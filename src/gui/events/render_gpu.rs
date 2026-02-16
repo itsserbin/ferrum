@@ -1,9 +1,9 @@
+#[cfg(all(feature = "gpu", not(target_os = "macos")))]
+use crate::gui::renderer::TabInfo;
 #[cfg(feature = "gpu")]
 use crate::gui::renderer::backend::RendererBackend;
 #[cfg(feature = "gpu")]
 use crate::gui::renderer::traits::Renderer;
-#[cfg(all(feature = "gpu", not(target_os = "macos")))]
-use crate::gui::renderer::TabInfo;
 #[cfg(feature = "gpu")]
 use crate::gui::*;
 
@@ -11,13 +11,7 @@ use crate::gui::*;
 impl FerrumWindow {
     /// GPU rendering path: issues draw commands through the GPU renderer
     /// and presents the frame via wgpu.
-    pub(super) fn render_gpu_frame(
-        &mut self,
-        w: NonZeroU32,
-        h: NonZeroU32,
-        bw: usize,
-        bh: usize,
-    ) {
+    pub(super) fn render_gpu_frame(&mut self, w: NonZeroU32, h: NonZeroU32, bw: usize, bh: usize) {
         // Build tab bar metadata (not needed on macOS -- native tab bar).
         #[cfg(not(target_os = "macos"))]
         let (tab_infos, tab_tooltip, drag_info, tab_offsets, show_tooltip) = {
@@ -73,10 +67,10 @@ impl FerrumWindow {
                 })
                 .collect();
 
-            let tab_tooltip: Option<String> =
-                self.backend
-                    .tab_hover_tooltip(&tab_infos, self.hovered_tab, bw as u32)
-                    .map(|s| s.to_owned());
+            let tab_tooltip: Option<String> = self
+                .backend
+                .tab_hover_tooltip(&tab_infos, self.hovered_tab, bw as u32)
+                .map(|s| s.to_owned());
 
             // Collect drag/overlay state needed during rendering.
             // Smooth the insertion indicator position with lerp.
@@ -115,14 +109,13 @@ impl FerrumWindow {
                 .dragging_tab
                 .as_ref()
                 .is_some_and(|drag| drag.is_active);
-            let show_tooltip = !dragging_active
-                && self.context_menu.is_none()
-                && self.security_popup.is_none();
+            let show_tooltip =
+                !dragging_active && self.context_menu.is_none() && self.security_popup.is_none();
 
             (tab_infos, tab_tooltip, drag_info, tab_offsets, show_tooltip)
         };
         #[cfg(not(target_os = "macos"))]
-        let tab_bar_visible = self.tabs.len() > 1 && self.backend.tab_bar_height_px() > 0;
+        let tab_bar_visible = self.backend.tab_bar_height_px() > 0;
 
         let RendererBackend::Gpu(gpu) = &mut self.backend else {
             return;
@@ -147,7 +140,14 @@ impl FerrumWindow {
                 );
             } else {
                 let display = tab.terminal.build_display(tab.scroll_offset);
-                gpu.render(&mut dummy, bw, bh, &display, tab.selection.as_ref(), viewport_start);
+                gpu.render(
+                    &mut dummy,
+                    bw,
+                    bh,
+                    &display,
+                    tab.selection.as_ref(),
+                    viewport_start,
+                );
             }
 
             // 2) Draw cursor.

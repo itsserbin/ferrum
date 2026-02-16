@@ -5,8 +5,9 @@ impl FerrumWindow {
     pub(in crate::gui) fn refresh_tab_bar_visibility(&mut self) {
         #[cfg(not(target_os = "macos"))]
         {
+            // Linux/Windows policy: keep custom tab bar always visible.
             let prev_height = self.backend.tab_bar_height_px();
-            self.backend.set_tab_bar_visible(self.tabs.len() > 1);
+            self.backend.set_tab_bar_visible(true);
             let next_height = self.backend.tab_bar_height_px();
 
             if prev_height != next_height && !self.tabs.is_empty() {

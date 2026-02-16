@@ -1,21 +1,15 @@
 #![cfg_attr(not(feature = "gpu"), allow(irrefutable_let_patterns))]
 
 use crate::core::Color;
-use crate::gui::renderer::backend::RendererBackend;
 #[cfg(not(target_os = "macos"))]
 use crate::gui::renderer::TabInfo;
+use crate::gui::renderer::backend::RendererBackend;
 use crate::gui::*;
 
 impl FerrumWindow {
     /// CPU rendering path: draws terminal, cursor, scrollbar, tab bar, popups
     /// into the softbuffer surface and presents the frame.
-    pub(super) fn render_cpu_frame(
-        &mut self,
-        w: NonZeroU32,
-        h: NonZeroU32,
-        bw: usize,
-        bh: usize,
-    ) {
+    pub(super) fn render_cpu_frame(&mut self, w: NonZeroU32, h: NonZeroU32, bw: usize, bh: usize) {
         // Build tab bar metadata (not needed on macOS -- native tab bar).
         #[cfg(not(target_os = "macos"))]
         let (tab_infos, tab_tooltip, drag_info, tab_offsets, show_tooltip) = {
@@ -71,10 +65,10 @@ impl FerrumWindow {
                 })
                 .collect();
 
-            let tab_tooltip: Option<String> =
-                self.backend
-                    .tab_hover_tooltip(&tab_infos, self.hovered_tab, bw as u32)
-                    .map(|s| s.to_owned());
+            let tab_tooltip: Option<String> = self
+                .backend
+                .tab_hover_tooltip(&tab_infos, self.hovered_tab, bw as u32)
+                .map(|s| s.to_owned());
 
             // Collect drag/overlay state needed during rendering.
             // Smooth the insertion indicator position with lerp.
@@ -113,14 +107,13 @@ impl FerrumWindow {
                 .dragging_tab
                 .as_ref()
                 .is_some_and(|drag| drag.is_active);
-            let show_tooltip = !dragging_active
-                && self.context_menu.is_none()
-                && self.security_popup.is_none();
+            let show_tooltip =
+                !dragging_active && self.context_menu.is_none() && self.security_popup.is_none();
 
             (tab_infos, tab_tooltip, drag_info, tab_offsets, show_tooltip)
         };
         #[cfg(not(target_os = "macos"))]
-        let tab_bar_visible = self.tabs.len() > 1 && self.backend.tab_bar_height_px() > 0;
+        let tab_bar_visible = self.backend.tab_bar_height_px() > 0;
 
         let RendererBackend::Cpu { renderer, surface } = &mut self.backend else {
             return;
@@ -151,7 +144,14 @@ impl FerrumWindow {
                 );
             } else {
                 let display = tab.terminal.build_display(tab.scroll_offset);
-                renderer.render(&mut buffer, bw, bh, &display, tab.selection.as_ref(), viewport_start);
+                renderer.render(
+                    &mut buffer,
+                    bw,
+                    bh,
+                    &display,
+                    tab.selection.as_ref(),
+                    viewport_start,
+                );
             }
 
             // 3) Draw cursor on top of terminal cells.
@@ -251,13 +251,7 @@ impl FerrumWindow {
         #[cfg(not(target_os = "macos"))]
         if show_tooltip && tab_bar_visible {
             if let Some(ref title) = tab_tooltip {
-                renderer.draw_tab_tooltip(
-                    &mut buffer,
-                    bw,
-                    bh,
-                    self.mouse_pos,
-                    title,
-                );
+                renderer.draw_tab_tooltip(&mut buffer, bw, bh, self.mouse_pos, title);
             }
         }
 
