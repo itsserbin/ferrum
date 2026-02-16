@@ -86,6 +86,10 @@ impl FerrumWindow {
                 if let Some(tab) = self.tabs.get_mut(rename.tab_index) {
                     tab.title = trimmed;
                 }
+                #[cfg(target_os = "macos")]
+                if let Some(tab) = self.tabs.get(rename.tab_index) {
+                    self.window.set_title(&tab.title);
+                }
             }
             // If trimmed is empty, the old title stays (we just dropped the rename state).
         }

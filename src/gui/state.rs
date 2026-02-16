@@ -93,6 +93,12 @@ pub(super) enum WindowRequest {
     },
     /// Close this window (all tabs gone or user closed).
     CloseWindow,
+    /// Create a new native macOS tab (new window in tab group).
+    #[cfg(target_os = "macos")]
+    NewTab,
+    /// Reopen a recently closed tab as a native macOS tab.
+    #[cfg(target_os = "macos")]
+    ReopenTab { title: String },
 }
 
 /// Per-window state. Each window is self-contained with its own tabs, renderer, surface.

@@ -215,7 +215,10 @@ impl CpuRenderer {
     }
 
     pub(crate) fn tab_bar_height_px(&self) -> u32 {
-        self.scaled_px(TAB_BAR_HEIGHT)
+        #[cfg(target_os = "macos")]
+        { 0 }
+        #[cfg(not(target_os = "macos"))]
+        { self.scaled_px(TAB_BAR_HEIGHT) }
     }
 
     pub(crate) fn window_padding_px(&self) -> u32 {

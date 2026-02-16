@@ -27,6 +27,10 @@ impl ApplicationHandler for App {
             let size = win.window.inner_size();
             let (rows, cols) = win.calc_grid_size(size.width, size.height);
             win.new_tab(rows, cols, &mut self.next_tab_id, &self.tx);
+            #[cfg(target_os = "macos")]
+            if let Some(tab) = win.tabs.first() {
+                win.window.set_title(&tab.title);
+            }
             win.window.request_redraw();
         }
     }
@@ -187,6 +191,48 @@ impl App {
                 }
                 WindowRequest::CloseWindow => {
                     self.windows.remove(&window_id);
+                }
+                #[cfg(target_os = "macos")]
+                WindowRequest::NewTab => {
+                    let existing_win = self.windows.get(&window_id).map(|w| w.window.clone());
+                    if let Some(new_id) = self.create_window(event_loop, None) {
+                        if let Some(new_win) = self.windows.get_mut(&new_id) {
+                            let size = new_win.window.inner_size();
+                            let (rows, cols) = new_win.calc_grid_size(size.width, size.height);
+                            new_win.new_tab(rows, cols, &mut self.next_tab_id, &self.tx);
+                            if let Some(tab) = new_win.tabs.first() {
+                                new_win.window.set_title(&tab.title);
+                            }
+                            if let Some(existing) = existing_win {
+                                platform::macos::add_as_tab(&existing, &new_win.window);
+                            }
+                            new_win.window.request_redraw();
+                        }
+                    }
+                }
+                #[cfg(target_os = "macos")]
+                WindowRequest::ReopenTab { title } => {
+                    let existing_win = self.windows.get(&window_id).map(|w| w.window.clone());
+                    if let Some(new_id) = self.create_window(event_loop, None) {
+                        if let Some(new_win) = self.windows.get_mut(&new_id) {
+                            let size = new_win.window.inner_size();
+                            let (rows, cols) = new_win.calc_grid_size(size.width, size.height);
+                            new_win.new_tab_with_title(
+                                rows,
+                                cols,
+                                Some(title),
+                                &mut self.next_tab_id,
+                                &self.tx,
+                            );
+                            if let Some(tab) = new_win.tabs.first() {
+                                new_win.window.set_title(&tab.title);
+                            }
+                            if let Some(existing) = existing_win {
+                                platform::macos::add_as_tab(&existing, &new_win.window);
+                            }
+                            new_win.window.request_redraw();
+                        }
+                    }
                 }
             }
         }

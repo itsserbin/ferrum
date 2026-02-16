@@ -111,6 +111,8 @@ impl FerrumWindow {
         }
 
         // If releasing mouse during an active tab drag, handle drop regardless of position.
+        // (Custom tab bar drag — not used on macOS.)
+        #[cfg(not(target_os = "macos"))]
         if state == ElementState::Released {
             if self.dragging_tab.as_ref().is_some_and(|d| d.is_active) {
                 self.handle_tab_bar_left_click(event_loop, state, mx, my, next_tab_id, tx);

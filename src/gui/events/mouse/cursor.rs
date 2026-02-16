@@ -68,7 +68,8 @@ impl FerrumWindow {
             self.resize_direction = None;
         }
 
-        // Update drag state tracking.
+        // Update drag state tracking (custom tab bar only — not on macOS).
+        #[cfg(not(target_os = "macos"))]
         if let Some(ref mut drag) = self.dragging_tab {
             drag.current_x = mx;
             drag.current_y = my;

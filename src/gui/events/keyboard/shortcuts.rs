@@ -14,9 +14,16 @@ impl FerrumWindow {
 
         match key {
             Key::Character(c) if c.as_str() == "t" => {
-                let size = self.window.inner_size();
-                let (rows, cols) = self.calc_grid_size(size.width, size.height);
-                self.new_tab(rows, cols, next_tab_id, tx);
+                #[cfg(target_os = "macos")]
+                {
+                    self.pending_requests.push(WindowRequest::NewTab);
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    let size = self.window.inner_size();
+                    let (rows, cols) = self.calc_grid_size(size.width, size.height);
+                    self.new_tab(rows, cols, next_tab_id, tx);
+                }
                 true
             }
             Key::Character(c) if c.as_str() == "w" => {
@@ -31,12 +38,23 @@ impl FerrumWindow {
                     .and_then(|ch| ch.to_digit(10))
                     .filter(|digit| (1..=9).contains(digit));
                 if let Some(digit) = digit {
-                    if digit == 9 {
-                        if !self.tabs.is_empty() {
-                            self.active_tab = self.tabs.len() - 1;
+                    #[cfg(target_os = "macos")]
+                    {
+                        if digit == 9 {
+                            crate::gui::platform::macos::select_tab(&self.window, usize::MAX);
+                        } else {
+                            crate::gui::platform::macos::select_tab(&self.window, (digit - 1) as usize);
                         }
-                    } else {
-                        self.switch_tab((digit - 1) as usize);
+                    }
+                    #[cfg(not(target_os = "macos"))]
+                    {
+                        if digit == 9 {
+                            if !self.tabs.is_empty() {
+                                self.active_tab = self.tabs.len() - 1;
+                            }
+                        } else {
+                            self.switch_tab((digit - 1) as usize);
+                        }
                     }
                     true
                 } else if c.as_str() == "c" {
@@ -54,8 +72,13 @@ impl FerrumWindow {
                 }
             }
             Key::Named(NamedKey::Tab) => {
-                if !self.tabs.is_empty() {
-                    self.active_tab = (self.active_tab + 1) % self.tabs.len();
+                #[cfg(target_os = "macos")]
+                crate::gui::platform::macos::select_next_tab(&self.window);
+                #[cfg(not(target_os = "macos"))]
+                {
+                    if !self.tabs.is_empty() {
+                        self.active_tab = (self.active_tab + 1) % self.tabs.len();
+                    }
                 }
                 true
             }
@@ -78,18 +101,31 @@ impl FerrumWindow {
                 let Some(closed) = self.closed_tabs.pop() else {
                     return true;
                 };
-                let size = self.window.inner_size();
-                let (rows, cols) = self.calc_grid_size(size.width, size.height);
-                self.new_tab_with_title(rows, cols, Some(closed.title), next_tab_id, tx);
+                #[cfg(target_os = "macos")]
+                {
+                    self.pending_requests
+                        .push(WindowRequest::ReopenTab { title: closed.title });
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    let size = self.window.inner_size();
+                    let (rows, cols) = self.calc_grid_size(size.width, size.height);
+                    self.new_tab_with_title(rows, cols, Some(closed.title), next_tab_id, tx);
+                }
                 true
             }
             Key::Named(NamedKey::Tab) => {
-                if !self.tabs.is_empty() {
-                    self.active_tab = if self.active_tab == 0 {
-                        self.tabs.len() - 1
-                    } else {
-                        self.active_tab - 1
-                    };
+                #[cfg(target_os = "macos")]
+                crate::gui::platform::macos::select_previous_tab(&self.window);
+                #[cfg(not(target_os = "macos"))]
+                {
+                    if !self.tabs.is_empty() {
+                        self.active_tab = if self.active_tab == 0 {
+                            self.tabs.len() - 1
+                        } else {
+                            self.active_tab - 1
+                        };
+                    }
                 }
                 true
             }

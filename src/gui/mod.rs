@@ -2,6 +2,7 @@ mod events;
 mod input;
 mod interaction;
 mod lifecycle;
+mod platform;
 mod renderer;
 mod state;
 mod tabs;
@@ -17,9 +18,6 @@ use winit::event::{ElementState, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::keyboard::{Key, ModifiersState, NamedKey};
 use winit::window::{CursorIcon, ResizeDirection, Window, WindowId};
-
-#[cfg(target_os = "macos")]
-use winit::platform::macos::WindowAttributesExtMacOS;
 
 use crate::core::terminal::Terminal;
 use crate::core::{MouseMode, Position, SecurityGuard, Selection};
@@ -118,6 +116,12 @@ impl App {
 
         // Use default metrics for minimum window size calculation.
         let tmp = CpuRenderer::new();
+        #[cfg(target_os = "macos")]
+        let min_size = winit::dpi::LogicalSize::new(
+            (tmp.cell_width * 40 + WINDOW_PADDING * 2) as f64,
+            (tmp.cell_height * 10 + WINDOW_PADDING * 2) as f64,
+        );
+        #[cfg(not(target_os = "macos"))]
         let min_size = winit::dpi::LogicalSize::new(
             (tmp.cell_width * 40 + WINDOW_PADDING * 2) as f64,
             (tmp.cell_height * 10 + TAB_BAR_HEIGHT + WINDOW_PADDING * 2) as f64,
@@ -126,15 +130,8 @@ impl App {
             .with_title("Ferrum")
             .with_min_inner_size(min_size);
 
-        #[cfg(target_os = "macos")]
-        {
-            attrs = attrs
-                .with_titlebar_transparent(true)
-                .with_title_hidden(true)
-                .with_fullsize_content_view(true)
-                .with_movable_by_window_background(false);
-        }
-
+        // On macOS: use standard native decorations + native tab bar.
+        // On other platforms: no decorations (custom tab bar handles chrome).
         #[cfg(not(target_os = "macos"))]
         {
             attrs = attrs.with_decorations(false);
@@ -154,26 +151,9 @@ impl App {
 
         window.set_cursor(CursorIcon::Default);
 
-        // On macOS, disable OS-level window dragging entirely so that tab
-        // dragging in the titlebar area works without the OS intercepting the
-        // gesture. Our code handles window drag manually via `drag_window()`
-        // when the user clicks on an empty tab-bar area.
+        // Configure native macOS tab grouping.
         #[cfg(target_os = "macos")]
-        {
-            use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
-            if let Ok(handle) = window.window_handle() {
-                if let RawWindowHandle::AppKit(appkit) = handle.as_raw() {
-                    unsafe {
-                        let ns_view: objc2::rc::Retained<objc2_app_kit::NSView> =
-                            objc2::rc::Retained::retain(appkit.ns_view.as_ptr().cast())
-                                .unwrap();
-                        if let Some(ns_window) = ns_view.window() {
-                            ns_window.setMovable(false);
-                        }
-                    }
-                }
-            }
-        }
+        platform::macos::configure_native_tabs(&window);
 
         let id = window.id();
         let ferrum_win = FerrumWindow::new(window, context);
