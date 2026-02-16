@@ -18,6 +18,9 @@ use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::keyboard::{Key, ModifiersState, NamedKey};
 use winit::window::{CursorIcon, ResizeDirection, Window, WindowId};
 
+#[cfg(target_os = "macos")]
+use winit::platform::macos::WindowAttributesExtMacOS;
+
 use crate::core::terminal::Terminal;
 use crate::core::{MouseMode, Position, SecurityGuard, Selection};
 use crate::gui::renderer::{ContextMenu, Renderer, SecurityPopup, TAB_BAR_HEIGHT, WINDOW_PADDING};
@@ -118,8 +121,20 @@ impl App {
         );
         let mut attrs = Window::default_attributes()
             .with_title("Ferrum")
-            .with_min_inner_size(min_size)
-            .with_decorations(false);
+            .with_min_inner_size(min_size);
+
+        #[cfg(target_os = "macos")]
+        {
+            attrs = attrs
+                .with_titlebar_transparent(true)
+                .with_title_hidden(true)
+                .with_fullsize_content_view(true);
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            attrs = attrs.with_decorations(false);
+        }
 
         if let Some(pos) = position {
             attrs = attrs.with_position(pos);

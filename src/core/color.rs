@@ -105,6 +105,15 @@ impl Color {
         ((self.r as u32) << 16) | ((self.g as u32) << 8) | (self.b as u32)
     }
 
+    /// Constructs a Color from a 0xRRGGBB u32 pixel value.
+    pub const fn from_pixel(pixel: u32) -> Color {
+        Color {
+            r: ((pixel >> 16) & 0xFF) as u8,
+            g: ((pixel >> 8) & 0xFF) as u8,
+            b: (pixel & 0xFF) as u8,
+        }
+    }
+
     /// 256-color palette: 0-15 = ANSI, 16-231 = 6x6x6 color cube, 232-255 = grayscale
     pub fn from_256(n: u16) -> Color {
         match n {

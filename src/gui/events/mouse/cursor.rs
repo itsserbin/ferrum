@@ -4,6 +4,46 @@ use crate::gui::*;
 /// Vertical distance from tab bar center at which a drag becomes a detach.
 const DETACH_THRESHOLD_Y: u32 = 30;
 
+/// Resize edge thickness in logical pixels.
+const RESIZE_EDGE: u32 = 4;
+
+/// Detects whether the cursor is near a window edge for resize purposes.
+/// Returns the resize direction if within the edge zone, None otherwise.
+#[cfg(not(target_os = "macos"))]
+fn resize_direction(x: f64, y: f64, width: u32, height: u32, edge: u32) -> Option<ResizeDirection> {
+    let e = edge as f64;
+    let w = width as f64;
+    let h = height as f64;
+
+    let left = x < e;
+    let right = x >= w - e;
+    let top = y < e;
+    let bottom = y >= h - e;
+
+    match (left, right, top, bottom) {
+        (true, _, true, _) => Some(ResizeDirection::NorthWest),
+        (_, true, true, _) => Some(ResizeDirection::NorthEast),
+        (true, _, _, true) => Some(ResizeDirection::SouthWest),
+        (_, true, _, true) => Some(ResizeDirection::SouthEast),
+        (true, _, _, _) => Some(ResizeDirection::West),
+        (_, true, _, _) => Some(ResizeDirection::East),
+        (_, _, true, _) => Some(ResizeDirection::North),
+        (_, _, _, true) => Some(ResizeDirection::South),
+        _ => None,
+    }
+}
+
+/// Returns the appropriate cursor icon for a given resize direction.
+#[cfg(not(target_os = "macos"))]
+fn resize_cursor_icon(dir: ResizeDirection) -> CursorIcon {
+    match dir {
+        ResizeDirection::North | ResizeDirection::South => CursorIcon::NsResize,
+        ResizeDirection::East | ResizeDirection::West => CursorIcon::EwResize,
+        ResizeDirection::NorthWest | ResizeDirection::SouthEast => CursorIcon::NwseResize,
+        ResizeDirection::NorthEast | ResizeDirection::SouthWest => CursorIcon::NeswResize,
+    }
+}
+
 impl FerrumWindow {
     pub(crate) fn on_cursor_moved(&mut self, position: winit::dpi::PhysicalPosition<f64>) {
         let (mx, my) = self.normalized_window_pos(position.x, position.y);
@@ -11,6 +51,19 @@ impl FerrumWindow {
         let tab_bar_height = self.renderer.tab_bar_height_px() as f64;
         let window_padding = self.renderer.window_padding_px() as f64;
         let detach_threshold_y = self.renderer.scaled_px(DETACH_THRESHOLD_Y) as f64;
+
+        // On non-macOS, check resize edges BEFORE any other hit testing.
+        #[cfg(not(target_os = "macos"))]
+        {
+            let size = self.window.inner_size();
+            let edge = self.renderer.scaled_px(RESIZE_EDGE);
+            if let Some(dir) = resize_direction(mx, my, size.width, size.height, edge) {
+                self.window.set_cursor(resize_cursor_icon(dir));
+                self.resize_direction = Some(dir);
+                return;
+            }
+            self.resize_direction = None;
+        }
 
         // Update drag state tracking.
         if let Some(ref mut drag) = self.dragging_tab {
@@ -38,33 +91,18 @@ impl FerrumWindow {
             }
         }
 
-        let dir = self.edge_direction(mx, my);
-        let cursor = if let Some(d) = dir {
-            match d {
-                ResizeDirection::North | ResizeDirection::South => CursorIcon::NsResize,
-                ResizeDirection::East | ResizeDirection::West => CursorIcon::EwResize,
-                ResizeDirection::NorthWest | ResizeDirection::SouthEast => CursorIcon::NwseResize,
-                ResizeDirection::NorthEast | ResizeDirection::SouthWest => CursorIcon::NeswResize,
-            }
-        } else if my < tab_bar_height {
-            if self.is_window_close_button_hit(mx, my)
-                || self.is_window_maximize_button_hit(mx, my)
-                || self.is_window_minimize_button_hit(mx, my)
-            {
-                CursorIcon::Pointer
-            } else {
-                match self.tab_bar_hit(mx, my) {
-                    TabBarHit::Tab(_) | TabBarHit::CloseTab(_) | TabBarHit::NewTab => {
-                        CursorIcon::Pointer
-                    }
-                    TabBarHit::Empty => CursorIcon::Default,
+        let cursor = if my < tab_bar_height {
+            match self.tab_bar_hit(mx, my) {
+                TabBarHit::Tab(_) | TabBarHit::CloseTab(_) | TabBarHit::NewTab
+                | TabBarHit::WindowButton(_) => {
+                    CursorIcon::Pointer
                 }
+                TabBarHit::Empty => CursorIcon::Default,
             }
         } else {
             CursorIcon::Text
         };
         self.window.set_cursor(cursor);
-        self.resize_direction = dir;
 
         // Track hovered tab for visual feedback.
         let size = self.window.inner_size();
@@ -144,7 +182,7 @@ impl FerrumWindow {
                 }
             }
 
-            if new_hover && self.resize_direction.is_none() {
+            if new_hover {
                 self.window.set_cursor(CursorIcon::Default);
             }
         }

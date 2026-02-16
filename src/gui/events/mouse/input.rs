@@ -91,18 +91,6 @@ impl FerrumWindow {
         false
     }
 
-    fn handle_resize_left_click(&mut self, state: ElementState) -> bool {
-        if state != ElementState::Pressed {
-            return false;
-        }
-        let Some(dir) = self.resize_direction else {
-            return false;
-        };
-
-        let _ = self.window.drag_resize_window(dir);
-        true
-    }
-
     fn on_left_mouse_input(
         &mut self,
         event_loop: &ActiveEventLoop,
@@ -112,6 +100,15 @@ impl FerrumWindow {
     ) {
         let (mx, my) = self.mouse_pos;
         let tab_bar_height = self.renderer.tab_bar_height_px() as f64;
+
+        // On non-macOS, initiate OS-level resize drag when pressing on window edges.
+        #[cfg(not(target_os = "macos"))]
+        if state == ElementState::Pressed {
+            if let Some(dir) = self.resize_direction {
+                let _ = self.window.drag_resize_window(dir);
+                return;
+            }
+        }
 
         // If releasing mouse during an active tab drag, handle drop regardless of position.
         if state == ElementState::Released {
@@ -133,12 +130,7 @@ impl FerrumWindow {
             return;
         }
 
-        // Resize has priority over tab bar (top edge is both resize zone and tab bar).
-        if self.handle_resize_left_click(state) {
-            return;
-        }
-
-        if my < tab_bar_height || self.is_window_close_button_hit(mx, my) {
+        if my < tab_bar_height {
             self.handle_tab_bar_left_click(event_loop, state, mx, my, next_tab_id, tx);
             return;
         }

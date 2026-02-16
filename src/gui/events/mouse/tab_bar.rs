@@ -1,4 +1,4 @@
-use crate::gui::renderer::{TabBarHit, TabInfo};
+use crate::gui::renderer::{TabBarHit, TabInfo, WindowButton};
 use crate::gui::*;
 
 const TOPBAR_DOUBLE_CLICK_MS: u128 = 400;
@@ -22,33 +22,6 @@ impl FerrumWindow {
                 rename_selection: None,
             })
             .collect()
-    }
-
-    pub(in crate::gui::events::mouse) fn is_window_close_button_hit(
-        &self,
-        mx: f64,
-        my: f64,
-    ) -> bool {
-        let buf_width = self.window.inner_size().width as usize;
-        self.renderer.is_window_close_button(mx, my, buf_width)
-    }
-
-    pub(in crate::gui::events::mouse) fn is_window_maximize_button_hit(
-        &self,
-        mx: f64,
-        my: f64,
-    ) -> bool {
-        let buf_width = self.window.inner_size().width as usize;
-        self.renderer.is_window_maximize_button(mx, my, buf_width)
-    }
-
-    pub(in crate::gui::events::mouse) fn is_window_minimize_button_hit(
-        &self,
-        mx: f64,
-        my: f64,
-    ) -> bool {
-        let buf_width = self.window.inner_size().width as usize;
-        self.renderer.is_window_minimize_button(mx, my, buf_width)
     }
 
     pub(in crate::gui::events::mouse) fn tab_bar_hit(&self, mx: f64, my: f64) -> TabBarHit {
@@ -127,32 +100,6 @@ impl FerrumWindow {
             return;
         }
 
-        // Window close button has priority over tab hit-test.
-        if self.is_window_close_button_hit(mx, my) {
-            self.dragging_tab = None;
-            self.commit_rename();
-            self.last_topbar_empty_click = None;
-            self.pending_requests.push(WindowRequest::CloseWindow);
-            return;
-        }
-
-        if self.is_window_maximize_button_hit(mx, my) {
-            self.dragging_tab = None;
-            self.commit_rename();
-            self.last_topbar_empty_click = None;
-            let maximized = self.window.is_maximized();
-            self.window.set_maximized(!maximized);
-            return;
-        }
-
-        if self.is_window_minimize_button_hit(mx, my) {
-            self.dragging_tab = None;
-            self.commit_rename();
-            self.last_topbar_empty_click = None;
-            self.window.set_minimized(true);
-            return;
-        }
-
         if let Some(tab_idx) = self.tab_bar_security_hit(mx, my) {
             self.dragging_tab = None;
             self.commit_rename();
@@ -218,6 +165,22 @@ impl FerrumWindow {
                 let size = self.window.inner_size();
                 let (rows, cols) = self.calc_grid_size(size.width, size.height);
                 self.new_tab(rows, cols, next_tab_id, tx);
+            }
+            TabBarHit::WindowButton(btn) => {
+                self.last_topbar_empty_click = None;
+                self.last_tab_click = None;
+                match btn {
+                    WindowButton::Minimize => {
+                        self.window.set_minimized(true);
+                    }
+                    WindowButton::Maximize => {
+                        let maximized = self.window.is_maximized();
+                        self.window.set_maximized(!maximized);
+                    }
+                    WindowButton::Close => {
+                        self.pending_requests.push(WindowRequest::CloseWindow);
+                    }
+                }
             }
             TabBarHit::Empty => {
                 self.last_tab_click = None;

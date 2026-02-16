@@ -119,7 +119,7 @@ impl FerrumWindow {
             // 1) Clear the full frame.
             buffer.fill(Color::DEFAULT_BG.to_pixel());
 
-            // 2) Draw tab bar first.
+            // 2) Build tab metadata/rename state.
             let renaming = self.renaming_tab.as_ref().map(|rename| {
                 let selection = rename.selection_anchor.and_then(|anchor| {
                     if anchor == rename.cursor {
@@ -171,14 +171,6 @@ impl FerrumWindow {
                     }
                 })
                 .collect();
-            self.renderer.draw_tab_bar(
-                &mut buffer,
-                bw,
-                bh,
-                &tab_infos,
-                self.hovered_tab,
-                self.mouse_pos,
-            );
             let tab_tooltip =
                 self.renderer
                     .tab_hover_tooltip(&tab_infos, self.hovered_tab, bw as u32);
@@ -255,7 +247,17 @@ impl FerrumWindow {
                 }
             }
 
-            // 4c) Draw drag overlay ON TOP of terminal content.
+            // 4c) Draw tab bar over content so it can adapt its glass tint to the current frame.
+            self.renderer.draw_tab_bar(
+                &mut buffer,
+                bw,
+                bh,
+                &tab_infos,
+                self.hovered_tab,
+                self.mouse_pos,
+            );
+
+            // 4d) Draw drag overlay ON TOP of terminal content.
             if let Some(ref drag) = self.dragging_tab {
                 if drag.is_active {
                     let insert_idx = self.renderer.tab_insert_index_from_x(

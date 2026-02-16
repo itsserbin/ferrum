@@ -148,14 +148,31 @@ impl Renderer {
         let line_h = popup.line_height(self.cell_height) as usize;
 
         let header_pixel = SECURITY_ACCENT.to_pixel();
-        let radius = self.scaled_px(10);
-        let tint = Color {
-            r: 128,
-            g: 150,
-            b: 182,
-        };
-
-        self.draw_liquid_glass_panel(buffer, buf_width, buf_height, mx, my, mw, mh, radius, tint);
+        let radius = self.scaled_px(6);
+        self.draw_rounded_rect(
+            buffer,
+            buf_width,
+            buf_height,
+            mx as i32,
+            my as i32,
+            mw,
+            mh,
+            radius,
+            0x1E2433,
+            248,
+        );
+        self.draw_rounded_rect(
+            buffer,
+            buf_width,
+            buf_height,
+            mx as i32,
+            my as i32,
+            mw,
+            mh,
+            radius,
+            0xFFFFFF,
+            20,
+        );
 
         let header_y = my + self.scaled_px(2);
         let header_x = mx + self.cell_width / 2;
@@ -179,7 +196,7 @@ impl Renderer {
             {
                 let idx = sep_y * buf_width + px;
                 if idx < buffer.len() {
-                    buffer[idx] = Self::blend_pixel(buffer[idx], header_pixel, 180);
+                    buffer[idx] = Self::blend_pixel(buffer[idx], header_pixel, 120);
                 }
             }
         }

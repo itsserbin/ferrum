@@ -69,20 +69,33 @@ impl Renderer {
         let mx = menu.x;
         let my = menu.y;
 
-        let hover_pixel = Color {
-            r: 86,
-            g: 98,
-            b: 124,
-        }
-        .to_pixel();
-        let radius = self.scaled_px(10);
-        let tint = Color {
-            r: 132,
-            g: 152,
-            b: 182,
-        };
+        let hover_pixel = 0x31394D;
+        let radius = self.scaled_px(6);
 
-        self.draw_liquid_glass_panel(buffer, buf_width, buf_height, mx, my, mw, mh, radius, tint);
+        self.draw_rounded_rect(
+            buffer,
+            buf_width,
+            buf_height,
+            mx as i32,
+            my as i32,
+            mw,
+            mh,
+            radius,
+            0x1E2433,
+            248,
+        );
+        self.draw_rounded_rect(
+            buffer,
+            buf_width,
+            buf_height,
+            mx as i32,
+            my as i32,
+            mw,
+            mh,
+            radius,
+            0xFFFFFF,
+            20,
+        );
 
         // Draw menu items.
         for (i, (action, label)) in menu.items.iter().enumerate() {
@@ -103,7 +116,7 @@ impl Renderer {
                     hover_h,
                     self.scaled_px(6),
                     hover_pixel,
-                    178,
+                    220,
                 );
             }
 

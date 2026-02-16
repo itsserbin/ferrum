@@ -1,11 +1,35 @@
 use super::*;
 
+// Catppuccin Mocha palette — flat Chrome-style tab bar.
+const BAR_BG: u32 = 0x181825;              // Mantle — bar background
+const ACTIVE_TAB_BG: u32 = 0x1E1E2E;      // Base — merges with terminal
+const INACTIVE_TAB_HOVER: u32 = 0x313244;  // Surface0
+const TAB_TEXT_ACTIVE: u32 = 0xCDD6F4;     // Text
+const TAB_TEXT_INACTIVE: u32 = 0x6C7086;   // Overlay0
+const TAB_BORDER: u32 = 0x313244;          // Surface0
+const CLOSE_HOVER_BG_COLOR: u32 = 0xF38BA8; // Red
+
+// Window button colors (non-macOS).
+#[cfg(not(target_os = "macos"))]
+const WIN_BTN_ICON: u32 = 0x6C7086;        // Overlay0
+#[cfg(not(target_os = "macos"))]
+const WIN_BTN_HOVER: u32 = 0x313244;       // Surface0
+#[cfg(not(target_os = "macos"))]
+const WIN_BTN_CLOSE_HOVER: u32 = 0xF38BA8; // Red
+#[cfg(not(target_os = "macos"))]
+const WIN_BTN_WIDTH: u32 = 46;
+
+// Insertion indicator color (Catppuccin Mocha Mauve).
+const INSERTION_COLOR: u32 = 0xCBA6F7;
+
 impl Renderer {
     /// Computes adaptive tab width with overflow compression.
     /// Tabs shrink from max (240px) down to MIN_TAB_WIDTH when many tabs are open.
     pub fn tab_width(&self, tab_count: usize, buf_width: u32) -> u32 {
-        // Reserve left-side window controls and right-side new-tab button.
-        let reserved = self.tab_strip_start_x() + self.plus_button_reserved_width();
+        let reserved = self.tab_strip_start_x()
+            + self.plus_button_reserved_width()
+            + self.scaled_px(8)
+            + self.window_buttons_reserved_width();
         let available = buf_width.saturating_sub(reserved);
         let min_tab_width = self.scaled_px(MIN_TAB_WIDTH);
         let max_tab_width = self.scaled_px(240);
@@ -13,11 +37,30 @@ impl Renderer {
     }
 
     pub(crate) fn tab_strip_start_x(&self) -> u32 {
-        self.window_controls_reserved_width()
+        #[cfg(target_os = "macos")]
+        {
+            self.scaled_px(70)
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            self.scaled_px(8)
+        }
     }
 
     fn plus_button_reserved_width(&self) -> u32 {
         self.cell_width + self.scaled_px(20)
+    }
+
+    /// Returns total width reserved for window control buttons.
+    fn window_buttons_reserved_width(&self) -> u32 {
+        #[cfg(not(target_os = "macos"))]
+        {
+            self.scaled_px(WIN_BTN_WIDTH) * 3
+        }
+        #[cfg(target_os = "macos")]
+        {
+            0
+        }
     }
 
     pub(crate) fn tab_origin_x(&self, tab_index: usize, tw: u32) -> u32 {
@@ -43,46 +86,12 @@ impl Renderer {
         idx
     }
 
-    fn window_button_size(&self) -> (u32, u32) {
-        let diameter = self.scaled_px(12);
-        (diameter, diameter)
-    }
-
-    fn window_button_spacing(&self) -> u32 {
-        self.scaled_px(8)
-    }
-
-    fn window_controls_reserved_width(&self) -> u32 {
-        let (bw, _) = self.window_button_size();
-        let left_pad = self.scaled_px(12);
-        let after_controls_gap = self.scaled_px(14);
-        // Left pad + 3 buttons + 2 gaps + gap before tabs.
-        left_pad + bw * 3 + self.window_button_spacing() * 2 + after_controls_gap
-    }
-
     /// Returns rectangle for per-tab close button.
     fn close_button_rect(&self, tab_index: usize, tw: u32) -> (u32, u32, u32, u32) {
         let btn_w = self.cell_width + self.scaled_px(8);
         let x = self.tab_origin_x(tab_index, tw) + tw - btn_w - self.scaled_px(6);
         let y = (self.tab_bar_height_px().saturating_sub(self.cell_height)) / 2;
         (x, y, btn_w, self.cell_height)
-    }
-
-    fn window_control_rects(
-        &self,
-        _buf_width: usize,
-    ) -> (
-        (u32, u32, u32, u32),
-        (u32, u32, u32, u32),
-        (u32, u32, u32, u32),
-    ) {
-        let (bw, bh) = self.window_button_size();
-        let spacing = self.window_button_spacing();
-        let y = (self.tab_bar_height_px().saturating_sub(bh)) / 2;
-        let close_x = self.scaled_px(12);
-        let min_x = close_x + bw + spacing;
-        let max_x = min_x + bw + spacing;
-        ((min_x, y, bw, bh), (max_x, y, bw, bh), (close_x, y, bw, bh))
     }
 
     /// Returns rectangle for new-tab button.
@@ -96,6 +105,12 @@ impl Renderer {
     pub fn hit_test_tab_bar(&self, x: f64, y: f64, tab_count: usize, buf_width: u32) -> TabBarHit {
         if y >= self.tab_bar_height_px() as f64 {
             return TabBarHit::Empty;
+        }
+
+        // Window buttons (non-macOS) have highest priority.
+        #[cfg(not(target_os = "macos"))]
+        if let Some(btn) = self.window_button_at_position(x, y, buf_width) {
+            return TabBarHit::WindowButton(btn);
         }
 
         let tw = self.tab_width(tab_count, buf_width);
@@ -174,6 +189,55 @@ impl Renderer {
         None
     }
 
+    /// Hit-test window control buttons (non-macOS only).
+    #[cfg(not(target_os = "macos"))]
+    pub fn window_button_at_position(&self, x: f64, y: f64, buf_width: u32) -> Option<WindowButton> {
+        let bar_h = self.tab_bar_height_px();
+        if y >= bar_h as f64 {
+            return None;
+        }
+        let btn_w = self.scaled_px(WIN_BTN_WIDTH);
+        let close_x = buf_width.saturating_sub(btn_w);
+        let min_x = buf_width.saturating_sub(btn_w * 2);
+        let minimize_x = buf_width.saturating_sub(btn_w * 3);
+
+        if x >= close_x as f64 && x < buf_width as f64 {
+            Some(WindowButton::Close)
+        } else if x >= min_x as f64 && x < (min_x + btn_w) as f64 {
+            Some(WindowButton::Maximize)
+        } else if x >= minimize_x as f64 && x < (minimize_x + btn_w) as f64 {
+            Some(WindowButton::Minimize)
+        } else {
+            None
+        }
+    }
+
+    fn blend_rgb(dst: u32, src: u32, alpha: u8) -> u32 {
+        if alpha == 255 {
+            return src;
+        }
+        if alpha == 0 {
+            return dst;
+        }
+
+        let a = alpha as u32;
+        let inv = 255 - a;
+
+        let dr = (dst >> 16) & 0xFF;
+        let dg = (dst >> 8) & 0xFF;
+        let db = dst & 0xFF;
+
+        let sr = (src >> 16) & 0xFF;
+        let sg = (src >> 8) & 0xFF;
+        let sb = src & 0xFF;
+
+        let r = (sr * a + dr * inv + 127) / 255;
+        let g = (sg * a + dg * inv + 127) / 255;
+        let b = (sb * a + db * inv + 127) / 255;
+
+        (r << 16) | (g << 8) | b
+    }
+
     /// Draws a filled circle at a given center with a given radius.
     fn draw_filled_circle(
         buffer: &mut [u32],
@@ -204,7 +268,6 @@ impl Renderer {
                 let dy = py as f32 + 0.5 - cy as f32;
                 let dist = (dx * dx + dy * dy).sqrt();
 
-                // 1px soft edge to reduce visible pixel stair-steps.
                 let coverage = (r + 0.5 - dist).clamp(0.0, 1.0);
                 if coverage <= 0.0 {
                     continue;
@@ -221,59 +284,9 @@ impl Renderer {
         }
     }
 
-    fn blend_rgb(dst: u32, src: u32, alpha: u8) -> u32 {
-        if alpha == 255 {
-            return src;
-        }
-        if alpha == 0 {
-            return dst;
-        }
-
-        let a = alpha as u32;
-        let inv = 255 - a;
-
-        let dr = (dst >> 16) & 0xFF;
-        let dg = (dst >> 8) & 0xFF;
-        let db = dst & 0xFF;
-
-        let sr = (src >> 16) & 0xFF;
-        let sg = (src >> 8) & 0xFF;
-        let sb = src & 0xFF;
-
-        let r = (sr * a + dr * inv + 127) / 255;
-        let g = (sg * a + dg * inv + 127) / 255;
-        let b = (sb * a + db * inv + 127) / 255;
-
-        (r << 16) | (g << 8) | b
-    }
-
     fn point_in_rect(x: f64, y: f64, rect: (u32, u32, u32, u32)) -> bool {
         let (rx, ry, rw, rh) = rect;
         x >= rx as f64 && x < (rx + rw) as f64 && y >= ry as f64 && y < (ry + rh) as f64
-    }
-
-    fn draw_window_button_circle(
-        &self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        rect: (u32, u32, u32, u32),
-        color: Color,
-    ) {
-        let (x, y, w, h) = rect;
-        let cx = (x + w / 2) as i32;
-        let cy = (y + h / 2) as i32;
-        let radius = (w.min(h) / 2).saturating_sub(1).max(4);
-        let base = color.to_pixel();
-        let rim = Self::blend_pixel(base, 0x0A0D14, 96);
-        let gloss = Self::blend_pixel(base, 0xFFFFFF, 168);
-
-        Self::draw_filled_circle(buffer, buf_width, cx, cy, radius, rim);
-        Self::draw_filled_circle(buffer, buf_width, cx, cy, radius.saturating_sub(1), base);
-
-        let gloss_radius = (radius / 2).max(self.scaled_px(2));
-        let gloss_x = cx - (radius as i32 / 3);
-        let gloss_y = cy - (radius as i32 / 3);
-        Self::draw_filled_circle(buffer, buf_width, gloss_x, gloss_y, gloss_radius, gloss);
     }
 
     fn point_to_segment_distance(px: f32, py: f32, x0: f32, y0: f32, x1: f32, y1: f32) -> f32 {
@@ -318,7 +331,6 @@ impl Renderer {
                 let pcy = py as f32 + 0.5;
                 let dist = Self::point_to_segment_distance(pcx, pcy, x0, y0, x1, y1);
 
-                // Soft AA edge around the stroke.
                 let coverage = (half + 0.5 - dist).clamp(0.0, 1.0);
                 if coverage <= 0.0 {
                     continue;
@@ -332,121 +344,6 @@ impl Renderer {
                 buffer[idx] = Self::blend_rgb(buffer[idx], color, alpha);
             }
         }
-    }
-
-    fn draw_window_minimize_icon(
-        &self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
-        rect: (u32, u32, u32, u32),
-        color: Color,
-    ) {
-        let (x, y, w, h) = rect;
-        let center_x = x as f32 + w as f32 * 0.5;
-        let center_y = y as f32 + h as f32 * 0.5;
-        let half = (w.min(h) as f32 * 0.5 - 3.5).max(1.6);
-        if half <= 0.0 {
-            return;
-        }
-        let stroke = (1.4_f32 * self.ui_scale() as f32).clamp(1.25, 2.8);
-        let pixel = color.to_pixel();
-
-        Self::draw_stroked_line(
-            buffer,
-            buf_width,
-            buf_height,
-            center_x - half,
-            center_y,
-            center_x + half,
-            center_y,
-            stroke,
-            pixel,
-        );
-    }
-
-    fn draw_window_maximize_icon(
-        &self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
-        rect: (u32, u32, u32, u32),
-        color: Color,
-    ) {
-        let (x, y, w, h) = rect;
-        let center_x = x as f32 + w as f32 * 0.5;
-        let center_y = y as f32 + h as f32 * 0.5;
-        let half = (w.min(h) as f32 * 0.5 - 3.5).max(1.6);
-        if half <= 0.0 {
-            return;
-        }
-        let stroke = (1.4_f32 * self.ui_scale() as f32).clamp(1.25, 2.8);
-        let pixel = color.to_pixel();
-
-        Self::draw_stroked_line(
-            buffer,
-            buf_width,
-            buf_height,
-            center_x - half,
-            center_y,
-            center_x + half,
-            center_y,
-            stroke,
-            pixel,
-        );
-        Self::draw_stroked_line(
-            buffer,
-            buf_width,
-            buf_height,
-            center_x,
-            center_y - half,
-            center_x,
-            center_y + half,
-            stroke,
-            pixel,
-        );
-    }
-
-    fn draw_window_close_icon(
-        &self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
-        rect: (u32, u32, u32, u32),
-        color: Color,
-    ) {
-        let (x, y, w, h) = rect;
-        let center_x = x as f32 + w as f32 * 0.5;
-        let center_y = y as f32 + h as f32 * 0.5;
-        let half = (w.min(h) as f32 * 0.5 - 3.5).max(1.6);
-        if half <= 0.0 {
-            return;
-        }
-        let stroke = (1.4_f32 * self.ui_scale() as f32).clamp(1.25, 2.8);
-
-        let pixel = color.to_pixel();
-        Self::draw_stroked_line(
-            buffer,
-            buf_width,
-            buf_height,
-            center_x - half,
-            center_y - half,
-            center_x + half,
-            center_y + half,
-            stroke,
-            pixel,
-        );
-        Self::draw_stroked_line(
-            buffer,
-            buf_width,
-            buf_height,
-            center_x + half,
-            center_y - half,
-            center_x - half,
-            center_y + half,
-            stroke,
-            pixel,
-        );
     }
 
     fn draw_tab_plus_icon(
@@ -499,7 +396,6 @@ impl Renderer {
         let (x, y, w, h) = rect;
         let center_x = x as f32 + w as f32 * 0.5;
         let center_y = y as f32 + h as f32 * 0.5;
-        // Diagonal cross appears optically larger than '+', so keep it slightly smaller.
         let half = (self.cell_height as f32 / 6.0).clamp(2.5, 3.4) * 0.86;
         let thickness = (1.25_f32 * self.ui_scale() as f32).clamp(1.15, 2.2);
         let pixel = color.to_pixel();
@@ -529,7 +425,6 @@ impl Renderer {
     }
 
     /// Returns true if the given tab width is too narrow to display the title.
-    /// When true, show tab number instead.
     fn should_show_number(&self, tw: u32) -> bool {
         tw < self.scaled_px(MIN_TAB_WIDTH_FOR_TITLE)
     }
@@ -618,14 +513,31 @@ impl Renderer {
             .min(buf_height as i32 - height as i32 - self.scaled_px(2) as i32)
             .max(self.scaled_px(2) as i32);
 
-        let radius = self.scaled_px(10);
-        let tint = Color {
-            r: 132,
-            g: 154,
-            b: 184,
-        };
-        self.draw_liquid_glass_panel(
-            buffer, buf_width, buf_height, x as u32, y as u32, width, height, radius, tint,
+        let radius = self.scaled_px(6);
+        self.draw_rounded_rect(
+            buffer,
+            buf_width,
+            buf_height,
+            x,
+            y,
+            width,
+            height,
+            radius,
+            ACTIVE_TAB_BG,
+            245,
+        );
+        // Subtle border.
+        self.draw_rounded_rect(
+            buffer,
+            buf_width,
+            buf_height,
+            x,
+            y,
+            width,
+            height,
+            radius,
+            TAB_BORDER,
+            80,
         );
 
         let text_x = x as u32 + self.scaled_px(1) + padding_x;
@@ -645,68 +557,178 @@ impl Renderer {
         }
     }
 
+    /// Draws a rounded rect with only the top corners rounded (bottom corners square).
+    /// Used for active/hovered tab shapes that merge with the terminal below.
+    #[allow(clippy::too_many_arguments)]
+    fn draw_top_rounded_rect(
+        &self,
+        buffer: &mut [u32],
+        buf_width: usize,
+        buf_height: usize,
+        x: i32,
+        y: i32,
+        w: u32,
+        h: u32,
+        radius: u32,
+        color: u32,
+        alpha: u8,
+    ) {
+        if w == 0 || h == 0 || alpha == 0 || buf_width == 0 || buf_height == 0 {
+            return;
+        }
+
+        let r = radius.min(w / 2).min(h / 2) as i32;
+        let max_x = buf_width as i32 - 1;
+        let max_y = buf_height as i32 - 1;
+
+        for py in 0..h as i32 {
+            let sy = y + py;
+            if sy < 0 || sy > max_y {
+                continue;
+            }
+
+            for px in 0..w as i32 {
+                let sx = x + px;
+                if sx < 0 || sx > max_x {
+                    continue;
+                }
+
+                // Only round the top corners; bottom corners are square.
+                let coverage = Self::top_rounded_coverage(px, py, w as i32, h as i32, r);
+                if coverage <= 0.0 {
+                    continue;
+                }
+
+                let idx = sy as usize * buf_width + sx as usize;
+                if idx >= buffer.len() {
+                    continue;
+                }
+                let aa_alpha = ((alpha as f32) * coverage).round().clamp(0.0, 255.0) as u8;
+                if aa_alpha == 0 {
+                    continue;
+                }
+                buffer[idx] = Self::blend_pixel(buffer[idx], color, aa_alpha);
+            }
+        }
+    }
+
+    /// Coverage function for a rect with only the top two corners rounded.
+    fn top_rounded_coverage(px: i32, py: i32, w: i32, h: i32, r: i32) -> f32 {
+        if px < 0 || py < 0 || px >= w || py >= h {
+            return 0.0;
+        }
+        if r <= 0 {
+            return 1.0;
+        }
+
+        let in_tl = px < r && py < r;
+        let in_tr = px >= w - r && py < r;
+        // Bottom corners are NOT rounded.
+        if !(in_tl || in_tr) {
+            return 1.0;
+        }
+
+        let cx = if in_tl {
+            r as f32 - 0.5
+        } else {
+            (w - r) as f32 - 0.5
+        };
+        let cy = r as f32 - 0.5;
+
+        let dx = px as f32 + 0.5 - cx;
+        let dy = py as f32 + 0.5 - cy;
+        let rr = r as f32;
+        let dist = (dx * dx + dy * dy).sqrt();
+        (rr + 0.5 - dist).clamp(0.0, 1.0)
+    }
+
+    /// Draws a 1px border on the top and sides of a top-rounded rect (no bottom border).
+    #[allow(clippy::too_many_arguments)]
+    fn draw_top_rounded_border(
+        &self,
+        buffer: &mut [u32],
+        buf_width: usize,
+        buf_height: usize,
+        x: i32,
+        y: i32,
+        w: u32,
+        h: u32,
+        radius: u32,
+        color: u32,
+        alpha: u8,
+    ) {
+        if w < 2 || h < 2 || alpha == 0 || buf_width == 0 || buf_height == 0 {
+            return;
+        }
+
+        let r = radius.min(w / 2).min(h / 2) as i32;
+        let max_x = buf_width as i32 - 1;
+        let max_y = buf_height as i32 - 1;
+
+        for py in 0..h as i32 {
+            let sy = y + py;
+            if sy < 0 || sy > max_y {
+                continue;
+            }
+
+            for px in 0..w as i32 {
+                let sx = x + px;
+                if sx < 0 || sx > max_x {
+                    continue;
+                }
+
+                // Determine if this pixel is on the border (top or sides, not bottom).
+                let on_top = py == 0;
+                let on_left = px == 0;
+                let on_right = px == w as i32 - 1;
+
+                if !on_top && !on_left && !on_right {
+                    continue;
+                }
+
+                // Skip bottom row entirely (no bottom border).
+                if py >= h as i32 - 1 {
+                    continue;
+                }
+
+                // Check that the pixel is inside the top-rounded shape.
+                let coverage = Self::top_rounded_coverage(px, py, w as i32, h as i32, r);
+                if coverage <= 0.0 {
+                    continue;
+                }
+
+                let idx = sy as usize * buf_width + sx as usize;
+                if idx >= buffer.len() {
+                    continue;
+                }
+                let aa_alpha = ((alpha as f32) * coverage).round().clamp(0.0, 255.0) as u8;
+                if aa_alpha == 0 {
+                    continue;
+                }
+                buffer[idx] = Self::blend_pixel(buffer[idx], color, aa_alpha);
+            }
+        }
+    }
+
     /// Draws top tab bar including tabs, controls, and separators.
     pub fn draw_tab_bar(
         &mut self,
         buffer: &mut [u32],
         buf_width: usize,
-        _buf_height: usize,
+        buf_height: usize,
         tabs: &[TabInfo],
         hovered_tab: Option<usize>,
         mouse_pos: (f64, f64),
     ) {
         let tab_bar_height = self.tab_bar_height_px();
         let bar_h = tab_bar_height as usize;
-        let top_bg = Color {
-            r: 62,
-            g: 70,
-            b: 92,
-        };
-        let bottom_bg = Color {
-            r: 30,
-            g: 36,
-            b: 52,
-        };
 
-        // Paint full bar background with a subtle vertical gradient (mac-like depth).
-        for py in 0..bar_h {
-            let t = py as f32 / (bar_h.max(1) as f32);
-            let blend = |a: u8, b: u8| -> u8 {
-                let av = a as f32;
-                let bv = b as f32;
-                (av + (bv - av) * t).round().clamp(0.0, 255.0) as u8
-            };
-            let row_pixel = Color {
-                r: blend(top_bg.r, bottom_bg.r),
-                g: blend(top_bg.g, bottom_bg.g),
-                b: blend(top_bg.b, bottom_bg.b),
-            }
-            .to_pixel();
+        // Solid bar background fill.
+        for py in 0..bar_h.min(buf_height) {
             for px in 0..buf_width {
                 let idx = py * buf_width + px;
                 if idx < buffer.len() {
-                    buffer[idx] = row_pixel;
-                }
-            }
-        }
-
-        // Specular sheen sweep to make the bar feel like translucent liquid glass.
-        let sheen_h = self.scaled_px(8).min(tab_bar_height) as usize;
-        for py in 0..sheen_h {
-            let py_t = 1.0 - py as f32 / sheen_h.max(1) as f32;
-            let row_alpha = (py_t * py_t * 52.0).round() as u8;
-            for px in 0..buf_width {
-                let wave = (((px as f32 / buf_width.max(1) as f32) * std::f32::consts::TAU * 1.6)
-                    .sin()
-                    * 0.5)
-                    + 0.5;
-                let alpha = (row_alpha as f32 * (0.62 + 0.38 * wave)).round() as u8;
-                if alpha == 0 {
-                    continue;
-                }
-                let idx = py * buf_width + px;
-                if idx < buffer.len() {
-                    buffer[idx] = Self::blend_pixel(buffer[idx], 0xFFFFFF, alpha);
+                    buffer[idx] = BAR_BG;
                 }
             }
         }
@@ -715,60 +737,67 @@ impl Renderer {
         let text_y = (tab_bar_height.saturating_sub(self.cell_height)) / 2 + self.scaled_px(1);
         let tab_padding_h = self.scaled_px(14);
         let use_numbers = self.should_show_number(tw);
+        let tab_radius = self.scaled_px(8);
+        let tab_inset_y = self.scaled_px(0); // Tabs start from top of bar.
+        let tab_h = tab_bar_height; // Full height so bottom merges with terminal.
 
         for (i, tab) in tabs.iter().enumerate() {
             let tab_x = self.tab_origin_x(i, tw);
             let is_hovered = hovered_tab == Some(i);
 
-            // Active tab = terminal bg (merges with content), inactive = bar bg, hovered = subtle lift.
-            let bg = if tab.is_active {
-                Color::DEFAULT_BG
-            } else if is_hovered {
-                TAB_HOVER_BG
-            } else {
-                TAB_BAR_BG
-            };
-            let bg_pixel = bg.to_pixel();
-
-            // mac-like tab capsule instead of full-height square blocks.
-            if tab.is_active || is_hovered {
-                let inset_y = self.scaled_px(4) as i32;
-                let capsule_h = tab_bar_height.saturating_sub(self.scaled_px(6));
-                let radius = self.scaled_px(8);
-                let alpha = if tab.is_active { 255 } else { 215 };
-                self.draw_rounded_rect(
+            if tab.is_active {
+                // Active tab: solid fill that merges with terminal.
+                self.draw_top_rounded_rect(
                     buffer,
                     buf_width,
                     bar_h,
                     tab_x as i32,
-                    inset_y,
+                    tab_inset_y as i32,
                     tw,
-                    capsule_h,
-                    radius,
-                    bg_pixel,
-                    alpha,
+                    tab_h,
+                    tab_radius,
+                    ACTIVE_TAB_BG,
+                    255,
+                );
+                // 1px border on top and sides only.
+                self.draw_top_rounded_border(
+                    buffer,
+                    buf_width,
+                    bar_h,
+                    tab_x as i32,
+                    tab_inset_y as i32,
+                    tw,
+                    tab_h,
+                    tab_radius,
+                    TAB_BORDER,
+                    255,
+                );
+            } else if is_hovered {
+                // Inactive tab hover: subtle highlight.
+                self.draw_top_rounded_rect(
+                    buffer,
+                    buf_width,
+                    bar_h,
+                    tab_x as i32,
+                    tab_inset_y as i32,
+                    tw,
+                    tab_h,
+                    tab_radius,
+                    INACTIVE_TAB_HOVER,
+                    255,
                 );
             }
+            // Inactive non-hovered: no background (BAR_BG shows through).
 
-            // Text color: active = bright white, hovered = subtext1, inactive = overlay0.
+            // Text color based on state.
             let fg = if tab.is_active {
-                Color::DEFAULT_FG
-            } else if is_hovered {
-                Color {
-                    r: 186,
-                    g: 194,
-                    b: 222,
-                } // Subtext1
+                Color::from_pixel(TAB_TEXT_ACTIVE)
             } else {
-                Color {
-                    r: 127,
-                    g: 132,
-                    b: 156,
-                } // Overlay0
+                Color::from_pixel(TAB_TEXT_INACTIVE)
             };
 
             if tab.is_renaming {
-                // Preserve existing rename rendering structure.
+                // Inline rename rendering.
                 let rename_text = tab.rename_text.unwrap_or("");
                 let text_x = tab_x + tab_padding_h;
                 let max_chars = (tw.saturating_sub(tab_padding_h * 2) / self.cell_width) as usize;
@@ -785,14 +814,15 @@ impl Renderer {
                     Some((start_chars.min(max_chars), end_chars.min(max_chars)))
                 });
 
-                let rename_bg = MENU_HOVER_BG.to_pixel();
+                let rename_bg = INACTIVE_TAB_HOVER;
                 for py in (text_y as usize)..(text_y + self.cell_height) as usize {
                     for dx in (tab_padding_h as usize - self.scaled_px(2) as usize)
                         ..(tw - tab_padding_h + self.scaled_px(2)) as usize
                     {
                         let px = tab_x as usize + dx;
                         if px < buf_width && py * buf_width + px < buffer.len() {
-                            buffer[py * buf_width + px] = rename_bg;
+                            let idx = py * buf_width + px;
+                            buffer[idx] = rename_bg;
                         }
                     }
                 }
@@ -856,7 +886,6 @@ impl Renderer {
                     self.draw_char_at(buffer, buf_width, bar_h, cx, text_y, ch, fg);
                 }
 
-                // Close button in number mode.
                 if show_close {
                     self.draw_close_button(buffer, buf_width, bar_h, i, tab, tw, mouse_pos);
                 }
@@ -927,101 +956,48 @@ impl Renderer {
                     }
                 }
 
-                // Close button with circular hover effect.
                 if show_close {
                     self.draw_close_button(buffer, buf_width, bar_h, i, tab, tw, mouse_pos);
                 }
             }
         }
 
-        // New-tab button after the last tab.
+        // New-tab (+) button after the last tab.
         let plus_rect = self.plus_button_rect(tabs.len(), tw);
         let plus_hover = Self::point_in_rect(mouse_pos.0, mouse_pos.1, plus_rect);
+        if plus_hover {
+            let (px, py, pw, ph) = plus_rect;
+            self.draw_rounded_rect(
+                buffer,
+                buf_width,
+                bar_h,
+                px as i32,
+                py as i32,
+                pw,
+                ph,
+                self.scaled_px(5),
+                INACTIVE_TAB_HOVER,
+                255,
+            );
+        }
         let plus_fg = if plus_hover {
-            Color::DEFAULT_FG
+            Color::from_pixel(TAB_TEXT_ACTIVE)
         } else {
-            Color {
-                r: 88,
-                g: 91,
-                b: 112,
-            } // Surface2
+            Color::from_pixel(TAB_TEXT_INACTIVE)
         };
         self.draw_tab_plus_icon(buffer, buf_width, bar_h, plus_rect, plus_fg);
 
-        // macOS-like traffic lights: close, minimize, maximize (left side).
-        let (min_rect, max_rect, close_rect) = self.window_control_rects(buf_width);
-        let min_hover = Self::point_in_rect(mouse_pos.0, mouse_pos.1, min_rect);
-        let max_hover = Self::point_in_rect(mouse_pos.0, mouse_pos.1, max_rect);
-        let close_hover = Self::point_in_rect(mouse_pos.0, mouse_pos.1, close_rect);
+        // Window control buttons (non-macOS).
+        #[cfg(not(target_os = "macos"))]
+        self.draw_window_buttons(buffer, buf_width, bar_h, mouse_pos);
 
-        self.draw_window_button_circle(
-            buffer,
-            buf_width,
-            close_rect,
-            Color {
-                r: 255,
-                g: 95,
-                b: 87,
-            },
-        );
-        self.draw_window_button_circle(
-            buffer,
-            buf_width,
-            min_rect,
-            Color {
-                r: 255,
-                g: 189,
-                b: 46,
-            },
-        );
-        self.draw_window_button_circle(
-            buffer,
-            buf_width,
-            max_rect,
-            Color {
-                r: 40,
-                g: 200,
-                b: 64,
-            },
-        );
-
-        let control_fg = Color {
-            r: 48,
-            g: 49,
-            b: 52,
-        };
-        if close_hover {
-            self.draw_window_close_icon(buffer, buf_width, bar_h, close_rect, control_fg);
-        }
-        if min_hover {
-            self.draw_window_minimize_icon(buffer, buf_width, bar_h, min_rect, control_fg);
-        }
-        if max_hover {
-            self.draw_window_maximize_icon(buffer, buf_width, bar_h, max_rect, control_fg);
-        }
-
-        // Bottom separator + soft shadow.
-        let sep_pixel = Color {
-            r: 54,
-            g: 56,
-            b: 74,
-        }
-        .to_pixel();
-        let py = bar_h - 1;
-        for px in 0..buf_width {
-            let idx = py * buf_width + px;
-            if idx < buffer.len() {
-                buffer[idx] = sep_pixel;
-            }
-        }
-
-        if bar_h < _buf_height {
-            let shadow_row = bar_h;
-            let alpha = 36u8;
+        // 1px bottom separator between bar and terminal.
+        if bar_h > 0 {
+            let py = bar_h - 1;
             for px in 0..buf_width {
-                let idx = shadow_row * buf_width + px;
+                let idx = py * buf_width + px;
                 if idx < buffer.len() {
-                    buffer[idx] = Self::blend_pixel(buffer[idx], 0x000000, alpha);
+                    buffer[idx] = Self::blend_pixel(buffer[idx], TAB_BORDER, 180);
                 }
             }
         }
@@ -1035,7 +1011,7 @@ impl Renderer {
         buf_width: usize,
         buf_height: usize,
         tab_index: usize,
-        tab: &TabInfo,
+        _tab: &TabInfo,
         tw: u32,
         mouse_pos: (f64, f64),
     ) {
@@ -1046,7 +1022,6 @@ impl Renderer {
             && mouse_pos.1 < (cy + ch) as f64
             && mouse_pos.1 < self.tab_bar_height_px() as f64;
 
-        // Draw circular background on close button hover.
         if is_close_hovered {
             let circle_r = (cw.min(ch) / 2).max(self.scaled_px(6));
             let circle_cx = (cx + cw / 2) as i32;
@@ -1057,28 +1032,134 @@ impl Renderer {
                 circle_cx,
                 circle_cy,
                 circle_r,
-                CLOSE_HOVER_BG.to_pixel(),
+                CLOSE_HOVER_BG_COLOR,
             );
         }
 
-        let close_fg = if tab.is_active {
-            Color {
-                r: 166,
-                g: 173,
-                b: 200,
-            } // Subtext0
-        } else {
-            Color {
-                r: 127,
-                g: 132,
-                b: 156,
-            } // Overlay0
-        };
+        let close_fg = Color::from_pixel(TAB_TEXT_INACTIVE);
         self.draw_tab_close_icon(buffer, buf_width, buf_height, (cx, cy, cw, ch), close_fg);
     }
 
+    /// Draws the 3 window control buttons at the right edge (non-macOS).
+    #[cfg(not(target_os = "macos"))]
+    fn draw_window_buttons(
+        &self,
+        buffer: &mut [u32],
+        buf_width: usize,
+        buf_height: usize,
+        mouse_pos: (f64, f64),
+    ) {
+        let bar_h = self.tab_bar_height_px();
+        let btn_w = self.scaled_px(WIN_BTN_WIDTH);
+        let bw = buf_width as u32;
+
+        // Button positions from right: Close, Maximize, Minimize.
+        let buttons: [(u32, WindowButton); 3] = [
+            (bw.saturating_sub(btn_w * 3), WindowButton::Minimize),
+            (bw.saturating_sub(btn_w * 2), WindowButton::Maximize),
+            (bw.saturating_sub(btn_w), WindowButton::Close),
+        ];
+
+        for &(btn_x, ref btn_type) in &buttons {
+            let is_hovered = mouse_pos.0 >= btn_x as f64
+                && mouse_pos.0 < (btn_x + btn_w) as f64
+                && mouse_pos.1 >= 0.0
+                && mouse_pos.1 < bar_h as f64;
+
+            // Hover background.
+            if is_hovered {
+                let hover_bg = if *btn_type == WindowButton::Close {
+                    WIN_BTN_CLOSE_HOVER
+                } else {
+                    WIN_BTN_HOVER
+                };
+                for py in 0..bar_h as usize {
+                    for px in btn_x as usize..(btn_x + btn_w) as usize {
+                        if px < buf_width && py < buf_height {
+                            let idx = py * buf_width + px;
+                            if idx < buffer.len() {
+                                buffer[idx] = hover_bg;
+                            }
+                        }
+                    }
+                }
+            }
+
+            let icon_color = if is_hovered && *btn_type == WindowButton::Close {
+                0xFFFFFF
+            } else {
+                WIN_BTN_ICON
+            };
+
+            let center_x = btn_x as f32 + btn_w as f32 / 2.0;
+            let center_y = bar_h as f32 / 2.0;
+            let thickness = (1.25_f32 * self.ui_scale() as f32).clamp(1.15, 2.2);
+
+            match btn_type {
+                WindowButton::Minimize => {
+                    // Thin horizontal line.
+                    let half_w = self.scaled_px(5) as f32;
+                    Self::draw_stroked_line(
+                        buffer,
+                        buf_width,
+                        buf_height,
+                        center_x - half_w,
+                        center_y,
+                        center_x + half_w,
+                        center_y,
+                        thickness,
+                        icon_color,
+                    );
+                }
+                WindowButton::Maximize => {
+                    // Small rectangle outline (10x10px scaled).
+                    let half = self.scaled_px(5) as f32;
+                    let x0 = center_x - half;
+                    let y0 = center_y - half;
+                    let x1 = center_x + half;
+                    let y1 = center_y + half;
+                    // Top.
+                    Self::draw_stroked_line(
+                        buffer, buf_width, buf_height,
+                        x0, y0, x1, y0, thickness, icon_color,
+                    );
+                    // Bottom.
+                    Self::draw_stroked_line(
+                        buffer, buf_width, buf_height,
+                        x0, y1, x1, y1, thickness, icon_color,
+                    );
+                    // Left.
+                    Self::draw_stroked_line(
+                        buffer, buf_width, buf_height,
+                        x0, y0, x0, y1, thickness, icon_color,
+                    );
+                    // Right.
+                    Self::draw_stroked_line(
+                        buffer, buf_width, buf_height,
+                        x1, y0, x1, y1, thickness, icon_color,
+                    );
+                }
+                WindowButton::Close => {
+                    // X shape.
+                    let half = self.scaled_px(5) as f32 * 0.7;
+                    Self::draw_stroked_line(
+                        buffer, buf_width, buf_height,
+                        center_x - half, center_y - half,
+                        center_x + half, center_y + half,
+                        thickness, icon_color,
+                    );
+                    Self::draw_stroked_line(
+                        buffer, buf_width, buf_height,
+                        center_x + half, center_y - half,
+                        center_x - half, center_y + half,
+                        thickness, icon_color,
+                    );
+                }
+            }
+        }
+    }
+
     /// Draws the drag overlay: ghost tab at cursor X + insertion indicator.
-    /// Detach happens instantly (not deferred), so this only draws for reorder.
     #[allow(clippy::too_many_arguments)]
     pub fn draw_tab_drag_overlay(
         &mut self,
@@ -1098,11 +1179,10 @@ impl Renderer {
         let tab_bar_height = self.tab_bar_height_px();
         let bar_h = tab_bar_height as usize;
 
-        // Ghost tab in the bar with 60% opacity.
+        // Ghost tab: semi-transparent flat rectangle (60% opacity).
         let ghost_x = (current_x - tw as f64 / 2.0).round() as i32;
-        let ghost_bg = ACTIVE_ACCENT;
-        let alpha = 153u32;
-        let inv_alpha = 255 - alpha;
+        let ghost_color = ACTIVE_TAB_BG;
+        let alpha = 153u8; // 60%
 
         for py in 0..bar_h {
             for dx in 0..tw as usize {
@@ -1114,14 +1194,7 @@ impl Renderer {
                 if idx >= buffer.len() {
                     continue;
                 }
-                let dst = buffer[idx];
-                let dr = (dst >> 16) & 0xFF;
-                let dg = (dst >> 8) & 0xFF;
-                let db = dst & 0xFF;
-                let r = (ghost_bg.r as u32 * alpha + dr * inv_alpha) / 255;
-                let g = (ghost_bg.g as u32 * alpha + dg * inv_alpha) / 255;
-                let b = (ghost_bg.b as u32 * alpha + db * inv_alpha) / 255;
-                buffer[idx] = (r << 16) | (g << 8) | b;
+                buffer[idx] = Self::blend_rgb(buffer[idx], ghost_color, alpha);
             }
         }
 
@@ -1153,9 +1226,8 @@ impl Renderer {
             }
         }
 
-        // Insertion indicator: 2px lavender vertical line.
+        // Insertion indicator: 2px vertical line in Mauve (#CBA6F7).
         let ix = self.tab_origin_x(insert_index, tw);
-        let ic = ACTIVE_ACCENT.to_pixel();
         let indicator_y_pad = self.scaled_px(4) as usize;
         for py in indicator_y_pad..bar_h.saturating_sub(indicator_y_pad) {
             for dx in 0..self.scaled_px(2) {
@@ -1163,7 +1235,7 @@ impl Renderer {
                 if (px as usize) < buf_width && py < buf_height {
                     let idx = py * buf_width + px as usize;
                     if idx < buffer.len() {
-                        buffer[idx] = ic;
+                        buffer[idx] = INSERTION_COLOR;
                     }
                 }
             }
@@ -1171,20 +1243,47 @@ impl Renderer {
     }
 
     /// Returns true when pointer is over the custom window minimize button.
+    #[allow(dead_code)]
     pub fn is_window_minimize_button(&self, x: f64, y: f64, buf_width: usize) -> bool {
-        let (min_rect, _, _) = self.window_control_rects(buf_width);
-        Self::point_in_rect(x, y, min_rect)
+        #[cfg(not(target_os = "macos"))]
+        {
+            self.window_button_at_position(x, y, buf_width as u32)
+                == Some(WindowButton::Minimize)
+        }
+        #[cfg(target_os = "macos")]
+        {
+            let _ = (x, y, buf_width);
+            false
+        }
     }
 
     /// Returns true when pointer is over the custom window maximize button.
+    #[allow(dead_code)]
     pub fn is_window_maximize_button(&self, x: f64, y: f64, buf_width: usize) -> bool {
-        let (_, max_rect, _) = self.window_control_rects(buf_width);
-        Self::point_in_rect(x, y, max_rect)
+        #[cfg(not(target_os = "macos"))]
+        {
+            self.window_button_at_position(x, y, buf_width as u32)
+                == Some(WindowButton::Maximize)
+        }
+        #[cfg(target_os = "macos")]
+        {
+            let _ = (x, y, buf_width);
+            false
+        }
     }
 
     /// Returns true when pointer is over the custom window close button.
+    #[allow(dead_code)]
     pub fn is_window_close_button(&self, x: f64, y: f64, buf_width: usize) -> bool {
-        let (_, _, close_rect) = self.window_control_rects(buf_width);
-        Self::point_in_rect(x, y, close_rect)
+        #[cfg(not(target_os = "macos"))]
+        {
+            self.window_button_at_position(x, y, buf_width as u32)
+                == Some(WindowButton::Close)
+        }
+        #[cfg(target_os = "macos")]
+        {
+            let _ = (x, y, buf_width);
+            false
+        }
     }
 }
