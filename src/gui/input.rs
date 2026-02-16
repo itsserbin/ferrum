@@ -152,25 +152,29 @@ pub(super) fn key_to_bytes(key: &Key, modifiers: ModifiersState, decckm: bool) -
                 NamedKey::ArrowUp => Some(encode_arrow_key('A', decckm, modifier_param)),
                 NamedKey::ArrowDown => Some(encode_arrow_key('B', decckm, modifier_param)),
                 NamedKey::ArrowRight => {
-                    if modifiers.alt_key() && !modifiers.control_key() {
+                    if modifiers.alt_key() && modifiers.shift_key() && !modifiers.control_key() {
+                        Some(encode_arrow_key('C', decckm, Some(4)))
+                    } else if modifiers.alt_key() && !modifiers.control_key() {
                         Some(b"\x1bf".to_vec()) // Meta+f — forward word
                     } else if modifiers.shift_key()
                         && !modifiers.control_key()
                         && !modifiers.alt_key()
                     {
-                        Some(encode_arrow_key('C', decckm, None))
+                        Some(encode_arrow_key('C', decckm, Some(2)))
                     } else {
                         Some(encode_arrow_key('C', decckm, modifier_param))
                     }
                 }
                 NamedKey::ArrowLeft => {
-                    if modifiers.alt_key() && !modifiers.control_key() {
+                    if modifiers.alt_key() && modifiers.shift_key() && !modifiers.control_key() {
+                        Some(encode_arrow_key('D', decckm, Some(4)))
+                    } else if modifiers.alt_key() && !modifiers.control_key() {
                         Some(b"\x1bb".to_vec()) // Meta+b — backward word
                     } else if modifiers.shift_key()
                         && !modifiers.control_key()
                         && !modifiers.alt_key()
                     {
-                        Some(encode_arrow_key('D', decckm, None))
+                        Some(encode_arrow_key('D', decckm, Some(2)))
                     } else {
                         Some(encode_arrow_key('D', decckm, modifier_param))
                     }

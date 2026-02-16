@@ -124,6 +124,7 @@ pub(super) struct FerrumWindow {
     pub(super) last_click_pos: Position,
     pub(super) click_streak: u8,
     pub(super) selection_anchor: Option<crate::core::SelectionPoint>,
+    pub(super) keyboard_selection_anchor: Option<crate::core::SelectionPoint>,
     pub(super) selection_drag_mode: SelectionDragMode,
     pub(super) hovered_tab: Option<usize>,
     pub(super) context_menu: Option<ContextMenu>,

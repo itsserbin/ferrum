@@ -7,6 +7,7 @@ impl FerrumWindow {
             tab.scroll_offset = 0;
             tab.selection = None;
         }
+        self.keyboard_selection_anchor = None;
 
         let decckm = self.active_tab_ref().is_some_and(|t| t.terminal.decckm);
         let Some(bytes) = key_to_bytes(key, self.modifiers, decckm) else {

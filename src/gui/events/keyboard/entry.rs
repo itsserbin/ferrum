@@ -46,8 +46,16 @@ impl FerrumWindow {
             return;
         }
 
+        if self.handle_shift_arrow_selection(&key) {
+            return;
+        }
+
         if Self::is_modifier_only_key(&key) {
             return;
+        }
+
+        if !self.modifiers.shift_key() {
+            self.keyboard_selection_anchor = None;
         }
 
         // Super/Cmd+key combinations are app-level shortcuts only; never forward to terminal.

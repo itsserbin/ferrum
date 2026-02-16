@@ -58,6 +58,7 @@ impl ApplicationHandler for App {
                 win.modifiers = ModifiersState::empty();
                 win.is_selecting = false;
                 win.selection_anchor = None;
+                win.keyboard_selection_anchor = None;
                 win.selection_drag_mode = SelectionDragMode::Character;
                 win.click_streak = 0;
                 win.last_tab_click = None;
@@ -221,8 +222,11 @@ impl App {
                             let size = new_win.window.inner_size();
                             let (rows, cols) = new_win.calc_grid_size(size.width, size.height);
                             new_win.new_tab_with_title(
-                                rows, cols, Some(tab_title),
-                                &mut self.next_tab_id, &self.tx,
+                                rows,
+                                cols,
+                                Some(tab_title),
+                                &mut self.next_tab_id,
+                                &self.tx,
                             );
                             if let Some(tab) = new_win.tabs.first() {
                                 new_win.window.set_title(&tab.title);
@@ -241,8 +245,11 @@ impl App {
                             let size = new_win.window.inner_size();
                             let (rows, cols) = new_win.calc_grid_size(size.width, size.height);
                             new_win.new_tab_with_title(
-                                rows, cols, Some(tab_title),
-                                &mut self.next_tab_id, &self.tx,
+                                rows,
+                                cols,
+                                Some(tab_title),
+                                &mut self.next_tab_id,
+                                &self.tx,
                             );
                             if let Some(tab) = new_win.tabs.first() {
                                 new_win.window.set_title(&tab.title);
@@ -278,6 +285,14 @@ impl App {
                         }
                     }
                 }
+            }
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            for win in self.windows.values() {
+                platform::macos::sync_native_tab_bar_visibility(&win.window);
+                win.window.request_redraw();
             }
         }
 

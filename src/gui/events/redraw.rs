@@ -125,6 +125,8 @@ impl FerrumWindow {
     }
 
     pub(crate) fn on_redraw_requested(&mut self) {
+        #[cfg(target_os = "macos")]
+        crate::gui::platform::macos::sync_native_tab_bar_visibility(&self.window);
         self.refresh_tab_bar_visibility();
         self.apply_pending_resize();
 

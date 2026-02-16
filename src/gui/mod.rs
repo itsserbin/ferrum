@@ -21,9 +21,11 @@ use winit::window::{CursorIcon, ResizeDirection, Window, WindowId};
 
 use crate::core::terminal::Terminal;
 use crate::core::{MouseMode, Position, SecurityGuard, Selection};
-use crate::gui::renderer::{ContextMenu, CpuRenderer, RendererBackend, SecurityPopup, WINDOW_PADDING};
 #[cfg(not(target_os = "macos"))]
 use crate::gui::renderer::TAB_BAR_HEIGHT;
+use crate::gui::renderer::{
+    ContextMenu, CpuRenderer, RendererBackend, SecurityPopup, WINDOW_PADDING,
+};
 use crate::pty;
 
 use self::state::{
@@ -33,10 +35,7 @@ use self::state::{
 
 impl FerrumWindow {
     /// Creates a new FerrumWindow wrapping an already-created winit window and renderer backend.
-    fn new(
-        window: Arc<Window>,
-        context: &Context<winit::event_loop::OwnedDisplayHandle>,
-    ) -> Self {
+    fn new(window: Arc<Window>, context: &Context<winit::event_loop::OwnedDisplayHandle>) -> Self {
         let mut backend = RendererBackend::new(window.clone(), context);
         backend.set_scale(window.scale_factor());
 
@@ -54,6 +53,7 @@ impl FerrumWindow {
             last_click_pos: Position { row: 0, col: 0 },
             click_streak: 0,
             selection_anchor: None,
+            keyboard_selection_anchor: None,
             selection_drag_mode: SelectionDragMode::Character,
             hovered_tab: None,
             context_menu: None,

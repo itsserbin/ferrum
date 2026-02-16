@@ -38,7 +38,7 @@ fn shift_arrow_left_uses_plain_arrow_encoding() {
         false,
     )
     .expect("Shift+Left should be encoded");
-    assert_eq!(bytes, b"\x1b[D");
+    assert_eq!(bytes, b"\x1b[1;2D");
 }
 
 #[test]
@@ -50,6 +50,17 @@ fn alt_arrow_right_moves_by_word() {
     )
     .expect("Alt+Right should be encoded");
     assert_eq!(bytes, b"\x1bf");
+}
+
+#[test]
+fn alt_shift_arrow_right_uses_combined_modifier_encoding() {
+    let bytes = key_to_bytes(
+        &Key::Named(NamedKey::ArrowRight),
+        mods(false, true, true),
+        false,
+    )
+    .expect("Alt+Shift+Right should be encoded");
+    assert_eq!(bytes, b"\x1b[1;4C");
 }
 
 #[test]

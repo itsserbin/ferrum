@@ -67,6 +67,7 @@ impl FerrumWindow {
                 }
 
                 self.is_selecting = true;
+                self.keyboard_selection_anchor = None;
 
                 if self.modifiers.shift_key() {
                     self.click_streak = 0;

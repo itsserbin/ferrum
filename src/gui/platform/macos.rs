@@ -1,8 +1,8 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use objc2::msg_send;
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
-use objc2::msg_send;
 use objc2_app_kit::{NSView, NSWindow, NSWindowTabbingMode};
 use objc2_foundation::ns_string;
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -50,8 +50,7 @@ fn get_ns_window(window: &Window) -> Option<Retained<NSWindow>> {
         return None;
     };
     unsafe {
-        let ns_view: Retained<NSView> =
-            Retained::retain(appkit.ns_view.as_ptr().cast())?;
+        let ns_view: Retained<NSView> = Retained::retain(appkit.ns_view.as_ptr().cast())?;
         ns_view.window()
     }
 }
@@ -84,9 +83,8 @@ pub fn install_new_tab_handler(window: &Window) {
 
     unsafe {
         let sel = sel_registerName(c"newWindowForTab:".as_ptr());
-        let imp: unsafe extern "C" fn() = core::mem::transmute(
-            handle_new_window_for_tab as unsafe extern "C" fn(_, _, _),
-        );
+        let imp: unsafe extern "C" fn() =
+            core::mem::transmute(handle_new_window_for_tab as unsafe extern "C" fn(_, _, _));
         let types = c"v@:@".as_ptr();
 
         // Helper: try add, then replace if already exists.
@@ -160,8 +158,7 @@ pub fn select_tab(window: &Window, index: usize) {
         return;
     };
     unsafe {
-        let tabbed: Option<Retained<AnyObject>> =
-            msg_send![&ns_window, tabbedWindows];
+        let tabbed: Option<Retained<AnyObject>> = msg_send![&ns_window, tabbedWindows];
         let Some(windows) = tabbed else { return };
         let count: usize = msg_send![&windows, count];
         if count == 0 {
@@ -190,6 +187,32 @@ pub fn select_previous_tab(window: &Window) {
     };
     unsafe {
         let _: () = msg_send![&ns_window, selectPreviousTab: std::ptr::null::<AnyObject>()];
+    }
+}
+
+/// Sync native macOS tab bar visibility:
+/// hide when only one native tab remains, show for 2+ tabs.
+pub fn sync_native_tab_bar_visibility(window: &Window) {
+    let Some(ns_window) = get_ns_window(window) else {
+        return;
+    };
+    unsafe {
+        let sel_set_visible = sel_registerName(c"setTabBarVisible:".as_ptr());
+        let supports: bool = msg_send![&ns_window, respondsToSelector: sel_set_visible];
+        if !supports {
+            return;
+        }
+
+        let tabbed: Option<Retained<AnyObject>> = msg_send![&ns_window, tabbedWindows];
+        let count = tabbed
+            .as_ref()
+            .map(|windows| {
+                let c: usize = msg_send![windows, count];
+                c
+            })
+            .unwrap_or(1);
+        let visible = count > 1;
+        let _: () = msg_send![&ns_window, setTabBarVisible: visible];
     }
 }
 
