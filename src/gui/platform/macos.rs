@@ -177,14 +177,42 @@ fn ensure_controller_class() {
 /// Creates an NSWindowController for the given window.
 /// The controller responds to `newWindowForTab:`, which makes the native "+" button appear.
 /// The returned `Retained` MUST be kept alive for the lifetime of the window.
+///
+/// Uses raw `objc_msgSend` to avoid trait conflicts between objc2 0.5 and 0.6
+/// (winit pulls in 0.5, our direct dep is 0.6).
 pub fn create_window_controller(window: &Window) -> Option<Retained<AnyObject>> {
     let ns_window = get_ns_window(window)?;
     ensure_controller_class();
 
+    unsafe extern "C" {
+        fn objc_msgSend(
+            obj: *const core::ffi::c_void,
+            sel: *const core::ffi::c_void,
+            ...
+        ) -> *mut core::ffi::c_void;
+        fn sel_registerName(name: *const core::ffi::c_char) -> *const core::ffi::c_void;
+    }
+
     unsafe {
         let cls = AnyClass::get(c"FermWindowController")?;
-        let alloc: Retained<AnyObject> = msg_send![cls, alloc];
-        let controller: Retained<AnyObject> = msg_send![alloc, initWithWindow: &*ns_window];
-        Some(controller)
+        let sel_alloc = sel_registerName(c"alloc".as_ptr());
+        let sel_init = sel_registerName(c"initWithWindow:".as_ptr());
+
+        let alloc = objc_msgSend((cls as *const AnyClass).cast(), sel_alloc);
+        if alloc.is_null() {
+            return None;
+        }
+
+        let controller = objc_msgSend(
+            alloc,
+            sel_init,
+            Retained::as_ptr(&ns_window) as *const core::ffi::c_void,
+        );
+        if controller.is_null() {
+            return None;
+        }
+
+        // initWithWindow: returns +1 retained — wrap without extra retain.
+        Retained::retain(controller.cast())
     }
 }
