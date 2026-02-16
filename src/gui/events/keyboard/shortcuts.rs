@@ -5,8 +5,8 @@ impl FerrumWindow {
         &mut self,
         _event_loop: &ActiveEventLoop,
         key: &Key,
-        next_tab_id: &mut u64,
-        tx: &mpsc::Sender<PtyEvent>,
+        _next_tab_id: &mut u64,
+        _tx: &mpsc::Sender<PtyEvent>,
     ) -> bool {
         if !self.is_action_modifier() || self.modifiers.shift_key() {
             return false;
@@ -22,7 +22,7 @@ impl FerrumWindow {
                 {
                     let size = self.window.inner_size();
                     let (rows, cols) = self.calc_grid_size(size.width, size.height);
-                    self.new_tab(rows, cols, next_tab_id, tx);
+                    self.new_tab(rows, cols, _next_tab_id, _tx);
                 }
                 true
             }
@@ -94,8 +94,8 @@ impl FerrumWindow {
     pub(in crate::gui::events::keyboard) fn handle_ctrl_shift_shortcuts(
         &mut self,
         key: &Key,
-        next_tab_id: &mut u64,
-        tx: &mpsc::Sender<PtyEvent>,
+        _next_tab_id: &mut u64,
+        _tx: &mpsc::Sender<PtyEvent>,
     ) -> bool {
         if !self.is_action_modifier() || !self.modifiers.shift_key() {
             return false;
@@ -115,7 +115,7 @@ impl FerrumWindow {
                 {
                     let size = self.window.inner_size();
                     let (rows, cols) = self.calc_grid_size(size.width, size.height);
-                    self.new_tab_with_title(rows, cols, Some(closed.title), next_tab_id, tx);
+                    self.new_tab_with_title(rows, cols, Some(closed.title), _next_tab_id, _tx);
                 }
                 true
             }

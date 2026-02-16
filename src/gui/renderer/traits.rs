@@ -2,7 +2,9 @@
 
 use crate::core::{CursorStyle, Grid, Selection};
 
-use super::{ContextMenu, SecurityPopup, TabBarHit, TabInfo, WindowButton};
+use super::{ContextMenu, SecurityPopup, TabBarHit, TabInfo};
+#[cfg(not(target_os = "macos"))]
+use super::WindowButton;
 
 /// Selects which rendering backend to use.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -2,7 +2,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use objc2::rc::Retained;
 use objc2::runtime::{AnyClass, AnyObject};
-use objc2::{msg_send, msg_send_id};
+use objc2::msg_send;
 use objc2_app_kit::{NSView, NSWindow, NSWindowTabbingMode};
 use objc2_foundation::ns_string;
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -46,7 +46,7 @@ pub fn add_as_tab(existing: &Window, new_window: &Window) {
     };
     unsafe {
         // NSWindowOrderingMode::Above = 1
-        let _: () = msg_send![&existing_ns, addTabbedWindow: &*new_ns ordered: 1i64];
+        let _: () = msg_send![&existing_ns, addTabbedWindow: &*new_ns, ordered: 1i64];
         new_ns.makeKeyAndOrderFront(None);
     }
 }
@@ -59,14 +59,14 @@ pub fn select_tab(window: &Window, index: usize) {
     };
     unsafe {
         let tabbed: Option<Retained<AnyObject>> =
-            msg_send_id![&ns_window, tabbedWindows];
+            msg_send![&ns_window, tabbedWindows];
         let Some(windows) = tabbed else { return };
         let count: usize = msg_send![&windows, count];
         if count == 0 {
             return;
         }
         let idx = index.min(count - 1);
-        let target: Retained<NSWindow> = msg_send_id![&windows, objectAtIndex: idx];
+        let target: Retained<NSWindow> = msg_send![&windows, objectAtIndex: idx];
         target.makeKeyAndOrderFront(None);
     }
 }
@@ -107,37 +107,40 @@ pub fn install_new_tab_responder() {
         return;
     }
 
+    // Raw ObjC runtime C functions — stable ABI, avoids objc2::ffi type churn.
+    extern "C" {
+        fn object_getClass(obj: *const core::ffi::c_void) -> *mut core::ffi::c_void;
+        fn sel_registerName(name: *const core::ffi::c_char) -> *const core::ffi::c_void;
+        fn class_addMethod(
+            cls: *mut core::ffi::c_void,
+            name: *const core::ffi::c_void,
+            imp: unsafe extern "C" fn(),
+            types: *const core::ffi::c_char,
+        ) -> bool;
+    }
+
     unsafe extern "C" fn handle_new_window_for_tab(
-        _this: *mut objc2::ffi::objc_object,
-        _cmd: *const objc2::ffi::objc_selector,
-        _sender: *mut objc2::ffi::objc_object,
+        _this: *mut core::ffi::c_void,
+        _cmd: *const core::ffi::c_void,
+        _sender: *mut core::ffi::c_void,
     ) {
         NEW_TAB_REQUESTED.store(true, Ordering::SeqCst);
     }
 
     unsafe {
-        let Some(ns_app_cls) = AnyClass::get("NSApplication") else {
+        let Some(ns_app_cls) = AnyClass::get(c"NSApplication") else {
             return;
         };
-        let app: Retained<AnyObject> = msg_send_id![ns_app_cls, sharedApplication];
-        let cls = objc2::ffi::object_getClass(
-            (&*app as *const AnyObject).cast(),
-        );
+        let app: Retained<AnyObject> = msg_send![ns_app_cls, sharedApplication];
+        let cls = object_getClass(Retained::as_ptr(&app).cast());
         if cls.is_null() {
             return;
         }
-        let sel = objc2::ffi::sel_registerName(c"newWindowForTab:".as_ptr());
-        objc2::ffi::class_addMethod(
-            cls as *mut _,
+        let sel = sel_registerName(c"newWindowForTab:".as_ptr());
+        class_addMethod(
+            cls,
             sel,
-            Some(core::mem::transmute(
-                handle_new_window_for_tab
-                    as unsafe extern "C" fn(
-                        *mut objc2::ffi::objc_object,
-                        *const objc2::ffi::objc_selector,
-                        *mut objc2::ffi::objc_object,
-                    ),
-            )),
+            core::mem::transmute(handle_new_window_for_tab as unsafe extern "C" fn(_, _, _)),
             c"v@:@".as_ptr(),
         );
     }

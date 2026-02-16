@@ -1,4 +1,6 @@
-use super::{FONT_SIZE, LINE_PADDING, SCROLLBAR_HIT_ZONE, TAB_BAR_HEIGHT, WINDOW_PADDING};
+use super::{FONT_SIZE, LINE_PADDING, SCROLLBAR_HIT_ZONE, WINDOW_PADDING};
+#[cfg(not(target_os = "macos"))]
+use super::TAB_BAR_HEIGHT;
 use fontdue::Font;
 
 /// Font metrics shared across renderers.

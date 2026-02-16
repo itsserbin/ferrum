@@ -53,8 +53,6 @@ impl FerrumWindow {
         self.mouse_pos = (mx, my);
         let tab_bar_height = self.backend.tab_bar_height_px() as f64;
         let window_padding = self.backend.window_padding_px() as f64;
-        let detach_threshold_y = self.backend.scaled_px(DETACH_THRESHOLD_Y) as f64;
-
         // On non-macOS, check resize edges BEFORE any other hit testing.
         #[cfg(not(target_os = "macos"))]
         {
@@ -83,6 +81,7 @@ impl FerrumWindow {
             }
             if drag.is_active {
                 // Detach: cursor moved far enough vertically from the tab bar.
+                let detach_threshold_y = self.backend.scaled_px(DETACH_THRESHOLD_Y) as f64;
                 let beyond_below = my > tab_bar_height + detach_threshold_y;
                 let beyond_above = my < self.backend.scaled_px(DRAG_ACTIVATION_THRESHOLD) as f64;
                 if (beyond_below || beyond_above) && self.tabs.len() > 1 {
