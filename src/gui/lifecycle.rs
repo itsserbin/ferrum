@@ -24,6 +24,10 @@ impl ApplicationHandler for App {
 
         // Create initial tab in the first window.
         if let Some(win) = self.windows.get_mut(&win_id) {
+            // Install newWindowForTab: on the window class (enables native "+" button).
+            #[cfg(target_os = "macos")]
+            platform::macos::install_new_tab_handler(&win.window);
+
             let size = win.window.inner_size();
             let (rows, cols) = win.calc_grid_size(size.width, size.height);
             win.new_tab(rows, cols, &mut self.next_tab_id, &self.tx);

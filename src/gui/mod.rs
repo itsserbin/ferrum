@@ -40,13 +40,8 @@ impl FerrumWindow {
         let mut backend = RendererBackend::new(window.clone(), context);
         backend.set_scale(window.scale_factor());
 
-        #[cfg(target_os = "macos")]
-        let _window_controller = platform::macos::create_window_controller(&window);
-
         FerrumWindow {
             window,
-            #[cfg(target_os = "macos")]
-            _window_controller,
             pending_grid_resize: None,
             backend,
             tabs: Vec::new(),

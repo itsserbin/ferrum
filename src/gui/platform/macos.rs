@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use objc2::rc::Retained;
-use objc2::runtime::{AnyClass, AnyObject};
+use objc2::runtime::AnyObject;
 use objc2::msg_send;
 use objc2_app_kit::{NSView, NSWindow, NSWindowTabbingMode};
 use objc2_foundation::ns_string;
@@ -10,6 +10,27 @@ use winit::window::Window;
 
 /// Flag: native "+" button was clicked, need to create a new tab.
 static NEW_TAB_REQUESTED: AtomicBool = AtomicBool::new(false);
+
+// Raw ObjC runtime C functions — stable ABI, avoids objc2 version conflicts.
+unsafe extern "C" {
+    fn object_getClass(obj: *const core::ffi::c_void) -> *mut core::ffi::c_void;
+    fn sel_registerName(name: *const core::ffi::c_char) -> *const core::ffi::c_void;
+    fn class_addMethod(
+        cls: *mut core::ffi::c_void,
+        name: *const core::ffi::c_void,
+        imp: unsafe extern "C" fn(),
+        types: *const core::ffi::c_char,
+    ) -> bool;
+}
+
+/// ObjC method implementation for `newWindowForTab:`.
+unsafe extern "C" fn handle_new_window_for_tab(
+    _this: *mut core::ffi::c_void,
+    _cmd: *const core::ffi::c_void,
+    _sender: *mut core::ffi::c_void,
+) {
+    NEW_TAB_REQUESTED.store(true, Ordering::SeqCst);
+}
 
 /// Extracts the NSWindow from a winit Window via raw-window-handle.
 fn get_ns_window(window: &Window) -> Option<Retained<NSWindow>> {
@@ -33,6 +54,35 @@ pub fn configure_native_tabs(window: &Window) {
         ns_window.setTabbingMode(NSWindowTabbingMode::Preferred);
         let identifier = ns_string!("com.ferrum.terminal");
         let _: () = msg_send![&ns_window, setTabbingIdentifier: identifier];
+    }
+}
+
+/// Adds `newWindowForTab:` to the winit NSWindow subclass.
+/// Called once — all winit windows share the same class.
+/// The "+" button appears when macOS finds this method in the responder chain.
+pub fn install_new_tab_handler(window: &Window) {
+    static INSTALLED: AtomicBool = AtomicBool::new(false);
+    if INSTALLED.swap(true, Ordering::SeqCst) {
+        return;
+    }
+
+    let Some(ns_window) = get_ns_window(window) else {
+        INSTALLED.store(false, Ordering::SeqCst);
+        return;
+    };
+    unsafe {
+        let cls = object_getClass(Retained::as_ptr(&ns_window).cast());
+        if cls.is_null() {
+            INSTALLED.store(false, Ordering::SeqCst);
+            return;
+        }
+        let sel = sel_registerName(c"newWindowForTab:".as_ptr());
+        class_addMethod(
+            cls,
+            sel,
+            core::mem::transmute(handle_new_window_for_tab as unsafe extern "C" fn(_, _, _)),
+            c"v@:@".as_ptr(),
+        );
     }
 }
 
@@ -114,105 +164,4 @@ pub fn select_previous_tab(window: &Window) {
 /// Returns true and resets the flag if the native "+" button was clicked.
 pub fn take_new_tab_request() -> bool {
     NEW_TAB_REQUESTED.swap(false, Ordering::SeqCst)
-}
-
-/// Registers the `FermWindowController` ObjC class (inherits NSWindowController).
-/// This class responds to `newWindowForTab:` — required by macOS to show the "+" button.
-fn ensure_controller_class() {
-    static REGISTERED: AtomicBool = AtomicBool::new(false);
-    if REGISTERED.swap(true, Ordering::SeqCst) {
-        return;
-    }
-
-    // Raw ObjC runtime C functions — stable ABI.
-    unsafe extern "C" {
-        fn objc_allocateClassPair(
-            superclass: *const core::ffi::c_void,
-            name: *const core::ffi::c_char,
-            extra_bytes: usize,
-        ) -> *mut core::ffi::c_void;
-        fn objc_registerClassPair(cls: *mut core::ffi::c_void);
-        fn sel_registerName(name: *const core::ffi::c_char) -> *const core::ffi::c_void;
-        fn class_addMethod(
-            cls: *mut core::ffi::c_void,
-            name: *const core::ffi::c_void,
-            imp: unsafe extern "C" fn(),
-            types: *const core::ffi::c_char,
-        ) -> bool;
-    }
-
-    unsafe extern "C" fn handle_new_window_for_tab(
-        _this: *mut core::ffi::c_void,
-        _cmd: *const core::ffi::c_void,
-        _sender: *mut core::ffi::c_void,
-    ) {
-        NEW_TAB_REQUESTED.store(true, Ordering::SeqCst);
-    }
-
-    unsafe {
-        let Some(superclass) = AnyClass::get(c"NSWindowController") else {
-            REGISTERED.store(false, Ordering::SeqCst);
-            return;
-        };
-        let cls = objc_allocateClassPair(
-            (superclass as *const AnyClass).cast(),
-            c"FermWindowController".as_ptr(),
-            0,
-        );
-        if cls.is_null() {
-            REGISTERED.store(false, Ordering::SeqCst);
-            return;
-        }
-        let sel = sel_registerName(c"newWindowForTab:".as_ptr());
-        class_addMethod(
-            cls,
-            sel,
-            core::mem::transmute(handle_new_window_for_tab as unsafe extern "C" fn(_, _, _)),
-            c"v@:@".as_ptr(),
-        );
-        objc_registerClassPair(cls);
-    }
-}
-
-/// Creates an NSWindowController for the given window.
-/// The controller responds to `newWindowForTab:`, which makes the native "+" button appear.
-/// The returned `Retained` MUST be kept alive for the lifetime of the window.
-///
-/// Uses raw `objc_msgSend` to avoid trait conflicts between objc2 0.5 and 0.6
-/// (winit pulls in 0.5, our direct dep is 0.6).
-pub fn create_window_controller(window: &Window) -> Option<Retained<AnyObject>> {
-    let ns_window = get_ns_window(window)?;
-    ensure_controller_class();
-
-    unsafe extern "C" {
-        fn objc_msgSend(
-            obj: *const core::ffi::c_void,
-            sel: *const core::ffi::c_void,
-            ...
-        ) -> *mut core::ffi::c_void;
-        fn sel_registerName(name: *const core::ffi::c_char) -> *const core::ffi::c_void;
-    }
-
-    unsafe {
-        let cls = AnyClass::get(c"FermWindowController")?;
-        let sel_alloc = sel_registerName(c"alloc".as_ptr());
-        let sel_init = sel_registerName(c"initWithWindow:".as_ptr());
-
-        let alloc = objc_msgSend((cls as *const AnyClass).cast(), sel_alloc);
-        if alloc.is_null() {
-            return None;
-        }
-
-        let controller = objc_msgSend(
-            alloc,
-            sel_init,
-            Retained::as_ptr(&ns_window) as *const core::ffi::c_void,
-        );
-        if controller.is_null() {
-            return None;
-        }
-
-        // initWithWindow: returns +1 retained — wrap without extra retain.
-        Retained::retain(controller.cast())
-    }
 }
