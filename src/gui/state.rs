@@ -112,6 +112,8 @@ pub(super) struct FerrumWindow {
     pub(super) resize_direction: Option<ResizeDirection>,
     pub(super) cursor_blink_start: std::time::Instant,
     pub(super) suppress_click_to_cursor_once: bool,
+    /// Accumulates fractional pixel scroll for trackpad (PixelDelta).
+    pub(super) scroll_accumulator: f64,
     /// Pending requests from this window to the App (detach, close, etc.).
     pub(super) pending_requests: Vec<WindowRequest>,
 }

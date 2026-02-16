@@ -39,7 +39,7 @@ impl Renderer {
     pub(crate) fn tab_strip_start_x(&self) -> u32 {
         #[cfg(target_os = "macos")]
         {
-            self.scaled_px(70)
+            self.scaled_px(78)
         }
         #[cfg(not(target_os = "macos"))]
         {
@@ -88,17 +88,18 @@ impl Renderer {
 
     /// Returns rectangle for per-tab close button.
     fn close_button_rect(&self, tab_index: usize, tw: u32) -> (u32, u32, u32, u32) {
-        let btn_w = self.cell_width + self.scaled_px(8);
-        let x = self.tab_origin_x(tab_index, tw) + tw - btn_w - self.scaled_px(6);
-        let y = (self.tab_bar_height_px().saturating_sub(self.cell_height)) / 2;
-        (x, y, btn_w, self.cell_height)
+        let btn_size = self.scaled_px(20);
+        let x = self.tab_origin_x(tab_index, tw) + tw - btn_size - self.scaled_px(6);
+        let y = (self.tab_bar_height_px().saturating_sub(btn_size)) / 2;
+        (x, y, btn_size, btn_size)
     }
 
     /// Returns rectangle for new-tab button.
     fn plus_button_rect(&self, tab_count: usize, tw: u32) -> (u32, u32, u32, u32) {
+        let btn_size = self.scaled_px(24);
         let x = self.tab_strip_start_x() + tab_count as u32 * tw + self.scaled_px(4);
-        let y = (self.tab_bar_height_px().saturating_sub(self.cell_height)) / 2;
-        (x, y, self.cell_width + self.scaled_px(8), self.cell_height)
+        let y = (self.tab_bar_height_px().saturating_sub(btn_size)) / 2;
+        (x, y, btn_size, btn_size)
     }
 
     /// Hit-tests the tab bar and returns the clicked target.
@@ -357,7 +358,7 @@ impl Renderer {
         let (x, y, w, h) = rect;
         let center_x = x as f32 + w as f32 * 0.5;
         let center_y = y as f32 + h as f32 * 0.5;
-        let half = (self.cell_height as f32 / 6.0).clamp(2.5, 3.4);
+        let half = (w.min(h) as f32 * 0.25).clamp(2.5, 5.0);
         let thickness = (1.25_f32 * self.ui_scale() as f32).clamp(1.15, 2.2);
         let pixel = color.to_pixel();
 
@@ -396,7 +397,7 @@ impl Renderer {
         let (x, y, w, h) = rect;
         let center_x = x as f32 + w as f32 * 0.5;
         let center_y = y as f32 + h as f32 * 0.5;
-        let half = (self.cell_height as f32 / 6.0).clamp(2.5, 3.4) * 0.86;
+        let half = (w.min(h) as f32 * 0.22).clamp(2.5, 4.5);
         let thickness = (1.25_f32 * self.ui_scale() as f32).clamp(1.15, 2.2);
         let pixel = color.to_pixel();
 
@@ -433,7 +434,7 @@ impl Renderer {
         let tab_padding_h = self.scaled_px(14);
         let show_close = tab.is_active || is_hovered;
         let close_reserved = if show_close {
-            self.cell_width + self.scaled_px(8)
+            self.scaled_px(20) + self.scaled_px(6)
         } else {
             0
         };
@@ -643,7 +644,7 @@ impl Renderer {
     }
 
     /// Draws a 1px border on the top and sides of a top-rounded rect (no bottom border).
-    #[allow(clippy::too_many_arguments)]
+    #[allow(dead_code, clippy::too_many_arguments)]
     fn draw_top_rounded_border(
         &self,
         buffer: &mut [u32],
@@ -723,22 +724,26 @@ impl Renderer {
         let tab_bar_height = self.tab_bar_height_px();
         let bar_h = tab_bar_height as usize;
 
-        // Solid bar background fill.
-        for py in 0..bar_h.min(buf_height) {
-            for px in 0..buf_width {
-                let idx = py * buf_width + px;
-                if idx < buffer.len() {
-                    buffer[idx] = BAR_BG;
-                }
-            }
-        }
+        // Bar background with rounded top corners.
+        let bar_radius = self.scaled_px(10);
+        self.draw_top_rounded_rect(
+            buffer,
+            buf_width,
+            buf_height,
+            0,
+            0,
+            buf_width as u32,
+            tab_bar_height,
+            bar_radius,
+            BAR_BG,
+            255,
+        );
 
         let tw = self.tab_width(tabs.len(), buf_width as u32);
         let text_y = (tab_bar_height.saturating_sub(self.cell_height)) / 2 + self.scaled_px(1);
         let tab_padding_h = self.scaled_px(14);
         let use_numbers = self.should_show_number(tw);
-        let tab_radius = self.scaled_px(8);
-        let tab_inset_y = self.scaled_px(0); // Tabs start from top of bar.
+        let tab_inset_y = 0u32; // Tabs start from top of bar.
         let tab_h = tab_bar_height; // Full height so bottom merges with terminal.
 
         for (i, tab) in tabs.iter().enumerate() {
@@ -746,46 +751,39 @@ impl Renderer {
             let is_hovered = hovered_tab == Some(i);
 
             if tab.is_active {
-                // Active tab: solid fill that merges with terminal.
-                self.draw_top_rounded_rect(
-                    buffer,
-                    buf_width,
-                    bar_h,
-                    tab_x as i32,
-                    tab_inset_y as i32,
-                    tw,
-                    tab_h,
-                    tab_radius,
-                    ACTIVE_TAB_BG,
-                    255,
-                );
-                // 1px border on top and sides only.
-                self.draw_top_rounded_border(
-                    buffer,
-                    buf_width,
-                    bar_h,
-                    tab_x as i32,
-                    tab_inset_y as i32,
-                    tw,
-                    tab_h,
-                    tab_radius,
-                    TAB_BORDER,
-                    255,
-                );
+                // Active tab: flat fill that merges with terminal.
+                let fill_bg = ACTIVE_TAB_BG;
+                for py in tab_inset_y as usize..(tab_inset_y + tab_h) as usize {
+                    if py >= bar_h {
+                        break;
+                    }
+                    for dx in 0..tw as usize {
+                        let px = tab_x as usize + dx;
+                        if px < buf_width {
+                            let idx = py * buf_width + px;
+                            if idx < buffer.len() {
+                                buffer[idx] = fill_bg;
+                            }
+                        }
+                    }
+                }
             } else if is_hovered {
-                // Inactive tab hover: subtle highlight.
-                self.draw_top_rounded_rect(
-                    buffer,
-                    buf_width,
-                    bar_h,
-                    tab_x as i32,
-                    tab_inset_y as i32,
-                    tw,
-                    tab_h,
-                    tab_radius,
-                    INACTIVE_TAB_HOVER,
-                    255,
-                );
+                // Inactive tab hover: flat fill highlight.
+                let fill_bg = INACTIVE_TAB_HOVER;
+                for py in tab_inset_y as usize..(tab_inset_y + tab_h) as usize {
+                    if py >= bar_h {
+                        break;
+                    }
+                    for dx in 0..tw as usize {
+                        let px = tab_x as usize + dx;
+                        if px < buf_width {
+                            let idx = py * buf_width + px;
+                            if idx < buffer.len() {
+                                buffer[idx] = fill_bg;
+                            }
+                        }
+                    }
+                }
             }
             // Inactive non-hovered: no background (BAR_BG shows through).
 
@@ -874,7 +872,7 @@ impl Renderer {
                 let number_str = (i + 1).to_string();
                 let show_close = tab.is_active || is_hovered;
                 let close_reserved = if show_close {
-                    self.cell_width + self.scaled_px(8)
+                    self.scaled_px(20) + self.scaled_px(6)
                 } else {
                     0
                 };
@@ -893,7 +891,7 @@ impl Renderer {
                 // Normal mode: show title with close button and security badge.
                 let show_close = tab.is_active || is_hovered;
                 let close_reserved = if show_close {
-                    self.cell_width + self.scaled_px(8)
+                    self.scaled_px(20) + self.scaled_px(6)
                 } else {
                     0
                 };
@@ -1023,7 +1021,7 @@ impl Renderer {
             && mouse_pos.1 < self.tab_bar_height_px() as f64;
 
         if is_close_hovered {
-            let circle_r = (cw.min(ch) / 2).max(self.scaled_px(6));
+            let circle_r = cw.min(ch) / 2;
             let circle_cx = (cx + cw / 2) as i32;
             let circle_cy = (cy + ch / 2) as i32;
             Self::draw_filled_circle(

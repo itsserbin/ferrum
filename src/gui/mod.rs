@@ -68,6 +68,7 @@ impl FerrumWindow {
             resize_direction: None,
             cursor_blink_start: std::time::Instant::now(),
             suppress_click_to_cursor_once: false,
+            scroll_accumulator: 0.0,
             pending_requests: Vec::new(),
         }
     }

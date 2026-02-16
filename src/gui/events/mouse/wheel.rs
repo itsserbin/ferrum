@@ -3,9 +3,20 @@ use crate::gui::*;
 impl FerrumWindow {
     pub(crate) fn on_mouse_wheel(&mut self, delta: MouseScrollDelta) {
         let raw_lines = match delta {
-            MouseScrollDelta::LineDelta(_, y) => y as isize,
+            MouseScrollDelta::LineDelta(_, y) => {
+                // Line-based scroll (mouse wheel) — reset accumulator
+                self.scroll_accumulator = 0.0;
+                y as isize
+            }
             MouseScrollDelta::PixelDelta(pos) => {
-                (pos.y / self.renderer.cell_height as f64) as isize
+                // Pixel-based scroll (trackpad) — accumulate small deltas
+                self.scroll_accumulator += pos.y;
+                let cell_h = self.renderer.cell_height as f64;
+                let lines = (self.scroll_accumulator / cell_h) as isize;
+                if lines != 0 {
+                    self.scroll_accumulator -= lines as f64 * cell_h;
+                }
+                lines
             }
         };
 
@@ -31,7 +42,7 @@ impl FerrumWindow {
                 return;
             }
 
-            let lines = raw_lines * 3;
+            let lines = raw_lines;
             if lines > 0 {
                 tab.scroll_offset =
                     (tab.scroll_offset + lines as usize).min(tab.terminal.scrollback.len());
