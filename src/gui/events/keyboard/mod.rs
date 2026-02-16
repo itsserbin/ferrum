@@ -100,10 +100,6 @@ impl FerrumWindow {
     }
 
     fn normalize_non_text_key(logical: &Key, physical: &PhysicalKey) -> Key {
-        if !matches!(logical, Key::Character(_)) {
-            return logical.clone();
-        }
-
         let PhysicalKey::Code(code) = physical else {
             return logical.clone();
         };

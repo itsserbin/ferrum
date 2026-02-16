@@ -31,6 +31,28 @@ fn shift_ctrl_arrow_right_encodes_combined_modifier() {
 }
 
 #[test]
+fn shift_arrow_left_uses_plain_arrow_encoding() {
+    let bytes = key_to_bytes(
+        &Key::Named(NamedKey::ArrowLeft),
+        mods(false, true, false),
+        false,
+    )
+    .expect("Shift+Left should be encoded");
+    assert_eq!(bytes, b"\x1b[D");
+}
+
+#[test]
+fn alt_arrow_right_moves_by_word() {
+    let bytes = key_to_bytes(
+        &Key::Named(NamedKey::ArrowRight),
+        mods(false, false, true),
+        false,
+    )
+    .expect("Alt+Right should be encoded");
+    assert_eq!(bytes, b"\x1bf");
+}
+
+#[test]
 fn home_and_end_respect_cursor_mode_without_modifiers() {
     let home_normal = key_to_bytes(&Key::Named(NamedKey::Home), ModifiersState::empty(), false)
         .expect("Home should be encoded in normal mode");

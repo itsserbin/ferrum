@@ -125,6 +125,7 @@ impl FerrumWindow {
     }
 
     pub(crate) fn on_redraw_requested(&mut self) {
+        self.refresh_tab_bar_visibility();
         self.apply_pending_resize();
 
         let size = self.window.inner_size();

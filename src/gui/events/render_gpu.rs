@@ -122,7 +122,7 @@ impl FerrumWindow {
             (tab_infos, tab_tooltip, drag_info, tab_offsets, show_tooltip)
         };
         #[cfg(not(target_os = "macos"))]
-        let tab_bar_visible = self.backend.tab_bar_height_px() > 0;
+        let tab_bar_visible = self.tabs.len() > 1 && self.backend.tab_bar_height_px() > 0;
 
         let RendererBackend::Gpu(gpu) = &mut self.backend else {
             return;
