@@ -64,7 +64,7 @@ pub(super) struct RenameState {
     pub(super) tab_index: usize,
     pub(super) text: String,
     pub(super) original_title: String, // Title before rename started, for Escape revert.
-    pub(super) cursor: usize, // Byte index at a valid UTF-8 char boundary.
+    pub(super) cursor: usize,          // Byte index at a valid UTF-8 char boundary.
     pub(super) selection_anchor: Option<usize>, // Byte index for selection anchor.
 }
 
@@ -108,6 +108,7 @@ pub(super) struct FerrumWindow {
     pub(super) renaming_tab: Option<RenameState>,
     pub(super) dragging_tab: Option<DragState>,
     pub(super) last_tab_click: Option<(usize, std::time::Instant)>,
+    pub(super) last_topbar_empty_click: Option<std::time::Instant>,
     pub(super) resize_direction: Option<ResizeDirection>,
     pub(super) cursor_blink_start: std::time::Instant,
     pub(super) suppress_click_to_cursor_once: bool,

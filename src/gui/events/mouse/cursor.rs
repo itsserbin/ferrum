@@ -1,28 +1,32 @@
-use crate::gui::renderer::{TAB_BAR_HEIGHT, WINDOW_PADDING, TabBarHit};
+use crate::gui::renderer::TabBarHit;
 use crate::gui::*;
 
 /// Vertical distance from tab bar center at which a drag becomes a detach.
-const DETACH_THRESHOLD_Y: f64 = 30.0;
+const DETACH_THRESHOLD_Y: u32 = 30;
 
 impl FerrumWindow {
     pub(crate) fn on_cursor_moved(&mut self, position: winit::dpi::PhysicalPosition<f64>) {
-        self.mouse_pos = (position.x, position.y);
+        let (mx, my) = self.normalized_window_pos(position.x, position.y);
+        self.mouse_pos = (mx, my);
+        let tab_bar_height = self.renderer.tab_bar_height_px() as f64;
+        let window_padding = self.renderer.window_padding_px() as f64;
+        let detach_threshold_y = self.renderer.scaled_px(DETACH_THRESHOLD_Y) as f64;
 
         // Update drag state tracking.
         if let Some(ref mut drag) = self.dragging_tab {
-            drag.current_x = position.x;
-            drag.current_y = position.y;
+            drag.current_x = mx;
+            drag.current_y = my;
             if !drag.is_active {
-                let dx = position.x - drag.start_x;
-                let dy = position.y - drag.start_y;
+                let dx = mx - drag.start_x;
+                let dy = my - drag.start_y;
                 if (dx * dx + dy * dy).sqrt() > 5.0 {
                     drag.is_active = true;
                 }
             }
             if drag.is_active {
                 // Detach: cursor moved far enough vertically from the tab bar.
-                let beyond_below = position.y > TAB_BAR_HEIGHT as f64 + DETACH_THRESHOLD_Y;
-                let beyond_above = position.y < 5.0;
+                let beyond_below = my > tab_bar_height + detach_threshold_y;
+                let beyond_above = my < self.renderer.scaled_px(5) as f64;
                 if (beyond_below || beyond_above) && self.tabs.len() > 1 {
                     self.detach_dragged_tab();
                     return;
@@ -34,7 +38,7 @@ impl FerrumWindow {
             }
         }
 
-        let dir = self.edge_direction(position.x, position.y);
+        let dir = self.edge_direction(mx, my);
         let cursor = if let Some(d) = dir {
             match d {
                 ResizeDirection::North | ResizeDirection::South => CursorIcon::NsResize,
@@ -42,16 +46,14 @@ impl FerrumWindow {
                 ResizeDirection::NorthWest | ResizeDirection::SouthEast => CursorIcon::NwseResize,
                 ResizeDirection::NorthEast | ResizeDirection::SouthWest => CursorIcon::NeswResize,
             }
-        } else if position.y < TAB_BAR_HEIGHT as f64 {
-            let size = self.window.inner_size();
-            let bw = size.width;
-            if self.renderer.is_window_close_button(position.x, position.y, bw as usize) {
+        } else if my < tab_bar_height {
+            if self.is_window_close_button_hit(mx, my)
+                || self.is_window_maximize_button_hit(mx, my)
+                || self.is_window_minimize_button_hit(mx, my)
+            {
                 CursorIcon::Pointer
             } else {
-                match self
-                    .renderer
-                    .hit_test_tab_bar(position.x, position.y, self.tabs.len(), bw)
-                {
+                match self.tab_bar_hit(mx, my) {
                     TabBarHit::Tab(_) | TabBarHit::CloseTab(_) | TabBarHit::NewTab => {
                         CursorIcon::Pointer
                     }
@@ -66,24 +68,19 @@ impl FerrumWindow {
 
         // Track hovered tab for visual feedback.
         let size = self.window.inner_size();
-        self.hovered_tab = self.renderer.hit_test_tab_hover(
-            position.x,
-            position.y,
-            self.tabs.len(),
-            size.width,
-        );
+        self.hovered_tab = self
+            .renderer
+            .hit_test_tab_hover(mx, my, self.tabs.len(), size.width);
 
         // Track hovered context-menu item.
         if let Some(ref mut menu) = self.context_menu {
-            menu.hover_index = self
-                .renderer
-                .hit_test_context_menu(menu, position.x, position.y);
+            menu.hover_index = self.renderer.hit_test_context_menu(menu, mx, my);
         }
 
         // Handle rename field drag selection in tab bar.
-        if position.y < TAB_BAR_HEIGHT as f64 {
+        if my < tab_bar_height {
             if self.is_selecting && self.renaming_tab.is_some() {
-                self.handle_rename_field_drag(position.x);
+                self.handle_rename_field_drag(mx);
             }
             return;
         }
@@ -104,13 +101,13 @@ impl FerrumWindow {
                 scrollback_len,
                 grid_rows,
             ) {
-                let track_top = (TAB_BAR_HEIGHT + WINDOW_PADDING) as f32;
-                let track_bottom = buf_height as f32 - WINDOW_PADDING as f32;
+                let track_top = (tab_bar_height + window_padding) as f32;
+                let track_bottom = buf_height as f32 - window_padding as f32;
                 let track_height = track_bottom - track_top;
                 let scrollable_track = track_height - thumb_height;
 
                 if scrollable_track > 0.0 {
-                    let delta_y = position.y - drag_start_y;
+                    let delta_y = my - drag_start_y;
                     let lines_per_pixel = scrollback_len as f64 / scrollable_track as f64;
                     let new_offset = drag_start_offset as f64 - delta_y * lines_per_pixel;
                     let new_offset = new_offset.round() as isize;
@@ -128,13 +125,13 @@ impl FerrumWindow {
         // Scrollbar hover detection.
         {
             let size = self.window.inner_size();
-            let in_zone = self.is_in_scrollbar_zone(position.x, size.width);
+            let in_zone = self.is_in_scrollbar_zone(mx, size.width);
             let has_scrollback = self
                 .active_tab_ref()
                 .is_some_and(|t| !t.terminal.scrollback.is_empty());
-            let track_top = (TAB_BAR_HEIGHT + WINDOW_PADDING) as f64;
-            let track_bottom = size.height as f64 - WINDOW_PADDING as f64;
-            let in_track = position.y >= track_top && position.y <= track_bottom;
+            let track_top = tab_bar_height + window_padding;
+            let track_bottom = size.height as f64 - window_padding;
+            let in_track = my >= track_top && my <= track_bottom;
             let new_hover = in_zone && has_scrollback && in_track;
 
             if let Some(tab) = self.active_tab_mut() {
@@ -152,7 +149,7 @@ impl FerrumWindow {
             }
         }
 
-        let (row, col) = self.pixel_to_grid(position.x, position.y);
+        let (row, col) = self.pixel_to_grid(mx, my);
 
         // Mouse drag/motion reporting
         let mouse_mode = self

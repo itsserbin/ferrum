@@ -4,32 +4,102 @@ impl Renderer {
     /// Computes adaptive tab width with overflow compression.
     /// Tabs shrink from max (240px) down to MIN_TAB_WIDTH when many tabs are open.
     pub fn tab_width(&self, tab_count: usize, buf_width: u32) -> u32 {
-        let reserved = self.cell_width * 7; // Reserve space for '+' and window close button.
+        // Reserve left-side window controls and right-side new-tab button.
+        let reserved = self.tab_strip_start_x() + self.plus_button_reserved_width();
         let available = buf_width.saturating_sub(reserved);
-        (available / tab_count.max(1) as u32).clamp(MIN_TAB_WIDTH, 240)
+        let min_tab_width = self.scaled_px(MIN_TAB_WIDTH);
+        let max_tab_width = self.scaled_px(240);
+        (available / tab_count.max(1) as u32).clamp(min_tab_width, max_tab_width)
+    }
+
+    pub(crate) fn tab_strip_start_x(&self) -> u32 {
+        self.window_controls_reserved_width()
+    }
+
+    fn plus_button_reserved_width(&self) -> u32 {
+        self.cell_width + self.scaled_px(20)
+    }
+
+    pub(crate) fn tab_origin_x(&self, tab_index: usize, tw: u32) -> u32 {
+        self.tab_strip_start_x() + tab_index as u32 * tw
+    }
+
+    pub(crate) fn tab_insert_index_from_x(
+        &self,
+        x: f64,
+        tab_count: usize,
+        buf_width: u32,
+    ) -> usize {
+        let tw = self.tab_width(tab_count, buf_width);
+        let start = self.tab_strip_start_x() as f64;
+        let mut idx = tab_count;
+        for i in 0..tab_count {
+            let center = start + i as f64 * tw as f64 + tw as f64 / 2.0;
+            if x < center {
+                idx = i;
+                break;
+            }
+        }
+        idx
+    }
+
+    fn window_button_size(&self) -> (u32, u32) {
+        let diameter = self.scaled_px(12);
+        (diameter, diameter)
+    }
+
+    fn window_button_spacing(&self) -> u32 {
+        self.scaled_px(8)
+    }
+
+    fn window_controls_reserved_width(&self) -> u32 {
+        let (bw, _) = self.window_button_size();
+        let left_pad = self.scaled_px(12);
+        let after_controls_gap = self.scaled_px(14);
+        // Left pad + 3 buttons + 2 gaps + gap before tabs.
+        left_pad + bw * 3 + self.window_button_spacing() * 2 + after_controls_gap
     }
 
     /// Returns rectangle for per-tab close button.
     fn close_button_rect(&self, tab_index: usize, tw: u32) -> (u32, u32, u32, u32) {
-        let x = tab_index as u32 * tw + tw - self.cell_width - 4;
-        let y = (TAB_BAR_HEIGHT - self.cell_height) / 2;
-        (x, y, self.cell_width + 4, self.cell_height)
+        let btn_w = self.cell_width + self.scaled_px(8);
+        let x = self.tab_origin_x(tab_index, tw) + tw - btn_w - self.scaled_px(6);
+        let y = (self.tab_bar_height_px().saturating_sub(self.cell_height)) / 2;
+        (x, y, btn_w, self.cell_height)
+    }
+
+    fn window_control_rects(
+        &self,
+        _buf_width: usize,
+    ) -> (
+        (u32, u32, u32, u32),
+        (u32, u32, u32, u32),
+        (u32, u32, u32, u32),
+    ) {
+        let (bw, bh) = self.window_button_size();
+        let spacing = self.window_button_spacing();
+        let y = (self.tab_bar_height_px().saturating_sub(bh)) / 2;
+        let close_x = self.scaled_px(12);
+        let min_x = close_x + bw + spacing;
+        let max_x = min_x + bw + spacing;
+        ((min_x, y, bw, bh), (max_x, y, bw, bh), (close_x, y, bw, bh))
     }
 
     /// Returns rectangle for new-tab button.
     fn plus_button_rect(&self, tab_count: usize, tw: u32) -> (u32, u32, u32, u32) {
-        let x = tab_count as u32 * tw + 4;
-        let y = (TAB_BAR_HEIGHT - self.cell_height) / 2;
-        (x, y, self.cell_width + 8, self.cell_height)
+        let x = self.tab_strip_start_x() + tab_count as u32 * tw + self.scaled_px(4);
+        let y = (self.tab_bar_height_px().saturating_sub(self.cell_height)) / 2;
+        (x, y, self.cell_width + self.scaled_px(8), self.cell_height)
     }
 
     /// Hit-tests the tab bar and returns the clicked target.
     pub fn hit_test_tab_bar(&self, x: f64, y: f64, tab_count: usize, buf_width: u32) -> TabBarHit {
-        if y >= TAB_BAR_HEIGHT as f64 {
+        if y >= self.tab_bar_height_px() as f64 {
             return TabBarHit::Empty;
         }
 
         let tw = self.tab_width(tab_count, buf_width);
+        let tab_strip_start = self.tab_strip_start_x();
 
         // New-tab button has priority over tab body hit-test.
         let (px, py, pw, ph) = self.plus_button_rect(tab_count, tw);
@@ -37,7 +107,12 @@ impl Renderer {
             return TabBarHit::NewTab;
         }
 
-        let tab_index = x as u32 / tw;
+        if x < tab_strip_start as f64 {
+            return TabBarHit::Empty;
+        }
+
+        let rel_x = x as u32 - tab_strip_start;
+        let tab_index = rel_x / tw;
         if (tab_index as usize) < tab_count {
             let idx = tab_index as usize;
             let (cx, cy, cw, ch) = self.close_button_rect(idx, tw);
@@ -58,11 +133,16 @@ impl Renderer {
         tab_count: usize,
         buf_width: u32,
     ) -> Option<usize> {
-        if y >= TAB_BAR_HEIGHT as f64 || tab_count == 0 {
+        if y >= self.tab_bar_height_px() as f64 || tab_count == 0 {
             return None;
         }
         let tw = self.tab_width(tab_count, buf_width);
-        let idx = x as u32 / tw;
+        let tab_strip_start = self.tab_strip_start_x();
+        if x < tab_strip_start as f64 {
+            return None;
+        }
+        let rel_x = x as u32 - tab_strip_start;
+        let idx = rel_x / tw;
         if (idx as usize) < tab_count {
             Some(idx as usize)
         } else {
@@ -139,26 +219,474 @@ impl Renderer {
         radius: u32,
         color: u32,
     ) {
-        let r = radius as i32;
-        for dy in -r..=r {
-            for dx in -r..=r {
-                if dx * dx + dy * dy <= r * r {
-                    let px = cx + dx;
-                    let py = cy + dy;
-                    if px >= 0 && py >= 0 && (px as usize) < buf_w {
-                        if let Some(pixel) = buffer.get_mut(py as usize * buf_w + px as usize) {
-                            *pixel = color;
-                        }
-                    }
+        if buf_w == 0 || buffer.is_empty() || radius == 0 {
+            return;
+        }
+
+        let buf_h = buffer.len() / buf_w;
+        if buf_h == 0 {
+            return;
+        }
+
+        let r = radius as f32;
+        let min_x = (cx - radius as i32 - 1).max(0);
+        let max_x = (cx + radius as i32 + 1).min(buf_w as i32 - 1);
+        let min_y = (cy - radius as i32 - 1).max(0);
+        let max_y = (cy + radius as i32 + 1).min(buf_h as i32 - 1);
+
+        for py in min_y..=max_y {
+            for px in min_x..=max_x {
+                let dx = px as f32 + 0.5 - cx as f32;
+                let dy = py as f32 + 0.5 - cy as f32;
+                let dist = (dx * dx + dy * dy).sqrt();
+
+                // 1px soft edge to reduce visible pixel stair-steps.
+                let coverage = (r + 0.5 - dist).clamp(0.0, 1.0);
+                if coverage <= 0.0 {
+                    continue;
                 }
+
+                let idx = py as usize * buf_w + px as usize;
+                if idx >= buffer.len() {
+                    continue;
+                }
+
+                let alpha = (coverage * 255.0).round() as u8;
+                buffer[idx] = Self::blend_rgb(buffer[idx], color, alpha);
             }
         }
+    }
+
+    fn blend_rgb(dst: u32, src: u32, alpha: u8) -> u32 {
+        if alpha == 255 {
+            return src;
+        }
+        if alpha == 0 {
+            return dst;
+        }
+
+        let a = alpha as u32;
+        let inv = 255 - a;
+
+        let dr = (dst >> 16) & 0xFF;
+        let dg = (dst >> 8) & 0xFF;
+        let db = dst & 0xFF;
+
+        let sr = (src >> 16) & 0xFF;
+        let sg = (src >> 8) & 0xFF;
+        let sb = src & 0xFF;
+
+        let r = (sr * a + dr * inv + 127) / 255;
+        let g = (sg * a + dg * inv + 127) / 255;
+        let b = (sb * a + db * inv + 127) / 255;
+
+        (r << 16) | (g << 8) | b
+    }
+
+    fn point_in_rect(x: f64, y: f64, rect: (u32, u32, u32, u32)) -> bool {
+        let (rx, ry, rw, rh) = rect;
+        x >= rx as f64 && x < (rx + rw) as f64 && y >= ry as f64 && y < (ry + rh) as f64
+    }
+
+    fn draw_window_button_circle(
+        &self,
+        buffer: &mut [u32],
+        buf_width: usize,
+        rect: (u32, u32, u32, u32),
+        color: Color,
+    ) {
+        let (x, y, w, h) = rect;
+        let cx = (x + w / 2) as i32;
+        let cy = (y + h / 2) as i32;
+        let radius = (w.min(h) / 2).saturating_sub(1).max(4);
+        Self::draw_filled_circle(buffer, buf_width, cx, cy, radius, color.to_pixel());
+    }
+
+    fn point_to_segment_distance(px: f32, py: f32, x0: f32, y0: f32, x1: f32, y1: f32) -> f32 {
+        let vx = x1 - x0;
+        let vy = y1 - y0;
+        let len_sq = vx * vx + vy * vy;
+        if len_sq <= f32::EPSILON {
+            return ((px - x0) * (px - x0) + (py - y0) * (py - y0)).sqrt();
+        }
+
+        let t = (((px - x0) * vx + (py - y0) * vy) / len_sq).clamp(0.0, 1.0);
+        let proj_x = x0 + t * vx;
+        let proj_y = y0 + t * vy;
+        ((px - proj_x) * (px - proj_x) + (py - proj_y) * (py - proj_y)).sqrt()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn draw_stroked_line(
+        buffer: &mut [u32],
+        buf_width: usize,
+        buf_height: usize,
+        x0: f32,
+        y0: f32,
+        x1: f32,
+        y1: f32,
+        thickness: f32,
+        color: u32,
+    ) {
+        if thickness <= 0.0 || buf_width == 0 || buf_height == 0 {
+            return;
+        }
+
+        let half = thickness * 0.5;
+        let min_x = ((x0.min(x1) - half - 1.0).floor() as i32).max(0);
+        let max_x = ((x0.max(x1) + half + 1.0).ceil() as i32).min(buf_width as i32 - 1);
+        let min_y = ((y0.min(y1) - half - 1.0).floor() as i32).max(0);
+        let max_y = ((y0.max(y1) + half + 1.0).ceil() as i32).min(buf_height as i32 - 1);
+
+        for py in min_y..=max_y {
+            for px in min_x..=max_x {
+                let pcx = px as f32 + 0.5;
+                let pcy = py as f32 + 0.5;
+                let dist = Self::point_to_segment_distance(pcx, pcy, x0, y0, x1, y1);
+
+                // Soft AA edge around the stroke.
+                let coverage = (half + 0.5 - dist).clamp(0.0, 1.0);
+                if coverage <= 0.0 {
+                    continue;
+                }
+
+                let idx = py as usize * buf_width + px as usize;
+                if idx >= buffer.len() {
+                    continue;
+                }
+                let alpha = (coverage * 255.0).round() as u8;
+                buffer[idx] = Self::blend_rgb(buffer[idx], color, alpha);
+            }
+        }
+    }
+
+    fn draw_window_minimize_icon(
+        &self,
+        buffer: &mut [u32],
+        buf_width: usize,
+        buf_height: usize,
+        rect: (u32, u32, u32, u32),
+        color: Color,
+    ) {
+        let (x, y, w, h) = rect;
+        let center_x = x as f32 + w as f32 * 0.5;
+        let center_y = y as f32 + h as f32 * 0.5;
+        let half = (w.min(h) as f32 * 0.5 - 3.5).max(1.6);
+        if half <= 0.0 {
+            return;
+        }
+        let stroke = (1.4_f32 * self.ui_scale() as f32).clamp(1.25, 2.8);
+        let pixel = color.to_pixel();
+
+        Self::draw_stroked_line(
+            buffer,
+            buf_width,
+            buf_height,
+            center_x - half,
+            center_y,
+            center_x + half,
+            center_y,
+            stroke,
+            pixel,
+        );
+    }
+
+    fn draw_window_maximize_icon(
+        &self,
+        buffer: &mut [u32],
+        buf_width: usize,
+        buf_height: usize,
+        rect: (u32, u32, u32, u32),
+        color: Color,
+    ) {
+        let (x, y, w, h) = rect;
+        let center_x = x as f32 + w as f32 * 0.5;
+        let center_y = y as f32 + h as f32 * 0.5;
+        let half = (w.min(h) as f32 * 0.5 - 3.5).max(1.6);
+        if half <= 0.0 {
+            return;
+        }
+        let stroke = (1.4_f32 * self.ui_scale() as f32).clamp(1.25, 2.8);
+        let pixel = color.to_pixel();
+
+        Self::draw_stroked_line(
+            buffer,
+            buf_width,
+            buf_height,
+            center_x - half,
+            center_y,
+            center_x + half,
+            center_y,
+            stroke,
+            pixel,
+        );
+        Self::draw_stroked_line(
+            buffer,
+            buf_width,
+            buf_height,
+            center_x,
+            center_y - half,
+            center_x,
+            center_y + half,
+            stroke,
+            pixel,
+        );
+    }
+
+    fn draw_window_close_icon(
+        &self,
+        buffer: &mut [u32],
+        buf_width: usize,
+        buf_height: usize,
+        rect: (u32, u32, u32, u32),
+        color: Color,
+    ) {
+        let (x, y, w, h) = rect;
+        let center_x = x as f32 + w as f32 * 0.5;
+        let center_y = y as f32 + h as f32 * 0.5;
+        let half = (w.min(h) as f32 * 0.5 - 3.5).max(1.6);
+        if half <= 0.0 {
+            return;
+        }
+        let stroke = (1.4_f32 * self.ui_scale() as f32).clamp(1.25, 2.8);
+
+        let pixel = color.to_pixel();
+        Self::draw_stroked_line(
+            buffer,
+            buf_width,
+            buf_height,
+            center_x - half,
+            center_y - half,
+            center_x + half,
+            center_y + half,
+            stroke,
+            pixel,
+        );
+        Self::draw_stroked_line(
+            buffer,
+            buf_width,
+            buf_height,
+            center_x + half,
+            center_y - half,
+            center_x - half,
+            center_y + half,
+            stroke,
+            pixel,
+        );
+    }
+
+    fn draw_tab_plus_icon(
+        &self,
+        buffer: &mut [u32],
+        buf_width: usize,
+        buf_height: usize,
+        rect: (u32, u32, u32, u32),
+        color: Color,
+    ) {
+        let (x, y, w, h) = rect;
+        let center_x = x as f32 + w as f32 * 0.5;
+        let center_y = y as f32 + h as f32 * 0.5;
+        let half = (self.cell_height as f32 / 6.0).clamp(2.5, 3.4);
+        let thickness = (1.25_f32 * self.ui_scale() as f32).clamp(1.15, 2.2);
+        let pixel = color.to_pixel();
+
+        Self::draw_stroked_line(
+            buffer,
+            buf_width,
+            buf_height,
+            center_x - half,
+            center_y,
+            center_x + half,
+            center_y,
+            thickness,
+            pixel,
+        );
+        Self::draw_stroked_line(
+            buffer,
+            buf_width,
+            buf_height,
+            center_x,
+            center_y - half,
+            center_x,
+            center_y + half,
+            thickness,
+            pixel,
+        );
+    }
+
+    fn draw_tab_close_icon(
+        &self,
+        buffer: &mut [u32],
+        buf_width: usize,
+        buf_height: usize,
+        rect: (u32, u32, u32, u32),
+        color: Color,
+    ) {
+        let (x, y, w, h) = rect;
+        let center_x = x as f32 + w as f32 * 0.5;
+        let center_y = y as f32 + h as f32 * 0.5;
+        // Diagonal cross appears optically larger than '+', so keep it slightly smaller.
+        let half = (self.cell_height as f32 / 6.0).clamp(2.5, 3.4) * 0.86;
+        let thickness = (1.25_f32 * self.ui_scale() as f32).clamp(1.15, 2.2);
+        let pixel = color.to_pixel();
+
+        Self::draw_stroked_line(
+            buffer,
+            buf_width,
+            buf_height,
+            center_x - half,
+            center_y - half,
+            center_x + half,
+            center_y + half,
+            thickness,
+            pixel,
+        );
+        Self::draw_stroked_line(
+            buffer,
+            buf_width,
+            buf_height,
+            center_x + half,
+            center_y - half,
+            center_x - half,
+            center_y + half,
+            thickness,
+            pixel,
+        );
     }
 
     /// Returns true if the given tab width is too narrow to display the title.
     /// When true, show tab number instead.
     fn should_show_number(&self, tw: u32) -> bool {
-        tw < MIN_TAB_WIDTH_FOR_TITLE
+        tw < self.scaled_px(MIN_TAB_WIDTH_FOR_TITLE)
+    }
+
+    fn title_max_chars(&self, tab: &TabInfo, tw: u32, is_hovered: bool) -> usize {
+        let tab_padding_h = self.scaled_px(14);
+        let show_close = tab.is_active || is_hovered;
+        let close_reserved = if show_close {
+            self.cell_width + self.scaled_px(8)
+        } else {
+            0
+        };
+        let security_reserved = if tab.security_count > 0 {
+            let count_chars = tab.security_count.min(99).to_string().len() as u32;
+            let count_width = if tab.security_count > 1 {
+                count_chars * self.cell_width + self.scaled_px(2)
+            } else {
+                0
+            };
+            let badge_min = self.scaled_px(10);
+            let badge_max = self.scaled_px(15);
+            self.cell_height
+                .saturating_sub(self.scaled_px(10))
+                .clamp(badge_min, badge_max)
+                + count_width
+                + self.scaled_px(6)
+        } else {
+            0
+        };
+        (tw.saturating_sub(tab_padding_h * 2 + close_reserved + security_reserved)
+            / self.cell_width) as usize
+    }
+
+    /// Returns full tab title when hover should show a tooltip (compressed or truncated label).
+    pub fn tab_hover_tooltip<'a>(
+        &self,
+        tabs: &'a [TabInfo<'a>],
+        hovered_tab: Option<usize>,
+        buf_width: u32,
+    ) -> Option<&'a str> {
+        let idx = hovered_tab?;
+        let tab = tabs.get(idx)?;
+        if tab.is_renaming || tab.title.is_empty() {
+            return None;
+        }
+
+        let tw = self.tab_width(tabs.len(), buf_width);
+        if self.should_show_number(tw) {
+            return Some(tab.title);
+        }
+
+        let max_chars = self.title_max_chars(tab, tw, true);
+        let title_chars = tab.title.chars().count();
+        (title_chars > max_chars).then_some(tab.title)
+    }
+
+    /// Draws a small tooltip with full tab title near the pointer.
+    pub fn draw_tab_tooltip(
+        &mut self,
+        buffer: &mut [u32],
+        buf_width: usize,
+        buf_height: usize,
+        mouse_pos: (f64, f64),
+        title: &str,
+    ) {
+        if title.is_empty() || buf_width == 0 || buf_height == 0 {
+            return;
+        }
+
+        let padding_x = self.scaled_px(6);
+        let padding_y = self.scaled_px(4);
+        let border = self.scaled_px(1);
+
+        let content_chars = title.chars().count() as u32;
+        let width = (content_chars * self.cell_width + padding_x * 2 + border * 2)
+            .min(buf_width.saturating_sub(4) as u32);
+        let height = (self.cell_height + padding_y * 2 + border * 2).min(buf_height as u32);
+        if width <= border * 2 || height <= border * 2 {
+            return;
+        }
+
+        let mut x = mouse_pos.0.round() as i32 + self.scaled_px(10) as i32;
+        let mut y = self.tab_bar_height_px() as i32 + self.scaled_px(6) as i32;
+        x = x
+            .min(buf_width as i32 - width as i32 - self.scaled_px(2) as i32)
+            .max(self.scaled_px(2) as i32);
+        y = y
+            .min(buf_height as i32 - height as i32 - self.scaled_px(2) as i32)
+            .max(self.scaled_px(2) as i32);
+
+        let bg = MENU_BG.to_pixel();
+        let border_px = SEPARATOR_COLOR.to_pixel();
+
+        for py in 0..height as usize {
+            for px in 0..width as usize {
+                let sx = x + px as i32;
+                let sy = y + py as i32;
+                if sx < 0 || sy < 0 {
+                    continue;
+                }
+                let sx = sx as usize;
+                let sy = sy as usize;
+                if sx >= buf_width || sy >= buf_height {
+                    continue;
+                }
+                let idx = sy * buf_width + sx;
+                if idx >= buffer.len() {
+                    continue;
+                }
+
+                let is_border =
+                    py == 0 || py == height as usize - 1 || px == 0 || px == width as usize - 1;
+                buffer[idx] = if is_border { border_px } else { bg };
+            }
+        }
+
+        let text_x = x as u32 + border + padding_x;
+        let text_y = y as u32 + border + padding_y;
+        let max_chars = ((width - border * 2 - padding_x * 2) / self.cell_width) as usize;
+        for (ci, ch) in title.chars().take(max_chars).enumerate() {
+            let cx = text_x + ci as u32 * self.cell_width;
+            self.draw_char_at(
+                buffer,
+                buf_width,
+                buf_height,
+                cx,
+                text_y,
+                ch,
+                Color::DEFAULT_FG,
+            );
+        }
     }
 
     /// Draws top tab bar including tabs, controls, and separators.
@@ -172,7 +700,8 @@ impl Renderer {
         mouse_pos: (f64, f64),
     ) {
         let bar_bg = TAB_BAR_BG.to_pixel();
-        let bar_h = TAB_BAR_HEIGHT as usize;
+        let tab_bar_height = self.tab_bar_height_px();
+        let bar_h = tab_bar_height as usize;
 
         // Paint full bar background first.
         for py in 0..bar_h {
@@ -185,14 +714,15 @@ impl Renderer {
         }
 
         let tw = self.tab_width(tabs.len(), buf_width as u32);
-        let text_y = (TAB_BAR_HEIGHT - self.cell_height) / 2 + 1;
-        let tab_padding_h = 14u32;
+        let tab_strip_start = self.tab_strip_start_x();
+        let text_y = (tab_bar_height.saturating_sub(self.cell_height)) / 2 + self.scaled_px(1);
+        let tab_padding_h = self.scaled_px(14);
         let use_numbers = self.should_show_number(tw);
 
         let active_idx = tabs.iter().position(|t| t.is_active);
 
         for (i, tab) in tabs.iter().enumerate() {
-            let tab_x = i as u32 * tw;
+            let tab_x = self.tab_origin_x(i, tw);
             let is_hovered = hovered_tab == Some(i);
 
             // Active tab = terminal bg (merges with content), inactive = bar bg, hovered = subtle lift.
@@ -207,15 +737,15 @@ impl Renderer {
 
             // Flat tab shape: all tabs fill the full bar height.
             // First tab gets a rounded top-left corner; all others are plain rectangles.
-            if i == 0 {
+            if i == 0 && tab_strip_start == 0 {
                 Self::draw_rect_with_top_left_radius(
                     buffer,
                     buf_width,
                     tab_x,
                     0,
                     tw,
-                    TAB_BAR_HEIGHT,
-                    FIRST_TAB_RADIUS,
+                    tab_bar_height,
+                    self.first_tab_radius_px(),
                     bg_pixel,
                 );
             } else {
@@ -241,7 +771,8 @@ impl Renderer {
                 let sep_x = tab_x + tw - 1;
                 if (sep_x as usize) < buf_width {
                     let sep_pixel = SEPARATOR_COLOR.to_pixel();
-                    for py in 8..(bar_h - 8) {
+                    let separator_pad = self.scaled_px(8) as usize;
+                    for py in separator_pad..bar_h.saturating_sub(separator_pad) {
                         let idx = py * buf_width + sep_x as usize;
                         if idx < buffer.len() {
                             buffer[idx] = sep_pixel;
@@ -287,7 +818,9 @@ impl Renderer {
 
                 let rename_bg = MENU_HOVER_BG.to_pixel();
                 for py in (text_y as usize)..(text_y + self.cell_height) as usize {
-                    for dx in (tab_padding_h as usize - 2)..(tw - tab_padding_h + 2) as usize {
+                    for dx in (tab_padding_h as usize - self.scaled_px(2) as usize)
+                        ..(tw - tab_padding_h + self.scaled_px(2)) as usize
+                    {
                         let px = tab_x as usize + dx;
                         if px < buf_width && py * buf_width + px < buffer.len() {
                             buffer[py * buf_width + px] = rename_bg;
@@ -341,7 +874,11 @@ impl Renderer {
                 // Overflow mode: show tab number (1-based) instead of title.
                 let number_str = (i + 1).to_string();
                 let show_close = tab.is_active || is_hovered;
-                let close_reserved = if show_close { self.cell_width + 4 } else { 0 };
+                let close_reserved = if show_close {
+                    self.cell_width + self.scaled_px(8)
+                } else {
+                    0
+                };
                 let text_w = number_str.len() as u32 * self.cell_width;
                 let text_x = tab_x + (tw.saturating_sub(text_w + close_reserved)) / 2;
 
@@ -352,29 +889,30 @@ impl Renderer {
 
                 // Close button in number mode.
                 if show_close {
-                    self.draw_close_button(
-                        buffer,
-                        buf_width,
-                        bar_h,
-                        i,
-                        tab,
-                        tw,
-                        text_y,
-                        mouse_pos,
-                    );
+                    self.draw_close_button(buffer, buf_width, bar_h, i, tab, tw, mouse_pos);
                 }
             } else {
                 // Normal mode: show title with close button and security badge.
                 let show_close = tab.is_active || is_hovered;
-                let close_reserved = if show_close { self.cell_width + 8 } else { 0 };
+                let close_reserved = if show_close {
+                    self.cell_width + self.scaled_px(8)
+                } else {
+                    0
+                };
                 let security_reserved = if tab.security_count > 0 {
                     let count_chars = tab.security_count.min(99).to_string().len() as u32;
                     let count_width = if tab.security_count > 1 {
-                        count_chars * self.cell_width + 2
+                        count_chars * self.cell_width + self.scaled_px(2)
                     } else {
                         0
                     };
-                    self.cell_height.saturating_sub(10).clamp(10, 15) + count_width + 6
+                    let badge_min = self.scaled_px(10);
+                    let badge_max = self.scaled_px(15);
+                    self.cell_height
+                        .saturating_sub(self.scaled_px(10))
+                        .clamp(badge_min, badge_max)
+                        + count_width
+                        + self.scaled_px(6)
                 } else {
                     0
                 };
@@ -404,7 +942,7 @@ impl Renderer {
                     );
                     if tab.security_count > 1 {
                         let count_text = tab.security_count.min(99).to_string();
-                        let count_x = sx + sw + 2;
+                        let count_x = sx + sw + self.scaled_px(2);
                         for (ci, ch) in count_text.chars().enumerate() {
                             let cx = count_x + ci as u32 * self.cell_width;
                             self.draw_char_at(
@@ -422,52 +960,83 @@ impl Renderer {
 
                 // Close button with circular hover effect.
                 if show_close {
-                    self.draw_close_button(
-                        buffer,
-                        buf_width,
-                        bar_h,
-                        i,
-                        tab,
-                        tw,
-                        text_y,
-                        mouse_pos,
-                    );
+                    self.draw_close_button(buffer, buf_width, bar_h, i, tab, tw, mouse_pos);
                 }
             }
         }
 
         // New-tab button after the last tab.
-        let plus_x = tabs.len() as u32 * tw + 12;
-        let plus_fg = Color {
-            r: 88,
-            g: 91,
-            b: 112,
-        }; // Surface2
-        self.draw_char_at(buffer, buf_width, bar_h, plus_x, text_y, '+', plus_fg);
+        let plus_rect = self.plus_button_rect(tabs.len(), tw);
+        let plus_hover = Self::point_in_rect(mouse_pos.0, mouse_pos.1, plus_rect);
+        let plus_fg = if plus_hover {
+            Color::DEFAULT_FG
+        } else {
+            Color {
+                r: 88,
+                g: 91,
+                b: 112,
+            } // Surface2
+        };
+        self.draw_tab_plus_icon(buffer, buf_width, bar_h, plus_rect, plus_fg);
 
-        // Custom window close button.
-        let close_win_x = buf_width as u32 - self.cell_width * 2;
-        let close_win_fg = Color {
-            r: 243,
-            g: 139,
-            b: 168,
-        }; // Red
-        self.draw_char_at(
+        // macOS-like traffic lights: close, minimize, maximize (left side).
+        let (min_rect, max_rect, close_rect) = self.window_control_rects(buf_width);
+        let min_hover = Self::point_in_rect(mouse_pos.0, mouse_pos.1, min_rect);
+        let max_hover = Self::point_in_rect(mouse_pos.0, mouse_pos.1, max_rect);
+        let close_hover = Self::point_in_rect(mouse_pos.0, mouse_pos.1, close_rect);
+
+        self.draw_window_button_circle(
             buffer,
             buf_width,
-            bar_h,
-            close_win_x,
-            text_y,
-            '\u{00D7}',
-            close_win_fg,
+            close_rect,
+            Color {
+                r: 255,
+                g: 95,
+                b: 87,
+            },
         );
+        self.draw_window_button_circle(
+            buffer,
+            buf_width,
+            min_rect,
+            Color {
+                r: 255,
+                g: 189,
+                b: 46,
+            },
+        );
+        self.draw_window_button_circle(
+            buffer,
+            buf_width,
+            max_rect,
+            Color {
+                r: 40,
+                g: 200,
+                b: 64,
+            },
+        );
+
+        let control_fg = Color {
+            r: 48,
+            g: 49,
+            b: 52,
+        };
+        if close_hover {
+            self.draw_window_close_icon(buffer, buf_width, bar_h, close_rect, control_fg);
+        }
+        if min_hover {
+            self.draw_window_minimize_icon(buffer, buf_width, bar_h, min_rect, control_fg);
+        }
+        if max_hover {
+            self.draw_window_maximize_icon(buffer, buf_width, bar_h, max_rect, control_fg);
+        }
 
         // Bottom separator — hidden under the active tab (tab merges with terminal area).
         let sep_pixel = SEPARATOR_COLOR.to_pixel();
         let py = bar_h - 1;
         for px in 0..buf_width {
             let in_active = active_idx.is_some_and(|ai| {
-                let ax = ai as u32 * tw;
+                let ax = self.tab_origin_x(ai, tw);
                 px >= ax as usize && px < (ax + tw) as usize
             });
             if !in_active {
@@ -489,25 +1058,20 @@ impl Renderer {
         tab_index: usize,
         tab: &TabInfo,
         tw: u32,
-        text_y: u32,
         mouse_pos: (f64, f64),
     ) {
-        let tab_x = tab_index as u32 * tw;
-        let close_x = tab_x + tw - self.cell_width - 6;
-
-        // Check if mouse is hovering over the close button area.
         let (cx, cy, cw, ch) = self.close_button_rect(tab_index, tw);
         let is_close_hovered = mouse_pos.0 >= cx as f64
             && mouse_pos.0 < (cx + cw) as f64
             && mouse_pos.1 >= cy as f64
             && mouse_pos.1 < (cy + ch) as f64
-            && mouse_pos.1 < TAB_BAR_HEIGHT as f64;
+            && mouse_pos.1 < self.tab_bar_height_px() as f64;
 
-        // Draw circular background on close button hover (~16px diameter).
+        // Draw circular background on close button hover.
         if is_close_hovered {
-            let circle_r = 8u32;
-            let circle_cx = (close_x + self.cell_width / 2) as i32;
-            let circle_cy = (text_y + self.cell_height / 2) as i32;
+            let circle_r = (cw.min(ch) / 2).max(self.scaled_px(6));
+            let circle_cx = (cx + cw / 2) as i32;
+            let circle_cy = (cy + ch / 2) as i32;
             Self::draw_filled_circle(
                 buffer,
                 buf_width,
@@ -531,15 +1095,7 @@ impl Renderer {
                 b: 156,
             } // Overlay0
         };
-        self.draw_char_at(
-            buffer,
-            buf_width,
-            buf_height,
-            close_x,
-            text_y,
-            '\u{00D7}',
-            close_fg,
-        );
+        self.draw_tab_close_icon(buffer, buf_width, buf_height, (cx, cy, cw, ch), close_fg);
     }
 
     /// Draws the drag overlay: ghost tab at cursor X + insertion indicator.
@@ -560,7 +1116,8 @@ impl Renderer {
             return;
         }
         let tw = self.tab_width(tab_count, buf_width as u32);
-        let bar_h = TAB_BAR_HEIGHT as usize;
+        let tab_bar_height = self.tab_bar_height_px();
+        let bar_h = tab_bar_height as usize;
 
         // Ghost tab in the bar with 60% opacity.
         let ghost_x = (current_x - tw as f64 / 2.0).round() as i32;
@@ -591,12 +1148,12 @@ impl Renderer {
 
         // Ghost title text.
         let tab = &tabs[source_index];
-        let text_y = (TAB_BAR_HEIGHT - self.cell_height) / 2 + 1;
+        let text_y = (tab_bar_height.saturating_sub(self.cell_height)) / 2 + self.scaled_px(1);
         let use_numbers = self.should_show_number(tw);
         let label: String = if use_numbers {
             (source_index + 1).to_string()
         } else {
-            let pad = 14u32;
+            let pad = self.scaled_px(14);
             let max = (tw.saturating_sub(pad * 2) / self.cell_width) as usize;
             tab.title.chars().take(max).collect()
         };
@@ -606,16 +1163,23 @@ impl Renderer {
             let cx = tx + ci as i32 * self.cell_width as i32;
             if cx >= 0 && (cx as usize) < buf_width {
                 self.draw_char_at(
-                    buffer, buf_width, buf_height, cx as u32, text_y, ch, Color::DEFAULT_FG,
+                    buffer,
+                    buf_width,
+                    buf_height,
+                    cx as u32,
+                    text_y,
+                    ch,
+                    Color::DEFAULT_FG,
                 );
             }
         }
 
         // Insertion indicator: 2px lavender vertical line.
-        let ix = insert_index as u32 * tw;
+        let ix = self.tab_origin_x(insert_index, tw);
         let ic = ACTIVE_ACCENT.to_pixel();
-        for py in 4..bar_h.saturating_sub(4) {
-            for dx in 0..2u32 {
+        let indicator_y_pad = self.scaled_px(4) as usize;
+        for py in indicator_y_pad..bar_h.saturating_sub(indicator_y_pad) {
+            for dx in 0..self.scaled_px(2) {
                 let px = ix + dx;
                 if (px as usize) < buf_width && py < buf_height {
                     let idx = py * buf_width + px as usize;
@@ -627,9 +1191,21 @@ impl Renderer {
         }
     }
 
+    /// Returns true when pointer is over the custom window minimize button.
+    pub fn is_window_minimize_button(&self, x: f64, y: f64, buf_width: usize) -> bool {
+        let (min_rect, _, _) = self.window_control_rects(buf_width);
+        Self::point_in_rect(x, y, min_rect)
+    }
+
+    /// Returns true when pointer is over the custom window maximize button.
+    pub fn is_window_maximize_button(&self, x: f64, y: f64, buf_width: usize) -> bool {
+        let (_, max_rect, _) = self.window_control_rects(buf_width);
+        Self::point_in_rect(x, y, max_rect)
+    }
+
     /// Returns true when pointer is over the custom window close button.
     pub fn is_window_close_button(&self, x: f64, y: f64, buf_width: usize) -> bool {
-        let close_x = buf_width as u32 - self.cell_width * 3;
-        x >= close_x as f64 && y < TAB_BAR_HEIGHT as f64
+        let (_, _, close_rect) = self.window_control_rects(buf_width);
+        Self::point_in_rect(x, y, close_rect)
     }
 }

@@ -1,6 +1,8 @@
 use crate::gui::renderer::{TabBarHit, TabInfo};
 use crate::gui::*;
 
+const TOPBAR_DOUBLE_CLICK_MS: u128 = 400;
+
 impl FerrumWindow {
     fn tab_infos_for_hit_test(&self) -> Vec<TabInfo<'_>> {
         self.tabs
@@ -22,53 +24,40 @@ impl FerrumWindow {
             .collect()
     }
 
-    fn tab_bar_hit_candidates(&self, mx: f64, my: f64) -> [(f64, f64); 2] {
-        let scale = self.window.scale_factor();
-        if (scale - 1.0).abs() < f64::EPSILON {
-            [(mx, my), (mx, my)]
-        } else {
-            [(mx, my), (mx * scale, my * scale)]
-        }
-    }
-
-    pub(in crate::gui::events::mouse) fn is_window_close_button_with_fallback(
+    pub(in crate::gui::events::mouse) fn is_window_close_button_hit(
         &self,
         mx: f64,
         my: f64,
     ) -> bool {
         let buf_width = self.window.inner_size().width as usize;
-        for (i, (x, y)) in self.tab_bar_hit_candidates(mx, my).into_iter().enumerate() {
-            if i == 1 && (x - mx).abs() < 0.5 && (y - my).abs() < 0.5 {
-                continue;
-            }
-            if self.renderer.is_window_close_button(x, y, buf_width) {
-                return true;
-            }
-        }
-        false
+        self.renderer.is_window_close_button(mx, my, buf_width)
     }
 
-    pub(in crate::gui::events::mouse) fn tab_bar_hit_with_fallback(
+    pub(in crate::gui::events::mouse) fn is_window_maximize_button_hit(
         &self,
         mx: f64,
         my: f64,
-    ) -> TabBarHit {
-        let buf_width = self.window.inner_size().width;
-        for (i, (x, y)) in self.tab_bar_hit_candidates(mx, my).into_iter().enumerate() {
-            if i == 1 && (x - mx).abs() < 0.5 && (y - my).abs() < 0.5 {
-                continue;
-            }
-            let hit = self
-                .renderer
-                .hit_test_tab_bar(x, y, self.tabs.len(), buf_width);
-            if !matches!(hit, TabBarHit::Empty) {
-                return hit;
-            }
-        }
-        TabBarHit::Empty
+    ) -> bool {
+        let buf_width = self.window.inner_size().width as usize;
+        self.renderer.is_window_maximize_button(mx, my, buf_width)
     }
 
-    pub(in crate::gui::events::mouse) fn tab_bar_security_hit_with_fallback(
+    pub(in crate::gui::events::mouse) fn is_window_minimize_button_hit(
+        &self,
+        mx: f64,
+        my: f64,
+    ) -> bool {
+        let buf_width = self.window.inner_size().width as usize;
+        self.renderer.is_window_minimize_button(mx, my, buf_width)
+    }
+
+    pub(in crate::gui::events::mouse) fn tab_bar_hit(&self, mx: f64, my: f64) -> TabBarHit {
+        let buf_width = self.window.inner_size().width;
+        self.renderer
+            .hit_test_tab_bar(mx, my, self.tabs.len(), buf_width)
+    }
+
+    pub(in crate::gui::events::mouse) fn tab_bar_security_hit(
         &self,
         mx: f64,
         my: f64,
@@ -78,18 +67,8 @@ impl FerrumWindow {
             return None;
         }
         let buf_width = self.window.inner_size().width;
-        for (i, (x, y)) in self.tab_bar_hit_candidates(mx, my).into_iter().enumerate() {
-            if i == 1 && (x - mx).abs() < 0.5 && (y - my).abs() < 0.5 {
-                continue;
-            }
-            if let Some(hit) = self
-                .renderer
-                .hit_test_tab_security_badge(x, y, &tab_infos, buf_width)
-            {
-                return Some(hit);
-            }
-        }
-        None
+        self.renderer
+            .hit_test_tab_security_badge(mx, my, &tab_infos, buf_width)
     }
 
     fn open_security_popup_for_tab(&mut self, tab_index: usize) {
@@ -114,8 +93,11 @@ impl FerrumWindow {
         let (popup_x, popup_y) = self
             .renderer
             .security_badge_rect(tab_index, self.tabs.len(), buf_width, event_count)
-            .map(|(x, y, w, h)| (x.saturating_sub(w), y + h + 6))
-            .unwrap_or((16, TAB_BAR_HEIGHT + 6));
+            .map(|(x, y, w, h)| (x.saturating_sub(w), y + h + self.renderer.scaled_px(6)))
+            .unwrap_or((
+                self.renderer.scaled_px(16),
+                self.renderer.tab_bar_height_px() + self.renderer.scaled_px(6),
+            ));
 
         self.security_popup = Some(SecurityPopup {
             tab_index,
@@ -146,27 +128,50 @@ impl FerrumWindow {
         }
 
         // Window close button has priority over tab hit-test.
-        if self.is_window_close_button_with_fallback(mx, my) {
+        if self.is_window_close_button_hit(mx, my) {
             self.dragging_tab = None;
             self.commit_rename();
+            self.last_topbar_empty_click = None;
             self.pending_requests.push(WindowRequest::CloseWindow);
             return;
         }
 
-        if let Some(tab_idx) = self.tab_bar_security_hit_with_fallback(mx, my) {
+        if self.is_window_maximize_button_hit(mx, my) {
             self.dragging_tab = None;
             self.commit_rename();
+            self.last_topbar_empty_click = None;
+            let maximized = self.window.is_maximized();
+            self.window.set_maximized(!maximized);
+            return;
+        }
+
+        if self.is_window_minimize_button_hit(mx, my) {
+            self.dragging_tab = None;
+            self.commit_rename();
+            self.last_topbar_empty_click = None;
+            self.window.set_minimized(true);
+            return;
+        }
+
+        if let Some(tab_idx) = self.tab_bar_security_hit(mx, my) {
+            self.dragging_tab = None;
+            self.commit_rename();
+            self.last_topbar_empty_click = None;
             self.open_security_popup_for_tab(tab_idx);
             return;
         }
 
-        let hit = self.tab_bar_hit_with_fallback(mx, my);
+        let hit = self.tab_bar_hit(mx, my);
 
         // Check if the click landed inside the rename text field area.
         // If so, handle cursor positioning instead of normal tab bar interaction.
         if self.renaming_tab.is_some() {
             if let TabBarHit::Tab(idx) = hit {
-                if self.renaming_tab.as_ref().is_some_and(|r| r.tab_index == idx) {
+                if self
+                    .renaming_tab
+                    .as_ref()
+                    .is_some_and(|r| r.tab_index == idx)
+                {
                     self.handle_rename_field_click(mx);
                     return;
                 }
@@ -179,6 +184,7 @@ impl FerrumWindow {
 
         match hit {
             TabBarHit::Tab(idx) => {
+                self.last_topbar_empty_click = None;
                 // Double-click starts inline rename.
                 let now = std::time::Instant::now();
                 if self.last_tab_click.is_some_and(|(last_idx, last_time)| {
@@ -204,15 +210,29 @@ impl FerrumWindow {
                 }
             }
             TabBarHit::CloseTab(idx) => {
+                self.last_topbar_empty_click = None;
                 self.close_tab(idx);
             }
             TabBarHit::NewTab => {
+                self.last_topbar_empty_click = None;
                 let size = self.window.inner_size();
                 let (rows, cols) = self.calc_grid_size(size.width, size.height);
                 self.new_tab(rows, cols, next_tab_id, tx);
             }
             TabBarHit::Empty => {
-                let _ = self.window.drag_window();
+                self.last_tab_click = None;
+                let now = std::time::Instant::now();
+                let is_double_click = self.last_topbar_empty_click.is_some_and(|last| {
+                    now.duration_since(last).as_millis() < TOPBAR_DOUBLE_CLICK_MS
+                });
+                if is_double_click {
+                    self.last_topbar_empty_click = None;
+                    let maximized = self.window.is_maximized();
+                    self.window.set_maximized(!maximized);
+                } else {
+                    self.last_topbar_empty_click = Some(now);
+                    let _ = self.window.drag_window();
+                }
             }
         }
     }
@@ -228,18 +248,12 @@ impl FerrumWindow {
 
         let source = drag.source_index;
         let buf_width = self.window.inner_size().width;
-        let tw = self.renderer.tab_width(self.tabs.len(), buf_width);
         let tab_count = self.tabs.len();
 
         // Calculate insertion index.
-        let mut insert_at = tab_count;
-        for i in 0..tab_count {
-            let tab_center = i as f64 * tw as f64 + tw as f64 / 2.0;
-            if drag.current_x < tab_center {
-                insert_at = i;
-                break;
-            }
-        }
+        let insert_at = self
+            .renderer
+            .tab_insert_index_from_x(drag.current_x, tab_count, buf_width);
 
         // Convert insertion index to the actual destination after removal.
         let dest = if insert_at > source {
@@ -275,7 +289,7 @@ impl FerrumWindow {
         let buf_width = self.window.inner_size().width;
         let tw = self.renderer.tab_width(self.tabs.len(), buf_width);
         let tab_padding_h = 14u32;
-        let text_x = rename.tab_index as u32 * tw + tab_padding_h;
+        let text_x = self.renderer.tab_origin_x(rename.tab_index, tw) + tab_padding_h;
 
         // Calculate cursor byte position from mouse x coordinate.
         let char_offset = if mx < text_x as f64 {
@@ -336,7 +350,7 @@ impl FerrumWindow {
         let buf_width = self.window.inner_size().width;
         let tw = self.renderer.tab_width(self.tabs.len(), buf_width);
         let tab_padding_h = 14u32;
-        let text_x = rename.tab_index as u32 * tw + tab_padding_h;
+        let text_x = self.renderer.tab_origin_x(rename.tab_index, tw) + tab_padding_h;
 
         let char_offset = if mx < text_x as f64 {
             0
@@ -370,7 +384,12 @@ impl FerrumWindow {
                 .next_back()
                 .map(|(i, _)| i)
                 .unwrap_or(0);
-            if !text[prev..idx].chars().next().unwrap_or(' ').is_whitespace() {
+            if !text[prev..idx]
+                .chars()
+                .next()
+                .unwrap_or(' ')
+                .is_whitespace()
+            {
                 break;
             }
             idx = prev;
@@ -382,7 +401,12 @@ impl FerrumWindow {
                 .next_back()
                 .map(|(i, _)| i)
                 .unwrap_or(0);
-            if text[prev..idx].chars().next().unwrap_or(' ').is_whitespace() {
+            if text[prev..idx]
+                .chars()
+                .next()
+                .unwrap_or(' ')
+                .is_whitespace()
+            {
                 break;
             }
             idx = prev;
@@ -401,7 +425,12 @@ impl FerrumWindow {
         // Skip whitespace to the right.
         while idx < text.len() {
             let next = idx + text[idx..].chars().next().map_or(0, char::len_utf8);
-            if !text[idx..next].chars().next().unwrap_or(' ').is_whitespace() {
+            if !text[idx..next]
+                .chars()
+                .next()
+                .unwrap_or(' ')
+                .is_whitespace()
+            {
                 break;
             }
             idx = next;
@@ -409,7 +438,12 @@ impl FerrumWindow {
         // Skip word chars to the right.
         while idx < text.len() {
             let next = idx + text[idx..].chars().next().map_or(0, char::len_utf8);
-            if text[idx..next].chars().next().unwrap_or(' ').is_whitespace() {
+            if text[idx..next]
+                .chars()
+                .next()
+                .unwrap_or(' ')
+                .is_whitespace()
+            {
                 break;
             }
             idx = next;

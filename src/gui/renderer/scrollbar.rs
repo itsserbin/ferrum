@@ -3,7 +3,7 @@ use super::*;
 /// Base alpha for the scrollbar thumb even at full opacity (semi-transparent look).
 const SCROLLBAR_BASE_ALPHA: u32 = 180;
 
-/// Minimum thumb height in pixels.
+/// Minimum thumb height in base UI pixels.
 const SCROLLBAR_MIN_THUMB: u32 = 20;
 
 impl Renderer {
@@ -27,8 +27,8 @@ impl Renderer {
             return;
         }
 
-        let track_top = (TAB_BAR_HEIGHT + WINDOW_PADDING) as f32;
-        let track_bottom = buf_height as f32 - WINDOW_PADDING as f32;
+        let track_top = (self.tab_bar_height_px() + self.window_padding_px()) as f32;
+        let track_bottom = buf_height as f32 - self.window_padding_px() as f32;
         let track_height = track_bottom - track_top;
         if track_height <= 0.0 {
             return;
@@ -37,8 +37,9 @@ impl Renderer {
         // Thumb dimensions.
         let total_lines = scrollback_len + grid_rows;
         let viewport_ratio = grid_rows as f32 / total_lines as f32;
+        let min_thumb = self.scaled_px(SCROLLBAR_MIN_THUMB) as f32;
         let thumb_height = (viewport_ratio * track_height)
-            .max(SCROLLBAR_MIN_THUMB as f32)
+            .max(min_thumb)
             .min(track_height);
 
         // Thumb position. scroll_offset=0 means bottom, scrollback_len means top.
@@ -49,8 +50,9 @@ impl Renderer {
         // Pixel bounds.
         let thumb_top = thumb_y.round() as usize;
         let thumb_bot = (thumb_y + thumb_height).round() as usize;
-        let thumb_left = buf_width.saturating_sub((SCROLLBAR_WIDTH + SCROLLBAR_MARGIN) as usize);
-        let thumb_right = buf_width.saturating_sub(SCROLLBAR_MARGIN as usize);
+        let thumb_left = buf_width
+            .saturating_sub((self.scrollbar_width_px() + self.scrollbar_margin_px()) as usize);
+        let thumb_right = buf_width.saturating_sub(self.scrollbar_margin_px() as usize);
 
         // Color and alpha.
         let color = if hover {
@@ -99,8 +101,8 @@ impl Renderer {
             return None;
         }
 
-        let track_top = (TAB_BAR_HEIGHT + WINDOW_PADDING) as f32;
-        let track_bottom = buf_height as f32 - WINDOW_PADDING as f32;
+        let track_top = (self.tab_bar_height_px() + self.window_padding_px()) as f32;
+        let track_bottom = buf_height as f32 - self.window_padding_px() as f32;
         let track_height = track_bottom - track_top;
         if track_height <= 0.0 {
             return None;
@@ -108,8 +110,9 @@ impl Renderer {
 
         let total_lines = scrollback_len + grid_rows;
         let viewport_ratio = grid_rows as f32 / total_lines as f32;
+        let min_thumb = self.scaled_px(SCROLLBAR_MIN_THUMB) as f32;
         let thumb_height = (viewport_ratio * track_height)
-            .max(SCROLLBAR_MIN_THUMB as f32)
+            .max(min_thumb)
             .min(track_height);
 
         let max_offset = scrollback_len as f32;

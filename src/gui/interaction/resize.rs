@@ -1,4 +1,3 @@
-use crate::gui::renderer::RESIZE_BORDER;
 use crate::gui::*;
 
 impl FerrumWindow {
@@ -7,11 +6,12 @@ impl FerrumWindow {
         let size = self.window.inner_size();
         let w = size.width as f64;
         let h = size.height as f64;
+        let resize_border = self.renderer.resize_border_px();
 
-        let left = x < RESIZE_BORDER;
-        let right = x > w - RESIZE_BORDER;
-        let top = y < RESIZE_BORDER;
-        let bottom = y > h - RESIZE_BORDER;
+        let left = x < resize_border;
+        let right = x > w - resize_border;
+        let top = y < resize_border;
+        let bottom = y > h - resize_border;
 
         match (left, right, top, bottom) {
             (true, _, true, _) => Some(ResizeDirection::NorthWest),

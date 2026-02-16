@@ -1,9 +1,64 @@
+use crate::core::terminal::Terminal;
+use crate::core::{Grid, Position, Selection};
 use crate::gui::*;
 
 const BRACKETED_PASTE_START: &[u8] = b"\x1b[200~";
 const BRACKETED_PASTE_END: &[u8] = b"\x1b[201~";
 
 impl FerrumWindow {
+    fn selected_text_from_terminal(
+        terminal: &Terminal,
+        selection: Selection,
+        scroll_offset: usize,
+    ) -> String {
+        if scroll_offset == 0 {
+            return Self::selected_text_from_grid(&terminal.grid, selection);
+        }
+
+        let display = terminal.build_display(scroll_offset);
+        Self::selected_text_from_grid(&display, selection)
+    }
+
+    fn selected_text_from_grid(grid: &Grid, selection: Selection) -> String {
+        if grid.rows == 0 || grid.cols == 0 {
+            return String::new();
+        }
+
+        let clamped = Selection {
+            start: Position {
+                row: selection.start.row.min(grid.rows - 1),
+                col: selection.start.col.min(grid.cols - 1),
+            },
+            end: Position {
+                row: selection.end.row.min(grid.rows - 1),
+                col: selection.end.col.min(grid.cols - 1),
+            },
+        };
+        let (start, end) = clamped.normalized();
+
+        let mut text = String::new();
+        for row in start.row..=end.row {
+            let col_start = if row == start.row { start.col } else { 0 };
+            let col_end = if row == end.row {
+                end.col
+            } else {
+                grid.cols - 1
+            };
+
+            for col in col_start..=col_end {
+                text.push(grid.get(row, col).character);
+            }
+            if row < end.row {
+                text.push('\n');
+            }
+        }
+
+        text.lines()
+            .map(|line| line.trim_end())
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
     fn wrap_bracketed_paste(text: &str) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(
             BRACKETED_PASTE_START.len() + text.len() + BRACKETED_PASTE_END.len(),
@@ -15,35 +70,14 @@ impl FerrumWindow {
     }
 
     pub(in crate::gui) fn copy_selection(&mut self) {
-        let tab = match self.active_tab_ref() {
-            Some(t) => t,
-            None => return,
-        };
-        let Some(ref sel) = tab.selection else { return };
-        let (start, end) = sel.normalized();
-
-        let mut text = String::new();
-        for row in start.row..=end.row {
-            let col_start = if row == start.row { start.col } else { 0 };
-            let col_end = if row == end.row {
-                end.col
-            } else {
-                tab.terminal.grid.cols - 1
+        let text = {
+            let tab = match self.active_tab_ref() {
+                Some(t) => t,
+                None => return,
             };
-
-            for col in col_start..=col_end {
-                text.push(tab.terminal.grid.get(row, col).character);
-            }
-            if row < end.row {
-                text.push('\n');
-            }
-        }
-
-        let text: String = text
-            .lines()
-            .map(|line| line.trim_end())
-            .collect::<Vec<_>>()
-            .join("\n");
+            let Some(sel) = tab.selection else { return };
+            Self::selected_text_from_terminal(&tab.terminal, sel, tab.scroll_offset)
+        };
 
         if let Some(ref mut clipboard) = self.clipboard {
             let _ = clipboard.set_text(&text);
@@ -70,5 +104,48 @@ impl FerrumWindow {
             let _ = tab.pty_writer.write_all(&bytes);
             let _ = tab.pty_writer.flush();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::Cell;
+
+    fn set_row(grid: &mut Grid, row: usize, text: &str) {
+        for (col, ch) in text.chars().take(grid.cols).enumerate() {
+            let mut cell = Cell::default();
+            cell.character = ch;
+            grid.set(row, col, cell);
+        }
+    }
+
+    fn row_cells(text: &str, cols: usize) -> Vec<Cell> {
+        let mut row = vec![Cell::default(); cols];
+        for (i, ch) in text.chars().take(cols).enumerate() {
+            row[i].character = ch;
+        }
+        row
+    }
+
+    #[test]
+    fn selected_text_uses_visible_scrollback_when_offset_non_zero() {
+        let mut terminal = Terminal::new(3, 5);
+        set_row(&mut terminal.grid, 0, "LIVE0");
+        set_row(&mut terminal.grid, 1, "LIVE1");
+        set_row(&mut terminal.grid, 2, "LIVE2");
+        terminal.scrollback.push_back(row_cells("SB000", 5));
+        terminal.scrollback.push_back(row_cells("SB001", 5));
+
+        let selection = Selection {
+            start: Position { row: 0, col: 0 },
+            end: Position { row: 0, col: 4 },
+        };
+
+        let live_text = FerrumWindow::selected_text_from_terminal(&terminal, selection, 0);
+        let scrollback_text = FerrumWindow::selected_text_from_terminal(&terminal, selection, 1);
+
+        assert_eq!(live_text, "LIVE0");
+        assert_eq!(scrollback_text, "SB001");
     }
 }

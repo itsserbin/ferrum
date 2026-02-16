@@ -12,8 +12,8 @@ impl Renderer {
         grid: &Grid,
         style: CursorStyle,
     ) {
-        let x = col as u32 * self.cell_width + WINDOW_PADDING;
-        let y = row as u32 * self.cell_height + TAB_BAR_HEIGHT + WINDOW_PADDING;
+        let x = col as u32 * self.cell_width + self.window_padding_px();
+        let y = row as u32 * self.cell_height + self.tab_bar_height_px() + self.window_padding_px();
         let cursor_pixel = Color::DEFAULT_FG.to_pixel();
 
         match style {

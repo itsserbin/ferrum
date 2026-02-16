@@ -84,23 +84,28 @@ impl Renderer {
         }
 
         let tw = self.tab_width(tab_count, buf_width);
-        let tab_x = tab_index as u32 * tw;
-        let badge_size = self.cell_height.saturating_sub(10).clamp(10, 15);
+        let tab_x = self.tab_origin_x(tab_index, tw);
+        let badge_min = self.scaled_px(10);
+        let badge_max = self.scaled_px(15);
+        let badge_size = self
+            .cell_height
+            .saturating_sub(self.scaled_px(10))
+            .clamp(badge_min, badge_max);
         let count_chars = if security_count > 1 {
             security_count.min(99).to_string().len() as u32
         } else {
             0
         };
         let count_width = if count_chars > 0 {
-            count_chars * self.cell_width + 2
+            count_chars * self.cell_width + self.scaled_px(2)
         } else {
             0
         };
         let indicator_width = badge_size + count_width;
-        let right_gutter = self.cell_width + 10; // Keep clear space for the close button area.
+        let right_gutter = self.cell_width + self.scaled_px(10); // Keep clear space for the close button area.
         let indicator_right = tab_x + tw.saturating_sub(right_gutter);
-        let x = indicator_right.saturating_sub(indicator_width + 2);
-        let y = (TAB_BAR_HEIGHT.saturating_sub(badge_size)) / 2;
+        let x = indicator_right.saturating_sub(indicator_width + self.scaled_px(2));
+        let y = (self.tab_bar_height_px().saturating_sub(badge_size)) / 2;
         Some((x, y, badge_size, badge_size))
     }
 
@@ -158,7 +163,7 @@ impl Renderer {
             }
         }
 
-        let header_y = my as u32 + 2;
+        let header_y = my as u32 + self.scaled_px(2);
         let header_x = mx as u32 + self.cell_width / 2;
         for (i, ch) in popup.title.chars().enumerate() {
             let x = header_x + i as u32 * self.cell_width;
@@ -184,7 +189,8 @@ impl Renderer {
         }
 
         for (line_idx, line) in popup.lines.iter().enumerate() {
-            let text_y = my as u32 + line_h as u32 + 4 + line_idx as u32 * line_h as u32;
+            let text_y =
+                my as u32 + line_h as u32 + self.scaled_px(4) + line_idx as u32 * line_h as u32;
             let text_x = mx as u32 + self.cell_width / 2;
             let mut chars = String::from("• ");
             chars.push_str(line);

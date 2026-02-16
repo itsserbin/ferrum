@@ -1,4 +1,4 @@
-use crate::gui::renderer::{ContextMenu, TAB_BAR_HEIGHT, WINDOW_PADDING, TabBarHit};
+use crate::gui::renderer::{ContextMenu, TabBarHit};
 use crate::gui::*;
 
 impl FerrumWindow {
@@ -28,12 +28,10 @@ impl FerrumWindow {
         }
         self.commit_rename();
         let (mx, my) = self.mouse_pos;
-        if my >= TAB_BAR_HEIGHT as f64 {
+        if my >= self.renderer.tab_bar_height_px() as f64 {
             return;
         }
-        if let TabBarHit::Tab(idx) | TabBarHit::CloseTab(idx) =
-            self.tab_bar_hit_with_fallback(mx, my)
-        {
+        if let TabBarHit::Tab(idx) | TabBarHit::CloseTab(idx) = self.tab_bar_hit(mx, my) {
             self.close_tab(idx);
         }
     }
@@ -44,12 +42,12 @@ impl FerrumWindow {
                 self.commit_rename();
                 self.security_popup = None;
                 let (mx, my) = self.mouse_pos;
-                if my < TAB_BAR_HEIGHT as f64 {
+                let tab_bar_height = self.renderer.tab_bar_height_px();
+                if my < tab_bar_height as f64 {
                     // Right click on a tab opens its context menu.
-                    if let TabBarHit::Tab(idx) | TabBarHit::CloseTab(idx) =
-                        self.tab_bar_hit_with_fallback(mx, my)
+                    if let TabBarHit::Tab(idx) | TabBarHit::CloseTab(idx) = self.tab_bar_hit(mx, my)
                     {
-                        self.context_menu = Some(ContextMenu::new(mx as u32, TAB_BAR_HEIGHT, idx));
+                        self.context_menu = Some(ContextMenu::new(mx as u32, tab_bar_height, idx));
                     }
                     return;
                 }
@@ -113,6 +111,7 @@ impl FerrumWindow {
         tx: &mpsc::Sender<PtyEvent>,
     ) {
         let (mx, my) = self.mouse_pos;
+        let tab_bar_height = self.renderer.tab_bar_height_px() as f64;
 
         // If releasing mouse during an active tab drag, handle drop regardless of position.
         if state == ElementState::Released {
@@ -139,7 +138,7 @@ impl FerrumWindow {
             return;
         }
 
-        if my < TAB_BAR_HEIGHT as f64 || self.is_window_close_button_with_fallback(mx, my) {
+        if my < tab_bar_height || self.is_window_close_button_hit(mx, my) {
             self.handle_tab_bar_left_click(event_loop, state, mx, my, next_tab_id, tx);
             return;
         }
@@ -159,12 +158,7 @@ impl FerrumWindow {
 
     /// Handles left mouse down/up on the scrollbar zone.
     /// Returns `true` if the event was consumed (click was in scrollbar zone).
-    fn handle_scrollbar_left_click(
-        &mut self,
-        state: ElementState,
-        mx: f64,
-        my: f64,
-    ) -> bool {
+    fn handle_scrollbar_left_click(&mut self, state: ElementState, mx: f64, my: f64) -> bool {
         // On release: end scrollbar drag if active.
         if state == ElementState::Released {
             if self.active_tab_ref().is_some_and(|t| t.scrollbar.dragging) {
@@ -195,9 +189,11 @@ impl FerrumWindow {
         let buf_height = size.height as usize;
         let grid_rows = tab.terminal.grid.rows;
         let scroll_offset = tab.scroll_offset;
+        let tab_bar_height = self.renderer.tab_bar_height_px() as f64;
+        let window_padding = self.renderer.window_padding_px() as f64;
 
-        let track_top = (TAB_BAR_HEIGHT + WINDOW_PADDING) as f64;
-        let track_bottom = buf_height as f64 - WINDOW_PADDING as f64;
+        let track_top = tab_bar_height + window_padding;
+        let track_bottom = buf_height as f64 - window_padding;
 
         // Ignore clicks outside the track area.
         if my < track_top || my > track_bottom {

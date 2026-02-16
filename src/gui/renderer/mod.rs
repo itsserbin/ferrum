@@ -9,7 +9,7 @@ use crate::core::{Color, CursorStyle, Grid, Selection};
 use fontdue::{Font, FontSettings};
 use std::collections::HashMap;
 
-pub(super) const FONT_SIZE: f32 = 16.0;
+pub(super) const FONT_SIZE: f32 = 15.0;
 pub(super) const LINE_PADDING: u32 = 2;
 
 /// Scrollbar thumb width in pixels.
@@ -36,7 +36,7 @@ pub(super) const SCROLLBAR_HOVER_COLOR: Color = Color {
 };
 
 /// Tab bar height in pixels.
-pub const TAB_BAR_HEIGHT: u32 = 38;
+pub const TAB_BAR_HEIGHT: u32 = 32;
 
 /// Outer terminal padding inside the window.
 pub const WINDOW_PADDING: u32 = 8;
@@ -169,6 +169,7 @@ struct GlyphBitmap {
 pub struct Renderer {
     font: Font,
     font_size: f32,
+    ui_scale: f64,
     pub cell_width: u32,
     pub cell_height: u32,
     ascent: i32,
@@ -184,26 +185,89 @@ impl Renderer {
         let font = Font::from_bytes(font_data as &[u8], FontSettings::default())
             .expect("font load failed");
 
-        let line_metrics = font
-            .horizontal_line_metrics(FONT_SIZE)
+        let mut renderer = Renderer {
+            font,
+            font_size: 1.0,
+            ui_scale: 1.0,
+            cell_width: 1,
+            cell_height: 1,
+            ascent: 0,
+            glyph_cache: HashMap::new(),
+        };
+        renderer.recompute_metrics();
+        renderer
+    }
+
+    fn recompute_metrics(&mut self) {
+        let scaled_font_size = (FONT_SIZE as f64 * self.ui_scale).max(1.0) as f32;
+        let line_padding = self.scaled_px(LINE_PADDING);
+        let line_metrics = self
+            .font
+            .horizontal_line_metrics(scaled_font_size)
             .expect("no horizontal line metrics");
         let asc = line_metrics.ascent.round() as i32;
         let desc = line_metrics.descent.round() as i32; // negative
-        let ascent = asc + LINE_PADDING as i32 / 2;
-        let cell_height = (asc - desc) as u32 + LINE_PADDING;
+        self.ascent = asc + line_padding as i32 / 2;
+        self.cell_height = ((asc - desc).max(1) as u32) + line_padding;
 
         // Measure advance width from 'M'
-        let (m_metrics, _) = font.rasterize('M', FONT_SIZE);
-        let cell_width = m_metrics.advance_width.round() as u32;
+        let (m_metrics, _) = self.font.rasterize('M', scaled_font_size);
+        self.cell_width = m_metrics.advance_width.round().max(1.0) as u32;
+        self.font_size = scaled_font_size;
+        self.glyph_cache.clear();
+    }
 
-        Renderer {
-            font,
-            font_size: FONT_SIZE,
-            cell_width,
-            cell_height,
-            ascent,
-            glyph_cache: HashMap::new(),
+    pub fn set_scale(&mut self, scale_factor: f64) {
+        let scale = if scale_factor.is_finite() {
+            scale_factor.clamp(0.75, 4.0)
+        } else {
+            1.0
+        };
+        if (self.ui_scale - scale).abs() < f64::EPSILON {
+            return;
         }
+        self.ui_scale = scale;
+        self.recompute_metrics();
+    }
+
+    pub(crate) fn ui_scale(&self) -> f64 {
+        self.ui_scale
+    }
+
+    pub(crate) fn scaled_px(&self, base: u32) -> u32 {
+        if base == 0 {
+            0
+        } else {
+            ((base as f64 * self.ui_scale).round() as u32).max(1)
+        }
+    }
+
+    pub(crate) fn tab_bar_height_px(&self) -> u32 {
+        self.scaled_px(TAB_BAR_HEIGHT)
+    }
+
+    pub(crate) fn window_padding_px(&self) -> u32 {
+        self.scaled_px(WINDOW_PADDING)
+    }
+
+    pub(crate) fn resize_border_px(&self) -> f64 {
+        RESIZE_BORDER * self.ui_scale
+    }
+
+    pub(crate) fn scrollbar_width_px(&self) -> u32 {
+        self.scaled_px(SCROLLBAR_WIDTH)
+    }
+
+    pub(crate) fn scrollbar_hit_zone_px(&self) -> u32 {
+        self.scaled_px(SCROLLBAR_HIT_ZONE)
+    }
+
+    pub(crate) fn scrollbar_margin_px(&self) -> u32 {
+        self.scaled_px(SCROLLBAR_MARGIN)
+    }
+
+    pub(crate) fn first_tab_radius_px(&self) -> u32 {
+        self.scaled_px(FIRST_TAB_RADIUS)
     }
 
     /// Draws one glyph at arbitrary pixel coordinates (used by tab bar and overlays).

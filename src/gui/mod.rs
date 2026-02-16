@@ -34,12 +34,15 @@ impl FerrumWindow {
         window: Arc<Window>,
         surface: Surface<winit::event_loop::OwnedDisplayHandle, Arc<Window>>,
     ) -> Self {
+        let mut renderer = Renderer::new();
+        renderer.set_scale(window.scale_factor());
+
         FerrumWindow {
             window,
             surface,
             last_surface_size: None,
             pending_grid_resize: None,
-            renderer: Renderer::new(),
+            renderer,
             tabs: Vec::new(),
             active_tab: 0,
             modifiers: ModifiersState::empty(),
@@ -58,6 +61,7 @@ impl FerrumWindow {
             renaming_tab: None,
             dragging_tab: None,
             last_tab_click: None,
+            last_topbar_empty_click: None,
             resize_direction: None,
             cursor_blink_start: std::time::Instant::now(),
             suppress_click_to_cursor_once: false,
@@ -67,10 +71,12 @@ impl FerrumWindow {
 
     /// Calculates terminal rows/cols with tab bar and outer padding applied.
     fn calc_grid_size(&self, width: u32, height: u32) -> (usize, usize) {
-        let rows = height.saturating_sub(TAB_BAR_HEIGHT + WINDOW_PADDING * 2) as usize
+        let tab_bar_height = self.renderer.tab_bar_height_px();
+        let window_padding = self.renderer.window_padding_px();
+        let rows = height.saturating_sub(tab_bar_height + window_padding * 2) as usize
             / self.renderer.cell_height as usize;
         let cols =
-            width.saturating_sub(WINDOW_PADDING * 2) as usize / self.renderer.cell_width as usize;
+            width.saturating_sub(window_padding * 2) as usize / self.renderer.cell_width as usize;
         (rows.max(1), cols.max(1))
     }
 
@@ -106,15 +112,14 @@ impl App {
         let context = self.context.as_ref()?;
 
         let renderer = Renderer::new();
-        let min_size = winit::dpi::PhysicalSize::new(
-            renderer.cell_width * 40 + WINDOW_PADDING * 2,
-            renderer.cell_height * 10 + TAB_BAR_HEIGHT + WINDOW_PADDING * 2,
+        let min_size = winit::dpi::LogicalSize::new(
+            (renderer.cell_width * 40 + WINDOW_PADDING * 2) as f64,
+            (renderer.cell_height * 10 + TAB_BAR_HEIGHT + WINDOW_PADDING * 2) as f64,
         );
         let mut attrs = Window::default_attributes()
             .with_title("Ferrum")
             .with_min_inner_size(min_size)
-            .with_decorations(false)
-            .with_theme(Some(winit::window::Theme::Dark));
+            .with_decorations(false);
 
         if let Some(pos) = position {
             attrs = attrs.with_position(pos);

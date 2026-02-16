@@ -40,6 +40,7 @@ impl ApplicationHandler for App {
         let Some(win) = self.windows.get_mut(&window_id) else {
             return;
         };
+        let mut should_redraw = false;
 
         match event {
             WindowEvent::CloseRequested => {
@@ -52,6 +53,7 @@ impl ApplicationHandler for App {
                 win.selection_drag_mode = SelectionDragMode::Character;
                 win.click_streak = 0;
                 win.last_tab_click = None;
+                win.last_topbar_empty_click = None;
                 win.resize_direction = None;
                 win.hovered_tab = None;
                 win.security_popup = None;
@@ -60,27 +62,36 @@ impl ApplicationHandler for App {
                     win.context_menu = None;
                 } else {
                     win.suppress_click_to_cursor_once = true;
-                    win.window.request_redraw();
                 }
+                should_redraw = true;
             }
             WindowEvent::ModifiersChanged(modifiers) => {
                 win.modifiers = modifiers.state();
             }
             WindowEvent::KeyboardInput { event, .. } => {
                 win.on_keyboard_input(event_loop, &event, &mut self.next_tab_id, &self.tx);
+                should_redraw = true;
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 win.on_mouse_wheel(delta);
+                should_redraw = true;
             }
             WindowEvent::CursorLeft { .. } => {
                 win.hovered_tab = None;
                 win.resize_direction = None;
+                should_redraw = true;
             }
             WindowEvent::CursorMoved { position, .. } => {
                 win.on_cursor_moved(position);
+                should_redraw = true;
             }
             WindowEvent::MouseInput { state, button, .. } => {
                 win.on_mouse_input(event_loop, state, button, &mut self.next_tab_id, &self.tx);
+                should_redraw = true;
+            }
+            WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+                win.on_scale_factor_changed(scale_factor);
+                should_redraw = true;
             }
             WindowEvent::Resized(size) => {
                 win.on_resized(size);
@@ -90,20 +101,34 @@ impl ApplicationHandler for App {
             }
             _ => (),
         }
+        if should_redraw {
+            win.window.request_redraw();
+        }
 
         // Process any pending window requests (detach, close).
         self.process_window_requests(event_loop, window_id);
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
-        event_loop.set_control_flow(winit::event_loop::ControlFlow::WaitUntil(
-            std::time::Instant::now() + std::time::Duration::from_millis(16),
-        ));
-
         self.drain_pty_events(event_loop);
 
+        let now = std::time::Instant::now();
+        let mut next_wakeup: Option<std::time::Instant> = None;
+
         for win in self.windows.values() {
-            win.window.request_redraw();
+            if let Some((deadline, redraw_now)) = win.animation_schedule(now) {
+                if redraw_now {
+                    win.window.request_redraw();
+                }
+                next_wakeup = Some(next_wakeup.map_or(deadline, |current| current.min(deadline)));
+            }
+        }
+
+        match next_wakeup {
+            Some(deadline) => {
+                event_loop.set_control_flow(winit::event_loop::ControlFlow::WaitUntil(deadline))
+            }
+            None => event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait),
         }
     }
 }
@@ -127,6 +152,7 @@ impl App {
             if let Some(win_id) = win_id {
                 if let Some(win) = self.windows.get_mut(&win_id) {
                     win.on_pty_event(&event);
+                    win.window.request_redraw();
                 }
                 self.process_window_requests(event_loop, win_id);
             }

@@ -10,8 +10,8 @@ impl Renderer {
         grid: &Grid,
         selection: Option<&Selection>,
     ) {
-        let y_offset = TAB_BAR_HEIGHT + WINDOW_PADDING;
-        let x_offset = WINDOW_PADDING;
+        let y_offset = self.tab_bar_height_px() + self.window_padding_px();
+        let x_offset = self.window_padding_px();
 
         for row in 0..grid.rows {
             for col in 0..grid.cols {
