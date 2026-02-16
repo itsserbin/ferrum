@@ -1,11 +1,11 @@
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
-use crate::core::Color;
-use super::super::{TabBarHit, TabInfo};
 #[cfg(not(target_os = "macos"))]
 use super::super::WindowButton;
 use super::super::{MIN_TAB_WIDTH, MIN_TAB_WIDTH_FOR_TITLE};
+use super::super::{TabBarHit, TabInfo};
 use super::{ACTIVE_TAB_BG, TAB_BORDER};
+use crate::core::Color;
 
 #[cfg(not(target_os = "macos"))]
 use super::WIN_BTN_WIDTH;
@@ -75,7 +75,11 @@ impl super::super::CpuRenderer {
     }
 
     /// Returns rectangle for per-tab close button.
-    pub(in crate::gui::renderer) fn close_button_rect(&self, tab_index: usize, tw: u32) -> (u32, u32, u32, u32) {
+    pub(in crate::gui::renderer) fn close_button_rect(
+        &self,
+        tab_index: usize,
+        tw: u32,
+    ) -> (u32, u32, u32, u32) {
         let btn_size = self.scaled_px(20);
         let x = self.tab_origin_x(tab_index, tw) + tw - btn_size - self.scaled_px(6);
         let y = (self.tab_bar_height_px().saturating_sub(btn_size)) / 2;
@@ -83,7 +87,11 @@ impl super::super::CpuRenderer {
     }
 
     /// Returns rectangle for new-tab button.
-    pub(in crate::gui::renderer) fn plus_button_rect(&self, tab_count: usize, tw: u32) -> (u32, u32, u32, u32) {
+    pub(in crate::gui::renderer) fn plus_button_rect(
+        &self,
+        tab_count: usize,
+        tw: u32,
+    ) -> (u32, u32, u32, u32) {
         let btn_size = self.scaled_px(24);
         let x = self.tab_strip_start_x() + tab_count as u32 * tw + self.scaled_px(4);
         let y = (self.tab_bar_height_px().saturating_sub(btn_size)) / 2;
@@ -180,7 +188,12 @@ impl super::super::CpuRenderer {
 
     /// Hit-test window control buttons (non-macOS only).
     #[cfg(not(target_os = "macos"))]
-    pub fn window_button_at_position(&self, x: f64, y: f64, buf_width: u32) -> Option<WindowButton> {
+    pub fn window_button_at_position(
+        &self,
+        x: f64,
+        y: f64,
+        buf_width: u32,
+    ) -> Option<WindowButton> {
         let bar_h = self.tab_bar_height_px();
         if y >= bar_h as f64 {
             return None;
@@ -206,7 +219,12 @@ impl super::super::CpuRenderer {
         tw < self.scaled_px(MIN_TAB_WIDTH_FOR_TITLE)
     }
 
-    pub(in crate::gui::renderer) fn title_max_chars(&self, tab: &TabInfo, tw: u32, is_hovered: bool) -> usize {
+    pub(in crate::gui::renderer) fn title_max_chars(
+        &self,
+        tab: &TabInfo,
+        tw: u32,
+        is_hovered: bool,
+    ) -> usize {
         let tab_padding_h = self.scaled_px(14);
         let show_close = tab.is_active || is_hovered;
         let close_reserved = if show_close {
@@ -305,16 +323,7 @@ impl super::super::CpuRenderer {
         );
         // Subtle border.
         self.draw_rounded_rect(
-            buffer,
-            buf_width,
-            buf_height,
-            x,
-            y,
-            width,
-            height,
-            radius,
-            TAB_BORDER,
-            80,
+            buffer, buf_width, buf_height, x, y, width, height, radius, TAB_BORDER, 80,
         );
 
         let text_x = x as u32 + self.scaled_px(1) + padding_x;

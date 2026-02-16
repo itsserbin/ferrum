@@ -3,8 +3,8 @@
 //! Tab bar layout math and drawing helpers for the GPU renderer.
 
 use super::{
-    ACTIVE_TAB_BG, BAR_BG, INACTIVE_TAB_HOVER, INSERTION_COLOR,
-    MIN_TAB_WIDTH, MIN_TAB_WIDTH_FOR_TITLE, TAB_BORDER, TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE,
+    ACTIVE_TAB_BG, BAR_BG, INACTIVE_TAB_HOVER, INSERTION_COLOR, MIN_TAB_WIDTH,
+    MIN_TAB_WIDTH_FOR_TITLE, TAB_BORDER, TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE,
 };
 
 use super::super::TabInfo;
@@ -130,10 +130,22 @@ impl super::GpuRenderer {
         let bw = buf_width as u32;
 
         // Bar background.
-        self.push_rounded_rect(0.0, 0.0, bw as f32, tab_bar_h, self.metrics.scaled_px(10) as f32, BAR_BG, 1.0);
+        self.push_rounded_rect(
+            0.0,
+            0.0,
+            bw as f32,
+            tab_bar_h,
+            self.metrics.scaled_px(10) as f32,
+            BAR_BG,
+            1.0,
+        );
 
         let tw = self.tab_width_val(tabs.len(), bw);
-        let text_y = (self.metrics.tab_bar_height_px().saturating_sub(self.metrics.cell_height)) / 2
+        let text_y = (self
+            .metrics
+            .tab_bar_height_px()
+            .saturating_sub(self.metrics.cell_height))
+            / 2
             + self.metrics.scaled_px(1);
         let tab_padding_h = self.metrics.scaled_px(14);
         let use_numbers = self.should_show_number(tw);
@@ -205,9 +217,9 @@ impl super::GpuRenderer {
                 } else {
                     0
                 };
-                let max_chars = (tw.saturating_sub(
-                    tab_padding_h * 2 + close_reserved + security_reserved,
-                ) / self.metrics.cell_width) as usize;
+                let max_chars = (tw
+                    .saturating_sub(tab_padding_h * 2 + close_reserved + security_reserved)
+                    / self.metrics.cell_width) as usize;
                 let title: String = tab.title.chars().take(max_chars).collect();
                 let tx = tab_x + tab_padding_h as f32;
                 self.push_text(tx, text_y as f32, &title, fg_color, 1.0);
@@ -243,8 +255,24 @@ impl super::GpuRenderer {
         let center_y = py as f32 + ph as f32 * 0.5;
         let half = (pw.min(ph) as f32 * 0.25).clamp(2.5, 5.0);
         let thickness = (1.25 * self.metrics.ui_scale as f32).clamp(1.15, 2.2);
-        self.push_line(center_x - half, center_y, center_x + half, center_y, thickness, plus_fg, 1.0);
-        self.push_line(center_x, center_y - half, center_x, center_y + half, thickness, plus_fg, 1.0);
+        self.push_line(
+            center_x - half,
+            center_y,
+            center_x + half,
+            center_y,
+            thickness,
+            plus_fg,
+            1.0,
+        );
+        self.push_line(
+            center_x,
+            center_y - half,
+            center_x,
+            center_y + half,
+            thickness,
+            plus_fg,
+            1.0,
+        );
 
         // Window control buttons (non-macOS).
         #[cfg(not(target_os = "macos"))]
@@ -277,14 +305,42 @@ impl super::GpuRenderer {
         let ghost_radius = self.metrics.scaled_px(6) as f32;
 
         // Shadow.
-        self.push_rounded_rect(ghost_x + 2.0, ghost_y + 2.0, tw as f32, ghost_h, ghost_radius, 0x000000, 0.24);
+        self.push_rounded_rect(
+            ghost_x + 2.0,
+            ghost_y + 2.0,
+            tw as f32,
+            ghost_h,
+            ghost_radius,
+            0x000000,
+            0.24,
+        );
         // Body.
-        self.push_rounded_rect(ghost_x, ghost_y, tw as f32, ghost_h, ghost_radius, ACTIVE_TAB_BG, 0.86);
+        self.push_rounded_rect(
+            ghost_x,
+            ghost_y,
+            tw as f32,
+            ghost_h,
+            ghost_radius,
+            ACTIVE_TAB_BG,
+            0.86,
+        );
         // Border.
-        self.push_rounded_rect(ghost_x, ghost_y, tw as f32, ghost_h, ghost_radius, TAB_BORDER, 0.39);
+        self.push_rounded_rect(
+            ghost_x,
+            ghost_y,
+            tw as f32,
+            ghost_h,
+            ghost_radius,
+            TAB_BORDER,
+            0.39,
+        );
 
         // Ghost title.
-        let text_y = (self.metrics.tab_bar_height_px().saturating_sub(self.metrics.cell_height)) / 2
+        let text_y = (self
+            .metrics
+            .tab_bar_height_px()
+            .saturating_sub(self.metrics.cell_height))
+            / 2
             + self.metrics.scaled_px(1);
         let use_numbers = self.should_show_number(tw);
         let label: String = if use_numbers {
@@ -324,9 +380,12 @@ impl super::GpuRenderer {
         let padding_x = self.metrics.scaled_px(6) as f32;
         let padding_y = self.metrics.scaled_px(4) as f32;
         let content_chars = title.chars().count() as f32;
-        let width = (content_chars * self.metrics.cell_width as f32 + padding_x * 2.0 + self.metrics.scaled_px(2) as f32)
+        let width = (content_chars * self.metrics.cell_width as f32
+            + padding_x * 2.0
+            + self.metrics.scaled_px(2) as f32)
             .min(buf_width as f32 - 4.0);
-        let height = self.metrics.cell_height as f32 + padding_y * 2.0 + self.metrics.scaled_px(2) as f32;
+        let height =
+            self.metrics.cell_height as f32 + padding_y * 2.0 + self.metrics.scaled_px(2) as f32;
 
         let mut x = mouse_pos.0 as f32 + self.metrics.scaled_px(10) as f32;
         let mut y = self.metrics.tab_bar_height_px() as f32 + self.metrics.scaled_px(6) as f32;
@@ -339,9 +398,8 @@ impl super::GpuRenderer {
 
         let text_x = x + self.metrics.scaled_px(1) as f32 + padding_x;
         let text_y = y + self.metrics.scaled_px(1) as f32 + padding_y;
-        let max_chars =
-            ((width - self.metrics.scaled_px(2) as f32 - padding_x * 2.0) / self.metrics.cell_width as f32)
-                as usize;
+        let max_chars = ((width - self.metrics.scaled_px(2) as f32 - padding_x * 2.0)
+            / self.metrics.cell_width as f32) as usize;
         let display: String = title.chars().take(max_chars).collect();
         self.push_text(text_x, text_y, &display, TAB_TEXT_ACTIVE, 1.0);
     }
@@ -388,9 +446,8 @@ impl super::GpuRenderer {
         } else {
             0
         };
-        let max_chars =
-            (tw.saturating_sub(tab_padding_h * 2 + close_reserved + security_reserved)
-                / self.metrics.cell_width) as usize;
+        let max_chars = (tw.saturating_sub(tab_padding_h * 2 + close_reserved + security_reserved)
+            / self.metrics.cell_width) as usize;
         let title_chars = tab.title.chars().count();
         (title_chars > max_chars).then_some(tab.title)
     }

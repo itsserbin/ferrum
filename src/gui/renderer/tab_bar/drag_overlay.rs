@@ -1,8 +1,8 @@
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
-use crate::core::Color;
 use super::super::TabInfo;
 use super::{ACTIVE_TAB_BG, INSERTION_COLOR, TAB_BORDER};
+use crate::core::Color;
 
 impl super::super::CpuRenderer {
     /// Draws the drag overlay: ghost tab at cursor X + insertion indicator.

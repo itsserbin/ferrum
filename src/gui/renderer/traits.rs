@@ -2,9 +2,9 @@
 
 use crate::core::{CursorStyle, Grid, Selection};
 
-use super::{ContextMenu, SecurityPopup, TabBarHit, TabInfo};
 #[cfg(not(target_os = "macos"))]
 use super::WindowButton;
+use super::{ContextMenu, SecurityPopup, TabBarHit, TabInfo};
 
 /// Selects which rendering backend to use.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -129,13 +129,8 @@ pub trait Renderer {
 
     fn hit_test_tab_bar(&self, x: f64, y: f64, tab_count: usize, buf_width: u32) -> TabBarHit;
 
-    fn hit_test_tab_hover(
-        &self,
-        x: f64,
-        y: f64,
-        tab_count: usize,
-        buf_width: u32,
-    ) -> Option<usize>;
+    fn hit_test_tab_hover(&self, x: f64, y: f64, tab_count: usize, buf_width: u32)
+    -> Option<usize>;
 
     fn hit_test_tab_security_badge(
         &self,

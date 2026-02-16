@@ -8,9 +8,9 @@ use winit::window::Window;
 
 use crate::core::Color;
 
+use super::super::metrics::FontMetrics;
 use super::atlas::GlyphAtlas;
 use super::buffers::*;
-use super::super::metrics::FontMetrics;
 use super::pipelines;
 use super::{FONT_SIZE, MAX_UI_COMMANDS};
 
@@ -35,16 +35,15 @@ impl super::GpuRenderer {
             force_fallback_adapter: false,
         }))?;
 
-        let (device, queue) = pollster::block_on(adapter.request_device(
-            &wgpu::DeviceDescriptor {
+        let (device, queue) =
+            pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
                 label: Some("ferrum_device"),
                 required_features: wgpu::Features::empty(),
                 required_limits: wgpu::Limits::default(),
                 memory_hints: Default::default(),
                 trace: Default::default(),
                 experimental_features: Default::default(),
-            },
-        ))?;
+            }))?;
 
         // Surface configuration.
         // Prefer a non-sRGB format so the GPU doesn't apply automatic gamma
@@ -123,11 +122,8 @@ impl super::GpuRenderer {
             "glyph_info",
         );
 
-        let ui_uniform_buffer = Self::create_uniform_buffer(
-            &device,
-            std::mem::size_of::<UiUniforms>(),
-            "ui_uniforms",
-        );
+        let ui_uniform_buffer =
+            Self::create_uniform_buffer(&device, std::mem::size_of::<UiUniforms>(), "ui_uniforms");
         let ui_command_buffer = Self::create_storage_buffer(
             &device,
             std::mem::size_of::<GpuDrawCommand>() * MAX_UI_COMMANDS,
@@ -268,13 +264,23 @@ impl super::GpuRenderer {
 
     /// Rebuilds grid and UI textures after a window resize.
     pub(super) fn resize_textures(&mut self) {
-        let (gt, gtv) =
-            Self::create_offscreen_texture(&self.device, self.width, self.height, "grid_texture", true);
+        let (gt, gtv) = Self::create_offscreen_texture(
+            &self.device,
+            self.width,
+            self.height,
+            "grid_texture",
+            true,
+        );
         self.grid_texture = gt;
         self.grid_texture_view = gtv;
 
-        let (ut, utv) =
-            Self::create_offscreen_texture(&self.device, self.width, self.height, "ui_texture", false);
+        let (ut, utv) = Self::create_offscreen_texture(
+            &self.device,
+            self.width,
+            self.height,
+            "ui_texture",
+            false,
+        );
         self.ui_texture = ut;
         self.ui_texture_view = utv;
     }

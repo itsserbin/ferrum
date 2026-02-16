@@ -75,12 +75,23 @@ impl super::super::CpuRenderer {
         }
     }
 
-    pub(in crate::gui::renderer) fn point_in_rect(x: f64, y: f64, rect: (u32, u32, u32, u32)) -> bool {
+    pub(in crate::gui::renderer) fn point_in_rect(
+        x: f64,
+        y: f64,
+        rect: (u32, u32, u32, u32),
+    ) -> bool {
         let (rx, ry, rw, rh) = rect;
         x >= rx as f64 && x < (rx + rw) as f64 && y >= ry as f64 && y < (ry + rh) as f64
     }
 
-    pub(in crate::gui::renderer) fn point_to_segment_distance(px: f32, py: f32, x0: f32, y0: f32, x1: f32, y1: f32) -> f32 {
+    pub(in crate::gui::renderer) fn point_to_segment_distance(
+        px: f32,
+        py: f32,
+        x0: f32,
+        y0: f32,
+        x1: f32,
+        y1: f32,
+    ) -> f32 {
         let vx = x1 - x0;
         let vy = y1 - y0;
         let len_sq = vx * vx + vy * vy;
@@ -271,7 +282,13 @@ impl super::super::CpuRenderer {
     }
 
     /// Coverage function for a rect with only the top two corners rounded.
-    pub(in crate::gui::renderer) fn top_rounded_coverage(px: i32, py: i32, w: i32, h: i32, r: i32) -> f32 {
+    pub(in crate::gui::renderer) fn top_rounded_coverage(
+        px: i32,
+        py: i32,
+        w: i32,
+        h: i32,
+        r: i32,
+    ) -> f32 {
         if px < 0 || py < 0 || px >= w || py >= h {
             return 0.0;
         }

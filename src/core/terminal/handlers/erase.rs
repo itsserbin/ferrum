@@ -62,14 +62,21 @@ pub(in super::super) fn handle_erase_csi(
 
 #[cfg(test)]
 mod tests {
-    use crate::core::terminal::Terminal;
     use crate::core::Cell;
+    use crate::core::terminal::Terminal;
 
     fn filled_term(rows: usize, cols: usize) -> Terminal {
         let mut term = Terminal::new(rows, cols);
         for r in 0..rows {
             for c in 0..cols {
-                term.grid.set(r, c, Cell { character: 'A', ..Cell::default() });
+                term.grid.set(
+                    r,
+                    c,
+                    Cell {
+                        character: 'A',
+                        ..Cell::default()
+                    },
+                );
             }
         }
         term
@@ -83,20 +90,41 @@ mod tests {
         term.process(b"\x1b[0J");
         // Before cursor on row 1: preserved
         for c in 0..3 {
-            assert_eq!(term.grid.get(1, c).character, 'A', "row 1 col {} should be A", c);
+            assert_eq!(
+                term.grid.get(1, c).character,
+                'A',
+                "row 1 col {} should be A",
+                c
+            );
         }
         // Row 0: fully preserved
         for c in 0..10 {
-            assert_eq!(term.grid.get(0, c).character, 'A', "row 0 col {} should be A", c);
+            assert_eq!(
+                term.grid.get(0, c).character,
+                'A',
+                "row 0 col {} should be A",
+                c
+            );
         }
         // From cursor to end of row 1: erased
         for c in 3..10 {
-            assert_eq!(term.grid.get(1, c).character, ' ', "row 1 col {} should be erased", c);
+            assert_eq!(
+                term.grid.get(1, c).character,
+                ' ',
+                "row 1 col {} should be erased",
+                c
+            );
         }
         // Rows below: fully erased
         for r in 2..4 {
             for c in 0..10 {
-                assert_eq!(term.grid.get(r, c).character, ' ', "row {} col {} should be erased", r, c);
+                assert_eq!(
+                    term.grid.get(r, c).character,
+                    ' ',
+                    "row {} col {} should be erased",
+                    r,
+                    c
+                );
             }
         }
     }
@@ -109,20 +137,41 @@ mod tests {
         term.process(b"\x1b[1J");
         // Row 0: fully erased
         for c in 0..10 {
-            assert_eq!(term.grid.get(0, c).character, ' ', "row 0 col {} should be erased", c);
+            assert_eq!(
+                term.grid.get(0, c).character,
+                ' ',
+                "row 0 col {} should be erased",
+                c
+            );
         }
         // Row 1 up to and including cursor: erased
         for c in 0..=3 {
-            assert_eq!(term.grid.get(1, c).character, ' ', "row 1 col {} should be erased", c);
+            assert_eq!(
+                term.grid.get(1, c).character,
+                ' ',
+                "row 1 col {} should be erased",
+                c
+            );
         }
         // Row 1 after cursor: preserved
         for c in 4..10 {
-            assert_eq!(term.grid.get(1, c).character, 'A', "row 1 col {} should be A", c);
+            assert_eq!(
+                term.grid.get(1, c).character,
+                'A',
+                "row 1 col {} should be A",
+                c
+            );
         }
         // Rows below: preserved
         for r in 2..4 {
             for c in 0..10 {
-                assert_eq!(term.grid.get(r, c).character, 'A', "row {} col {} should be A", r, c);
+                assert_eq!(
+                    term.grid.get(r, c).character,
+                    'A',
+                    "row {} col {} should be A",
+                    r,
+                    c
+                );
             }
         }
     }
@@ -133,7 +182,13 @@ mod tests {
         term.process(b"\x1b[2J");
         for r in 0..4 {
             for c in 0..10 {
-                assert_eq!(term.grid.get(r, c).character, ' ', "row {} col {} should be erased", r, c);
+                assert_eq!(
+                    term.grid.get(r, c).character,
+                    ' ',
+                    "row {} col {} should be erased",
+                    r,
+                    c
+                );
             }
         }
     }
@@ -146,19 +201,40 @@ mod tests {
         term.process(b"\x1b[J");
         // Same as 0J: from cursor to end erased
         for c in 3..10 {
-            assert_eq!(term.grid.get(1, c).character, ' ', "row 1 col {} should be erased", c);
+            assert_eq!(
+                term.grid.get(1, c).character,
+                ' ',
+                "row 1 col {} should be erased",
+                c
+            );
         }
         for r in 2..4 {
             for c in 0..10 {
-                assert_eq!(term.grid.get(r, c).character, ' ', "row {} col {} should be erased", r, c);
+                assert_eq!(
+                    term.grid.get(r, c).character,
+                    ' ',
+                    "row {} col {} should be erased",
+                    r,
+                    c
+                );
             }
         }
         // Before cursor preserved
         for c in 0..3 {
-            assert_eq!(term.grid.get(1, c).character, 'A', "row 1 col {} should be A", c);
+            assert_eq!(
+                term.grid.get(1, c).character,
+                'A',
+                "row 1 col {} should be A",
+                c
+            );
         }
         for c in 0..10 {
-            assert_eq!(term.grid.get(0, c).character, 'A', "row 0 col {} should be A", c);
+            assert_eq!(
+                term.grid.get(0, c).character,
+                'A',
+                "row 0 col {} should be A",
+                c
+            );
         }
     }
 
@@ -174,7 +250,12 @@ mod tests {
         }
         // Cols 3..9 erased
         for c in 3..10 {
-            assert_eq!(term.grid.get(0, c).character, ' ', "col {} should be erased", c);
+            assert_eq!(
+                term.grid.get(0, c).character,
+                ' ',
+                "col {} should be erased",
+                c
+            );
         }
     }
 
@@ -186,7 +267,12 @@ mod tests {
         term.process(b"\x1b[1K");
         // Cols 0..3 erased (inclusive)
         for c in 0..=3 {
-            assert_eq!(term.grid.get(0, c).character, ' ', "col {} should be erased", c);
+            assert_eq!(
+                term.grid.get(0, c).character,
+                ' ',
+                "col {} should be erased",
+                c
+            );
         }
         // Cols 4..9 preserved
         for c in 4..10 {
@@ -201,7 +287,12 @@ mod tests {
         term.cursor_col = 5;
         term.process(b"\x1b[2K");
         for c in 0..10 {
-            assert_eq!(term.grid.get(0, c).character, ' ', "col {} should be erased", c);
+            assert_eq!(
+                term.grid.get(0, c).character,
+                ' ',
+                "col {} should be erased",
+                c
+            );
         }
     }
 
@@ -216,7 +307,12 @@ mod tests {
             assert_eq!(term.grid.get(0, c).character, 'A', "col {} should be A", c);
         }
         for c in 3..10 {
-            assert_eq!(term.grid.get(0, c).character, ' ', "col {} should be erased", c);
+            assert_eq!(
+                term.grid.get(0, c).character,
+                ' ',
+                "col {} should be erased",
+                c
+            );
         }
     }
 }

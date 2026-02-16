@@ -7,19 +7,19 @@ mod primitives;
 use super::*;
 
 // Catppuccin Mocha palette — flat Chrome-style tab bar.
-const BAR_BG: u32 = 0x181825;              // Mantle — bar background
-pub(self) const ACTIVE_TAB_BG: u32 = 0x1E1E2E;      // Base — merges with terminal
-const INACTIVE_TAB_HOVER: u32 = 0x313244;  // Surface0
-const TAB_TEXT_ACTIVE: u32 = 0xCDD6F4;     // Text
-const TAB_TEXT_INACTIVE: u32 = 0x6C7086;   // Overlay0
-pub(self) const TAB_BORDER: u32 = 0x313244;          // Surface0
+const BAR_BG: u32 = 0x181825; // Mantle — bar background
+pub(self) const ACTIVE_TAB_BG: u32 = 0x1E1E2E; // Base — merges with terminal
+const INACTIVE_TAB_HOVER: u32 = 0x313244; // Surface0
+const TAB_TEXT_ACTIVE: u32 = 0xCDD6F4; // Text
+const TAB_TEXT_INACTIVE: u32 = 0x6C7086; // Overlay0
+pub(self) const TAB_BORDER: u32 = 0x313244; // Surface0
 const CLOSE_HOVER_BG_COLOR: u32 = 0xF38BA8; // Red
 
 // Window button colors (non-macOS).
 #[cfg(not(target_os = "macos"))]
-const WIN_BTN_ICON: u32 = 0x6C7086;        // Overlay0
+const WIN_BTN_ICON: u32 = 0x6C7086; // Overlay0
 #[cfg(not(target_os = "macos"))]
-const WIN_BTN_HOVER: u32 = 0x313244;       // Surface0
+const WIN_BTN_HOVER: u32 = 0x313244; // Surface0
 #[cfg(not(target_os = "macos"))]
 const WIN_BTN_CLOSE_HOVER: u32 = 0xF38BA8; // Red
 #[cfg(not(target_os = "macos"))]
@@ -438,39 +438,45 @@ impl CpuRenderer {
                     let y1 = center_y + half;
                     // Top.
                     Self::draw_stroked_line(
-                        buffer, buf_width, buf_height,
-                        x0, y0, x1, y0, thickness, icon_color,
+                        buffer, buf_width, buf_height, x0, y0, x1, y0, thickness, icon_color,
                     );
                     // Bottom.
                     Self::draw_stroked_line(
-                        buffer, buf_width, buf_height,
-                        x0, y1, x1, y1, thickness, icon_color,
+                        buffer, buf_width, buf_height, x0, y1, x1, y1, thickness, icon_color,
                     );
                     // Left.
                     Self::draw_stroked_line(
-                        buffer, buf_width, buf_height,
-                        x0, y0, x0, y1, thickness, icon_color,
+                        buffer, buf_width, buf_height, x0, y0, x0, y1, thickness, icon_color,
                     );
                     // Right.
                     Self::draw_stroked_line(
-                        buffer, buf_width, buf_height,
-                        x1, y0, x1, y1, thickness, icon_color,
+                        buffer, buf_width, buf_height, x1, y0, x1, y1, thickness, icon_color,
                     );
                 }
                 WindowButton::Close => {
                     // X shape.
                     let half = self.scaled_px(5) as f32 * 0.7;
                     Self::draw_stroked_line(
-                        buffer, buf_width, buf_height,
-                        center_x - half, center_y - half,
-                        center_x + half, center_y + half,
-                        thickness, icon_color,
+                        buffer,
+                        buf_width,
+                        buf_height,
+                        center_x - half,
+                        center_y - half,
+                        center_x + half,
+                        center_y + half,
+                        thickness,
+                        icon_color,
                     );
                     Self::draw_stroked_line(
-                        buffer, buf_width, buf_height,
-                        center_x + half, center_y - half,
-                        center_x - half, center_y + half,
-                        thickness, icon_color,
+                        buffer,
+                        buf_width,
+                        buf_height,
+                        center_x + half,
+                        center_y - half,
+                        center_x - half,
+                        center_y + half,
+                        thickness,
+                        icon_color,
                     );
                 }
             }
@@ -482,8 +488,7 @@ impl CpuRenderer {
     pub fn is_window_minimize_button(&self, x: f64, y: f64, buf_width: usize) -> bool {
         #[cfg(not(target_os = "macos"))]
         {
-            self.window_button_at_position(x, y, buf_width as u32)
-                == Some(WindowButton::Minimize)
+            self.window_button_at_position(x, y, buf_width as u32) == Some(WindowButton::Minimize)
         }
         #[cfg(target_os = "macos")]
         {
@@ -497,8 +502,7 @@ impl CpuRenderer {
     pub fn is_window_maximize_button(&self, x: f64, y: f64, buf_width: usize) -> bool {
         #[cfg(not(target_os = "macos"))]
         {
-            self.window_button_at_position(x, y, buf_width as u32)
-                == Some(WindowButton::Maximize)
+            self.window_button_at_position(x, y, buf_width as u32) == Some(WindowButton::Maximize)
         }
         #[cfg(target_os = "macos")]
         {
@@ -512,8 +516,7 @@ impl CpuRenderer {
     pub fn is_window_close_button(&self, x: f64, y: f64, buf_width: usize) -> bool {
         #[cfg(not(target_os = "macos"))]
         {
-            self.window_button_at_position(x, y, buf_width as u32)
-                == Some(WindowButton::Close)
+            self.window_button_at_position(x, y, buf_width as u32) == Some(WindowButton::Close)
         }
         #[cfg(target_os = "macos")]
         {

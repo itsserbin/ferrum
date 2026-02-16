@@ -48,13 +48,20 @@ pub(in super::super) fn handle_inline_edit_csi(
 
 #[cfg(test)]
 mod tests {
-    use crate::core::terminal::Terminal;
     use crate::core::Cell;
+    use crate::core::terminal::Terminal;
 
     /// Helper: write a string into row 0 starting at col 0.
     fn write_row(term: &mut Terminal, text: &str) {
         for (i, ch) in text.chars().enumerate() {
-            term.grid.set(0, i, Cell { character: ch, ..Cell::default() });
+            term.grid.set(
+                0,
+                i,
+                Cell {
+                    character: ch,
+                    ..Cell::default()
+                },
+            );
         }
     }
 

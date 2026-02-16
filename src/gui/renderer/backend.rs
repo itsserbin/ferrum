@@ -42,8 +42,7 @@ impl RendererBackend {
             }
         }
 
-        let surface =
-            Surface::new(context, window.clone()).expect("softbuffer surface");
+        let surface = Surface::new(context, window.clone()).expect("softbuffer surface");
         let renderer = CpuRenderer::new();
         eprintln!("[ferrum] Using CPU renderer (softbuffer)");
         RendererBackend::Cpu { renderer, surface }
@@ -135,13 +134,20 @@ impl RendererBackend {
         grid_rows: usize,
     ) -> Option<(f32, f32)> {
         match self {
-            RendererBackend::Cpu { renderer, .. } => {
-                renderer.scrollbar_thumb_bounds(buf_height, scroll_offset, scrollback_len, grid_rows)
-            }
+            RendererBackend::Cpu { renderer, .. } => renderer.scrollbar_thumb_bounds(
+                buf_height,
+                scroll_offset,
+                scrollback_len,
+                grid_rows,
+            ),
             #[cfg(feature = "gpu")]
-            RendererBackend::Gpu(gpu) => {
-                Renderer::scrollbar_thumb_bounds(gpu, buf_height, scroll_offset, scrollback_len, grid_rows)
-            }
+            RendererBackend::Gpu(gpu) => Renderer::scrollbar_thumb_bounds(
+                gpu,
+                buf_height,
+                scroll_offset,
+                scrollback_len,
+                grid_rows,
+            ),
         }
     }
 
@@ -263,13 +269,9 @@ impl RendererBackend {
 
     pub fn hit_test_context_menu(&self, menu: &ContextMenu, x: f64, y: f64) -> Option<usize> {
         match self {
-            RendererBackend::Cpu { renderer, .. } => {
-                renderer.hit_test_context_menu(menu, x, y)
-            }
+            RendererBackend::Cpu { renderer, .. } => renderer.hit_test_context_menu(menu, x, y),
             #[cfg(feature = "gpu")]
-            RendererBackend::Gpu(gpu) => {
-                Renderer::hit_test_context_menu(gpu, menu, x, y)
-            }
+            RendererBackend::Gpu(gpu) => Renderer::hit_test_context_menu(gpu, menu, x, y),
         }
     }
 

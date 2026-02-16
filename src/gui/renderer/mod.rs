@@ -72,8 +72,8 @@ pub(super) const MIN_TAB_WIDTH_FOR_TITLE: u32 = 60;
 /// Absolute minimum tab width (number + close button).
 pub(super) const MIN_TAB_WIDTH: u32 = 36;
 
-pub use types::*;
 use types::GlyphBitmap;
+pub use types::*;
 
 /// CPU-based software renderer using softbuffer pixel buffers.
 pub struct CpuRenderer {
@@ -156,7 +156,9 @@ impl CpuRenderer {
 
     pub(crate) fn tab_bar_height_px(&self) -> u32 {
         #[cfg(target_os = "macos")]
-        { 0 }
+        {
+            0
+        }
         #[cfg(not(target_os = "macos"))]
         {
             if self.tab_bar_visible {
@@ -181,9 +183,13 @@ impl CpuRenderer {
 
     pub(crate) fn window_padding_px(&self) -> u32 {
         #[cfg(target_os = "macos")]
-        { 0 }
+        {
+            0
+        }
         #[cfg(not(target_os = "macos"))]
-        { self.scaled_px(WINDOW_PADDING) }
+        {
+            self.scaled_px(WINDOW_PADDING)
+        }
     }
 
     pub(crate) fn scrollbar_width_px(&self) -> u32 {
@@ -449,7 +455,15 @@ impl traits::Renderer for CpuRenderer {
         selection: Option<&Selection>,
         viewport_start: usize,
     ) {
-        CpuRenderer::render(self, buffer, buf_width, buf_height, grid, selection, viewport_start);
+        CpuRenderer::render(
+            self,
+            buffer,
+            buf_width,
+            buf_height,
+            grid,
+            selection,
+            viewport_start,
+        );
     }
 
     fn draw_cursor(
@@ -496,7 +510,13 @@ impl traits::Renderer for CpuRenderer {
         scrollback_len: usize,
         grid_rows: usize,
     ) -> Option<(f32, f32)> {
-        CpuRenderer::scrollbar_thumb_bounds(self, buf_height, scroll_offset, scrollback_len, grid_rows)
+        CpuRenderer::scrollbar_thumb_bounds(
+            self,
+            buf_height,
+            scroll_offset,
+            scrollback_len,
+            grid_rows,
+        )
     }
 
     fn draw_tab_bar(
@@ -509,7 +529,16 @@ impl traits::Renderer for CpuRenderer {
         mouse_pos: (f64, f64),
         tab_offsets: Option<&[f32]>,
     ) {
-        CpuRenderer::draw_tab_bar(self, buffer, buf_width, buf_height, tabs, hovered_tab, mouse_pos, tab_offsets);
+        CpuRenderer::draw_tab_bar(
+            self,
+            buffer,
+            buf_width,
+            buf_height,
+            tabs,
+            hovered_tab,
+            mouse_pos,
+            tab_offsets,
+        );
     }
 
     fn draw_tab_drag_overlay(

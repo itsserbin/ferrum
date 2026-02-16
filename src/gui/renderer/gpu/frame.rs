@@ -6,14 +6,14 @@ use wgpu;
 
 use crate::core::Color;
 
-use super::buffers::*;
 use super::MAX_UI_COMMANDS;
+use super::buffers::*;
 
 #[cfg(not(target_os = "macos"))]
 use super::super::WindowButton;
-use super::{CLOSE_HOVER_BG_COLOR, TAB_TEXT_INACTIVE};
 #[cfg(not(target_os = "macos"))]
 use super::WIN_BTN_WIDTH;
+use super::{CLOSE_HOVER_BG_COLOR, TAB_TEXT_INACTIVE};
 
 impl super::GpuRenderer {
     pub(super) fn draw_close_button_commands(
@@ -62,11 +62,7 @@ impl super::GpuRenderer {
     }
 
     #[cfg(not(target_os = "macos"))]
-    pub(super) fn draw_window_buttons_commands(
-        &mut self,
-        buf_width: u32,
-        mouse_pos: (f64, f64),
-    ) {
+    pub(super) fn draw_window_buttons_commands(&mut self, buf_width: u32, mouse_pos: (f64, f64)) {
         let bar_h = self.metrics.tab_bar_height_px() as f32;
         let btn_w = self.metrics.scaled_px(WIN_BTN_WIDTH);
         let bw = buf_width;
@@ -177,11 +173,8 @@ impl super::GpuRenderer {
             let glyph_data = self.atlas.glyph_info_buffer_data();
             let glyph_bytes = bytemuck::cast_slice(&glyph_data);
             if glyph_bytes.len() as u64 > self.glyph_info_buffer.size() {
-                self.glyph_info_buffer = Self::create_storage_buffer_init(
-                    &self.device,
-                    glyph_bytes,
-                    "glyph_info",
-                );
+                self.glyph_info_buffer =
+                    Self::create_storage_buffer_init(&self.device, glyph_bytes, "glyph_info");
             } else {
                 self.queue
                     .write_buffer(&self.glyph_info_buffer, 0, glyph_bytes);
@@ -206,11 +199,8 @@ impl super::GpuRenderer {
         if command_count > 0 {
             let cmd_bytes = bytemuck::cast_slice(&self.commands[..command_count]);
             if cmd_bytes.len() as u64 > self.ui_command_buffer.size() {
-                self.ui_command_buffer = Self::create_storage_buffer(
-                    &self.device,
-                    cmd_bytes.len(),
-                    "ui_commands",
-                );
+                self.ui_command_buffer =
+                    Self::create_storage_buffer(&self.device, cmd_bytes.len(), "ui_commands");
             }
             self.queue
                 .write_buffer(&self.ui_command_buffer, 0, cmd_bytes);
@@ -352,29 +342,28 @@ impl super::GpuRenderer {
 
         // Pass 3: Composite.
         {
-            let composite_bind_group =
-                self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("composite_bind_group"),
-                    layout: &self.composite_bind_group_layout,
-                    entries: &[
-                        wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: wgpu::BindingResource::TextureView(&self.grid_texture_view),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 1,
-                            resource: wgpu::BindingResource::TextureView(&self.ui_texture_view),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 2,
-                            resource: wgpu::BindingResource::Sampler(&self.sampler),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 3,
-                            resource: self.composite_uniform_buffer.as_entire_binding(),
-                        },
-                    ],
-                });
+            let composite_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("composite_bind_group"),
+                layout: &self.composite_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&self.grid_texture_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(&self.ui_texture_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::Sampler(&self.sampler),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: self.composite_uniform_buffer.as_entire_binding(),
+                    },
+                ],
+            });
 
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("composite_render_pass"),

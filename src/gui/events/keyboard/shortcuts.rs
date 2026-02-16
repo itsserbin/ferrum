@@ -48,7 +48,10 @@ impl FerrumWindow {
                         if digit == 9 {
                             crate::gui::platform::macos::select_tab(&self.window, usize::MAX);
                         } else {
-                            crate::gui::platform::macos::select_tab(&self.window, (digit - 1) as usize);
+                            crate::gui::platform::macos::select_tab(
+                                &self.window,
+                                (digit - 1) as usize,
+                            );
                         }
                     }
                     #[cfg(not(target_os = "macos"))]
@@ -160,8 +163,9 @@ impl FerrumWindow {
                 };
                 #[cfg(target_os = "macos")]
                 {
-                    self.pending_requests
-                        .push(WindowRequest::ReopenTab { title: closed.title });
+                    self.pending_requests.push(WindowRequest::ReopenTab {
+                        title: closed.title,
+                    });
                 }
                 #[cfg(not(target_os = "macos"))]
                 {

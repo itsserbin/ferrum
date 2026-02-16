@@ -46,7 +46,9 @@ impl FontMetrics {
 
     pub fn tab_bar_height_px(&self) -> u32 {
         #[cfg(target_os = "macos")]
-        { 0 }
+        {
+            0
+        }
         #[cfg(not(target_os = "macos"))]
         {
             if self.tab_bar_visible {
@@ -59,9 +61,13 @@ impl FontMetrics {
 
     pub fn window_padding_px(&self) -> u32 {
         #[cfg(target_os = "macos")]
-        { 0 }
+        {
+            0
+        }
         #[cfg(not(target_os = "macos"))]
-        { self.scaled_px(WINDOW_PADDING) }
+        {
+            self.scaled_px(WINDOW_PADDING)
+        }
     }
 
     pub fn scrollbar_hit_zone_px(&self) -> u32 {

@@ -59,8 +59,8 @@ pub(in super::super) fn handle_scroll_csi(
 
 #[cfg(test)]
 mod tests {
-    use crate::core::terminal::Terminal;
     use crate::core::Cell;
+    use crate::core::terminal::Terminal;
 
     /// Helper: fill each row with a distinct character ('A' for row 0, 'B' for row 1, etc.)
     fn filled_term(rows: usize, cols: usize) -> Terminal {
@@ -68,7 +68,14 @@ mod tests {
         for r in 0..rows {
             let ch = (b'A' + r as u8) as char;
             for c in 0..cols {
-                term.grid.set(r, c, Cell { character: ch, ..Cell::default() });
+                term.grid.set(
+                    r,
+                    c,
+                    Cell {
+                        character: ch,
+                        ..Cell::default()
+                    },
+                );
             }
         }
         term
@@ -100,7 +107,14 @@ mod tests {
         for r in 0..10 {
             let ch = (b'A' + r as u8) as char;
             for c in 0..10 {
-                term.grid.set(r, c, Cell { character: ch, ..Cell::default() });
+                term.grid.set(
+                    r,
+                    c,
+                    Cell {
+                        character: ch,
+                        ..Cell::default()
+                    },
+                );
             }
         }
 
@@ -133,7 +147,14 @@ mod tests {
         for r in 0..6 {
             let ch = (b'A' + r as u8) as char;
             for c in 0..5 {
-                term.grid.set(r, c, Cell { character: ch, ..Cell::default() });
+                term.grid.set(
+                    r,
+                    c,
+                    Cell {
+                        character: ch,
+                        ..Cell::default()
+                    },
+                );
             }
         }
         term.process(b"\x1b[1S");
@@ -212,7 +233,14 @@ mod tests {
         for r in 0..4 {
             let ch = (b'A' + r as u8) as char;
             for c in 0..5 {
-                term.grid.set(r, c, Cell { character: ch, ..Cell::default() });
+                term.grid.set(
+                    r,
+                    c,
+                    Cell {
+                        character: ch,
+                        ..Cell::default()
+                    },
+                );
             }
         }
 

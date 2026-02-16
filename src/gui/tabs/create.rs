@@ -109,8 +109,7 @@ fn last_login_message() -> String {
     use std::fmt::Write as _;
     let dow_names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     let mon_names = [
-        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
     ];
     unsafe {
         let now = libc::time(std::ptr::null_mut());

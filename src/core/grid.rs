@@ -175,9 +175,30 @@ mod tests {
     #[test]
     fn shift_up_moves_rows() {
         let mut grid = Grid::new(3, 1);
-        grid.set(0, 0, Cell { character: 'A', ..Cell::default() });
-        grid.set(1, 0, Cell { character: 'B', ..Cell::default() });
-        grid.set(2, 0, Cell { character: 'C', ..Cell::default() });
+        grid.set(
+            0,
+            0,
+            Cell {
+                character: 'A',
+                ..Cell::default()
+            },
+        );
+        grid.set(
+            1,
+            0,
+            Cell {
+                character: 'B',
+                ..Cell::default()
+            },
+        );
+        grid.set(
+            2,
+            0,
+            Cell {
+                character: 'C',
+                ..Cell::default()
+            },
+        );
 
         grid.shift_up(1);
 
@@ -189,9 +210,30 @@ mod tests {
     #[test]
     fn shift_down_moves_rows() {
         let mut grid = Grid::new(3, 1);
-        grid.set(0, 0, Cell { character: 'A', ..Cell::default() });
-        grid.set(1, 0, Cell { character: 'B', ..Cell::default() });
-        grid.set(2, 0, Cell { character: 'C', ..Cell::default() });
+        grid.set(
+            0,
+            0,
+            Cell {
+                character: 'A',
+                ..Cell::default()
+            },
+        );
+        grid.set(
+            1,
+            0,
+            Cell {
+                character: 'B',
+                ..Cell::default()
+            },
+        );
+        grid.set(
+            2,
+            0,
+            Cell {
+                character: 'C',
+                ..Cell::default()
+            },
+        );
 
         grid.shift_down(1);
 
@@ -204,8 +246,14 @@ mod tests {
     fn set_row_replaces() {
         let mut grid = Grid::new(2, 4);
         let cells = vec![
-            Cell { character: 'X', ..Cell::default() },
-            Cell { character: 'Y', ..Cell::default() },
+            Cell {
+                character: 'X',
+                ..Cell::default()
+            },
+            Cell {
+                character: 'Y',
+                ..Cell::default()
+            },
         ];
         grid.set_row(0, cells);
 

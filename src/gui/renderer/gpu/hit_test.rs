@@ -4,9 +4,9 @@
 
 use crate::core::Color;
 
-use super::super::{ContextAction, ContextMenu, SecurityPopup, TabBarHit, TabInfo};
 #[cfg(not(target_os = "macos"))]
 use super::super::WindowButton;
+use super::super::{ContextAction, ContextMenu, SecurityPopup, TabBarHit, TabInfo};
 
 #[cfg(not(target_os = "macos"))]
 use super::WIN_BTN_WIDTH;
@@ -47,11 +47,7 @@ impl super::GpuRenderer {
         if (tab_index as usize) < tab_count {
             let idx = tab_index as usize;
             let (cx, cy, cw, ch) = self.close_button_rect(idx, tw);
-            if x >= cx as f64
-                && x < (cx + cw) as f64
-                && y >= cy as f64
-                && y < (cy + ch) as f64
-            {
+            if x >= cx as f64 && x < (cx + cw) as f64 && y >= cy as f64 && y < (cy + ch) as f64 {
                 return TabBarHit::CloseTab(idx);
             }
             return TabBarHit::Tab(idx);
@@ -100,11 +96,7 @@ impl super::GpuRenderer {
             else {
                 continue;
             };
-            if x >= sx as f64
-                && x < (sx + sw) as f64
-                && y >= sy as f64
-                && y < (sy + sh) as f64
-            {
+            if x >= sx as f64 && x < (sx + sw) as f64 && y >= sy as f64 && y < (sy + sh) as f64 {
                 return Some(idx);
             }
         }
@@ -248,7 +240,13 @@ impl super::GpuRenderer {
             let text_y = y + line_h + self.metrics.scaled_px(4) as f32 + line_idx as f32 * line_h;
             let text_x = x + self.metrics.cell_width as f32 / 2.0;
             let full_line = format!("\u{2022} {}", line);
-            self.push_text(text_x, text_y, &full_line, Color::DEFAULT_FG.to_pixel(), 1.0);
+            self.push_text(
+                text_x,
+                text_y,
+                &full_line,
+                Color::DEFAULT_FG.to_pixel(),
+                1.0,
+            );
         }
     }
 

@@ -130,16 +130,19 @@ impl GlyphAtlas {
 
         if gw == 0 || gh == 0 {
             // Space or zero-width — store an empty entry.
-            self.glyphs.insert(codepoint, GlyphInfo {
-                x: 0.0,
-                y: 0.0,
-                w: 0.0,
-                h: 0.0,
-                offset_x: 0.0,
-                offset_y: 0.0,
-                _pad1: 0.0,
-                _pad2: 0.0,
-            });
+            self.glyphs.insert(
+                codepoint,
+                GlyphInfo {
+                    x: 0.0,
+                    y: 0.0,
+                    w: 0.0,
+                    h: 0.0,
+                    offset_x: 0.0,
+                    offset_y: 0.0,
+                    _pad1: 0.0,
+                    _pad2: 0.0,
+                },
+            );
             return;
         }
 
@@ -152,16 +155,19 @@ impl GlyphAtlas {
 
         // Guard against atlas overflow (silently skip).
         if self.next_y + gh > self.atlas_height {
-            self.glyphs.insert(codepoint, GlyphInfo {
-                x: 0.0,
-                y: 0.0,
-                w: 0.0,
-                h: 0.0,
-                offset_x: 0.0,
-                offset_y: 0.0,
-                _pad1: 0.0,
-                _pad2: 0.0,
-            });
+            self.glyphs.insert(
+                codepoint,
+                GlyphInfo {
+                    x: 0.0,
+                    y: 0.0,
+                    w: 0.0,
+                    h: 0.0,
+                    offset_x: 0.0,
+                    offset_y: 0.0,
+                    _pad1: 0.0,
+                    _pad2: 0.0,
+                },
+            );
             return;
         }
 
@@ -236,5 +242,4 @@ impl GlyphAtlas {
         }
         data
     }
-
 }

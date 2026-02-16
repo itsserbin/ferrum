@@ -73,28 +73,10 @@ impl CpuRenderer {
         let radius = self.scaled_px(6);
 
         self.draw_rounded_rect(
-            buffer,
-            buf_width,
-            buf_height,
-            mx as i32,
-            my as i32,
-            mw,
-            mh,
-            radius,
-            0x1E2433,
-            248,
+            buffer, buf_width, buf_height, mx as i32, my as i32, mw, mh, radius, 0x1E2433, 248,
         );
         self.draw_rounded_rect(
-            buffer,
-            buf_width,
-            buf_height,
-            mx as i32,
-            my as i32,
-            mw,
-            mh,
-            radius,
-            0xFFFFFF,
-            20,
+            buffer, buf_width, buf_height, mx as i32, my as i32, mw, mh, radius, 0xFFFFFF, 20,
         );
 
         // Draw menu items.

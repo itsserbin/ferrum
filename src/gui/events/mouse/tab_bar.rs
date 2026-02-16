@@ -1,6 +1,6 @@
-use crate::gui::renderer::{TabBarHit, TabInfo};
 #[cfg(not(target_os = "macos"))]
 use crate::gui::renderer::WindowButton;
+use crate::gui::renderer::{TabBarHit, TabInfo};
 use crate::gui::*;
 
 const TOPBAR_DOUBLE_CLICK_MS: u128 = 400;

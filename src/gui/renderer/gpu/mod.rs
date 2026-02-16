@@ -19,14 +19,14 @@ use wgpu;
 
 use crate::core::{Color, CursorStyle, Grid, Selection};
 
+#[cfg(not(target_os = "macos"))]
+use super::WindowButton;
 use super::metrics::FontMetrics;
 use super::traits;
 use super::{
-    ContextMenu, SecurityPopup, TabBarHit, TabInfo,
-    FONT_SIZE, MIN_TAB_WIDTH, MIN_TAB_WIDTH_FOR_TITLE,
+    ContextMenu, FONT_SIZE, MIN_TAB_WIDTH, MIN_TAB_WIDTH_FOR_TITLE, SecurityPopup, TabBarHit,
+    TabInfo,
 };
-#[cfg(not(target_os = "macos"))]
-use super::WindowButton;
 
 use atlas::GlyphAtlas;
 use buffers::*;
@@ -249,7 +249,8 @@ impl traits::Renderer for GpuRenderer {
         grid: &Grid,
         style: CursorStyle,
     ) {
-        let x = col as f32 * self.metrics.cell_width as f32 + self.metrics.window_padding_px() as f32;
+        let x =
+            col as f32 * self.metrics.cell_width as f32 + self.metrics.window_padding_px() as f32;
         let y = row as f32 * self.metrics.cell_height as f32
             + self.metrics.tab_bar_height_px() as f32
             + self.metrics.window_padding_px() as f32;
@@ -340,7 +341,15 @@ impl traits::Renderer for GpuRenderer {
         let base_alpha = 180.0 / 255.0;
         let alpha = base_alpha * opacity;
 
-        self.push_rounded_rect(thumb_x, thumb_y, sb_width, thumb_height, radius, color, alpha);
+        self.push_rounded_rect(
+            thumb_x,
+            thumb_y,
+            sb_width,
+            thumb_height,
+            radius,
+            color,
+            alpha,
+        );
     }
 
     fn scrollbar_thumb_bounds(

@@ -120,10 +120,9 @@ impl FerrumWindow {
         let vp = self.viewport_start();
 
         // Anchor is already in absolute coords
-        let mut anchor = self.selection_anchor.unwrap_or(SelectionPoint {
-            row: vp + row,
-            col,
-        });
+        let mut anchor = self
+            .selection_anchor
+            .unwrap_or(SelectionPoint { row: vp + row, col });
         // Clamp anchor col (row is absolute, no clamping to screen max_row)
         anchor.col = anchor.col.min(max_col);
 

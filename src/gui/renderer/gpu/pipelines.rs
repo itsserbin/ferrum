@@ -105,9 +105,7 @@ pub fn create_grid_pipeline(
 ///   1: commands array (storage, read-only)
 ///   2: atlas texture (texture_2d<f32>)
 ///   3: atlas sampler
-pub fn create_ui_pipeline(
-    device: &wgpu::Device,
-) -> (wgpu::RenderPipeline, wgpu::BindGroupLayout) {
+pub fn create_ui_pipeline(device: &wgpu::Device) -> (wgpu::RenderPipeline, wgpu::BindGroupLayout) {
     let shader_src = include_str!("shaders/ui.wgsl");
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("ui_shader"),

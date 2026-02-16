@@ -2,8 +2,8 @@
 
 //! UI draw command helpers for pushing primitives into the GPU command buffer.
 
-use super::buffers::*;
 use super::MAX_UI_COMMANDS;
+use super::buffers::*;
 
 impl super::GpuRenderer {
     pub(super) fn push_rect(&mut self, x: f32, y: f32, w: f32, h: f32, color: u32, alpha: f32) {
@@ -129,7 +129,9 @@ impl super::GpuRenderer {
         let cw = self.metrics.cell_width as f32;
         for (i, ch) in text.chars().enumerate() {
             let cp = ch as u32;
-            let info = self.atlas.get_or_insert(cp, &self.font, self.metrics.font_size, &self.queue);
+            let info =
+                self.atlas
+                    .get_or_insert(cp, &self.font, self.metrics.font_size, &self.queue);
             if info.w > 0.0 && info.h > 0.0 {
                 let gx = x + i as f32 * cw + info.offset_x;
                 let gy = y + info.offset_y;
