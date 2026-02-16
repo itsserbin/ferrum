@@ -112,6 +112,9 @@ pub(super) enum WindowRequest {
 /// Per-window state. Each window is self-contained with its own tabs, renderer, surface.
 pub(super) struct FerrumWindow {
     pub(super) window: Arc<Window>,
+    /// NSWindowController that responds to `newWindowForTab:` — keeps "+" button visible.
+    #[cfg(target_os = "macos")]
+    pub(super) _window_controller: Option<objc2::rc::Retained<objc2::runtime::AnyObject>>,
     pub(super) pending_grid_resize: Option<(usize, usize)>,
     pub(super) backend: renderer::RendererBackend,
     pub(super) tabs: Vec<TabState>,
@@ -123,7 +126,7 @@ pub(super) struct FerrumWindow {
     pub(super) last_click_time: std::time::Instant,
     pub(super) last_click_pos: Position,
     pub(super) click_streak: u8,
-    pub(super) selection_anchor: Option<Position>,
+    pub(super) selection_anchor: Option<crate::core::SelectionPoint>,
     pub(super) selection_drag_mode: SelectionDragMode,
     pub(super) hovered_tab: Option<usize>,
     pub(super) context_menu: Option<ContextMenu>,

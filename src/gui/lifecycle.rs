@@ -22,10 +22,6 @@ impl ApplicationHandler for App {
             return;
         };
 
-        // Install native macOS "+" button handler before creating first tab.
-        #[cfg(target_os = "macos")]
-        platform::macos::install_new_tab_responder();
-
         // Create initial tab in the first window.
         if let Some(win) = self.windows.get_mut(&win_id) {
             let size = win.window.inner_size();

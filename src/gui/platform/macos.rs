@@ -36,17 +36,23 @@ pub fn configure_native_tabs(window: &Window) {
     }
 }
 
-/// Shows the native tab bar (makes "+" button visible even with a single tab).
-/// Uses NSWindowTabGroup.tabBarVisible (macOS 12+) for reliable behavior.
+/// Shows the native tab bar even with a single tab.
 pub fn show_tab_bar(window: &Window) {
     let Some(ns_window) = get_ns_window(window) else {
         return;
     };
     unsafe {
+        // Try NSWindowTabGroup API (macOS 12+).
         let tab_group: Option<Retained<AnyObject>> = msg_send![&ns_window, tabGroup];
         if let Some(group) = tab_group {
-            let _: () = msg_send![&group, setTabBarVisible: true];
+            let visible: bool = msg_send![&group, isTabBarVisible];
+            if !visible {
+                let _: () = msg_send![&group, setTabBarVisible: true];
+            }
+            return;
         }
+        // Fallback: toggleTabBar (macOS 10.12+).
+        let _: () = msg_send![&ns_window, toggleTabBar: std::ptr::null::<AnyObject>()];
     }
 }
 
@@ -110,20 +116,22 @@ pub fn take_new_tab_request() -> bool {
     NEW_TAB_REQUESTED.swap(false, Ordering::SeqCst)
 }
 
-/// Installs a handler for the native macOS tab bar "+" button.
-///
-/// Dynamically adds `newWindowForTab:` to the running NSApplication's class.
-/// When the "+" button is clicked, sets an atomic flag that the event loop
-/// polls to create a new tab.
-pub fn install_new_tab_responder() {
-    static INSTALLED: AtomicBool = AtomicBool::new(false);
-    if INSTALLED.swap(true, Ordering::SeqCst) {
+/// Registers the `FermWindowController` ObjC class (inherits NSWindowController).
+/// This class responds to `newWindowForTab:` — required by macOS to show the "+" button.
+fn ensure_controller_class() {
+    static REGISTERED: AtomicBool = AtomicBool::new(false);
+    if REGISTERED.swap(true, Ordering::SeqCst) {
         return;
     }
 
-    // Raw ObjC runtime C functions — stable ABI, avoids objc2::ffi type churn.
+    // Raw ObjC runtime C functions — stable ABI.
     unsafe extern "C" {
-        fn object_getClass(obj: *const core::ffi::c_void) -> *mut core::ffi::c_void;
+        fn objc_allocateClassPair(
+            superclass: *const core::ffi::c_void,
+            name: *const core::ffi::c_char,
+            extra_bytes: usize,
+        ) -> *mut core::ffi::c_void;
+        fn objc_registerClassPair(cls: *mut core::ffi::c_void);
         fn sel_registerName(name: *const core::ffi::c_char) -> *const core::ffi::c_void;
         fn class_addMethod(
             cls: *mut core::ffi::c_void,
@@ -142,12 +150,17 @@ pub fn install_new_tab_responder() {
     }
 
     unsafe {
-        let Some(ns_app_cls) = AnyClass::get(c"NSApplication") else {
+        let Some(superclass) = AnyClass::get(c"NSWindowController") else {
+            REGISTERED.store(false, Ordering::SeqCst);
             return;
         };
-        let app: Retained<AnyObject> = msg_send![ns_app_cls, sharedApplication];
-        let cls = object_getClass(Retained::as_ptr(&app).cast());
+        let cls = objc_allocateClassPair(
+            (superclass as *const AnyClass).cast(),
+            c"FermWindowController".as_ptr(),
+            0,
+        );
         if cls.is_null() {
+            REGISTERED.store(false, Ordering::SeqCst);
             return;
         }
         let sel = sel_registerName(c"newWindowForTab:".as_ptr());
@@ -157,5 +170,21 @@ pub fn install_new_tab_responder() {
             core::mem::transmute(handle_new_window_for_tab as unsafe extern "C" fn(_, _, _)),
             c"v@:@".as_ptr(),
         );
+        objc_registerClassPair(cls);
+    }
+}
+
+/// Creates an NSWindowController for the given window.
+/// The controller responds to `newWindowForTab:`, which makes the native "+" button appear.
+/// The returned `Retained` MUST be kept alive for the lifetime of the window.
+pub fn create_window_controller(window: &Window) -> Option<Retained<AnyObject>> {
+    let ns_window = get_ns_window(window)?;
+    ensure_controller_class();
+
+    unsafe {
+        let cls = AnyClass::get(c"FermWindowController")?;
+        let alloc: Retained<AnyObject> = msg_send![cls, alloc];
+        let controller: Retained<AnyObject> = msg_send![alloc, initWithWindow: &*ns_window];
+        Some(controller)
     }
 }
