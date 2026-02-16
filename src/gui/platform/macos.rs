@@ -21,6 +21,17 @@ unsafe extern "C" {
         imp: unsafe extern "C" fn(),
         types: *const core::ffi::c_char,
     ) -> bool;
+    fn class_replaceMethod(
+        cls: *mut core::ffi::c_void,
+        name: *const core::ffi::c_void,
+        imp: unsafe extern "C" fn(),
+        types: *const core::ffi::c_char,
+    );
+    fn objc_msgSend(
+        obj: *const core::ffi::c_void,
+        sel: *const core::ffi::c_void,
+        ...
+    ) -> *mut core::ffi::c_void;
 }
 
 /// ObjC method implementation for `newWindowForTab:`.
@@ -57,9 +68,9 @@ pub fn configure_native_tabs(window: &Window) {
     }
 }
 
-/// Adds `newWindowForTab:` to the winit NSWindow subclass.
-/// Called once — all winit windows share the same class.
-/// The "+" button appears when macOS finds this method in the responder chain.
+/// Adds `newWindowForTab:` to every level of the responder chain.
+/// Uses class_replaceMethod (handles both "add new" and "replace existing no-op" cases).
+/// Targets: window class, window delegate class, NSApp class, NSApp delegate class.
 pub fn install_new_tab_handler(window: &Window) {
     static INSTALLED: AtomicBool = AtomicBool::new(false);
     if INSTALLED.swap(true, Ordering::SeqCst) {
@@ -70,19 +81,60 @@ pub fn install_new_tab_handler(window: &Window) {
         INSTALLED.store(false, Ordering::SeqCst);
         return;
     };
+
     unsafe {
-        let cls = object_getClass(Retained::as_ptr(&ns_window).cast());
-        if cls.is_null() {
-            INSTALLED.store(false, Ordering::SeqCst);
-            return;
-        }
         let sel = sel_registerName(c"newWindowForTab:".as_ptr());
-        class_addMethod(
-            cls,
-            sel,
-            core::mem::transmute(handle_new_window_for_tab as unsafe extern "C" fn(_, _, _)),
-            c"v@:@".as_ptr(),
+        let imp: unsafe extern "C" fn() = core::mem::transmute(
+            handle_new_window_for_tab as unsafe extern "C" fn(_, _, _),
         );
+        let types = c"v@:@".as_ptr();
+
+        // Helper: try add, then replace if already exists.
+        let inject = |cls: *mut core::ffi::c_void| {
+            if cls.is_null() {
+                return;
+            }
+            if !class_addMethod(cls, sel, imp, types) {
+                // Method already exists (e.g. winit no-op stub) — replace it.
+                class_replaceMethod(cls, sel, imp, types);
+            }
+        };
+
+        // 1) Window class (NSWindow subclass from winit).
+        let win_cls = object_getClass(Retained::as_ptr(&ns_window).cast());
+        inject(win_cls);
+
+        // 2) Window delegate class.
+        let sel_delegate = sel_registerName(c"delegate".as_ptr());
+        let win_delegate = objc_msgSend(Retained::as_ptr(&ns_window).cast(), sel_delegate);
+        if !win_delegate.is_null() {
+            inject(object_getClass(win_delegate));
+        }
+
+        // 3) NSApplication class.
+        let sel_shared = sel_registerName(c"sharedApplication".as_ptr());
+        let ns_app_cls_ptr = {
+            unsafe extern "C" {
+                fn objc_getClass(name: *const core::ffi::c_char) -> *const core::ffi::c_void;
+            }
+            objc_getClass(c"NSApplication".as_ptr())
+        };
+        if !ns_app_cls_ptr.is_null() {
+            let ns_app = objc_msgSend(ns_app_cls_ptr, sel_shared);
+            if !ns_app.is_null() {
+                // NSApp instance class.
+                inject(object_getClass(ns_app));
+
+                // 4) NSApp delegate class.
+                let app_delegate = objc_msgSend(ns_app, sel_delegate);
+                if !app_delegate.is_null() {
+                    inject(object_getClass(app_delegate));
+                }
+            }
+        }
+
+        // Log for debugging (visible in terminal output).
+        eprintln!("[ferrum] newWindowForTab: installed on responder chain");
     }
 }
 
