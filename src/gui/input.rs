@@ -133,7 +133,10 @@ pub(super) fn key_to_bytes(key: &Key, modifiers: ModifiersState, decckm: bool) -
 
             match named {
                 NamedKey::Enter => Some(with_alt_prefix(vec![b'\r'], modifiers)),
-                NamedKey::Backspace => Some(with_alt_prefix(vec![0x7f], modifiers)),
+                NamedKey::Backspace => {
+                    let byte = if modifiers.control_key() { 0x17 } else { 0x7f };
+                    Some(with_alt_prefix(vec![byte], modifiers))
+                }
                 NamedKey::Tab => {
                     if modifiers.shift_key() && !modifiers.control_key() && !modifiers.alt_key() {
                         Some(b"\x1b[Z".to_vec()) // Back-tab

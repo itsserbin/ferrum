@@ -72,6 +72,27 @@ impl FerrumWindow {
                 } else if c.as_str() == "v" {
                     self.paste_clipboard();
                     true
+                } else if self.modifiers.super_key() && c.as_str().eq_ignore_ascii_case("a") {
+                    self.write_pty_bytes(b"\x01"); // Ctrl+A — beginning of line
+                    true
+                } else if self.modifiers.super_key() && c.as_str().eq_ignore_ascii_case("e") {
+                    self.write_pty_bytes(b"\x05"); // Ctrl+E — end of line
+                    true
+                } else if self.modifiers.super_key() && c.as_str().eq_ignore_ascii_case("b") {
+                    self.write_pty_bytes(b"\x1bb"); // Alt+B — previous word
+                    true
+                } else if self.modifiers.super_key() && c.as_str().eq_ignore_ascii_case("f") {
+                    self.write_pty_bytes(b"\x1bf"); // Alt+F — next word
+                    true
+                } else if self.modifiers.super_key() && c.as_str().eq_ignore_ascii_case("d") {
+                    self.write_pty_bytes(b"\x1bd"); // Alt+D — delete next word
+                    true
+                } else if self.modifiers.super_key() && c.as_str().eq_ignore_ascii_case("k") {
+                    self.write_pty_bytes(b"\x0b"); // Ctrl+K — delete to end of line
+                    true
+                } else if self.modifiers.super_key() && c.as_str().eq_ignore_ascii_case("u") {
+                    self.write_pty_bytes(b"\x15"); // Ctrl+U — delete to beginning of line
+                    true
                 } else {
                     false
                 }
@@ -85,6 +106,37 @@ impl FerrumWindow {
                         self.active_tab = (self.active_tab + 1) % self.tabs.len();
                     }
                 }
+                true
+            }
+            // Cmd/Super text navigation on all platforms.
+            Key::Named(NamedKey::ArrowLeft) if self.modifiers.super_key() => {
+                self.write_pty_bytes(b"\x01"); // Ctrl+A — beginning of line
+                true
+            }
+            Key::Named(NamedKey::ArrowRight) if self.modifiers.super_key() => {
+                self.write_pty_bytes(b"\x05"); // Ctrl+E — end of line
+                true
+            }
+            Key::Named(NamedKey::ArrowUp) if self.modifiers.super_key() => {
+                // Scroll to top of scrollback.
+                if let Some(tab) = self.active_tab_mut() {
+                    tab.scroll_offset = tab.terminal.scrollback.len();
+                }
+                true
+            }
+            Key::Named(NamedKey::ArrowDown) if self.modifiers.super_key() => {
+                // Scroll to bottom.
+                if let Some(tab) = self.active_tab_mut() {
+                    tab.scroll_offset = 0;
+                }
+                true
+            }
+            Key::Named(NamedKey::Backspace) if self.modifiers.super_key() => {
+                self.write_pty_bytes(b"\x15"); // Ctrl+U — delete to beginning of line
+                true
+            }
+            Key::Named(NamedKey::Delete) if self.modifiers.super_key() => {
+                self.write_pty_bytes(b"\x0b"); // Ctrl+K — delete to end of line
                 true
             }
             _ => false,

@@ -32,6 +32,10 @@ impl FerrumWindow {
             return; // Do not forward rename keystrokes to PTY.
         }
 
+        if self.handle_selection_delete_key(key) {
+            return;
+        }
+
         if self.handle_ctrl_shortcuts(event_loop, key, next_tab_id, tx) {
             return;
         }
@@ -46,8 +50,7 @@ impl FerrumWindow {
             return;
         }
 
-        // On macOS, Cmd+key = app shortcuts only; never forward to terminal.
-        #[cfg(target_os = "macos")]
+        // Super/Cmd+key combinations are app-level shortcuts only; never forward to terminal.
         if self.modifiers.super_key() {
             return;
         }

@@ -66,6 +66,28 @@ fn ctrl_space_produces_nul() {
 }
 
 #[test]
+fn ctrl_backspace_deletes_previous_word() {
+    let bytes = key_to_bytes(
+        &Key::Named(NamedKey::Backspace),
+        mods(true, false, false),
+        false,
+    )
+    .expect("Ctrl+Backspace should be encoded");
+    assert_eq!(bytes, vec![0x17]);
+}
+
+#[test]
+fn plain_backspace_is_del() {
+    let bytes = key_to_bytes(
+        &Key::Named(NamedKey::Backspace),
+        mods(false, false, false),
+        false,
+    )
+    .expect("Backspace should be encoded");
+    assert_eq!(bytes, vec![0x7f]);
+}
+
+#[test]
 fn alt_character_is_escaped() {
     let bytes = key_to_bytes(&Key::Character("f".into()), mods(false, false, true), false)
         .expect("Alt+f should be encoded");
