@@ -72,6 +72,8 @@ impl FerrumWindow {
                     } else {
                         false
                     }
+                } else if c.as_str().eq_ignore_ascii_case("x") {
+                    self.cut_selection()
                 } else if c.as_str() == "v" {
                     self.paste_clipboard();
                     true

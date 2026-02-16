@@ -30,6 +30,20 @@ impl FerrumWindow {
         self.keyboard_selection_anchor = None;
     }
 
+    fn build_horizontal_cursor_move_bytes(cursor_col: usize, target_col: usize) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        if target_col < cursor_col {
+            for _ in 0..(cursor_col - target_col) {
+                bytes.extend_from_slice(b"\x1b[D");
+            }
+        } else if target_col > cursor_col {
+            for _ in 0..(target_col - cursor_col) {
+                bytes.extend_from_slice(b"\x1b[C");
+            }
+        }
+        bytes
+    }
+
     fn is_word_char_for_motion(ch: char) -> bool {
         ch.is_alphanumeric() || ch == '_' || ch == '-' || ch == '.' || ch == '/'
     }
@@ -143,7 +157,7 @@ impl FerrumWindow {
         }
 
         let alt_word_motion = self.modifiers.alt_key();
-        let (abs_row, anchor_col, target_col, grid_cols, bytes) = {
+        let (abs_row, anchor_col, cursor_col, target_col, grid_cols) = {
             let Some(tab) = self.active_tab_ref() else {
                 return false;
             };
@@ -172,20 +186,27 @@ impl FerrumWindow {
                 .filter(|anchor| anchor.row == abs_row)
                 .map(|anchor| anchor.col)
                 .unwrap_or(cursor_col);
-            let bytes: &'static [u8] = match (alt_word_motion, motion) {
-                (false, HorizontalMotion::Left) => b"\x1b[D",
-                (false, HorizontalMotion::Right) => b"\x1b[C",
-                (true, HorizontalMotion::Left) => b"\x1bb",
-                (true, HorizontalMotion::Right) => b"\x1bf",
-            };
 
-            (abs_row, anchor_col, target_col, grid_cols, bytes)
+            (abs_row, anchor_col, cursor_col, target_col, grid_cols)
         };
 
-        if let Some(tab) = self.active_tab_mut() {
-            tab.scroll_offset = 0;
-            let _ = tab.pty_writer.write_all(bytes);
-            let _ = tab.pty_writer.flush();
+        let bytes = if alt_word_motion {
+            // Keep cursor and local selection in lock-step: synthesize character-wise arrows
+            // for word-jumps instead of relying on shell-specific Meta+F/B semantics.
+            Self::build_horizontal_cursor_move_bytes(cursor_col, target_col)
+        } else {
+            match motion {
+                HorizontalMotion::Left => b"\x1b[D".to_vec(),
+                HorizontalMotion::Right => b"\x1b[C".to_vec(),
+            }
+        };
+
+        if !bytes.is_empty() {
+            if let Some(tab) = self.active_tab_mut() {
+                tab.scroll_offset = 0;
+                let _ = tab.pty_writer.write_all(&bytes);
+                let _ = tab.pty_writer.flush();
+            }
         }
 
         self.keyboard_selection_anchor = Some(crate::core::SelectionPoint {
@@ -227,22 +248,7 @@ impl FerrumWindow {
         bytes
     }
 
-    fn handle_selection_delete_key(&mut self, key: &Key) -> bool {
-        let use_backspace = matches!(key, Key::Named(NamedKey::Backspace));
-        let use_delete = matches!(key, Key::Named(NamedKey::Delete));
-        if !use_backspace && !use_delete {
-            return false;
-        }
-
-        // Only plain Backspace/Delete should delete active terminal selection.
-        if self.modifiers.shift_key()
-            || self.modifiers.control_key()
-            || self.modifiers.alt_key()
-            || self.modifiers.super_key()
-        {
-            return false;
-        }
-
+    fn delete_terminal_selection(&mut self, use_backspace: bool) -> bool {
         let (cursor_col, selection_start_col, selection_end_col) = {
             let Some(tab) = self.active_tab_ref() else {
                 return false;
@@ -276,6 +282,39 @@ impl FerrumWindow {
         );
         self.write_pty_bytes(&bytes);
         true
+    }
+
+    fn cut_selection(&mut self) -> bool {
+        if !self.active_tab_ref().is_some_and(|t| t.selection.is_some()) {
+            return false;
+        }
+
+        self.copy_selection();
+        if !self.delete_terminal_selection(false) {
+            if let Some(tab) = self.active_tab_mut() {
+                tab.selection = None;
+            }
+            self.keyboard_selection_anchor = None;
+        }
+        true
+    }
+
+    fn handle_selection_delete_key(&mut self, key: &Key) -> bool {
+        let use_backspace = matches!(key, Key::Named(NamedKey::Backspace));
+        let use_delete = matches!(key, Key::Named(NamedKey::Delete));
+        if !use_backspace && !use_delete {
+            return false;
+        }
+
+        // Only plain Backspace/Delete should delete active terminal selection.
+        if self.modifiers.shift_key()
+            || self.modifiers.control_key()
+            || self.modifiers.alt_key()
+            || self.modifiers.super_key()
+        {
+            return false;
+        }
+        self.delete_terminal_selection(use_backspace)
     }
 
     fn normalize_non_text_key(logical: &Key, physical: &PhysicalKey) -> Key {
