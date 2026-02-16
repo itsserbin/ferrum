@@ -83,34 +83,9 @@ impl FerrumWindow {
 
         let mut terminal = Terminal::new(rows, cols);
 
-        // Show "Last login" greeting.
+        // Show "Last login" greeting with local time.
         {
-            use std::fmt::Write as _;
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs();
-            let secs_per_day = 86400;
-            let secs_per_hour = 3600;
-            let secs_per_min = 60;
-            let days_since_epoch = now / secs_per_day;
-            let time_of_day = now % secs_per_day;
-            let hour = time_of_day / secs_per_hour;
-            let min = (time_of_day % secs_per_hour) / secs_per_min;
-            let sec = time_of_day % secs_per_min;
-            let dow = ((days_since_epoch + 4) % 7) as usize;
-            let dow_names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-            let (year, month, day) = days_to_ymd(days_since_epoch);
-            let mon_names = [
-                "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-            ];
-            let mut msg = String::new();
-            let _ = write!(
-                msg,
-                "Last login: {} {} {:2} {:02}:{:02}:{:02} {}\r\n",
-                dow_names[dow], mon_names[month as usize - 1], day, hour, min, sec, year,
-            );
+            let msg = last_login_message();
             terminal.process(msg.as_bytes());
         }
 
@@ -128,18 +103,42 @@ impl FerrumWindow {
     }
 }
 
-/// Converts days since Unix epoch to (year, month, day).
-fn days_to_ymd(days: u64) -> (u64, u64, u64) {
-    // Civil calendar algorithm from Howard Hinnant.
-    let z = days + 719468;
-    let era = z / 146097;
-    let doe = z - era * 146097;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = if m <= 2 { y + 1 } else { y };
-    (y, m, d)
+#[cfg(unix)]
+fn last_login_message() -> String {
+    use std::fmt::Write as _;
+    let dow_names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    let mon_names = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ];
+    unsafe {
+        let now = libc::time(std::ptr::null_mut());
+        let mut tm: libc::tm = std::mem::zeroed();
+        libc::localtime_r(&now, &mut tm);
+        let mut msg = String::new();
+        let _ = write!(
+            msg,
+            "Last login: {} {} {:2} {:02}:{:02}:{:02} {}\r\n",
+            dow_names[tm.tm_wday as usize],
+            mon_names[tm.tm_mon as usize],
+            tm.tm_mday,
+            tm.tm_hour,
+            tm.tm_min,
+            tm.tm_sec,
+            tm.tm_year + 1900,
+        );
+        msg
+    }
+}
+
+#[cfg(windows)]
+fn last_login_message() -> String {
+    use std::fmt::Write as _;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let mut msg = String::new();
+    let _ = write!(msg, "Last login: {now}\r\n");
+    msg
 }
