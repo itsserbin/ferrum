@@ -791,21 +791,49 @@ impl traits::Renderer for GpuRenderer {
     // ── Scrollbar ─────────────────────────────────────────────────────
 
     fn render_scrollbar(
-        &self,
+        &mut self,
         _buffer: &mut [u32],
         _buf_width: usize,
-        _buf_height: usize,
-        _scroll_offset: usize,
-        _scrollback_len: usize,
-        _grid_rows: usize,
-        _opacity: f32,
-        _hover: bool,
+        buf_height: usize,
+        scroll_offset: usize,
+        scrollback_len: usize,
+        grid_rows: usize,
+        opacity: f32,
+        hover: bool,
     ) {
-        // Note: this method takes &self but we need &mut self to push commands.
-        // For GPU renderer, scrollbar rendering is handled via draw commands pushed
-        // in a separate mutable call. This is a trait limitation — the GPU renderer
-        // will use the present() call to handle this. For now, this is a no-op stub.
-        // The scrollbar drawing is done through push commands in a mutable context.
+        if scrollback_len == 0 || opacity <= 0.0 {
+            return;
+        }
+
+        let track_top =
+            (self.metrics.tab_bar_height_px() + self.metrics.window_padding_px()) as f32;
+        let track_bottom = buf_height as f32 - self.metrics.window_padding_px() as f32;
+        let track_height = track_bottom - track_top;
+        if track_height <= 0.0 {
+            return;
+        }
+
+        let total_lines = scrollback_len + grid_rows;
+        let viewport_ratio = grid_rows as f32 / total_lines as f32;
+        let min_thumb = self.metrics.scaled_px(SCROLLBAR_MIN_THUMB) as f32;
+        let thumb_height = (viewport_ratio * track_height)
+            .max(min_thumb)
+            .min(track_height);
+
+        let max_offset = scrollback_len as f32;
+        let scroll_ratio = (max_offset - scroll_offset as f32) / max_offset;
+        let thumb_y = track_top + scroll_ratio * (track_height - thumb_height);
+
+        let sb_width = self.metrics.scaled_px(super::SCROLLBAR_WIDTH) as f32;
+        let sb_margin = self.metrics.scaled_px(super::SCROLLBAR_MARGIN) as f32;
+        let thumb_x = self.width as f32 - sb_width - sb_margin;
+        let radius = self.metrics.scaled_px(3) as f32;
+
+        let color = if hover { 0x7F849C } else { 0x6C7086 };
+        let base_alpha = 180.0 / 255.0;
+        let alpha = base_alpha * opacity;
+
+        self.push_rounded_rect(thumb_x, thumb_y, sb_width, thumb_height, radius, color, alpha);
     }
 
     fn scrollbar_thumb_bounds(

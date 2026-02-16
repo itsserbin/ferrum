@@ -56,7 +56,7 @@ pub trait Renderer {
     // ── Scrollbar ───────────────────────────────────────────────────
 
     fn render_scrollbar(
-        &self,
+        &mut self,
         buffer: &mut [u32],
         buf_width: usize,
         buf_height: usize,

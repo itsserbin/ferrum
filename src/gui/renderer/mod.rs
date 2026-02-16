@@ -497,7 +497,7 @@ impl traits::Renderer for CpuRenderer {
     }
 
     fn render_scrollbar(
-        &self,
+        &mut self,
         buffer: &mut [u32],
         buf_width: usize,
         buf_height: usize,

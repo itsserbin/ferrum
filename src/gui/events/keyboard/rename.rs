@@ -86,7 +86,7 @@ impl FerrumWindow {
             Cancel,
         }
 
-        let ctrl = self.modifiers.control_key();
+        let ctrl = self.is_action_modifier();
         let alt = self.modifiers.alt_key();
         let shift = self.modifiers.shift_key();
 

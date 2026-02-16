@@ -8,7 +8,7 @@ impl FerrumWindow {
         next_tab_id: &mut u64,
         tx: &mpsc::Sender<PtyEvent>,
     ) -> bool {
-        if !self.modifiers.control_key() || self.modifiers.shift_key() {
+        if !self.is_action_modifier() || self.modifiers.shift_key() {
             return false;
         }
 
@@ -69,7 +69,7 @@ impl FerrumWindow {
         next_tab_id: &mut u64,
         tx: &mpsc::Sender<PtyEvent>,
     ) -> bool {
-        if !self.modifiers.control_key() || !self.modifiers.shift_key() {
+        if !self.is_action_modifier() || !self.modifiers.shift_key() {
             return false;
         }
 

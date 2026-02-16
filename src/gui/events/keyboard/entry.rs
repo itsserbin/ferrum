@@ -46,6 +46,12 @@ impl FerrumWindow {
             return;
         }
 
+        // On macOS, Cmd+key = app shortcuts only; never forward to terminal.
+        #[cfg(target_os = "macos")]
+        if self.modifiers.super_key() {
+            return;
+        }
+
         self.forward_key_to_pty(key);
     }
 }

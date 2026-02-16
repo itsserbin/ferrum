@@ -154,6 +154,27 @@ impl App {
 
         window.set_cursor(CursorIcon::Default);
 
+        // On macOS, disable OS-level window dragging entirely so that tab
+        // dragging in the titlebar area works without the OS intercepting the
+        // gesture. Our code handles window drag manually via `drag_window()`
+        // when the user clicks on an empty tab-bar area.
+        #[cfg(target_os = "macos")]
+        {
+            use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+            if let Ok(handle) = window.window_handle() {
+                if let RawWindowHandle::AppKit(appkit) = handle.as_raw() {
+                    unsafe {
+                        let ns_view: objc2::rc::Retained<objc2_app_kit::NSView> =
+                            objc2::rc::Retained::retain(appkit.ns_view.as_ptr().cast())
+                                .unwrap();
+                        if let Some(ns_window) = ns_view.window() {
+                            ns_window.setMovable(false);
+                        }
+                    }
+                }
+            }
+        }
+
         let id = window.id();
         let ferrum_win = FerrumWindow::new(window, context);
         self.windows.insert(id, ferrum_win);
