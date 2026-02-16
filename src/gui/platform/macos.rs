@@ -2,7 +2,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use objc2::msg_send;
 use objc2::rc::Retained;
-use objc2::runtime::AnyObject;
+use objc2::runtime::{AnyObject, NSObjectProtocol};
+use objc2::sel;
 use objc2_app_kit::{NSView, NSWindow, NSWindowTabbingMode};
 use objc2_foundation::ns_string;
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -196,22 +197,17 @@ pub fn sync_native_tab_bar_visibility(window: &Window) {
     let Some(ns_window) = get_ns_window(window) else {
         return;
     };
-    unsafe {
-        let sel_set_visible = sel_registerName(c"setTabBarVisible:".as_ptr());
-        let supports: bool = msg_send![&ns_window, respondsToSelector: sel_set_visible];
-        if !supports {
-            return;
-        }
+    // Avoid runtime selector-encoding mismatch here: use typed Sel for respondsToSelector.
+    if !ns_window.respondsToSelector(sel!(setTabBarVisible:)) {
+        return;
+    }
 
-        let tabbed: Option<Retained<AnyObject>> = msg_send![&ns_window, tabbedWindows];
-        let count = tabbed
-            .as_ref()
-            .map(|windows| {
-                let c: usize = msg_send![windows, count];
-                c
-            })
-            .unwrap_or(1);
-        let visible = count > 1;
+    let visible = ns_window
+        .tabbedWindows()
+        .map(|windows| windows.len() > 1)
+        .unwrap_or(false);
+
+    unsafe {
         let _: () = msg_send![&ns_window, setTabBarVisible: visible];
     }
 }
