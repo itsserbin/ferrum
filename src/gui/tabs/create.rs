@@ -81,18 +81,15 @@ impl FerrumWindow {
             }
         });
 
-        #[allow(unused_mut)]
         let mut terminal = Terminal::new(rows, cols);
 
-        // Show "Last login" greeting like macOS Terminal.app.
-        #[cfg(target_os = "macos")]
+        // Show "Last login" greeting.
         {
             use std::fmt::Write as _;
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs();
-            // Format timestamp manually (avoid chrono dep).
             let secs_per_day = 86400;
             let secs_per_hour = 3600;
             let secs_per_min = 60;
@@ -101,10 +98,8 @@ impl FerrumWindow {
             let hour = time_of_day / secs_per_hour;
             let min = (time_of_day % secs_per_hour) / secs_per_min;
             let sec = time_of_day % secs_per_min;
-            // Day of week (Jan 1 1970 = Thursday = 4).
             let dow = ((days_since_epoch + 4) % 7) as usize;
             let dow_names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-            // Date from days since epoch.
             let (year, month, day) = days_to_ymd(days_since_epoch);
             let mon_names = [
                 "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -134,7 +129,6 @@ impl FerrumWindow {
 }
 
 /// Converts days since Unix epoch to (year, month, day).
-#[cfg(target_os = "macos")]
 fn days_to_ymd(days: u64) -> (u64, u64, u64) {
     // Civil calendar algorithm from Howard Hinnant.
     let z = days + 719468;
