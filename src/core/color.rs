@@ -137,3 +137,60 @@ impl Color {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn to_pixel_roundtrip() {
+        let color = Color {
+            r: 0xAB,
+            g: 0xCD,
+            b: 0xEF,
+        };
+        assert_eq!(color.to_pixel(), 0xABCDEF);
+        assert_eq!(Color::from_pixel(0xABCDEF), color);
+    }
+
+    #[test]
+    fn from_256_ansi_range() {
+        for i in 0..16u16 {
+            assert_eq!(Color::from_256(i), Color::ANSI[i as usize]);
+        }
+    }
+
+    #[test]
+    fn from_256_color_cube() {
+        // Index 16 = first color cube entry = rgb(0,0,0)
+        assert_eq!(
+            Color::from_256(16),
+            Color { r: 0, g: 0, b: 0 }
+        );
+        // Index 196: n-16=180, r=180/36=5, g=(180%36)/6=0, b=180%6=0
+        // r=5 -> 55+5*40=255, g=0, b=0
+        assert_eq!(
+            Color::from_256(196),
+            Color { r: 255, g: 0, b: 0 }
+        );
+    }
+
+    #[test]
+    fn from_256_grayscale() {
+        // Index 232: v = 8 + (232-232)*10 = 8
+        assert_eq!(
+            Color::from_256(232),
+            Color { r: 8, g: 8, b: 8 }
+        );
+        // Index 255: v = 8 + (255-232)*10 = 238
+        assert_eq!(
+            Color::from_256(255),
+            Color { r: 238, g: 238, b: 238 }
+        );
+    }
+
+    #[test]
+    fn from_256_out_of_range() {
+        assert_eq!(Color::from_256(256), Color::DEFAULT_FG);
+    }
+}

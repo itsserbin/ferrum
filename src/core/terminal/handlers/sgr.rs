@@ -68,3 +68,196 @@ pub(in super::super) fn handle_sgr(term: &mut Terminal, params: &Params) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::core::terminal::Terminal;
+    use crate::core::{Cell, Color};
+
+    fn write_colored(seq: &[u8]) -> Terminal {
+        let mut term = Terminal::new(4, 20);
+        term.process(seq);
+        term.process(b"X");
+        term
+    }
+
+    fn cell_at(term: &Terminal, row: usize, col: usize) -> &Cell {
+        term.grid.get(row, col)
+    }
+
+    #[test]
+    fn sgr_reset() {
+        let mut term = Terminal::new(4, 20);
+        term.process(b"\x1b[1;31mA\x1b[0mB");
+        let a = cell_at(&term, 0, 0);
+        assert!(a.bold);
+        assert_eq!(a.fg, Color::ANSI[1]);
+        let b = cell_at(&term, 0, 1);
+        assert!(!b.bold);
+        assert_eq!(b.fg, Color::DEFAULT_FG);
+    }
+
+    #[test]
+    fn sgr_bold() {
+        let term = write_colored(b"\x1b[1m");
+        assert!(cell_at(&term, 0, 0).bold);
+    }
+
+    #[test]
+    fn sgr_underline() {
+        let term = write_colored(b"\x1b[4m");
+        assert!(cell_at(&term, 0, 0).underline);
+    }
+
+    #[test]
+    fn sgr_reverse() {
+        let term = write_colored(b"\x1b[7m");
+        assert!(cell_at(&term, 0, 0).reverse);
+    }
+
+    #[test]
+    fn sgr_bold_off() {
+        let term = write_colored(b"\x1b[1m\x1b[22m");
+        assert!(!cell_at(&term, 0, 0).bold);
+    }
+
+    #[test]
+    fn sgr_underline_off() {
+        let term = write_colored(b"\x1b[4m\x1b[24m");
+        assert!(!cell_at(&term, 0, 0).underline);
+    }
+
+    #[test]
+    fn sgr_reverse_off() {
+        let term = write_colored(b"\x1b[7m\x1b[27m");
+        assert!(!cell_at(&term, 0, 0).reverse);
+    }
+
+    #[test]
+    fn sgr_fg_ansi_colors() {
+        for i in 0u8..8 {
+            let seq = format!("\x1b[{}m", 30 + i);
+            let term = write_colored(seq.as_bytes());
+            assert_eq!(
+                cell_at(&term, 0, 0).fg,
+                Color::ANSI[i as usize],
+                "SGR {} should set fg to ANSI[{}]",
+                30 + i,
+                i
+            );
+        }
+    }
+
+    #[test]
+    fn sgr_bg_ansi_colors() {
+        for i in 0u8..8 {
+            let seq = format!("\x1b[{}m", 40 + i);
+            let term = write_colored(seq.as_bytes());
+            assert_eq!(
+                cell_at(&term, 0, 0).bg,
+                Color::ANSI[i as usize],
+                "SGR {} should set bg to ANSI[{}]",
+                40 + i,
+                i
+            );
+        }
+    }
+
+    #[test]
+    fn sgr_bright_fg() {
+        for i in 0u8..8 {
+            let seq = format!("\x1b[{}m", 90 + i);
+            let term = write_colored(seq.as_bytes());
+            assert_eq!(
+                cell_at(&term, 0, 0).fg,
+                Color::ANSI[(8 + i) as usize],
+                "SGR {} should set fg to ANSI[{}]",
+                90 + i,
+                8 + i
+            );
+        }
+    }
+
+    #[test]
+    fn sgr_bright_bg() {
+        for i in 0u8..8 {
+            let seq = format!("\x1b[{}m", 100 + i);
+            let term = write_colored(seq.as_bytes());
+            assert_eq!(
+                cell_at(&term, 0, 0).bg,
+                Color::ANSI[(8 + i) as usize],
+                "SGR {} should set bg to ANSI[{}]",
+                100 + i,
+                8 + i
+            );
+        }
+    }
+
+    #[test]
+    fn sgr_256_fg() {
+        let term = write_colored(b"\x1b[38;5;196m");
+        assert_eq!(cell_at(&term, 0, 0).fg, Color::from_256(196));
+    }
+
+    #[test]
+    fn sgr_256_bg() {
+        let term = write_colored(b"\x1b[48;5;82m");
+        assert_eq!(cell_at(&term, 0, 0).bg, Color::from_256(82));
+    }
+
+    #[test]
+    fn sgr_rgb_fg() {
+        let term = write_colored(b"\x1b[38;2;255;128;0m");
+        assert_eq!(
+            cell_at(&term, 0, 0).fg,
+            Color {
+                r: 255,
+                g: 128,
+                b: 0
+            }
+        );
+    }
+
+    #[test]
+    fn sgr_rgb_bg() {
+        let term = write_colored(b"\x1b[48;2;10;20;30m");
+        assert_eq!(
+            cell_at(&term, 0, 0).bg,
+            Color {
+                r: 10,
+                g: 20,
+                b: 30
+            }
+        );
+    }
+
+    #[test]
+    fn sgr_default_fg() {
+        let term = write_colored(b"\x1b[31m\x1b[39m");
+        assert_eq!(cell_at(&term, 0, 0).fg, Color::DEFAULT_FG);
+    }
+
+    #[test]
+    fn sgr_default_bg() {
+        let term = write_colored(b"\x1b[41m\x1b[49m");
+        assert_eq!(cell_at(&term, 0, 0).bg, Color::DEFAULT_BG);
+    }
+
+    #[test]
+    fn sgr_combined() {
+        let term = write_colored(b"\x1b[1;4;31m");
+        let cell = cell_at(&term, 0, 0);
+        assert!(cell.bold);
+        assert!(cell.underline);
+        assert_eq!(cell.fg, Color::ANSI[1]);
+    }
+
+    #[test]
+    fn sgr_no_params_resets() {
+        let mut term = Terminal::new(4, 20);
+        term.process(b"\x1b[1;31mA\x1b[mB");
+        let b = cell_at(&term, 0, 1);
+        assert!(!b.bold);
+        assert_eq!(b.fg, Color::DEFAULT_FG);
+    }
+}

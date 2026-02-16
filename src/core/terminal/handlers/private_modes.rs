@@ -58,3 +58,132 @@ pub(in super::super) fn handle_cursor_style_csi(
     });
     true
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::core::terminal::Terminal;
+    use crate::core::{CursorStyle, MouseMode};
+
+    #[test]
+    fn decckm_application_mode() {
+        let mut term = Terminal::new(4, 10);
+        term.process(b"\x1b[?1h");
+        assert_eq!(term.decckm, true);
+    }
+
+    #[test]
+    fn decckm_normal_mode() {
+        let mut term = Terminal::new(4, 10);
+        // First enable, then disable
+        term.process(b"\x1b[?1h");
+        term.process(b"\x1b[?1l");
+        assert_eq!(term.decckm, false);
+    }
+
+    #[test]
+    fn cursor_hide() {
+        let mut term = Terminal::new(4, 10);
+        assert_eq!(term.cursor_visible, true);
+        term.process(b"\x1b[?25l");
+        assert_eq!(term.cursor_visible, false);
+    }
+
+    #[test]
+    fn cursor_show() {
+        let mut term = Terminal::new(4, 10);
+        term.process(b"\x1b[?25l");
+        term.process(b"\x1b[?25h");
+        assert_eq!(term.cursor_visible, true);
+    }
+
+    #[test]
+    fn alt_screen_enter() {
+        let mut term = Terminal::new(4, 10);
+        term.cursor_row = 2;
+        term.cursor_col = 5;
+        term.process(b"\x1b[?1049h");
+
+        assert!(term.is_alt_screen());
+        assert_eq!(term.cursor_row, 0);
+        assert_eq!(term.cursor_col, 0);
+    }
+
+    #[test]
+    fn alt_screen_leave_restores() {
+        let mut term = Terminal::new(4, 10);
+        // Write something on main screen
+        term.process(b"Hello");
+        let saved_row = term.cursor_row;
+        let saved_col = term.cursor_col;
+
+        // Enter alt screen, write something different
+        term.process(b"\x1b[?1049h");
+        assert!(term.is_alt_screen());
+        term.process(b"Alt");
+
+        // Leave alt screen
+        term.process(b"\x1b[?1049l");
+        assert!(!term.is_alt_screen());
+
+        // Cursor restored
+        assert_eq!(term.cursor_row, saved_row);
+        assert_eq!(term.cursor_col, saved_col);
+
+        // Original grid restored: "Hello" should still be there
+        assert_eq!(term.grid.get(0, 0).character, 'H');
+        assert_eq!(term.grid.get(0, 4).character, 'o');
+    }
+
+    #[test]
+    fn mouse_normal_mode() {
+        let mut term = Terminal::new(4, 10);
+        term.process(b"\x1b[?1000h");
+        assert!(term.mouse_mode == MouseMode::Normal);
+    }
+
+    #[test]
+    fn mouse_button_event() {
+        let mut term = Terminal::new(4, 10);
+        term.process(b"\x1b[?1002h");
+        assert!(term.mouse_mode == MouseMode::ButtonEvent);
+    }
+
+    #[test]
+    fn mouse_any_event() {
+        let mut term = Terminal::new(4, 10);
+        term.process(b"\x1b[?1003h");
+        assert!(term.mouse_mode == MouseMode::AnyEvent);
+    }
+
+    #[test]
+    fn mouse_off() {
+        let mut term = Terminal::new(4, 10);
+        term.process(b"\x1b[?1000h");
+        assert!(term.mouse_mode == MouseMode::Normal);
+        term.process(b"\x1b[?1000l");
+        assert!(term.mouse_mode == MouseMode::Off);
+    }
+
+    #[test]
+    fn sgr_mouse_on_off() {
+        let mut term = Terminal::new(4, 10);
+        term.process(b"\x1b[?1006h");
+        assert!(term.sgr_mouse == true);
+        term.process(b"\x1b[?1006l");
+        assert!(term.sgr_mouse == false);
+    }
+
+    #[test]
+    fn cursor_style_steady_block() {
+        let mut term = Terminal::new(4, 10);
+        term.process(b"\x1b[2 q");
+        assert!(term.cursor_style == CursorStyle::SteadyBlock);
+    }
+
+    #[test]
+    fn cursor_style_blinking_bar() {
+        let mut term = Terminal::new(4, 10);
+        term.process(b"\x1b[5 q");
+        assert!(term.cursor_style == CursorStyle::BlinkingBar);
+    }
+}
