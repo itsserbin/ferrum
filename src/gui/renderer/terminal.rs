@@ -1,6 +1,6 @@
 use super::*;
 
-impl Renderer {
+impl CpuRenderer {
     /// Renders terminal cells with top/left offsets for tab bar and padding.
     pub fn render(
         &mut self,

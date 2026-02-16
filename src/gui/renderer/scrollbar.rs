@@ -6,7 +6,7 @@ const SCROLLBAR_BASE_ALPHA: u32 = 180;
 /// Minimum thumb height in base UI pixels.
 const SCROLLBAR_MIN_THUMB: u32 = 20;
 
-impl Renderer {
+impl CpuRenderer {
     /// Renders an overlay scrollbar thumb with alpha blending over existing buffer content.
     ///
     /// `opacity` ranges from 0.0 (invisible) to 1.0 (fully shown).

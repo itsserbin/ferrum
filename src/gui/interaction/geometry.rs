@@ -25,13 +25,13 @@ impl FerrumWindow {
 
     /// Converts window pixels to terminal grid coordinates.
     pub(in crate::gui) fn pixel_to_grid(&self, x: f64, y: f64) -> (usize, usize) {
-        let window_padding = self.renderer.window_padding_px();
-        let tab_bar_height = self.renderer.tab_bar_height_px();
-        let col = ((x as u32).saturating_sub(window_padding) + self.renderer.cell_width / 2)
+        let window_padding = self.backend.window_padding_px();
+        let tab_bar_height = self.backend.tab_bar_height_px();
+        let col = ((x as u32).saturating_sub(window_padding) + self.backend.cell_width() / 2)
             as usize
-            / self.renderer.cell_width as usize;
+            / self.backend.cell_width() as usize;
         let row = (y as u32).saturating_sub(tab_bar_height + window_padding) as usize
-            / self.renderer.cell_height as usize;
+            / self.backend.cell_height() as usize;
         if let Some(tab) = self.active_tab_ref() {
             let row = row.min(tab.terminal.grid.rows.saturating_sub(1));
             let col = col.min(tab.terminal.grid.cols.saturating_sub(1));
@@ -43,7 +43,7 @@ impl FerrumWindow {
 
     /// Returns `true` if the given x coordinate is within the scrollbar hit zone.
     pub(in crate::gui) fn is_in_scrollbar_zone(&self, x: f64, window_width: u32) -> bool {
-        let hit_zone = self.renderer.scrollbar_hit_zone_px();
+        let hit_zone = self.backend.scrollbar_hit_zone_px();
         x >= window_width.saturating_sub(hit_zone) as f64
     }
 }

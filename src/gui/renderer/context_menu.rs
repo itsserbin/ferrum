@@ -16,22 +16,22 @@ impl ContextMenu {
     }
 
     /// Menu width in pixels.
-    fn width(&self, cell_width: u32) -> u32 {
+    pub(crate) fn width(&self, cell_width: u32) -> u32 {
         cell_width * 16
     }
 
     /// Single menu item height in pixels.
-    fn item_height(&self, cell_height: u32) -> u32 {
+    pub(crate) fn item_height(&self, cell_height: u32) -> u32 {
         cell_height + 4
     }
 
     /// Total menu height in pixels.
-    fn height(&self, cell_height: u32) -> u32 {
+    pub(crate) fn height(&self, cell_height: u32) -> u32 {
         self.item_height(cell_height) * self.items.len() as u32 + 4
     }
 }
 
-impl Renderer {
+impl CpuRenderer {
     /// Hit-tests context menu and returns hovered item index.
     pub fn hit_test_context_menu(&self, menu: &ContextMenu, x: f64, y: f64) -> Option<usize> {
         let mw = menu.width(self.cell_width);

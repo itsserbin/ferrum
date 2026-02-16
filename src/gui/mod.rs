@@ -11,7 +11,7 @@ use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::sync::mpsc;
 
-use softbuffer::{Context, Surface};
+use softbuffer::Context;
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
@@ -23,7 +23,9 @@ use winit::platform::macos::WindowAttributesExtMacOS;
 
 use crate::core::terminal::Terminal;
 use crate::core::{MouseMode, Position, SecurityGuard, Selection};
-use crate::gui::renderer::{ContextMenu, Renderer, SecurityPopup, TAB_BAR_HEIGHT, WINDOW_PADDING};
+use crate::gui::renderer::{
+    ContextMenu, CpuRenderer, RendererBackend, SecurityPopup, TAB_BAR_HEIGHT, WINDOW_PADDING,
+};
 use crate::pty;
 
 use self::state::{
@@ -32,20 +34,18 @@ use self::state::{
 };
 
 impl FerrumWindow {
-    /// Creates a new FerrumWindow wrapping an already-created winit window and surface.
+    /// Creates a new FerrumWindow wrapping an already-created winit window and renderer backend.
     fn new(
         window: Arc<Window>,
-        surface: Surface<winit::event_loop::OwnedDisplayHandle, Arc<Window>>,
+        context: &Context<winit::event_loop::OwnedDisplayHandle>,
     ) -> Self {
-        let mut renderer = Renderer::new();
-        renderer.set_scale(window.scale_factor());
+        let mut backend = RendererBackend::new(window.clone(), context);
+        backend.set_scale(window.scale_factor());
 
         FerrumWindow {
             window,
-            surface,
-            last_surface_size: None,
             pending_grid_resize: None,
-            renderer,
+            backend,
             tabs: Vec::new(),
             active_tab: 0,
             modifiers: ModifiersState::empty(),
@@ -75,12 +75,12 @@ impl FerrumWindow {
 
     /// Calculates terminal rows/cols with tab bar and outer padding applied.
     fn calc_grid_size(&self, width: u32, height: u32) -> (usize, usize) {
-        let tab_bar_height = self.renderer.tab_bar_height_px();
-        let window_padding = self.renderer.window_padding_px();
+        let tab_bar_height = self.backend.tab_bar_height_px();
+        let window_padding = self.backend.window_padding_px();
         let rows = height.saturating_sub(tab_bar_height + window_padding * 2) as usize
-            / self.renderer.cell_height as usize;
+            / self.backend.cell_height() as usize;
         let cols =
-            width.saturating_sub(window_padding * 2) as usize / self.renderer.cell_width as usize;
+            width.saturating_sub(window_padding * 2) as usize / self.backend.cell_width() as usize;
         (rows.max(1), cols.max(1))
     }
 
@@ -115,10 +115,11 @@ impl App {
     ) -> Option<WindowId> {
         let context = self.context.as_ref()?;
 
-        let renderer = Renderer::new();
+        // Use default metrics for minimum window size calculation.
+        let tmp = CpuRenderer::new();
         let min_size = winit::dpi::LogicalSize::new(
-            (renderer.cell_width * 40 + WINDOW_PADDING * 2) as f64,
-            (renderer.cell_height * 10 + TAB_BAR_HEIGHT + WINDOW_PADDING * 2) as f64,
+            (tmp.cell_width * 40 + WINDOW_PADDING * 2) as f64,
+            (tmp.cell_height * 10 + TAB_BAR_HEIGHT + WINDOW_PADDING * 2) as f64,
         );
         let mut attrs = Window::default_attributes()
             .with_title("Ferrum")
@@ -149,18 +150,10 @@ impl App {
             }
         };
 
-        let surface = match Surface::new(context, window.clone()) {
-            Ok(s) => s,
-            Err(err) => {
-                eprintln!("Failed to create render surface: {err}");
-                return None;
-            }
-        };
-
         window.set_cursor(CursorIcon::Default);
 
         let id = window.id();
-        let ferrum_win = FerrumWindow::new(window, surface);
+        let ferrum_win = FerrumWindow::new(window, context);
         self.windows.insert(id, ferrum_win);
         Some(id)
     }

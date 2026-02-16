@@ -1,11 +1,11 @@
 use super::*;
 
 impl SecurityPopup {
-    fn line_height(&self, cell_height: u32) -> u32 {
+    pub(crate) fn line_height(&self, cell_height: u32) -> u32 {
         cell_height + 4
     }
 
-    fn width(&self, cell_width: u32) -> u32 {
+    pub(crate) fn width(&self, cell_width: u32) -> u32 {
         let max_line_chars = self
             .lines
             .iter()
@@ -17,14 +17,14 @@ impl SecurityPopup {
         ((content_chars + 3).max(24)) * cell_width
     }
 
-    fn height(&self, cell_height: u32) -> u32 {
+    pub(crate) fn height(&self, cell_height: u32) -> u32 {
         let title_h = self.line_height(cell_height);
         let lines_h = self.line_height(cell_height) * self.lines.len() as u32;
         title_h + lines_h + 8
     }
 }
 
-impl Renderer {
+impl CpuRenderer {
     pub(super) fn draw_security_shield_icon(
         &self,
         buffer: &mut [u32],

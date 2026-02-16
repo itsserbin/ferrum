@@ -18,7 +18,7 @@ impl FerrumWindow {
             return false;
         };
 
-        if let Some(item_idx) = self.renderer.hit_test_context_menu(&menu, mx, my) {
+        if let Some(item_idx) = self.backend.hit_test_context_menu(&menu, mx, my) {
             let action = menu.items[item_idx].0;
             let tab_idx = menu.tab_index;
             match action {

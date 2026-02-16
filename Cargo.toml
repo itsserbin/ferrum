@@ -3,6 +3,10 @@ name = "ferrum"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = ["gpu"]
+gpu = ["wgpu", "pollster", "bytemuck"]
+
 [dependencies]
 winit = "0.30"
 softbuffer = "0.4"
@@ -12,3 +16,6 @@ anyhow = "1"
 vte = "0.15"
 unicode-width = "0.2"
 arboard = "3"
+wgpu = { version = "28", optional = true }
+pollster = { version = "0.4", optional = true }
+bytemuck = { version = "1", features = ["derive"], optional = true }

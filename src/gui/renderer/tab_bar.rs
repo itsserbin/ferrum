@@ -22,7 +22,7 @@ const WIN_BTN_WIDTH: u32 = 46;
 // Insertion indicator color (Catppuccin Mocha Mauve).
 const INSERTION_COLOR: u32 = 0xCBA6F7;
 
-impl Renderer {
+impl CpuRenderer {
     /// Computes adaptive tab width with overflow compression.
     /// Tabs shrink from max (240px) down to MIN_TAB_WIDTH when many tabs are open.
     pub fn tab_width(&self, tab_count: usize, buf_width: u32) -> u32 {

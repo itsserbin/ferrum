@@ -86,10 +86,8 @@ pub(super) enum WindowRequest {
 /// Per-window state. Each window is self-contained with its own tabs, renderer, surface.
 pub(super) struct FerrumWindow {
     pub(super) window: Arc<Window>,
-    pub(super) surface: Surface<winit::event_loop::OwnedDisplayHandle, Arc<Window>>,
-    pub(super) last_surface_size: Option<(u32, u32)>,
     pub(super) pending_grid_resize: Option<(usize, usize)>,
-    pub(super) renderer: Renderer,
+    pub(super) backend: renderer::RendererBackend,
     pub(super) tabs: Vec<TabState>,
     pub(super) active_tab: usize,
     pub(super) modifiers: ModifiersState,

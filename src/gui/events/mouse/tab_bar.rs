@@ -26,7 +26,7 @@ impl FerrumWindow {
 
     pub(in crate::gui::events::mouse) fn tab_bar_hit(&self, mx: f64, my: f64) -> TabBarHit {
         let buf_width = self.window.inner_size().width;
-        self.renderer
+        self.backend
             .hit_test_tab_bar(mx, my, self.tabs.len(), buf_width)
     }
 
@@ -40,7 +40,7 @@ impl FerrumWindow {
             return None;
         }
         let buf_width = self.window.inner_size().width;
-        self.renderer
+        self.backend
             .hit_test_tab_security_badge(mx, my, &tab_infos, buf_width)
     }
 
@@ -64,12 +64,12 @@ impl FerrumWindow {
 
         let buf_width = self.window.inner_size().width;
         let (popup_x, popup_y) = self
-            .renderer
+            .backend
             .security_badge_rect(tab_index, self.tabs.len(), buf_width, event_count)
-            .map(|(x, y, w, h)| (x.saturating_sub(w), y + h + self.renderer.scaled_px(6)))
+            .map(|(x, y, w, h)| (x.saturating_sub(w), y + h + self.backend.scaled_px(6)))
             .unwrap_or((
-                self.renderer.scaled_px(16),
-                self.renderer.tab_bar_height_px() + self.renderer.scaled_px(6),
+                self.backend.scaled_px(16),
+                self.backend.tab_bar_height_px() + self.backend.scaled_px(6),
             ));
 
         self.security_popup = Some(SecurityPopup {
@@ -215,7 +215,7 @@ impl FerrumWindow {
 
         // Calculate insertion index.
         let insert_at = self
-            .renderer
+            .backend
             .tab_insert_index_from_x(drag.current_x, tab_count, buf_width);
 
         // Convert insertion index to the actual destination after removal.
@@ -250,15 +250,15 @@ impl FerrumWindow {
         };
 
         let buf_width = self.window.inner_size().width;
-        let tw = self.renderer.tab_width(self.tabs.len(), buf_width);
+        let tw = self.backend.tab_width(self.tabs.len(), buf_width);
         let tab_padding_h = 14u32;
-        let text_x = self.renderer.tab_origin_x(rename.tab_index, tw) + tab_padding_h;
+        let text_x = self.backend.tab_origin_x(rename.tab_index, tw) + tab_padding_h;
 
         // Calculate cursor byte position from mouse x coordinate.
         let char_offset = if mx < text_x as f64 {
             0
         } else {
-            ((mx as u32 - text_x + self.renderer.cell_width / 2) / self.renderer.cell_width)
+            ((mx as u32 - text_x + self.backend.cell_width() / 2) / self.backend.cell_width())
                 as usize
         };
         let byte_pos = rename
@@ -311,14 +311,14 @@ impl FerrumWindow {
         };
 
         let buf_width = self.window.inner_size().width;
-        let tw = self.renderer.tab_width(self.tabs.len(), buf_width);
+        let tw = self.backend.tab_width(self.tabs.len(), buf_width);
         let tab_padding_h = 14u32;
-        let text_x = self.renderer.tab_origin_x(rename.tab_index, tw) + tab_padding_h;
+        let text_x = self.backend.tab_origin_x(rename.tab_index, tw) + tab_padding_h;
 
         let char_offset = if mx < text_x as f64 {
             0
         } else {
-            ((mx as u32 - text_x + self.renderer.cell_width / 2) / self.renderer.cell_width)
+            ((mx as u32 - text_x + self.backend.cell_width() / 2) / self.backend.cell_width())
                 as usize
         };
         let byte_pos = rename

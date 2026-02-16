@@ -11,7 +11,7 @@ impl FerrumWindow {
             MouseScrollDelta::PixelDelta(pos) => {
                 // Pixel-based scroll (trackpad) — accumulate small deltas
                 self.scroll_accumulator += pos.y;
-                let cell_h = self.renderer.cell_height as f64;
+                let cell_h = self.backend.cell_height() as f64;
                 let lines = (self.scroll_accumulator / cell_h) as isize;
                 if lines != 0 {
                     self.scroll_accumulator -= lines as f64 * cell_h;

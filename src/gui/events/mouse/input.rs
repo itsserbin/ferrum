@@ -28,7 +28,7 @@ impl FerrumWindow {
         }
         self.commit_rename();
         let (mx, my) = self.mouse_pos;
-        if my >= self.renderer.tab_bar_height_px() as f64 {
+        if my >= self.backend.tab_bar_height_px() as f64 {
             return;
         }
         if let TabBarHit::Tab(idx) | TabBarHit::CloseTab(idx) = self.tab_bar_hit(mx, my) {
@@ -42,7 +42,7 @@ impl FerrumWindow {
                 self.commit_rename();
                 self.security_popup = None;
                 let (mx, my) = self.mouse_pos;
-                let tab_bar_height = self.renderer.tab_bar_height_px();
+                let tab_bar_height = self.backend.tab_bar_height_px();
                 if my < tab_bar_height as f64 {
                     // Right click on a tab opens its context menu.
                     if let TabBarHit::Tab(idx) | TabBarHit::CloseTab(idx) = self.tab_bar_hit(mx, my)
@@ -82,7 +82,7 @@ impl FerrumWindow {
         let (buf_width, buf_height) = (size.width as usize, size.height as usize);
 
         if self
-            .renderer
+            .backend
             .hit_test_security_popup(&popup, mx, my, buf_width, buf_height)
         {
             return true;
@@ -99,7 +99,7 @@ impl FerrumWindow {
         tx: &mpsc::Sender<PtyEvent>,
     ) {
         let (mx, my) = self.mouse_pos;
-        let tab_bar_height = self.renderer.tab_bar_height_px() as f64;
+        let tab_bar_height = self.backend.tab_bar_height_px() as f64;
 
         // On non-macOS, initiate OS-level resize drag when pressing on window edges.
         #[cfg(not(target_os = "macos"))]
@@ -181,8 +181,8 @@ impl FerrumWindow {
         let buf_height = size.height as usize;
         let grid_rows = tab.terminal.grid.rows;
         let scroll_offset = tab.scroll_offset;
-        let tab_bar_height = self.renderer.tab_bar_height_px() as f64;
-        let window_padding = self.renderer.window_padding_px() as f64;
+        let tab_bar_height = self.backend.tab_bar_height_px() as f64;
+        let window_padding = self.backend.window_padding_px() as f64;
 
         let track_top = tab_bar_height + window_padding;
         let track_bottom = buf_height as f64 - window_padding;
@@ -195,7 +195,7 @@ impl FerrumWindow {
         let track_height = track_bottom - track_top;
 
         // Check if click is on the thumb or on the track.
-        if let Some((thumb_y, thumb_height)) = self.renderer.scrollbar_thumb_bounds(
+        if let Some((thumb_y, thumb_height)) = self.backend.scrollbar_thumb_bounds(
             buf_height,
             scroll_offset,
             scrollback_len,

@@ -48,15 +48,15 @@ impl FerrumWindow {
     pub(crate) fn on_cursor_moved(&mut self, position: winit::dpi::PhysicalPosition<f64>) {
         let (mx, my) = self.normalized_window_pos(position.x, position.y);
         self.mouse_pos = (mx, my);
-        let tab_bar_height = self.renderer.tab_bar_height_px() as f64;
-        let window_padding = self.renderer.window_padding_px() as f64;
-        let detach_threshold_y = self.renderer.scaled_px(DETACH_THRESHOLD_Y) as f64;
+        let tab_bar_height = self.backend.tab_bar_height_px() as f64;
+        let window_padding = self.backend.window_padding_px() as f64;
+        let detach_threshold_y = self.backend.scaled_px(DETACH_THRESHOLD_Y) as f64;
 
         // On non-macOS, check resize edges BEFORE any other hit testing.
         #[cfg(not(target_os = "macos"))]
         {
             let size = self.window.inner_size();
-            let edge = self.renderer.scaled_px(RESIZE_EDGE);
+            let edge = self.backend.scaled_px(RESIZE_EDGE);
             if let Some(dir) = resize_direction(mx, my, size.width, size.height, edge) {
                 self.window.set_cursor(resize_cursor_icon(dir));
                 self.resize_direction = Some(dir);
@@ -79,7 +79,7 @@ impl FerrumWindow {
             if drag.is_active {
                 // Detach: cursor moved far enough vertically from the tab bar.
                 let beyond_below = my > tab_bar_height + detach_threshold_y;
-                let beyond_above = my < self.renderer.scaled_px(5) as f64;
+                let beyond_above = my < self.backend.scaled_px(5) as f64;
                 if (beyond_below || beyond_above) && self.tabs.len() > 1 {
                     self.detach_dragged_tab();
                     return;
@@ -107,12 +107,12 @@ impl FerrumWindow {
         // Track hovered tab for visual feedback.
         let size = self.window.inner_size();
         self.hovered_tab = self
-            .renderer
+            .backend
             .hit_test_tab_hover(mx, my, self.tabs.len(), size.width);
 
         // Track hovered context-menu item.
         if let Some(ref mut menu) = self.context_menu {
-            menu.hover_index = self.renderer.hit_test_context_menu(menu, mx, my);
+            menu.hover_index = self.backend.hit_test_context_menu(menu, mx, my);
         }
 
         // Handle rename field drag selection in tab bar.
@@ -133,7 +133,7 @@ impl FerrumWindow {
             let drag_start_y = tab.scrollbar.drag_start_y;
             let drag_start_offset = tab.scrollbar.drag_start_offset;
 
-            if let Some((_thumb_y, thumb_height)) = self.renderer.scrollbar_thumb_bounds(
+            if let Some((_thumb_y, thumb_height)) = self.backend.scrollbar_thumb_bounds(
                 buf_height,
                 tab.scroll_offset,
                 scrollback_len,

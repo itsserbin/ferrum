@@ -1,6 +1,6 @@
 use super::*;
 
-impl Renderer {
+impl CpuRenderer {
     #[allow(clippy::too_many_arguments)]
     pub fn draw_cursor(
         &mut self,
