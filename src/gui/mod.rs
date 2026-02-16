@@ -67,6 +67,10 @@ impl FerrumWindow {
             resize_direction: None,
             cursor_blink_start: std::time::Instant::now(),
             suppress_click_to_cursor_once: false,
+            #[cfg(target_os = "macos")]
+            pending_native_tab_syncs: 0,
+            #[cfg(target_os = "macos")]
+            next_native_tab_sync_at: None,
             scroll_accumulator: 0.0,
             pending_requests: Vec::new(),
         }

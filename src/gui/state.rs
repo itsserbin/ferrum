@@ -138,6 +138,10 @@ pub(super) struct FerrumWindow {
     pub(super) resize_direction: Option<ResizeDirection>,
     pub(super) cursor_blink_start: std::time::Instant,
     pub(super) suppress_click_to_cursor_once: bool,
+    #[cfg(target_os = "macos")]
+    pub(super) pending_native_tab_syncs: u8,
+    #[cfg(target_os = "macos")]
+    pub(super) next_native_tab_sync_at: Option<std::time::Instant>,
     /// Accumulates fractional pixel scroll for trackpad (PixelDelta).
     pub(super) scroll_accumulator: f64,
     /// Pending requests from this window to the App (detach, close, etc.).

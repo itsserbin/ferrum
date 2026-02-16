@@ -290,9 +290,9 @@ impl App {
 
         #[cfg(target_os = "macos")]
         {
-            for win in self.windows.values() {
+            for win in self.windows.values_mut() {
                 platform::macos::sync_native_tab_bar_visibility(&win.window);
-                win.window.request_redraw();
+                win.schedule_native_tab_bar_resync();
             }
         }
 

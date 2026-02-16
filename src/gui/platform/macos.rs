@@ -202,10 +202,27 @@ pub fn sync_native_tab_bar_visibility(window: &Window) {
         return;
     }
 
-    let visible = ns_window
-        .tabbedWindows()
-        .map(|windows| windows.len() > 1)
-        .unwrap_or(false);
+    let tab_count = unsafe {
+        // Use tabGroup.windows when possible because it tracks group membership
+        // independently of whether the tab bar is currently visible.
+        let tab_group: Option<Retained<AnyObject>> = msg_send![&ns_window, tabGroup];
+        if let Some(group) = tab_group {
+            let windows: Option<Retained<AnyObject>> = msg_send![&group, windows];
+            windows
+                .as_ref()
+                .map(|window_list| {
+                    let count: usize = msg_send![window_list, count];
+                    count
+                })
+                .unwrap_or(1)
+        } else {
+            ns_window
+                .tabbedWindows()
+                .map(|windows| windows.len())
+                .unwrap_or(1)
+        }
+    };
+    let visible = tab_count > 1;
 
     unsafe {
         let _: () = msg_send![&ns_window, setTabBarVisible: visible];

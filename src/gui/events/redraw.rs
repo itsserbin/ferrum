@@ -8,6 +8,10 @@ const BLINK_WAKE_TOLERANCE: Duration = Duration::from_millis(20);
 const SCROLLBAR_FADE_START: Duration = Duration::from_millis(1500);
 const SCROLLBAR_FADE_END: Duration = Duration::from_millis(1800);
 const ANIMATION_FRAME_INTERVAL: Duration = Duration::from_millis(16);
+#[cfg(target_os = "macos")]
+const NATIVE_TAB_SYNC_INTERVAL: Duration = Duration::from_millis(60);
+#[cfg(target_os = "macos")]
+const NATIVE_TAB_SYNC_ATTEMPTS: u8 = 6;
 
 /// Quadratic ease-out: fast start, smooth deceleration.
 #[cfg(not(target_os = "macos"))]
@@ -16,6 +20,13 @@ fn ease_out(t: f32) -> f32 {
 }
 
 impl FerrumWindow {
+    #[cfg(target_os = "macos")]
+    pub(in crate::gui) fn schedule_native_tab_bar_resync(&mut self) {
+        self.pending_native_tab_syncs = NATIVE_TAB_SYNC_ATTEMPTS;
+        self.next_native_tab_sync_at = Some(Instant::now());
+        self.window.request_redraw();
+    }
+
     pub(in crate::gui) fn animation_schedule(&self, now: Instant) -> Option<(Instant, bool)> {
         let cursor = self.cursor_animation_schedule(now);
         let scrollbar = self.scrollbar_animation_schedule(now);
@@ -29,6 +40,15 @@ impl FerrumWindow {
                 Some((deadline, redraw)) => (deadline.min(s.0), redraw || s.1),
             });
         }
+
+        #[cfg(target_os = "macos")]
+        if let Some(s) = self.native_tab_sync_schedule(now) {
+            result = Some(match result {
+                None => s,
+                Some((deadline, redraw)) => (deadline.min(s.0), redraw || s.1),
+            });
+        }
+
         result
     }
 
@@ -99,6 +119,15 @@ impl FerrumWindow {
         None
     }
 
+    #[cfg(target_os = "macos")]
+    fn native_tab_sync_schedule(&self, now: Instant) -> Option<(Instant, bool)> {
+        if self.pending_native_tab_syncs == 0 {
+            return None;
+        }
+        let deadline = self.next_native_tab_sync_at.unwrap_or(now);
+        Some((deadline, now >= deadline))
+    }
+
     pub(in crate::gui) fn apply_pending_resize(&mut self) {
         if let Some((rows, cols)) = self.pending_grid_resize.take() {
             self.resize_all_tabs(rows, cols);
@@ -126,7 +155,17 @@ impl FerrumWindow {
 
     pub(crate) fn on_redraw_requested(&mut self) {
         #[cfg(target_os = "macos")]
-        crate::gui::platform::macos::sync_native_tab_bar_visibility(&self.window);
+        {
+            crate::gui::platform::macos::sync_native_tab_bar_visibility(&self.window);
+            if self.pending_native_tab_syncs > 0 {
+                self.pending_native_tab_syncs -= 1;
+                self.next_native_tab_sync_at = if self.pending_native_tab_syncs > 0 {
+                    Some(Instant::now() + NATIVE_TAB_SYNC_INTERVAL)
+                } else {
+                    None
+                };
+            }
+        }
         self.refresh_tab_bar_visibility();
         self.apply_pending_resize();
 
