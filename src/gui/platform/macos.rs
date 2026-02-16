@@ -138,26 +138,6 @@ pub fn install_new_tab_handler(window: &Window) {
     }
 }
 
-/// Shows the native tab bar even with a single tab.
-pub fn show_tab_bar(window: &Window) {
-    let Some(ns_window) = get_ns_window(window) else {
-        return;
-    };
-    unsafe {
-        // Try NSWindowTabGroup API (macOS 12+).
-        let tab_group: Option<Retained<AnyObject>> = msg_send![&ns_window, tabGroup];
-        if let Some(group) = tab_group {
-            let visible: bool = msg_send![&group, isTabBarVisible];
-            if !visible {
-                let _: () = msg_send![&group, setTabBarVisible: true];
-            }
-            return;
-        }
-        // Fallback: toggleTabBar (macOS 10.12+).
-        let _: () = msg_send![&ns_window, toggleTabBar: std::ptr::null::<AnyObject>()];
-    }
-}
-
 /// Adds `new_window` as a native macOS tab to the `existing` window's tab group.
 pub fn add_as_tab(existing: &Window, new_window: &Window) {
     let Some(existing_ns) = get_ns_window(existing) else {

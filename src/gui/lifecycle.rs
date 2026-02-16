@@ -36,9 +36,6 @@ impl ApplicationHandler for App {
                 win.window.set_title(&tab.title);
             }
             win.window.request_redraw();
-
-            #[cfg(target_os = "macos")]
-            platform::macos::show_tab_bar(&win.window);
         }
     }
 
