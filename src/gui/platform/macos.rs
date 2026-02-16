@@ -2,8 +2,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use objc2::msg_send;
 use objc2::rc::Retained;
-use objc2::runtime::{AnyObject, NSObjectProtocol};
-use objc2::sel;
+use objc2::runtime::AnyObject;
 use objc2_app_kit::{NSView, NSWindow, NSWindowTabbingMode};
 use objc2_foundation::ns_string;
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -197,35 +196,20 @@ pub fn sync_native_tab_bar_visibility(window: &Window) {
     let Some(ns_window) = get_ns_window(window) else {
         return;
     };
-    // Avoid runtime selector-encoding mismatch here: use typed Sel for respondsToSelector.
-    if !ns_window.respondsToSelector(sel!(setTabBarVisible:)) {
-        return;
-    }
+    let tab_group = ns_window.tabGroup();
+    let tab_count = tab_group
+        .as_ref()
+        .map(|group| group.windows().len())
+        .or_else(|| ns_window.tabbedWindows().map(|windows| windows.len()))
+        .unwrap_or(1);
+    let should_be_visible = tab_count > 1;
+    let is_visible = tab_group
+        .as_ref()
+        .is_some_and(|group| group.isTabBarVisible());
 
-    let tab_count = unsafe {
-        // Use tabGroup.windows when possible because it tracks group membership
-        // independently of whether the tab bar is currently visible.
-        let tab_group: Option<Retained<AnyObject>> = msg_send![&ns_window, tabGroup];
-        if let Some(group) = tab_group {
-            let windows: Option<Retained<AnyObject>> = msg_send![&group, windows];
-            windows
-                .as_ref()
-                .map(|window_list| {
-                    let count: usize = msg_send![window_list, count];
-                    count
-                })
-                .unwrap_or(1)
-        } else {
-            ns_window
-                .tabbedWindows()
-                .map(|windows| windows.len())
-                .unwrap_or(1)
-        }
-    };
-    let visible = tab_count > 1;
-
-    unsafe {
-        let _: () = msg_send![&ns_window, setTabBarVisible: visible];
+    // Match Ghostty-style behavior: rely on native toggle based on current state.
+    if should_be_visible != is_visible {
+        ns_window.toggleTabBar(None);
     }
 }
 
