@@ -215,11 +215,15 @@ impl App {
                 }
                 #[cfg(target_os = "macos")]
                 WindowRequest::NewWindow => {
+                    let tab_title = format!("bash #{}", self.windows.len() + 1);
                     if let Some(new_id) = self.create_window(event_loop, None) {
                         if let Some(new_win) = self.windows.get_mut(&new_id) {
                             let size = new_win.window.inner_size();
                             let (rows, cols) = new_win.calc_grid_size(size.width, size.height);
-                            new_win.new_tab(rows, cols, &mut self.next_tab_id, &self.tx);
+                            new_win.new_tab_with_title(
+                                rows, cols, Some(tab_title),
+                                &mut self.next_tab_id, &self.tx,
+                            );
                             if let Some(tab) = new_win.tabs.first() {
                                 new_win.window.set_title(&tab.title);
                             }
@@ -230,11 +234,16 @@ impl App {
                 #[cfg(target_os = "macos")]
                 WindowRequest::NewTab => {
                     let existing_win = self.windows.get(&window_id).map(|w| w.window.clone());
+                    // Title based on current window count (not global ID).
+                    let tab_title = format!("bash #{}", self.windows.len() + 1);
                     if let Some(new_id) = self.create_window(event_loop, None) {
                         if let Some(new_win) = self.windows.get_mut(&new_id) {
                             let size = new_win.window.inner_size();
                             let (rows, cols) = new_win.calc_grid_size(size.width, size.height);
-                            new_win.new_tab(rows, cols, &mut self.next_tab_id, &self.tx);
+                            new_win.new_tab_with_title(
+                                rows, cols, Some(tab_title),
+                                &mut self.next_tab_id, &self.tx,
+                            );
                             if let Some(tab) = new_win.tabs.first() {
                                 new_win.window.set_title(&tab.title);
                             }

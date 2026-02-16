@@ -160,7 +160,10 @@ impl CpuRenderer {
     }
 
     pub(crate) fn window_padding_px(&self) -> u32 {
-        self.scaled_px(WINDOW_PADDING)
+        #[cfg(target_os = "macos")]
+        { 0 }
+        #[cfg(not(target_os = "macos"))]
+        { self.scaled_px(WINDOW_PADDING) }
     }
 
     pub(crate) fn scrollbar_width_px(&self) -> u32 {
