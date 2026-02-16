@@ -9,8 +9,9 @@ use super::MAX_UI_COMMANDS;
 
 #[cfg(not(target_os = "macos"))]
 use super::super::WindowButton;
+use super::{CLOSE_HOVER_BG_COLOR, TAB_TEXT_INACTIVE};
 #[cfg(not(target_os = "macos"))]
-use super::{CLOSE_HOVER_BG_COLOR, TAB_TEXT_INACTIVE, WIN_BTN_WIDTH};
+use super::WIN_BTN_WIDTH;
 
 impl super::GpuRenderer {
     pub(super) fn draw_close_button_commands(

@@ -108,7 +108,7 @@ pub fn install_new_tab_responder() {
     }
 
     // Raw ObjC runtime C functions — stable ABI, avoids objc2::ffi type churn.
-    extern "C" {
+    unsafe extern "C" {
         fn object_getClass(obj: *const core::ffi::c_void) -> *mut core::ffi::c_void;
         fn sel_registerName(name: *const core::ffi::c_char) -> *const core::ffi::c_void;
         fn class_addMethod(
