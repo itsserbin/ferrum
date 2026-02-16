@@ -1,5 +1,5 @@
 use crate::core::terminal::Terminal;
-use crate::core::{Grid, Position, Selection};
+use crate::core::{Grid, Selection, SelectionPoint};
 use crate::gui::*;
 
 const BRACKETED_PASTE_START: &[u8] = b"\x1b[200~";
@@ -11,12 +11,26 @@ impl FerrumWindow {
         selection: Selection,
         scroll_offset: usize,
     ) -> String {
+        let viewport_start = terminal.scrollback.len() - scroll_offset;
+
+        // Convert absolute selection to viewport-relative
+        let rel_selection = Selection {
+            start: SelectionPoint {
+                row: selection.start.row.saturating_sub(viewport_start),
+                col: selection.start.col,
+            },
+            end: SelectionPoint {
+                row: selection.end.row.saturating_sub(viewport_start),
+                col: selection.end.col,
+            },
+        };
+
         if scroll_offset == 0 {
-            return Self::selected_text_from_grid(&terminal.grid, selection);
+            return Self::selected_text_from_grid(&terminal.grid, rel_selection);
         }
 
         let display = terminal.build_display(scroll_offset);
-        Self::selected_text_from_grid(&display, selection)
+        Self::selected_text_from_grid(&display, rel_selection)
     }
 
     fn selected_text_from_grid(grid: &Grid, selection: Selection) -> String {
@@ -25,11 +39,11 @@ impl FerrumWindow {
         }
 
         let clamped = Selection {
-            start: Position {
+            start: SelectionPoint {
                 row: selection.start.row.min(grid.rows - 1),
                 col: selection.start.col.min(grid.cols - 1),
             },
-            end: Position {
+            end: SelectionPoint {
                 row: selection.end.row.min(grid.rows - 1),
                 col: selection.end.col.min(grid.cols - 1),
             },
@@ -137,15 +151,23 @@ mod tests {
         terminal.scrollback.push_back(row_cells("SB000", 5));
         terminal.scrollback.push_back(row_cells("SB001", 5));
 
+        // scrollback has 2 entries. With scroll_offset=0, viewport_start=2.
+        // Live grid row 0 is absolute row 2.
         let selection = Selection {
-            start: Position { row: 0, col: 0 },
-            end: Position { row: 0, col: 4 },
+            start: SelectionPoint { row: 2, col: 0 },
+            end: SelectionPoint { row: 2, col: 4 },
         };
 
         let live_text = FerrumWindow::selected_text_from_terminal(&terminal, selection, 0);
-        let scrollback_text = FerrumWindow::selected_text_from_terminal(&terminal, selection, 1);
-
         assert_eq!(live_text, "LIVE0");
+
+        // With scroll_offset=1, viewport_start=1. Viewport row 0 is SB001 (absolute row 1).
+        let scrollback_selection = Selection {
+            start: SelectionPoint { row: 1, col: 0 },
+            end: SelectionPoint { row: 1, col: 4 },
+        };
+        let scrollback_text =
+            FerrumWindow::selected_text_from_terminal(&terminal, scrollback_selection, 1);
         assert_eq!(scrollback_text, "SB001");
     }
 }

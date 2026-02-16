@@ -64,6 +64,7 @@ pub struct Terminal {
     pending_security_events: Vec<SecurityEventKind>,
     pub cursor_style: CursorStyle,
     resize_at: Option<std::time::Instant>,
+    scrollback_popped: usize,
     parser: Parser,
 }
 
@@ -96,6 +97,7 @@ impl Terminal {
             pending_security_events: Vec::new(),
             cursor_style: CursorStyle::default(),
             resize_at: None,
+            scrollback_popped: 0,
             parser: Parser::new(),
         }
     }
@@ -122,6 +124,11 @@ impl Terminal {
     /// Drains all pending PTY response bytes.
     pub fn drain_responses(&mut self) -> Vec<u8> {
         std::mem::take(&mut self.pending_responses)
+    }
+
+    /// Returns and resets the accumulated scrollback-popped counter.
+    pub fn drain_scrollback_popped(&mut self) -> usize {
+        std::mem::take(&mut self.scrollback_popped)
     }
 
     /// Drains security events detected while parsing terminal output.

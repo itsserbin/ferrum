@@ -133,6 +133,7 @@ impl FerrumWindow {
 
         // 1) Render terminal grid.
         if let Some(tab) = self.tabs.get(self.active_tab) {
+            let viewport_start = tab.terminal.scrollback.len() - tab.scroll_offset;
             if tab.scroll_offset == 0 {
                 gpu.render(
                     &mut dummy,
@@ -140,10 +141,11 @@ impl FerrumWindow {
                     bh,
                     &tab.terminal.grid,
                     tab.selection.as_ref(),
+                    viewport_start,
                 );
             } else {
                 let display = tab.terminal.build_display(tab.scroll_offset);
-                gpu.render(&mut dummy, bw, bh, &display, tab.selection.as_ref());
+                gpu.render(&mut dummy, bw, bh, &display, tab.selection.as_ref(), viewport_start);
             }
 
             // 2) Draw cursor.

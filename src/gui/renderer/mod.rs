@@ -420,8 +420,9 @@ impl traits::Renderer for CpuRenderer {
         buf_height: usize,
         grid: &Grid,
         selection: Option<&Selection>,
+        viewport_start: usize,
     ) {
-        CpuRenderer::render(self, buffer, buf_width, buf_height, grid, selection);
+        CpuRenderer::render(self, buffer, buf_width, buf_height, grid, selection, viewport_start);
     }
 
     fn draw_cursor(

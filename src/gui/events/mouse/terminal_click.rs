@@ -1,3 +1,4 @@
+use crate::core::SelectionPoint;
 use crate::gui::*;
 
 const MULTI_CLICK_TIMEOUT_MS: u128 = 400;
@@ -52,6 +53,11 @@ impl FerrumWindow {
             return;
         }
 
+        let abs_pos = SelectionPoint {
+            row: self.screen_to_abs(row),
+            col,
+        };
+
         match state {
             ElementState::Pressed => {
                 let is_focus_click = self.suppress_click_to_cursor_once;
@@ -67,17 +73,20 @@ impl FerrumWindow {
                     self.last_click_time = std::time::Instant::now();
                     self.last_click_pos = pos;
 
-                    let anchor = self.tabs[idx].selection.map(|sel| sel.start).unwrap_or(pos);
+                    let anchor = self.tabs[idx]
+                        .selection
+                        .map(|sel| sel.start)
+                        .unwrap_or(abs_pos);
                     self.selection_anchor = Some(anchor);
                     self.selection_drag_mode = SelectionDragMode::Character;
                     self.tabs[idx].selection = Some(Selection {
                         start: anchor,
-                        end: pos,
+                        end: abs_pos,
                     });
                     return;
                 }
 
-                self.selection_anchor = Some(pos);
+                self.selection_anchor = Some(abs_pos);
                 match self.update_terminal_click_streak(pos) {
                     1 => {
                         // Single-click arms char-wise drag; selection starts on movement.

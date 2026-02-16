@@ -9,6 +9,14 @@ impl FerrumWindow {
                 if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == *tab_id) {
                     tab.terminal.process(bytes);
                     tab.scroll_offset = 0;
+
+                    let popped = tab.terminal.drain_scrollback_popped();
+                    if popped > 0 {
+                        tab.selection = tab
+                            .selection
+                            .and_then(|sel| sel.adjust_for_scrollback_pop(popped));
+                    }
+
                     for event in tab.terminal.drain_security_events() {
                         tab.security.record(event);
                     }

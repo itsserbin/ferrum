@@ -159,6 +159,7 @@ impl traits::Renderer for GpuRenderer {
         _buf_height: usize,
         grid: &Grid,
         selection: Option<&Selection>,
+        viewport_start: usize,
     ) {
         // Pack grid cells into the GPU buffer format.
         let rows = grid.rows;
@@ -167,9 +168,10 @@ impl traits::Renderer for GpuRenderer {
         self.grid_cells.reserve(rows * cols);
 
         for row in 0..rows {
+            let abs_row = viewport_start + row;
             for col in 0..cols {
                 let cell = grid.get(row, col);
-                let selected = selection.is_some_and(|s| s.contains(row, col));
+                let selected = selection.is_some_and(|s| s.contains(abs_row, col));
 
                 let mut attrs = 0u32;
                 if cell.bold {

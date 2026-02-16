@@ -102,6 +102,7 @@ impl super::Terminal {
             self.scrollback.push_back(row);
             if self.scrollback.len() > self.max_scrollback {
                 self.scrollback.pop_front();
+                self.scrollback_popped += 1;
             }
         }
 

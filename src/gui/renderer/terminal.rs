@@ -9,11 +9,13 @@ impl CpuRenderer {
         buf_height: usize,
         grid: &Grid,
         selection: Option<&Selection>,
+        viewport_start: usize,
     ) {
         let y_offset = self.tab_bar_height_px() + self.window_padding_px();
         let x_offset = self.window_padding_px();
 
         for row in 0..grid.rows {
+            let abs_row = viewport_start + row;
             for col in 0..grid.cols {
                 let cell = grid.get(row, col);
                 let x = col as u32 * self.cell_width + x_offset;
@@ -24,7 +26,7 @@ impl CpuRenderer {
                 }
 
                 // Invert colors if the cell is selected
-                let selected = selection.is_some_and(|s| s.contains(row, col));
+                let selected = selection.is_some_and(|s| s.contains(abs_row, col));
                 let (mut fg, mut bg) = if selected {
                     (cell.bg, cell.fg)
                 } else {

@@ -137,6 +137,7 @@ impl FerrumWindow {
 
         // 2) Draw active tab terminal content.
         if let Some(tab) = self.tabs.get(self.active_tab) {
+            let viewport_start = tab.terminal.scrollback.len() - tab.scroll_offset;
             if tab.scroll_offset == 0 {
                 renderer.render(
                     &mut buffer,
@@ -144,10 +145,11 @@ impl FerrumWindow {
                     bh,
                     &tab.terminal.grid,
                     tab.selection.as_ref(),
+                    viewport_start,
                 );
             } else {
                 let display = tab.terminal.build_display(tab.scroll_offset);
-                renderer.render(&mut buffer, bw, bh, &display, tab.selection.as_ref());
+                renderer.render(&mut buffer, bw, bh, &display, tab.selection.as_ref(), viewport_start);
             }
 
             // 3) Draw cursor on top of terminal cells.

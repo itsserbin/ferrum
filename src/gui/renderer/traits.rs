@@ -42,6 +42,7 @@ pub trait Renderer {
         buf_height: usize,
         grid: &Grid,
         selection: Option<&Selection>,
+        viewport_start: usize,
     );
 
     fn draw_cursor(

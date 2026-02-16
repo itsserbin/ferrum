@@ -12,5 +12,5 @@ pub use color::Color;
 pub use grid::Grid;
 pub use position::Position;
 pub use security::{SecurityConfig, SecurityEventKind, SecurityGuard};
-pub use selection::Selection;
+pub use selection::{Selection, SelectionPoint};
 pub use terminal::{CursorStyle, MouseMode};
