@@ -8,7 +8,7 @@ pub fn default_shell() -> String {
 
 #[cfg(windows)]
 pub fn default_shell() -> String {
-    "powershell.exe".to_string()
+    std::env::var("COMSPEC").unwrap_or_else(|_| "cmd.exe".to_string())
 }
 
 pub struct Session {
