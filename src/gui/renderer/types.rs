@@ -44,12 +44,14 @@ pub enum TabBarHit {
     /// Clicked on the new-tab button.
     NewTab,
     /// Clicked on a window control button (non-macOS).
+    #[cfg(not(target_os = "macos"))]
     WindowButton(WindowButton),
     /// Clicked empty bar area (window drag).
     Empty,
 }
 
 /// Window control button type (non-macOS).
+#[cfg(not(target_os = "macos"))]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum WindowButton {
     Minimize,

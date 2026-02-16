@@ -10,6 +10,7 @@ pub(super) enum PtyEvent {
 }
 
 /// Metadata for recently closed tabs (Ctrl+Shift+T restore).
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 pub(super) struct ClosedTabInfo {
     pub(super) title: String,
 }
@@ -50,6 +51,7 @@ pub(super) struct TabState {
 }
 
 /// Drag-and-drop state for tab reordering.
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 pub(super) struct DragState {
     pub(super) source_index: usize, // Which tab is being dragged.
     pub(super) start_x: f64,        // Mouse x at drag start.
@@ -61,6 +63,7 @@ pub(super) struct DragState {
 }
 
 /// Post-reorder slide animation for tabs.
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 pub(super) struct TabReorderAnimation {
     pub(super) started: Instant,
     pub(super) duration_ms: u32,
@@ -69,6 +72,7 @@ pub(super) struct TabReorderAnimation {
 }
 
 /// Temporary inline rename state for the tab bar.
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 pub(super) struct RenameState {
     pub(super) tab_index: usize,
     pub(super) text: String,
@@ -87,6 +91,7 @@ pub(super) enum SelectionDragMode {
 /// Request from a FerrumWindow to the App (window manager).
 pub(super) enum WindowRequest {
     /// Detach a tab into a new window at the given screen position.
+    #[cfg(not(target_os = "macos"))]
     DetachTab {
         tab: TabState,
         cursor_pos: Option<winit::dpi::PhysicalPosition<i32>>,

@@ -1,3 +1,5 @@
+#![cfg_attr(target_os = "macos", allow(dead_code))]
+
 //! UI draw command helpers for pushing primitives into the GPU command buffer.
 
 use super::buffers::*;

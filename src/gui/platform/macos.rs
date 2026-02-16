@@ -36,6 +36,16 @@ pub fn configure_native_tabs(window: &Window) {
     }
 }
 
+/// Shows the native tab bar (makes "+" button visible even with a single tab).
+pub fn show_tab_bar(window: &Window) {
+    let Some(ns_window) = get_ns_window(window) else {
+        return;
+    };
+    unsafe {
+        let _: () = msg_send![&ns_window, toggleTabBar: std::ptr::null::<AnyObject>()];
+    }
+}
+
 /// Adds `new_window` as a native macOS tab to the `existing` window's tab group.
 pub fn add_as_tab(existing: &Window, new_window: &Window) {
     let Some(existing_ns) = get_ns_window(existing) else {

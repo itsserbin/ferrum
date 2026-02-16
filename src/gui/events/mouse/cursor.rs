@@ -97,10 +97,11 @@ impl FerrumWindow {
 
         let cursor = if my < tab_bar_height {
             match self.tab_bar_hit(mx, my) {
-                TabBarHit::Tab(_) | TabBarHit::CloseTab(_) | TabBarHit::NewTab
-                | TabBarHit::WindowButton(_) => {
+                TabBarHit::Tab(_) | TabBarHit::CloseTab(_) | TabBarHit::NewTab => {
                     CursorIcon::Pointer
                 }
+                #[cfg(not(target_os = "macos"))]
+                TabBarHit::WindowButton(_) => CursorIcon::Pointer,
                 TabBarHit::Empty => CursorIcon::Default,
             }
         } else {
@@ -222,6 +223,7 @@ impl FerrumWindow {
     }
 
     /// Detaches the currently dragged tab into a new window (called during drag, button still held).
+    #[cfg(not(target_os = "macos"))]
     fn detach_dragged_tab(&mut self) {
         let Some(drag) = self.dragging_tab.take() else {
             return;

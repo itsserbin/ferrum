@@ -163,6 +163,7 @@ impl App {
 
     /// Creates a new window with a single detached tab.
     /// Immediately starts OS-level window drag (mouse button still held).
+    #[cfg(not(target_os = "macos"))]
     fn create_window_with_tab(
         &mut self,
         event_loop: &ActiveEventLoop,

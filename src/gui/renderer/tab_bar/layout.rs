@@ -1,3 +1,5 @@
+#![cfg_attr(target_os = "macos", allow(dead_code))]
+
 use crate::core::Color;
 use super::super::{TabBarHit, TabInfo};
 #[cfg(not(target_os = "macos"))]

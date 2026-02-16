@@ -36,6 +36,9 @@ impl ApplicationHandler for App {
                 win.window.set_title(&tab.title);
             }
             win.window.request_redraw();
+
+            #[cfg(target_os = "macos")]
+            platform::macos::show_tab_bar(&win.window);
         }
     }
 
@@ -198,6 +201,7 @@ impl App {
 
         for request in requests {
             match request {
+                #[cfg(not(target_os = "macos"))]
                 WindowRequest::DetachTab { tab, cursor_pos } => {
                     self.create_window_with_tab(event_loop, tab, cursor_pos);
                     // If source window is now empty, close it.

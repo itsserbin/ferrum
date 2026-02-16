@@ -1,3 +1,5 @@
+#![cfg_attr(target_os = "macos", allow(dead_code))]
+
 //! Hit testing and popup drawing for the GPU renderer.
 
 use crate::core::Color;

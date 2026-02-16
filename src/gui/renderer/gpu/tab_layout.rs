@@ -1,3 +1,5 @@
+#![cfg_attr(target_os = "macos", allow(dead_code))]
+
 //! Tab bar layout math and drawing helpers for the GPU renderer.
 
 use super::{

@@ -1,3 +1,5 @@
+#![cfg_attr(not(feature = "gpu"), allow(irrefutable_let_patterns))]
+
 use crate::core::Color;
 use crate::gui::renderer::backend::RendererBackend;
 #[cfg(not(target_os = "macos"))]

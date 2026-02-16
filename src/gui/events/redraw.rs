@@ -1,3 +1,4 @@
+#[cfg(feature = "gpu")]
 use crate::gui::renderer::backend::RendererBackend;
 use crate::gui::*;
 use std::time::{Duration, Instant};
