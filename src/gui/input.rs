@@ -20,6 +20,13 @@ fn csi_modifier_param(modifiers: ModifiersState) -> Option<u8> {
     has_modifier.then_some(param)
 }
 
+fn is_word_delete_combo(modifiers: ModifiersState) -> bool {
+    if modifiers.super_key() || modifiers.shift_key() {
+        return false;
+    }
+    modifiers.control_key() || modifiers.alt_key()
+}
+
 fn with_alt_prefix(mut bytes: Vec<u8>, modifiers: ModifiersState) -> Vec<u8> {
     if modifiers.alt_key() {
         let mut prefixed = Vec::with_capacity(bytes.len() + 1);
@@ -134,8 +141,11 @@ pub(super) fn key_to_bytes(key: &Key, modifiers: ModifiersState, decckm: bool) -
             match named {
                 NamedKey::Enter => Some(with_alt_prefix(vec![b'\r'], modifiers)),
                 NamedKey::Backspace => {
-                    let byte = if modifiers.control_key() { 0x17 } else { 0x7f };
-                    Some(with_alt_prefix(vec![byte], modifiers))
+                    if is_word_delete_combo(modifiers) {
+                        Some(vec![0x17]) // Ctrl+W — backward-kill-word
+                    } else {
+                        Some(with_alt_prefix(vec![0x7f], modifiers))
+                    }
                 }
                 NamedKey::Tab => {
                     if modifiers.shift_key() && !modifiers.control_key() && !modifiers.alt_key() {
@@ -182,7 +192,13 @@ pub(super) fn key_to_bytes(key: &Key, modifiers: ModifiersState, decckm: bool) -
                 NamedKey::Home => Some(encode_home_end_key('H', decckm, modifier_param)),
                 NamedKey::End => Some(encode_home_end_key('F', decckm, modifier_param)),
                 NamedKey::Insert => Some(csi_tilde(2, modifier_param)),
-                NamedKey::Delete => Some(csi_tilde(3, modifier_param)),
+                NamedKey::Delete => {
+                    if is_word_delete_combo(modifiers) {
+                        Some(b"\x1bd".to_vec()) // Alt+D — kill next word
+                    } else {
+                        Some(csi_tilde(3, modifier_param))
+                    }
+                }
                 NamedKey::PageUp => Some(csi_tilde(5, modifier_param)),
                 NamedKey::PageDown => Some(csi_tilde(6, modifier_param)),
                 _ => None,

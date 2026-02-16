@@ -11,16 +11,15 @@ enum HorizontalMotion {
     Right,
 }
 
-impl FerrumWindow {
-    fn copy_selection_and_clear(&mut self) {
-        self.copy_selection();
-        if let Some(tab) = self.active_tab_mut() {
-            tab.selection = None;
-        }
-        self.keyboard_selection_anchor = None;
-    }
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum MotionClass {
+    Word,
+    Symbol,
+    Whitespace,
+}
 
-    fn write_pty_bytes(&mut self, bytes: &[u8]) {
+impl FerrumWindow {
+    pub(in crate::gui) fn write_pty_bytes(&mut self, bytes: &[u8]) {
         if let Some(tab) = self.active_tab_mut() {
             tab.scroll_offset = 0;
             tab.selection = None;
@@ -45,7 +44,40 @@ impl FerrumWindow {
     }
 
     fn is_word_char_for_motion(ch: char) -> bool {
-        ch.is_alphanumeric() || ch == '_' || ch == '-' || ch == '.' || ch == '/'
+        ch.is_alphanumeric() || ch == '_'
+    }
+
+    fn motion_class(ch: char) -> MotionClass {
+        if ch.is_whitespace() {
+            MotionClass::Whitespace
+        } else if Self::is_word_char_for_motion(ch) {
+            MotionClass::Word
+        } else {
+            MotionClass::Symbol
+        }
+    }
+
+    fn is_plain_shift_selection_combo(modifiers: ModifiersState) -> bool {
+        modifiers.shift_key()
+            && !modifiers.control_key()
+            && !modifiers.alt_key()
+            && !modifiers.super_key()
+    }
+
+    fn is_native_word_selection_combo(modifiers: ModifiersState) -> bool {
+        if !modifiers.shift_key() || modifiers.super_key() {
+            return false;
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            modifiers.alt_key() && !modifiers.control_key()
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            modifiers.control_key() && !modifiers.alt_key()
+        }
     }
 
     fn word_motion_target_col_for_line(
@@ -64,26 +96,39 @@ impl FerrumWindow {
                     return 0;
                 }
 
-                let mut idx = cursor_col.saturating_sub(1).min(cols.saturating_sub(1));
-                while idx > 0 && !Self::is_word_char_for_motion(line[idx]) {
+                let mut idx = cursor_col.min(cols).saturating_sub(1);
+
+                while idx > 0 && Self::motion_class(line[idx]) == MotionClass::Whitespace {
                     idx -= 1;
                 }
-                if idx == 0 && !Self::is_word_char_for_motion(line[idx]) {
+
+                if idx == 0 && Self::motion_class(line[idx]) == MotionClass::Whitespace {
                     return 0;
                 }
-                while idx > 0 && Self::is_word_char_for_motion(line[idx - 1]) {
+
+                let class = Self::motion_class(line[idx]);
+                while idx > 0 && Self::motion_class(line[idx - 1]) == class {
                     idx -= 1;
                 }
+
                 idx
             }
             HorizontalMotion::Right => {
                 let mut idx = cursor_col.min(cols);
-                while idx < cols && !Self::is_word_char_for_motion(line[idx]) {
+
+                while idx < cols && Self::motion_class(line[idx]) == MotionClass::Whitespace {
                     idx += 1;
                 }
-                while idx < cols && Self::is_word_char_for_motion(line[idx]) {
+
+                if idx >= cols {
+                    return cols;
+                }
+
+                let class = Self::motion_class(line[idx]);
+                while idx < cols && Self::motion_class(line[idx]) == class {
                     idx += 1;
                 }
+
                 idx
             }
         }
@@ -151,12 +196,12 @@ impl FerrumWindow {
             _ => return false,
         };
 
-        if !self.modifiers.shift_key() || self.modifiers.control_key() || self.modifiers.super_key()
-        {
+        let modifiers = self.modifiers;
+        let word_motion = Self::is_native_word_selection_combo(modifiers);
+        if !Self::is_plain_shift_selection_combo(modifiers) && !word_motion {
             return false;
         }
 
-        let alt_word_motion = self.modifiers.alt_key();
         let (abs_row, anchor_col, cursor_col, target_col, grid_cols) = {
             let Some(tab) = self.active_tab_ref() else {
                 return false;
@@ -171,7 +216,7 @@ impl FerrumWindow {
             }
 
             let cursor_col = tab.terminal.cursor_col.min(grid_cols);
-            let target_col = if alt_word_motion {
+            let target_col = if word_motion {
                 Self::word_motion_target_col(tab, cursor_col, motion)
             } else {
                 match motion {
@@ -190,7 +235,7 @@ impl FerrumWindow {
             (abs_row, anchor_col, cursor_col, target_col, grid_cols)
         };
 
-        let bytes = if alt_word_motion {
+        let bytes = if word_motion {
             // Keep cursor and local selection in lock-step: synthesize character-wise arrows
             // for word-jumps instead of relying on shell-specific Meta+F/B semantics.
             Self::build_horizontal_cursor_move_bytes(cursor_col, target_col)
@@ -248,7 +293,7 @@ impl FerrumWindow {
         bytes
     }
 
-    fn delete_terminal_selection(&mut self, use_backspace: bool) -> bool {
+    pub(in crate::gui) fn delete_terminal_selection(&mut self, use_backspace: bool) -> bool {
         let (cursor_col, selection_start_col, selection_end_col) = {
             let Some(tab) = self.active_tab_ref() else {
                 return false;
@@ -317,6 +362,82 @@ impl FerrumWindow {
         self.delete_terminal_selection(use_backspace)
     }
 
+    fn is_word_delete_modifier(modifiers: ModifiersState) -> bool {
+        if modifiers.shift_key() || modifiers.super_key() {
+            return false;
+        }
+        modifiers.control_key() || modifiers.alt_key()
+    }
+
+    fn build_word_delete_bytes(cells_to_delete: usize, use_backspace: bool) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        let delete_seq: &[u8] = if use_backspace { b"\x7f" } else { b"\x1b[3~" };
+        for _ in 0..cells_to_delete {
+            bytes.extend_from_slice(delete_seq);
+        }
+        bytes
+    }
+
+    fn build_forward_word_delete_bytes(cursor_col: usize, target_col: usize) -> Vec<u8> {
+        let cells_to_delete = target_col.saturating_sub(cursor_col);
+        let mut bytes = Self::build_horizontal_cursor_move_bytes(cursor_col, target_col);
+        for _ in 0..cells_to_delete {
+            bytes.extend_from_slice(b"\x7f");
+        }
+        bytes
+    }
+
+    fn handle_word_delete_key(&mut self, key: &Key) -> bool {
+        let use_backspace = matches!(key, Key::Named(NamedKey::Backspace));
+        let use_delete = matches!(key, Key::Named(NamedKey::Delete));
+        if !use_backspace && !use_delete {
+            return false;
+        }
+
+        if !Self::is_word_delete_modifier(self.modifiers) {
+            return false;
+        }
+
+        if self.active_tab_ref().is_some_and(|tab| tab.selection.is_some()) {
+            if self.delete_terminal_selection(use_backspace) {
+                return true;
+            }
+        }
+
+        let (cursor_col, target_col) = {
+            let Some(tab) = self.active_tab_ref() else {
+                return false;
+            };
+            if tab.terminal.is_alt_screen() {
+                return false;
+            }
+
+            let grid_cols = tab.terminal.grid.cols;
+            if grid_cols == 0 {
+                return false;
+            }
+
+            let cursor_col = tab.terminal.cursor_col.min(grid_cols);
+            let target_col = if use_backspace {
+                Self::word_motion_target_col(tab, cursor_col, HorizontalMotion::Left)
+            } else {
+                Self::word_motion_target_col(tab, cursor_col, HorizontalMotion::Right)
+            };
+            (cursor_col, target_col)
+        };
+
+        let bytes = if use_backspace {
+            let cells_to_delete = cursor_col.saturating_sub(target_col);
+            Self::build_word_delete_bytes(cells_to_delete, true)
+        } else {
+            Self::build_forward_word_delete_bytes(cursor_col, target_col)
+        };
+        if !bytes.is_empty() {
+            self.write_pty_bytes(&bytes);
+        }
+        true
+    }
+
     fn normalize_non_text_key(logical: &Key, physical: &PhysicalKey) -> Key {
         let PhysicalKey::Code(code) = physical else {
             return logical.clone();
@@ -349,13 +470,33 @@ impl FerrumWindow {
             Key::Named(NamedKey::Control | NamedKey::Shift | NamedKey::Alt | NamedKey::Super)
         )
     }
+
+    fn is_text_replacement_key(key: &Key, modifiers: ModifiersState) -> bool {
+        if modifiers.control_key() || modifiers.alt_key() || modifiers.super_key() {
+            return false;
+        }
+
+        match key {
+            Key::Character(c) => !c.is_empty() && !c.chars().any(char::is_control),
+            Key::Named(NamedKey::Space) => true,
+            _ => false,
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::FerrumWindow;
     use super::HorizontalMotion;
-    use crate::gui::{Key, KeyCode, NamedKey, PhysicalKey};
+    use crate::gui::{Key, KeyCode, ModifiersState, NamedKey, PhysicalKey};
+
+    fn mods(ctrl: bool, shift: bool, alt: bool) -> ModifiersState {
+        let mut state = ModifiersState::empty();
+        state.set(ModifiersState::CONTROL, ctrl);
+        state.set(ModifiersState::SHIFT, shift);
+        state.set(ModifiersState::ALT, alt);
+        state
+    }
 
     #[test]
     fn selection_delete_bytes_with_backspace_moves_to_right_edge_then_erases() {
@@ -425,5 +566,111 @@ mod tests {
         let target =
             FerrumWindow::word_motion_target_col_for_line(&line, 0, HorizontalMotion::Right);
         assert_eq!(target, 5);
+    }
+
+    #[test]
+    fn word_motion_right_stops_at_symbol_boundaries() {
+        let line: Vec<char> = "foo/bar-baz".chars().collect();
+        let first = FerrumWindow::word_motion_target_col_for_line(&line, 0, HorizontalMotion::Right);
+        let second =
+            FerrumWindow::word_motion_target_col_for_line(&line, first, HorizontalMotion::Right);
+        let third =
+            FerrumWindow::word_motion_target_col_for_line(&line, second, HorizontalMotion::Right);
+
+        assert_eq!(first, 3); // "foo"
+        assert_eq!(second, 4); // "/"
+        assert_eq!(third, 7); // "bar"
+    }
+
+    #[test]
+    fn word_motion_left_stops_at_symbol_boundaries() {
+        let line: Vec<char> = "foo/bar-baz".chars().collect();
+        let target =
+            FerrumWindow::word_motion_target_col_for_line(&line, 8, HorizontalMotion::Left);
+        assert_eq!(target, 7); // stops on '-' group, not whole left side
+    }
+
+    #[test]
+    fn word_delete_modifier_accepts_ctrl_or_alt_without_shift_super() {
+        assert!(FerrumWindow::is_word_delete_modifier(mods(
+            true, false, false
+        )));
+        assert!(FerrumWindow::is_word_delete_modifier(mods(
+            false, false, true
+        )));
+        assert!(!FerrumWindow::is_word_delete_modifier(mods(
+            true, true, false
+        )));
+    }
+
+    #[test]
+    fn word_delete_bytes_backspace_repeats_del() {
+        let bytes = FerrumWindow::build_word_delete_bytes(3, true);
+        assert_eq!(bytes, b"\x7f\x7f\x7f");
+    }
+
+    #[test]
+    fn forward_word_delete_moves_right_then_erases_with_backspace() {
+        let bytes = FerrumWindow::build_forward_word_delete_bytes(3, 6);
+        assert_eq!(bytes, b"\x1b[C\x1b[C\x1b[C\x7f\x7f\x7f");
+    }
+
+    #[test]
+    fn plain_shift_selection_combo_is_detected() {
+        assert!(FerrumWindow::is_plain_shift_selection_combo(mods(
+            false, true, false
+        )));
+        assert!(!FerrumWindow::is_plain_shift_selection_combo(mods(
+            true, true, false
+        )));
+        assert!(!FerrumWindow::is_plain_shift_selection_combo(mods(
+            false, true, true
+        )));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn native_word_selection_combo_uses_alt_shift_on_macos() {
+        assert!(FerrumWindow::is_native_word_selection_combo(mods(
+            false, true, true
+        )));
+        assert!(!FerrumWindow::is_native_word_selection_combo(mods(
+            true, true, false
+        )));
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn native_word_selection_combo_uses_ctrl_shift_off_macos() {
+        assert!(FerrumWindow::is_native_word_selection_combo(mods(
+            true, true, false
+        )));
+        assert!(!FerrumWindow::is_native_word_selection_combo(mods(
+            false, true, true
+        )));
+    }
+
+    #[test]
+    fn text_replacement_key_detects_plain_printable_input() {
+        assert!(FerrumWindow::is_text_replacement_key(
+            &Key::Character("x".into()),
+            mods(false, false, false)
+        ));
+        assert!(FerrumWindow::is_text_replacement_key(
+            &Key::Character("X".into()),
+            mods(false, true, false)
+        ));
+    }
+
+    #[test]
+    fn text_replacement_key_rejects_modified_or_non_text_keys() {
+        assert!(!FerrumWindow::is_text_replacement_key(
+            &Key::Character("x".into()),
+            mods(true, false, false)
+        ));
+        assert!(!FerrumWindow::is_text_replacement_key(
+            &Key::Named(NamedKey::ArrowLeft),
+            mods(false, false, false)
+        ));
     }
 }

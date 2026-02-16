@@ -1,10 +1,34 @@
 use crate::gui::*;
 
 impl FerrumWindow {
+    fn physical_key_is(physical: &PhysicalKey, code: KeyCode) -> bool {
+        matches!(physical, PhysicalKey::Code(current) if *current == code)
+    }
+
+    fn physical_digit_index(physical: &PhysicalKey) -> Option<usize> {
+        let PhysicalKey::Code(code) = physical else {
+            return None;
+        };
+
+        match code {
+            KeyCode::Digit1 | KeyCode::Numpad1 => Some(0),
+            KeyCode::Digit2 | KeyCode::Numpad2 => Some(1),
+            KeyCode::Digit3 | KeyCode::Numpad3 => Some(2),
+            KeyCode::Digit4 | KeyCode::Numpad4 => Some(3),
+            KeyCode::Digit5 | KeyCode::Numpad5 => Some(4),
+            KeyCode::Digit6 | KeyCode::Numpad6 => Some(5),
+            KeyCode::Digit7 | KeyCode::Numpad7 => Some(6),
+            KeyCode::Digit8 | KeyCode::Numpad8 => Some(7),
+            KeyCode::Digit9 | KeyCode::Numpad9 => Some(8),
+            _ => None,
+        }
+    }
+
     pub(in crate::gui::events::keyboard) fn handle_ctrl_shortcuts(
         &mut self,
         _event_loop: &ActiveEventLoop,
         key: &Key,
+        physical: &PhysicalKey,
         _next_tab_id: &mut u64,
         _tx: &mpsc::Sender<PtyEvent>,
     ) -> bool {
@@ -12,96 +36,105 @@ impl FerrumWindow {
             return false;
         }
 
-        match key {
-            Key::Character(c) if c.as_str() == "t" => {
-                #[cfg(target_os = "macos")]
-                {
-                    self.pending_requests.push(WindowRequest::NewTab);
-                }
-                #[cfg(not(target_os = "macos"))]
-                {
-                    let size = self.window.inner_size();
-                    let (rows, cols) = self.calc_grid_size(size.width, size.height);
-                    self.new_tab(rows, cols, _next_tab_id, _tx);
-                }
-                true
+        let is_copy_key = matches!(key, Key::Named(NamedKey::Copy))
+            || Self::physical_key_is(physical, KeyCode::KeyC);
+        if is_copy_key {
+            if self.active_tab_ref().is_some_and(|t| t.selection.is_some()) {
+                self.copy_selection();
+                return true;
             }
-            Key::Character(c) if c.as_str() == "w" => {
-                self.close_tab(self.active_tab);
-                true
-            }
+            return false;
+        }
+
+        let is_paste_key = matches!(key, Key::Named(NamedKey::Paste))
+            || Self::physical_key_is(physical, KeyCode::KeyV);
+        if is_paste_key {
+            self.paste_clipboard();
+            return true;
+        }
+
+        if Self::physical_key_is(physical, KeyCode::KeyX) {
+            return self.cut_selection();
+        }
+
+        if Self::physical_key_is(physical, KeyCode::KeyT) {
             #[cfg(target_os = "macos")]
-            Key::Character(c) if c.as_str() == "n" => {
-                self.pending_requests.push(WindowRequest::NewWindow);
-                true
+            {
+                self.pending_requests.push(WindowRequest::NewTab);
             }
-            Key::Character(c) => {
-                let digit = c
-                    .as_str()
-                    .chars()
-                    .next()
-                    .and_then(|ch| ch.to_digit(10))
-                    .filter(|digit| (1..=9).contains(digit));
-                if let Some(digit) = digit {
-                    #[cfg(target_os = "macos")]
-                    {
-                        if digit == 9 {
-                            crate::gui::platform::macos::select_tab(&self.window, usize::MAX);
-                        } else {
-                            crate::gui::platform::macos::select_tab(
-                                &self.window,
-                                (digit - 1) as usize,
-                            );
-                        }
-                    }
-                    #[cfg(not(target_os = "macos"))]
-                    {
-                        if digit == 9 {
-                            if !self.tabs.is_empty() {
-                                self.active_tab = self.tabs.len() - 1;
-                            }
-                        } else {
-                            self.switch_tab((digit - 1) as usize);
-                        }
-                    }
-                    true
-                } else if c.as_str() == "c" {
-                    if self.active_tab_ref().is_some_and(|t| t.selection.is_some()) {
-                        self.copy_selection_and_clear();
-                        true
-                    } else {
-                        false
-                    }
-                } else if c.as_str().eq_ignore_ascii_case("x") {
-                    self.cut_selection()
-                } else if c.as_str() == "v" {
-                    self.paste_clipboard();
-                    true
-                } else if self.modifiers.super_key() && c.as_str().eq_ignore_ascii_case("a") {
-                    self.write_pty_bytes(b"\x01"); // Ctrl+A — beginning of line
-                    true
-                } else if self.modifiers.super_key() && c.as_str().eq_ignore_ascii_case("e") {
-                    self.write_pty_bytes(b"\x05"); // Ctrl+E — end of line
-                    true
-                } else if self.modifiers.super_key() && c.as_str().eq_ignore_ascii_case("b") {
-                    self.write_pty_bytes(b"\x1bb"); // Alt+B — previous word
-                    true
-                } else if self.modifiers.super_key() && c.as_str().eq_ignore_ascii_case("f") {
-                    self.write_pty_bytes(b"\x1bf"); // Alt+F — next word
-                    true
-                } else if self.modifiers.super_key() && c.as_str().eq_ignore_ascii_case("d") {
-                    self.write_pty_bytes(b"\x1bd"); // Alt+D — delete next word
-                    true
-                } else if self.modifiers.super_key() && c.as_str().eq_ignore_ascii_case("k") {
-                    self.write_pty_bytes(b"\x0b"); // Ctrl+K — delete to end of line
-                    true
-                } else if self.modifiers.super_key() && c.as_str().eq_ignore_ascii_case("u") {
-                    self.write_pty_bytes(b"\x15"); // Ctrl+U — delete to beginning of line
-                    true
+            #[cfg(not(target_os = "macos"))]
+            {
+                let size = self.window.inner_size();
+                let (rows, cols) = self.calc_grid_size(size.width, size.height);
+                self.new_tab(rows, cols, _next_tab_id, _tx);
+            }
+            return true;
+        }
+
+        if Self::physical_key_is(physical, KeyCode::KeyW) {
+            self.close_tab(self.active_tab);
+            return true;
+        }
+
+        if Self::physical_key_is(physical, KeyCode::KeyN) {
+            self.pending_requests.push(WindowRequest::NewWindow);
+            return true;
+        }
+
+        if let Some(digit_index) = Self::physical_digit_index(physical) {
+            #[cfg(target_os = "macos")]
+            {
+                if digit_index == 8 {
+                    crate::gui::platform::macos::select_tab(&self.window, usize::MAX);
                 } else {
-                    false
+                    crate::gui::platform::macos::select_tab(&self.window, digit_index);
                 }
             }
+            #[cfg(not(target_os = "macos"))]
+            {
+                if digit_index == 8 {
+                    if !self.tabs.is_empty() {
+                        self.active_tab = self.tabs.len() - 1;
+                    }
+                } else {
+                    self.switch_tab(digit_index);
+                }
+            }
+            return true;
+        }
+
+        if self.modifiers.super_key() {
+            if Self::physical_key_is(physical, KeyCode::KeyA) {
+                self.write_pty_bytes(b"\x01"); // Ctrl+A - beginning of line
+                return true;
+            }
+            if Self::physical_key_is(physical, KeyCode::KeyE) {
+                self.write_pty_bytes(b"\x05"); // Ctrl+E - end of line
+                return true;
+            }
+            if Self::physical_key_is(physical, KeyCode::KeyB) {
+                self.write_pty_bytes(b"\x1bb"); // Alt+B - previous word
+                return true;
+            }
+            if Self::physical_key_is(physical, KeyCode::KeyF) {
+                self.write_pty_bytes(b"\x1bf"); // Alt+F - next word
+                return true;
+            }
+            if Self::physical_key_is(physical, KeyCode::KeyD) {
+                self.write_pty_bytes(b"\x1bd"); // Alt+D - delete next word
+                return true;
+            }
+            if Self::physical_key_is(physical, KeyCode::KeyK) {
+                self.write_pty_bytes(b"\x0b"); // Ctrl+K - delete to end of line
+                return true;
+            }
+            if Self::physical_key_is(physical, KeyCode::KeyU) {
+                self.write_pty_bytes(b"\x15"); // Ctrl+U - delete to beginning of line
+                return true;
+            }
+        }
+
+        match key {
             Key::Named(NamedKey::Tab) => {
                 #[cfg(target_os = "macos")]
                 crate::gui::platform::macos::select_next_tab(&self.window);
@@ -115,11 +148,11 @@ impl FerrumWindow {
             }
             // Cmd/Super text navigation on all platforms.
             Key::Named(NamedKey::ArrowLeft) if self.modifiers.super_key() => {
-                self.write_pty_bytes(b"\x01"); // Ctrl+A — beginning of line
+                self.write_pty_bytes(b"\x01"); // Ctrl+A - beginning of line
                 true
             }
             Key::Named(NamedKey::ArrowRight) if self.modifiers.super_key() => {
-                self.write_pty_bytes(b"\x05"); // Ctrl+E — end of line
+                self.write_pty_bytes(b"\x05"); // Ctrl+E - end of line
                 true
             }
             Key::Named(NamedKey::ArrowUp) if self.modifiers.super_key() => {
@@ -137,11 +170,11 @@ impl FerrumWindow {
                 true
             }
             Key::Named(NamedKey::Backspace) if self.modifiers.super_key() => {
-                self.write_pty_bytes(b"\x15"); // Ctrl+U — delete to beginning of line
+                self.write_pty_bytes(b"\x15"); // Ctrl+U - delete to beginning of line
                 true
             }
             Key::Named(NamedKey::Delete) if self.modifiers.super_key() => {
-                self.write_pty_bytes(b"\x0b"); // Ctrl+K — delete to end of line
+                self.write_pty_bytes(b"\x0b"); // Ctrl+K - delete to end of line
                 true
             }
             _ => false,
@@ -151,6 +184,7 @@ impl FerrumWindow {
     pub(in crate::gui::events::keyboard) fn handle_ctrl_shift_shortcuts(
         &mut self,
         key: &Key,
+        physical: &PhysicalKey,
         _next_tab_id: &mut u64,
         _tx: &mpsc::Sender<PtyEvent>,
     ) -> bool {
@@ -158,25 +192,40 @@ impl FerrumWindow {
             return false;
         }
 
-        match key {
-            Key::Character(c) if c.as_str() == "T" || c.as_str() == "t" => {
-                let Some(closed) = self.closed_tabs.pop() else {
-                    return true;
-                };
-                #[cfg(target_os = "macos")]
-                {
-                    self.pending_requests.push(WindowRequest::ReopenTab {
-                        title: closed.title,
-                    });
-                }
-                #[cfg(not(target_os = "macos"))]
-                {
-                    let size = self.window.inner_size();
-                    let (rows, cols) = self.calc_grid_size(size.width, size.height);
-                    self.new_tab_with_title(rows, cols, Some(closed.title), _next_tab_id, _tx);
-                }
-                true
+        if Self::physical_key_is(physical, KeyCode::KeyT) {
+            let Some(closed) = self.closed_tabs.pop() else {
+                return true;
+            };
+            #[cfg(target_os = "macos")]
+            {
+                self.pending_requests.push(WindowRequest::ReopenTab {
+                    title: closed.title,
+                });
             }
+            #[cfg(not(target_os = "macos"))]
+            {
+                let size = self.window.inner_size();
+                let (rows, cols) = self.calc_grid_size(size.width, size.height);
+                self.new_tab_with_title(rows, cols, Some(closed.title), _next_tab_id, _tx);
+            }
+            return true;
+        }
+
+        let is_copy_key = matches!(key, Key::Named(NamedKey::Copy))
+            || Self::physical_key_is(physical, KeyCode::KeyC);
+        if is_copy_key {
+            self.copy_selection();
+            return true;
+        }
+
+        let is_paste_key = matches!(key, Key::Named(NamedKey::Paste))
+            || Self::physical_key_is(physical, KeyCode::KeyV);
+        if is_paste_key {
+            self.paste_clipboard();
+            return true;
+        }
+
+        match key {
             Key::Named(NamedKey::Tab) => {
                 #[cfg(target_os = "macos")]
                 crate::gui::platform::macos::select_previous_tab(&self.window);
@@ -193,46 +242,36 @@ impl FerrumWindow {
                 true
             }
             Key::Named(NamedKey::ArrowLeft) if self.modifiers.super_key() => {
-                self.write_pty_bytes(b"\x01"); // Ctrl+A — beginning of line
+                self.write_pty_bytes(b"\x01"); // Ctrl+A - beginning of line
                 true
             }
             Key::Named(NamedKey::ArrowRight) if self.modifiers.super_key() => {
-                self.write_pty_bytes(b"\x05"); // Ctrl+E — end of line
-                true
-            }
-            Key::Character(c) if c.as_str() == "C" || c.as_str() == "c" => {
-                self.copy_selection_and_clear();
-                true
-            }
-            Key::Character(c) if c.as_str() == "V" || c.as_str() == "v" => {
-                self.paste_clipboard();
+                self.write_pty_bytes(b"\x05"); // Ctrl+E - end of line
                 true
             }
             _ => false,
         }
     }
 
-    pub(in crate::gui::events::keyboard) fn handle_alt_shortcuts(&mut self, key: &Key) -> bool {
+    pub(in crate::gui::events::keyboard) fn handle_alt_shortcuts(
+        &mut self,
+        key: &Key,
+        physical: &PhysicalKey,
+    ) -> bool {
         if !self.modifiers.alt_key() {
             return false;
         }
 
         match key {
             Key::Named(NamedKey::Tab) => true, // Let Alt+Tab pass through to window manager.
-            Key::Character(c) => match c
-                .as_str()
-                .chars()
-                .next()
-                .and_then(|ch| ch.to_digit(10))
-                .filter(|digit| (1..=9).contains(digit))
-            {
-                Some(digit) => {
-                    self.switch_tab((digit - 1) as usize);
+            _ => {
+                if let Some(digit_index) = Self::physical_digit_index(physical) {
+                    self.switch_tab(digit_index);
                     true
+                } else {
+                    false
                 }
-                None => false,
-            },
-            _ => false,
+            }
         }
     }
 }

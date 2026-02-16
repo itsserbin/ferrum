@@ -35,14 +35,17 @@ impl FerrumWindow {
         if self.handle_selection_delete_key(&key) {
             return;
         }
+        if self.handle_word_delete_key(&key) {
+            return;
+        }
 
-        if self.handle_ctrl_shortcuts(event_loop, &key, next_tab_id, tx) {
+        if self.handle_ctrl_shortcuts(event_loop, &key, &event.physical_key, next_tab_id, tx) {
             return;
         }
-        if self.handle_ctrl_shift_shortcuts(&key, next_tab_id, tx) {
+        if self.handle_ctrl_shift_shortcuts(&key, &event.physical_key, next_tab_id, tx) {
             return;
         }
-        if self.handle_alt_shortcuts(&key) {
+        if self.handle_alt_shortcuts(&key, &event.physical_key) {
             return;
         }
 

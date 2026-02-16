@@ -110,6 +110,39 @@ fn ctrl_backspace_deletes_previous_word() {
 }
 
 #[test]
+fn alt_backspace_deletes_previous_word() {
+    let bytes = key_to_bytes(
+        &Key::Named(NamedKey::Backspace),
+        mods(false, false, true),
+        false,
+    )
+    .expect("Alt+Backspace should be encoded");
+    assert_eq!(bytes, vec![0x17]);
+}
+
+#[test]
+fn ctrl_delete_deletes_next_word() {
+    let bytes = key_to_bytes(
+        &Key::Named(NamedKey::Delete),
+        mods(true, false, false),
+        false,
+    )
+    .expect("Ctrl+Delete should be encoded");
+    assert_eq!(bytes, b"\x1bd");
+}
+
+#[test]
+fn alt_delete_deletes_next_word() {
+    let bytes = key_to_bytes(
+        &Key::Named(NamedKey::Delete),
+        mods(false, false, true),
+        false,
+    )
+    .expect("Alt+Delete should be encoded");
+    assert_eq!(bytes, b"\x1bd");
+}
+
+#[test]
 fn plain_backspace_is_del() {
     let bytes = key_to_bytes(
         &Key::Named(NamedKey::Backspace),

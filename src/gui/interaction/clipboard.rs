@@ -108,16 +108,24 @@ impl FerrumWindow {
         if text.is_empty() {
             return;
         }
-        if let Some(tab) = self.active_tab_mut() {
+
+        if self.active_tab_ref().is_some_and(|tab| tab.selection.is_some()) {
+            let _ = self.delete_terminal_selection(false);
+        }
+
+        let bytes = {
+            let Some(tab) = self.active_tab_mut() else {
+                return;
+            };
             tab.security.check_paste_payload(&text);
-            let bytes = if tab.security.should_wrap_paste() {
+            if tab.security.should_wrap_paste() {
                 Self::wrap_bracketed_paste(&text)
             } else {
                 text.as_bytes().to_vec()
-            };
-            let _ = tab.pty_writer.write_all(&bytes);
-            let _ = tab.pty_writer.flush();
-        }
+            }
+        };
+
+        self.write_pty_bytes(&bytes);
     }
 }
 
