@@ -59,6 +59,14 @@ impl RendererBackend {
         }
     }
 
+    pub fn set_tab_bar_visible(&mut self, visible: bool) {
+        match self {
+            RendererBackend::Cpu { renderer, .. } => renderer.set_tab_bar_visible(visible),
+            #[cfg(feature = "gpu")]
+            RendererBackend::Gpu(gpu) => Renderer::set_tab_bar_visible(gpu, visible),
+        }
+    }
+
     // ── Metrics ─────────────────────────────────────────────────────
 
     pub fn cell_width(&self) -> u32 {

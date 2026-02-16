@@ -15,7 +15,7 @@ impl FerrumWindow {
         // Reset blink phase so the cursor is immediately visible after keypress.
         self.cursor_blink_start = std::time::Instant::now();
 
-        let key = &event.logical_key;
+        let key = Self::normalize_non_text_key(&event.logical_key, &event.physical_key);
 
         // Escape cancels tab drag.
         if matches!(key, Key::Named(NamedKey::Escape)) {
@@ -28,25 +28,25 @@ impl FerrumWindow {
         }
 
         // Rename mode consumes all key input before PTY forwarding.
-        if self.handle_rename_input(key) {
+        if self.handle_rename_input(&key) {
             return; // Do not forward rename keystrokes to PTY.
         }
 
-        if self.handle_selection_delete_key(key) {
+        if self.handle_selection_delete_key(&key) {
             return;
         }
 
-        if self.handle_ctrl_shortcuts(event_loop, key, next_tab_id, tx) {
+        if self.handle_ctrl_shortcuts(event_loop, &key, next_tab_id, tx) {
             return;
         }
-        if self.handle_ctrl_shift_shortcuts(key, next_tab_id, tx) {
+        if self.handle_ctrl_shift_shortcuts(&key, next_tab_id, tx) {
             return;
         }
-        if self.handle_alt_shortcuts(key) {
+        if self.handle_alt_shortcuts(&key) {
             return;
         }
 
-        if Self::is_modifier_only_key(key) {
+        if Self::is_modifier_only_key(&key) {
             return;
         }
 
@@ -55,6 +55,6 @@ impl FerrumWindow {
             return;
         }
 
-        self.forward_key_to_pty(key);
+        self.forward_key_to_pty(&key);
     }
 }

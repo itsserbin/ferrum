@@ -122,6 +122,18 @@ impl traits::Renderer for GpuRenderer {
         self.rebuild_atlas();
     }
 
+    fn set_tab_bar_visible(&mut self, visible: bool) {
+        #[cfg(target_os = "macos")]
+        {
+            let _ = visible;
+            self.metrics.tab_bar_visible = false;
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            self.metrics.tab_bar_visible = visible;
+        }
+    }
+
     fn cell_width(&self) -> u32 {
         self.metrics.cell_width
     }

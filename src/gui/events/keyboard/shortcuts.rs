@@ -186,6 +186,14 @@ impl FerrumWindow {
                 }
                 true
             }
+            Key::Named(NamedKey::ArrowLeft) if self.modifiers.super_key() => {
+                self.write_pty_bytes(b"\x01"); // Ctrl+A — beginning of line
+                true
+            }
+            Key::Named(NamedKey::ArrowRight) if self.modifiers.super_key() => {
+                self.write_pty_bytes(b"\x05"); // Ctrl+E — end of line
+                true
+            }
             Key::Character(c) if c.as_str() == "C" || c.as_str() == "c" => {
                 self.copy_selection_and_clear();
                 true

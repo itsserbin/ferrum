@@ -16,7 +16,7 @@ use softbuffer::Context;
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
-use winit::keyboard::{Key, ModifiersState, NamedKey};
+use winit::keyboard::{Key, KeyCode, ModifiersState, NamedKey, PhysicalKey};
 use winit::window::{CursorIcon, ResizeDirection, Window, WindowId};
 
 use crate::core::terminal::Terminal;
@@ -176,6 +176,7 @@ impl App {
         if let Some(win) = self.windows.get_mut(&win_id) {
             win.tabs.push(tab);
             win.active_tab = 0;
+            win.refresh_tab_bar_visibility();
             // Mouse button is still held — initiate OS drag so the window follows cursor.
             let _ = win.window.drag_window();
             win.window.request_redraw();

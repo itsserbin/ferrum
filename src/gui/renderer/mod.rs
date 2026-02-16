@@ -80,6 +80,7 @@ pub struct CpuRenderer {
     font: Font,
     font_size: f32,
     ui_scale: f64,
+    tab_bar_visible: bool,
     pub cell_width: u32,
     pub cell_height: u32,
     ascent: i32,
@@ -99,6 +100,7 @@ impl CpuRenderer {
             font,
             font_size: 1.0,
             ui_scale: 1.0,
+            tab_bar_visible: false,
             cell_width: 1,
             cell_height: 1,
             ascent: 0,
@@ -156,7 +158,25 @@ impl CpuRenderer {
         #[cfg(target_os = "macos")]
         { 0 }
         #[cfg(not(target_os = "macos"))]
-        { self.scaled_px(TAB_BAR_HEIGHT) }
+        {
+            if self.tab_bar_visible {
+                self.scaled_px(TAB_BAR_HEIGHT)
+            } else {
+                0
+            }
+        }
+    }
+
+    pub(crate) fn set_tab_bar_visible(&mut self, visible: bool) {
+        #[cfg(target_os = "macos")]
+        {
+            let _ = visible;
+            self.tab_bar_visible = false;
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            self.tab_bar_visible = visible;
+        }
     }
 
     pub(crate) fn window_padding_px(&self) -> u32 {
@@ -386,6 +406,10 @@ impl CpuRenderer {
 impl traits::Renderer for CpuRenderer {
     fn set_scale(&mut self, scale_factor: f64) {
         CpuRenderer::set_scale(self, scale_factor);
+    }
+
+    fn set_tab_bar_visible(&mut self, visible: bool) {
+        CpuRenderer::set_tab_bar_visible(self, visible);
     }
 
     fn cell_width(&self) -> u32 {

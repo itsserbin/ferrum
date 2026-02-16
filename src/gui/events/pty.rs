@@ -39,6 +39,7 @@ impl FerrumWindow {
                     self.adjust_rename_after_tab_remove(idx);
                     self.adjust_security_popup_after_tab_remove(idx);
                     self.tabs.remove(idx);
+                    self.refresh_tab_bar_visibility();
                     if self.tabs.is_empty() {
                         self.pending_requests.push(WindowRequest::CloseWindow);
                         return;

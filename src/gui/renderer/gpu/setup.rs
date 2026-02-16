@@ -86,6 +86,7 @@ impl super::GpuRenderer {
             font_size: FONT_SIZE,
             ui_scale: 1.0,
             ascent: 0,
+            tab_bar_visible: false,
         };
         metrics.recompute(&font);
 

@@ -22,6 +22,7 @@ pub trait Renderer {
     // ── Lifecycle ────────────────────────────────────────────────────
 
     fn set_scale(&mut self, scale_factor: f64);
+    fn set_tab_bar_visible(&mut self, visible: bool);
 
     // ── Metrics ─────────────────────────────────────────────────────
 

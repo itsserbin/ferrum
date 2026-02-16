@@ -26,6 +26,7 @@ impl FerrumWindow {
             Ok(tab) => {
                 self.tabs.push(tab);
                 self.active_tab = self.tabs.len() - 1;
+                self.refresh_tab_bar_visibility();
             }
             Err(err) => {
                 eprintln!("Failed to create tab: {err}");

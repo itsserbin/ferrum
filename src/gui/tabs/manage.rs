@@ -2,6 +2,21 @@ use crate::gui::tabs::normalized_active_index_after_remove;
 use crate::gui::*;
 
 impl FerrumWindow {
+    pub(in crate::gui) fn refresh_tab_bar_visibility(&mut self) {
+        #[cfg(not(target_os = "macos"))]
+        {
+            let prev_height = self.backend.tab_bar_height_px();
+            self.backend.set_tab_bar_visible(self.tabs.len() > 1);
+            let next_height = self.backend.tab_bar_height_px();
+
+            if prev_height != next_height && !self.tabs.is_empty() {
+                let size = self.window.inner_size();
+                let (rows, cols) = self.calc_grid_size(size.width, size.height);
+                self.resize_all_tabs(rows, cols);
+            }
+        }
+    }
+
     /// Closes a tab by index.
     pub(in crate::gui) fn close_tab(&mut self, index: usize) {
         if index >= self.tabs.len() {
@@ -15,6 +30,7 @@ impl FerrumWindow {
         self.adjust_rename_after_tab_remove(index);
         self.adjust_security_popup_after_tab_remove(index);
         self.tabs.remove(index);
+        self.refresh_tab_bar_visibility();
 
         if self.tabs.is_empty() {
             self.pending_requests.push(WindowRequest::CloseWindow);

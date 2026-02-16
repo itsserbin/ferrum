@@ -13,6 +13,7 @@ pub struct FontMetrics {
     pub font_size: f32,
     pub ui_scale: f64,
     pub ascent: i32,
+    pub tab_bar_visible: bool,
 }
 
 impl FontMetrics {
@@ -47,7 +48,13 @@ impl FontMetrics {
         #[cfg(target_os = "macos")]
         { 0 }
         #[cfg(not(target_os = "macos"))]
-        { self.scaled_px(TAB_BAR_HEIGHT) }
+        {
+            if self.tab_bar_visible {
+                self.scaled_px(TAB_BAR_HEIGHT)
+            } else {
+                0
+            }
+        }
     }
 
     pub fn window_padding_px(&self) -> u32 {

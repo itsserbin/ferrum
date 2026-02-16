@@ -119,6 +119,8 @@ impl FerrumWindow {
 
             (tab_infos, tab_tooltip, drag_info, tab_offsets, show_tooltip)
         };
+        #[cfg(not(target_os = "macos"))]
+        let tab_bar_visible = self.backend.tab_bar_height_px() > 0;
 
         let RendererBackend::Cpu { renderer, surface } = &mut self.backend else {
             return;
@@ -211,27 +213,29 @@ impl FerrumWindow {
         // 5) Draw tab bar (not on macOS -- native tab bar).
         #[cfg(not(target_os = "macos"))]
         {
-            renderer.draw_tab_bar(
-                &mut buffer,
-                bw,
-                bh,
-                &tab_infos,
-                self.hovered_tab,
-                self.mouse_pos,
-                tab_offsets.as_deref(),
-            );
-
-            // 6) Draw drag overlay.
-            if let Some((source_index, current_x, indicator_x)) = drag_info {
-                renderer.draw_tab_drag_overlay(
+            if tab_bar_visible {
+                renderer.draw_tab_bar(
                     &mut buffer,
                     bw,
                     bh,
                     &tab_infos,
-                    source_index,
-                    current_x,
-                    indicator_x,
+                    self.hovered_tab,
+                    self.mouse_pos,
+                    tab_offsets.as_deref(),
                 );
+
+                // 6) Draw drag overlay.
+                if let Some((source_index, current_x, indicator_x)) = drag_info {
+                    renderer.draw_tab_drag_overlay(
+                        &mut buffer,
+                        bw,
+                        bh,
+                        &tab_infos,
+                        source_index,
+                        current_x,
+                        indicator_x,
+                    );
+                }
             }
         }
 
@@ -245,7 +249,7 @@ impl FerrumWindow {
         }
 
         #[cfg(not(target_os = "macos"))]
-        if show_tooltip {
+        if show_tooltip && tab_bar_visible {
             if let Some(ref title) = tab_tooltip {
                 renderer.draw_tab_tooltip(
                     &mut buffer,

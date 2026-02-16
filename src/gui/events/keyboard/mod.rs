@@ -99,6 +99,36 @@ impl FerrumWindow {
         true
     }
 
+    fn normalize_non_text_key(logical: &Key, physical: &PhysicalKey) -> Key {
+        if !matches!(logical, Key::Character(_)) {
+            return logical.clone();
+        }
+
+        let PhysicalKey::Code(code) = physical else {
+            return logical.clone();
+        };
+
+        let named = match code {
+            KeyCode::ArrowLeft => Some(NamedKey::ArrowLeft),
+            KeyCode::ArrowRight => Some(NamedKey::ArrowRight),
+            KeyCode::ArrowUp => Some(NamedKey::ArrowUp),
+            KeyCode::ArrowDown => Some(NamedKey::ArrowDown),
+            KeyCode::Home => Some(NamedKey::Home),
+            KeyCode::End => Some(NamedKey::End),
+            KeyCode::PageUp => Some(NamedKey::PageUp),
+            KeyCode::PageDown => Some(NamedKey::PageDown),
+            KeyCode::Insert => Some(NamedKey::Insert),
+            KeyCode::Delete => Some(NamedKey::Delete),
+            KeyCode::Backspace => Some(NamedKey::Backspace),
+            KeyCode::Tab => Some(NamedKey::Tab),
+            KeyCode::Enter => Some(NamedKey::Enter),
+            KeyCode::Escape => Some(NamedKey::Escape),
+            _ => None,
+        };
+
+        named.map_or_else(|| logical.clone(), Key::Named)
+    }
+
     fn is_modifier_only_key(key: &Key) -> bool {
         matches!(
             key,
@@ -110,6 +140,7 @@ impl FerrumWindow {
 #[cfg(test)]
 mod tests {
     use super::FerrumWindow;
+    use crate::gui::{Key, KeyCode, NamedKey, PhysicalKey};
 
     #[test]
     fn selection_delete_bytes_with_backspace_moves_to_right_edge_then_erases() {
@@ -121,5 +152,23 @@ mod tests {
     fn selection_delete_bytes_with_delete_moves_to_left_edge_then_erases() {
         let bytes = FerrumWindow::build_selection_delete_bytes(10, 6, 2, false);
         assert_eq!(bytes, b"\x1b[D\x1b[D\x1b[D\x1b[D\x1b[3~\x1b[3~");
+    }
+
+    #[test]
+    fn normalize_non_text_key_maps_character_arrow_from_physical_code() {
+        let key = FerrumWindow::normalize_non_text_key(
+            &Key::Character("".into()),
+            &PhysicalKey::Code(KeyCode::ArrowLeft),
+        );
+        assert_eq!(key, Key::Named(NamedKey::ArrowLeft));
+    }
+
+    #[test]
+    fn normalize_non_text_key_keeps_regular_character_keys() {
+        let key = FerrumWindow::normalize_non_text_key(
+            &Key::Character("x".into()),
+            &PhysicalKey::Code(KeyCode::KeyX),
+        );
+        assert_eq!(key, Key::Character("x".into()));
     }
 }
