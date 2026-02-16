@@ -30,6 +30,11 @@ impl FerrumWindow {
                 self.close_tab(self.active_tab);
                 true
             }
+            #[cfg(target_os = "macos")]
+            Key::Character(c) if c.as_str() == "n" => {
+                self.pending_requests.push(WindowRequest::NewWindow);
+                true
+            }
             Key::Character(c) => {
                 let digit = c
                     .as_str()

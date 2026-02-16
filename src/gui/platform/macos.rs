@@ -1,10 +1,15 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use objc2::rc::Retained;
-use objc2::runtime::AnyObject;
+use objc2::runtime::{AnyClass, AnyObject};
 use objc2::{msg_send, msg_send_id};
 use objc2_app_kit::{NSView, NSWindow, NSWindowTabbingMode};
 use objc2_foundation::ns_string;
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use winit::window::Window;
+
+/// Flag: native "+" button was clicked, need to create a new tab.
+static NEW_TAB_REQUESTED: AtomicBool = AtomicBool::new(false);
 
 /// Extracts the NSWindow from a winit Window via raw-window-handle.
 fn get_ns_window(window: &Window) -> Option<Retained<NSWindow>> {
@@ -83,5 +88,57 @@ pub fn select_previous_tab(window: &Window) {
     };
     unsafe {
         let _: () = msg_send![&ns_window, selectPreviousTab: std::ptr::null::<AnyObject>()];
+    }
+}
+
+/// Returns true and resets the flag if the native "+" button was clicked.
+pub fn take_new_tab_request() -> bool {
+    NEW_TAB_REQUESTED.swap(false, Ordering::SeqCst)
+}
+
+/// Installs a handler for the native macOS tab bar "+" button.
+///
+/// Dynamically adds `newWindowForTab:` to the running NSApplication's class.
+/// When the "+" button is clicked, sets an atomic flag that the event loop
+/// polls to create a new tab.
+pub fn install_new_tab_responder() {
+    static INSTALLED: AtomicBool = AtomicBool::new(false);
+    if INSTALLED.swap(true, Ordering::SeqCst) {
+        return;
+    }
+
+    unsafe extern "C" fn handle_new_window_for_tab(
+        _this: *mut objc2::ffi::objc_object,
+        _cmd: *const objc2::ffi::objc_selector,
+        _sender: *mut objc2::ffi::objc_object,
+    ) {
+        NEW_TAB_REQUESTED.store(true, Ordering::SeqCst);
+    }
+
+    unsafe {
+        let Some(ns_app_cls) = AnyClass::get("NSApplication") else {
+            return;
+        };
+        let app: Retained<AnyObject> = msg_send_id![ns_app_cls, sharedApplication];
+        let cls = objc2::ffi::object_getClass(
+            (&*app as *const AnyObject).cast(),
+        );
+        if cls.is_null() {
+            return;
+        }
+        let sel = objc2::ffi::sel_registerName(c"newWindowForTab:".as_ptr());
+        objc2::ffi::class_addMethod(
+            cls as *mut _,
+            sel,
+            Some(core::mem::transmute(
+                handle_new_window_for_tab
+                    as unsafe extern "C" fn(
+                        *mut objc2::ffi::objc_object,
+                        *const objc2::ffi::objc_selector,
+                        *mut objc2::ffi::objc_object,
+                    ),
+            )),
+            c"v@:@".as_ptr(),
+        );
     }
 }

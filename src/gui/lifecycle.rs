@@ -22,6 +22,10 @@ impl ApplicationHandler for App {
             return;
         };
 
+        // Install native macOS "+" button handler before creating first tab.
+        #[cfg(target_os = "macos")]
+        platform::macos::install_new_tab_responder();
+
         // Create initial tab in the first window.
         if let Some(win) = self.windows.get_mut(&win_id) {
             let size = win.window.inner_size();
@@ -122,6 +126,22 @@ impl ApplicationHandler for App {
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         self.drain_pty_events(event_loop);
 
+        // Handle native macOS "+" button clicks (newWindowForTab: action).
+        #[cfg(target_os = "macos")]
+        if platform::macos::take_new_tab_request() {
+            let focused_id = self
+                .windows
+                .iter()
+                .find(|(_, w)| w.window.has_focus())
+                .map(|(id, _)| *id);
+            if let Some(win_id) = focused_id {
+                if let Some(win) = self.windows.get_mut(&win_id) {
+                    win.pending_requests.push(WindowRequest::NewTab);
+                }
+                self.process_window_requests(event_loop, win_id);
+            }
+        }
+
         let now = std::time::Instant::now();
         let mut next_wakeup: Option<std::time::Instant> = None;
 
@@ -191,6 +211,20 @@ impl App {
                 }
                 WindowRequest::CloseWindow => {
                     self.windows.remove(&window_id);
+                }
+                #[cfg(target_os = "macos")]
+                WindowRequest::NewWindow => {
+                    if let Some(new_id) = self.create_window(event_loop, None) {
+                        if let Some(new_win) = self.windows.get_mut(&new_id) {
+                            let size = new_win.window.inner_size();
+                            let (rows, cols) = new_win.calc_grid_size(size.width, size.height);
+                            new_win.new_tab(rows, cols, &mut self.next_tab_id, &self.tx);
+                            if let Some(tab) = new_win.tabs.first() {
+                                new_win.window.set_title(&tab.title);
+                            }
+                            new_win.window.request_redraw();
+                        }
+                    }
                 }
                 #[cfg(target_os = "macos")]
                 WindowRequest::NewTab => {

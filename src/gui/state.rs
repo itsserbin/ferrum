@@ -93,6 +93,9 @@ pub(super) enum WindowRequest {
     },
     /// Close this window (all tabs gone or user closed).
     CloseWindow,
+    /// Create a new standalone window (Cmd+N on macOS).
+    #[cfg(target_os = "macos")]
+    NewWindow,
     /// Create a new native macOS tab (new window in tab group).
     #[cfg(target_os = "macos")]
     NewTab,
