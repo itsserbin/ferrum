@@ -46,6 +46,7 @@ pub(super) const SCROLLBAR_HOVER_COLOR: Color = Color {
 };
 
 /// Tab bar height in pixels.
+#[cfg(not(target_os = "macos"))]
 pub const TAB_BAR_HEIGHT: u32 = 36;
 
 /// Outer terminal padding inside the window.

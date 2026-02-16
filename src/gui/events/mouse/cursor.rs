@@ -2,12 +2,15 @@ use crate::gui::renderer::TabBarHit;
 use crate::gui::*;
 
 /// Vertical distance from tab bar center at which a drag becomes a detach.
+#[cfg(not(target_os = "macos"))]
 const DETACH_THRESHOLD_Y: u32 = 30;
 
 /// Minimum mouse movement to activate a tab drag (logical pixels).
+#[cfg(not(target_os = "macos"))]
 const DRAG_ACTIVATION_THRESHOLD: u32 = 5;
 
 /// Resize edge thickness in logical pixels.
+#[cfg(not(target_os = "macos"))]
 const RESIZE_EDGE: u32 = 4;
 
 /// Detects whether the cursor is near a window edge for resize purposes.

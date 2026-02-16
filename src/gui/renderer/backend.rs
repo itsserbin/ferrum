@@ -167,6 +167,7 @@ impl RendererBackend {
         }
     }
 
+    #[cfg(not(target_os = "macos"))]
     pub fn tab_hover_tooltip<'a>(
         &self,
         tabs: &'a [TabInfo<'a>],

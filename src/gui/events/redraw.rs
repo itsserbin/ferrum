@@ -10,6 +10,7 @@ const SCROLLBAR_FADE_END: Duration = Duration::from_millis(1800);
 const ANIMATION_FRAME_INTERVAL: Duration = Duration::from_millis(16);
 
 /// Quadratic ease-out: fast start, smooth deceleration.
+#[cfg(not(target_os = "macos"))]
 fn ease_out(t: f32) -> f32 {
     1.0 - (1.0 - t) * (1.0 - t)
 }
@@ -42,6 +43,7 @@ impl FerrumWindow {
     }
 
     /// Returns current animation offsets for tab slide animation (or None if not animating).
+    #[cfg(not(target_os = "macos"))]
     pub(in crate::gui) fn tab_animation_offsets(&self) -> Option<Vec<f32>> {
         let anim = self.tab_reorder_animation.as_ref()?;
         let elapsed = anim.started.elapsed().as_secs_f32();

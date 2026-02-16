@@ -37,12 +37,16 @@ pub fn configure_native_tabs(window: &Window) {
 }
 
 /// Shows the native tab bar (makes "+" button visible even with a single tab).
+/// Uses NSWindowTabGroup.tabBarVisible (macOS 12+) for reliable behavior.
 pub fn show_tab_bar(window: &Window) {
     let Some(ns_window) = get_ns_window(window) else {
         return;
     };
     unsafe {
-        let _: () = msg_send![&ns_window, toggleTabBar: std::ptr::null::<AnyObject>()];
+        let tab_group: Option<Retained<AnyObject>> = msg_send![&ns_window, tabGroup];
+        if let Some(group) = tab_group {
+            let _: () = msg_send![&group, setTabBarVisible: true];
+        }
     }
 }
 
