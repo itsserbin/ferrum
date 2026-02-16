@@ -81,9 +81,47 @@ impl FerrumWindow {
             }
         });
 
+        #[allow(unused_mut)]
+        let mut terminal = Terminal::new(rows, cols);
+
+        // Show "Last login" greeting like macOS Terminal.app.
+        #[cfg(target_os = "macos")]
+        {
+            use std::fmt::Write as _;
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            // Format timestamp manually (avoid chrono dep).
+            let secs_per_day = 86400;
+            let secs_per_hour = 3600;
+            let secs_per_min = 60;
+            let days_since_epoch = now / secs_per_day;
+            let time_of_day = now % secs_per_day;
+            let hour = time_of_day / secs_per_hour;
+            let min = (time_of_day % secs_per_hour) / secs_per_min;
+            let sec = time_of_day % secs_per_min;
+            // Day of week (Jan 1 1970 = Thursday = 4).
+            let dow = ((days_since_epoch + 4) % 7) as usize;
+            let dow_names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+            // Date from days since epoch.
+            let (year, month, day) = days_to_ymd(days_since_epoch);
+            let mon_names = [
+                "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+            ];
+            let mut msg = String::new();
+            let _ = write!(
+                msg,
+                "Last login: {} {} {:2} {:02}:{:02}:{:02} {}\r\n",
+                dow_names[dow], mon_names[month as usize - 1], day, hour, min, sec, year,
+            );
+            terminal.process(msg.as_bytes());
+        }
+
         Ok(TabState {
             id,
-            terminal: Terminal::new(rows, cols),
+            terminal,
             session,
             pty_writer,
             title: title.unwrap_or_else(|| format!("bash #{}", id + 1)),
@@ -93,4 +131,21 @@ impl FerrumWindow {
             scrollbar: ScrollbarState::new(),
         })
     }
+}
+
+/// Converts days since Unix epoch to (year, month, day).
+#[cfg(target_os = "macos")]
+fn days_to_ymd(days: u64) -> (u64, u64, u64) {
+    // Civil calendar algorithm from Howard Hinnant.
+    let z = days + 719468;
+    let era = z / 146097;
+    let doe = z - era * 146097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    (y, m, d)
 }
