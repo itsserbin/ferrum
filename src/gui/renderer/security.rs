@@ -117,8 +117,8 @@ impl Renderer {
     ) -> (u32, u32, u32, u32) {
         let width = popup.width(self.cell_width).min(buf_width as u32);
         let height = popup.height(self.cell_height).min(buf_height as u32);
-        let x = popup.x.min(buf_width as u32 - width);
-        let y = popup.y.min(buf_height as u32 - height);
+        let x = popup.x.min((buf_width as u32).saturating_sub(width));
+        let y = popup.y.min((buf_height as u32).saturating_sub(height));
         (x, y, width, height)
     }
 
@@ -142,29 +142,26 @@ impl Renderer {
         popup: &SecurityPopup,
     ) {
         let (mx, my, mw, mh) = self.security_popup_rect(popup, buf_width, buf_height);
-        let mx = mx as usize;
-        let my = my as usize;
-        let mw = mw as usize;
-        let mh = mh as usize;
+        let mx_usize = mx as usize;
+        let my_usize = my as usize;
+        let mw_usize = mw as usize;
         let line_h = popup.line_height(self.cell_height) as usize;
 
-        let bg_pixel = MENU_BG.to_pixel();
-        let border_pixel = SEPARATOR_COLOR.to_pixel();
-        let header_pixel = SECURITY_ACCENT.to_pixel();
-
-        for py in my..((my + mh).min(buf_height)) {
-            for px in mx..((mx + mw).min(buf_width)) {
-                let idx = py * buf_width + px;
-                if idx >= buffer.len() {
-                    continue;
-                }
-                let is_border = py == my || py == my + mh - 1 || px == mx || px == mx + mw - 1;
-                buffer[idx] = if is_border { border_pixel } else { bg_pixel };
-            }
+        let bg_pixel = Color {
+            r: 36,
+            g: 38,
+            b: 52,
         }
+        .to_pixel();
+        let header_pixel = SECURITY_ACCENT.to_pixel();
+        let radius = self.scaled_px(8);
 
-        let header_y = my as u32 + self.scaled_px(2);
-        let header_x = mx as u32 + self.cell_width / 2;
+        self.draw_elevated_panel(
+            buffer, buf_width, buf_height, mx, my, mw, mh, radius, bg_pixel,
+        );
+
+        let header_y = my + self.scaled_px(2);
+        let header_x = mx + self.cell_width / 2;
         for (i, ch) in popup.title.chars().enumerate() {
             let x = header_x + i as u32 * self.cell_width;
             self.draw_char_at(
@@ -178,20 +175,21 @@ impl Renderer {
             );
         }
 
-        let sep_y = my + line_h;
+        let sep_y = my_usize + line_h;
         if sep_y < buf_height {
-            for px in (mx + 1)..(mx + mw - 1) {
+            for px in (mx_usize + self.scaled_px(3) as usize)
+                ..(mx_usize + mw_usize).saturating_sub(self.scaled_px(3) as usize)
+            {
                 let idx = sep_y * buf_width + px;
                 if idx < buffer.len() {
-                    buffer[idx] = header_pixel;
+                    buffer[idx] = Self::blend_pixel(buffer[idx], header_pixel, 180);
                 }
             }
         }
 
         for (line_idx, line) in popup.lines.iter().enumerate() {
-            let text_y =
-                my as u32 + line_h as u32 + self.scaled_px(4) + line_idx as u32 * line_h as u32;
-            let text_x = mx as u32 + self.cell_width / 2;
+            let text_y = my + line_h as u32 + self.scaled_px(4) + line_idx as u32 * line_h as u32;
+            let text_x = mx + self.cell_width / 2;
             let mut chars = String::from("• ");
             chars.push_str(line);
             for (i, ch) in chars.chars().enumerate() {

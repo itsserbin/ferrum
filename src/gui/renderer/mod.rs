@@ -51,13 +51,6 @@ pub(super) const TAB_BAR_BG: Color = Color {
     b: 27,
 };
 
-/// Divider color (Catppuccin Mocha Surface0 #313244).
-pub(super) const SEPARATOR_COLOR: Color = Color {
-    r: 49,
-    g: 50,
-    b: 68,
-};
-
 /// Hover background — subtle lift between Crust and Surface0 (#232334).
 pub(super) const TAB_HOVER_BG: Color = Color {
     r: 35,
@@ -86,22 +79,12 @@ pub(super) const SECURITY_ACCENT: Color = Color {
     b: 175,
 };
 
-/// Context-menu background.
-pub(super) const MENU_BG: Color = Color {
-    r: 30,
-    g: 30,
-    b: 46,
-};
-
 /// Context-menu hover background.
 pub(super) const MENU_HOVER_BG: Color = Color {
     r: 69,
     g: 71,
     b: 90,
 };
-
-/// Top-left corner radius for the first tab (window corner).
-pub(super) const FIRST_TAB_RADIUS: u32 = 6;
 
 /// Minimum tab width before switching to number-only display.
 pub(super) const MIN_TAB_WIDTH_FOR_TITLE: u32 = 60;
@@ -266,10 +249,6 @@ impl Renderer {
         self.scaled_px(SCROLLBAR_MARGIN)
     }
 
-    pub(crate) fn first_tab_radius_px(&self) -> u32 {
-        self.scaled_px(FIRST_TAB_RADIUS)
-    }
-
     /// Draws one glyph at arbitrary pixel coordinates (used by tab bar and overlays).
     #[allow(clippy::too_many_arguments)]
     fn draw_char_at(
@@ -359,5 +338,160 @@ impl Renderer {
                 }
             }
         }
+    }
+
+    pub(in crate::gui::renderer) fn blend_pixel(dst: u32, src: u32, alpha: u8) -> u32 {
+        if alpha == 255 {
+            return src;
+        }
+        if alpha == 0 {
+            return dst;
+        }
+
+        let a = alpha as u32;
+        let inv = 255 - a;
+
+        let dr = (dst >> 16) & 0xFF;
+        let dg = (dst >> 8) & 0xFF;
+        let db = dst & 0xFF;
+
+        let sr = (src >> 16) & 0xFF;
+        let sg = (src >> 8) & 0xFF;
+        let sb = src & 0xFF;
+
+        let r = (sr * a + dr * inv + 127) / 255;
+        let g = (sg * a + dg * inv + 127) / 255;
+        let b = (sb * a + db * inv + 127) / 255;
+
+        (r << 16) | (g << 8) | b
+    }
+
+    pub(in crate::gui::renderer) fn draw_rounded_rect(
+        &self,
+        buffer: &mut [u32],
+        buf_width: usize,
+        buf_height: usize,
+        x: i32,
+        y: i32,
+        w: u32,
+        h: u32,
+        radius: u32,
+        color: u32,
+        alpha: u8,
+    ) {
+        if w == 0 || h == 0 || alpha == 0 || buf_width == 0 || buf_height == 0 {
+            return;
+        }
+
+        let r = radius.min(w / 2).min(h / 2) as i32;
+        let max_x = buf_width as i32 - 1;
+        let max_y = buf_height as i32 - 1;
+
+        for py in 0..h as i32 {
+            let sy = y + py;
+            if sy < 0 || sy > max_y {
+                continue;
+            }
+
+            for px in 0..w as i32 {
+                let sx = x + px;
+                if sx < 0 || sx > max_x {
+                    continue;
+                }
+
+                if r > 0 {
+                    let in_tl = px < r && py < r;
+                    let in_tr = px >= w as i32 - r && py < r;
+                    let in_bl = px < r && py >= h as i32 - r;
+                    let in_br = px >= w as i32 - r && py >= h as i32 - r;
+
+                    if in_tl || in_tr || in_bl || in_br {
+                        let cx = if in_tl || in_bl {
+                            r as f32 - 0.5
+                        } else {
+                            (w as i32 - r) as f32 - 0.5
+                        };
+                        let cy = if in_tl || in_tr {
+                            r as f32 - 0.5
+                        } else {
+                            (h as i32 - r) as f32 - 0.5
+                        };
+                        let dx = px as f32 + 0.5 - cx;
+                        let dy = py as f32 + 0.5 - cy;
+                        let rr = r as f32;
+                        if dx * dx + dy * dy > rr * rr {
+                            continue;
+                        }
+                    }
+                }
+
+                let idx = sy as usize * buf_width + sx as usize;
+                if idx >= buffer.len() {
+                    continue;
+                }
+                buffer[idx] = Self::blend_pixel(buffer[idx], color, alpha);
+            }
+        }
+    }
+
+    pub(in crate::gui::renderer) fn draw_elevated_panel(
+        &self,
+        buffer: &mut [u32],
+        buf_width: usize,
+        buf_height: usize,
+        x: u32,
+        y: u32,
+        w: u32,
+        h: u32,
+        radius: u32,
+        fill: u32,
+    ) {
+        let shadow = 0x000000;
+        let step1 = self.scaled_px(1) as i32;
+        let step2 = self.scaled_px(3) as i32;
+        let step3 = self.scaled_px(6) as i32;
+        let x_i = x as i32;
+        let y_i = y as i32;
+
+        self.draw_rounded_rect(
+            buffer,
+            buf_width,
+            buf_height,
+            x_i,
+            y_i + step1,
+            w,
+            h,
+            radius,
+            shadow,
+            46,
+        );
+        self.draw_rounded_rect(
+            buffer,
+            buf_width,
+            buf_height,
+            x_i,
+            y_i + step2,
+            w,
+            h,
+            radius + self.scaled_px(1),
+            shadow,
+            28,
+        );
+        self.draw_rounded_rect(
+            buffer,
+            buf_width,
+            buf_height,
+            x_i,
+            y_i + step3,
+            w,
+            h,
+            radius + self.scaled_px(2),
+            shadow,
+            16,
+        );
+
+        self.draw_rounded_rect(
+            buffer, buf_width, buf_height, x_i, y_i, w, h, radius, fill, 255,
+        );
     }
 }

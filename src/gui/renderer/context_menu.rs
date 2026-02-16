@@ -63,43 +63,46 @@ impl Renderer {
         buf_height: usize,
         menu: &ContextMenu,
     ) {
-        let mw = menu.width(self.cell_width) as usize;
+        let mw = menu.width(self.cell_width);
         let ih = menu.item_height(self.cell_height);
-        let mh = menu.height(self.cell_height) as usize;
-        let mx = menu.x as usize;
-        let my = menu.y as usize;
+        let mh = menu.height(self.cell_height);
+        let mx = menu.x;
+        let my = menu.y;
 
-        let bg_pixel = MENU_BG.to_pixel();
-        let border_pixel = SEPARATOR_COLOR.to_pixel();
-        let hover_pixel = MENU_HOVER_BG.to_pixel();
-
-        // Draw menu background and border.
-        for py in my..((my + mh).min(buf_height)) {
-            for px in mx..((mx + mw).min(buf_width)) {
-                let idx = py * buf_width + px;
-                if idx < buffer.len() {
-                    let is_border = py == my || py == my + mh - 1 || px == mx || px == mx + mw - 1;
-                    buffer[idx] = if is_border { border_pixel } else { bg_pixel };
-                }
-            }
+        let bg_pixel = Color {
+            r: 36,
+            g: 38,
+            b: 52,
         }
+        .to_pixel();
+        let hover_pixel = MENU_HOVER_BG.to_pixel();
+        let radius = self.scaled_px(8);
+
+        self.draw_elevated_panel(
+            buffer, buf_width, buf_height, mx, my, mw, mh, radius, bg_pixel,
+        );
 
         // Draw menu items.
         for (i, (action, label)) in menu.items.iter().enumerate() {
-            let item_y = my as u32 + 2 + i as u32 * ih;
+            let item_y = my + self.scaled_px(2) + i as u32 * ih;
 
             // Hover highlight for the active row.
             if menu.hover_index == Some(i) {
-                for py in item_y as usize..(item_y + ih) as usize {
-                    for px in (mx + 1)..(mx + mw - 1) {
-                        if py < buf_height && px < buf_width {
-                            let idx = py * buf_width + px;
-                            if idx < buffer.len() {
-                                buffer[idx] = hover_pixel;
-                            }
-                        }
-                    }
-                }
+                let hover_x = mx + self.scaled_px(4);
+                let hover_w = mw.saturating_sub(self.scaled_px(8));
+                let hover_h = ih.saturating_sub(self.scaled_px(1));
+                self.draw_rounded_rect(
+                    buffer,
+                    buf_width,
+                    buf_height,
+                    hover_x as i32,
+                    item_y as i32,
+                    hover_w,
+                    hover_h,
+                    self.scaled_px(6),
+                    hover_pixel,
+                    255,
+                );
             }
 
             let fg = if *action == ContextAction::Close {
@@ -112,11 +115,11 @@ impl Renderer {
                 Color::DEFAULT_FG
             };
 
-            let text_x = mx as u32 + self.cell_width;
-            let text_y = item_y + 2;
+            let text_x = mx + self.cell_width;
+            let text_y = item_y + self.scaled_px(2);
             for (ci, ch) in label.chars().enumerate() {
                 let cx = text_x + ci as u32 * self.cell_width;
-                if cx as usize + self.cell_width as usize <= mx + mw {
+                if cx + self.cell_width <= mx + mw {
                     self.draw_char_at(buffer, buf_width, buf_height, cx, text_y, ch, fg);
                 }
             }

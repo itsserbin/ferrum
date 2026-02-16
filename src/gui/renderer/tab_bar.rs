@@ -174,42 +174,6 @@ impl Renderer {
         None
     }
 
-    /// Draws a rectangle with only the top-left corner rounded.
-    fn draw_rect_with_top_left_radius(
-        buffer: &mut [u32],
-        buf_w: usize,
-        x: u32,
-        y: u32,
-        w: u32,
-        h: u32,
-        radius: u32,
-        color: u32,
-    ) {
-        let r = radius as f32;
-        for dy in 0..h {
-            for dx in 0..w {
-                let px = (x + dx) as usize;
-                let py = (y + dy) as usize;
-                if px >= buf_w {
-                    continue;
-                }
-
-                // Only clip the top-left corner.
-                if dy < radius && dx < radius {
-                    let cx = (radius - dx) as f32 - 0.5;
-                    let cy = (radius - dy) as f32 - 0.5;
-                    if cx * cx + cy * cy > r * r {
-                        continue;
-                    }
-                }
-
-                if let Some(pixel) = buffer.get_mut(py * buf_w + px) {
-                    *pixel = color;
-                }
-            }
-        }
-    }
-
     /// Draws a filled circle at a given center with a given radius.
     fn draw_filled_circle(
         buffer: &mut [u32],
@@ -627,13 +591,11 @@ impl Renderer {
 
         let padding_x = self.scaled_px(6);
         let padding_y = self.scaled_px(4);
-        let border = self.scaled_px(1);
-
         let content_chars = title.chars().count() as u32;
-        let width = (content_chars * self.cell_width + padding_x * 2 + border * 2)
+        let width = (content_chars * self.cell_width + padding_x * 2 + self.scaled_px(2))
             .min(buf_width.saturating_sub(4) as u32);
-        let height = (self.cell_height + padding_y * 2 + border * 2).min(buf_height as u32);
-        if width <= border * 2 || height <= border * 2 {
+        let height = (self.cell_height + padding_y * 2 + self.scaled_px(2)).min(buf_height as u32);
+        if width <= self.scaled_px(2) || height <= self.scaled_px(2) {
             return;
         }
 
@@ -646,35 +608,20 @@ impl Renderer {
             .min(buf_height as i32 - height as i32 - self.scaled_px(2) as i32)
             .max(self.scaled_px(2) as i32);
 
-        let bg = MENU_BG.to_pixel();
-        let border_px = SEPARATOR_COLOR.to_pixel();
-
-        for py in 0..height as usize {
-            for px in 0..width as usize {
-                let sx = x + px as i32;
-                let sy = y + py as i32;
-                if sx < 0 || sy < 0 {
-                    continue;
-                }
-                let sx = sx as usize;
-                let sy = sy as usize;
-                if sx >= buf_width || sy >= buf_height {
-                    continue;
-                }
-                let idx = sy * buf_width + sx;
-                if idx >= buffer.len() {
-                    continue;
-                }
-
-                let is_border =
-                    py == 0 || py == height as usize - 1 || px == 0 || px == width as usize - 1;
-                buffer[idx] = if is_border { border_px } else { bg };
-            }
+        let radius = self.scaled_px(8);
+        let fill = Color {
+            r: 36,
+            g: 38,
+            b: 52,
         }
+        .to_pixel();
+        self.draw_elevated_panel(
+            buffer, buf_width, buf_height, x as u32, y as u32, width, height, radius, fill,
+        );
 
-        let text_x = x as u32 + border + padding_x;
-        let text_y = y as u32 + border + padding_y;
-        let max_chars = ((width - border * 2 - padding_x * 2) / self.cell_width) as usize;
+        let text_x = x as u32 + self.scaled_px(1) + padding_x;
+        let text_y = y as u32 + self.scaled_px(1) + padding_y;
+        let max_chars = ((width - self.scaled_px(2) - padding_x * 2) / self.cell_width) as usize;
         for (ci, ch) in title.chars().take(max_chars).enumerate() {
             let cx = text_x + ci as u32 * self.cell_width;
             self.draw_char_at(
@@ -699,27 +646,41 @@ impl Renderer {
         hovered_tab: Option<usize>,
         mouse_pos: (f64, f64),
     ) {
-        let bar_bg = TAB_BAR_BG.to_pixel();
         let tab_bar_height = self.tab_bar_height_px();
         let bar_h = tab_bar_height as usize;
+        let top_bg = Color {
+            r: 28,
+            g: 30,
+            b: 43,
+        };
+        let bottom_bg = TAB_BAR_BG;
 
-        // Paint full bar background first.
+        // Paint full bar background with a subtle vertical gradient (mac-like depth).
         for py in 0..bar_h {
+            let t = py as f32 / (bar_h.max(1) as f32);
+            let blend = |a: u8, b: u8| -> u8 {
+                let av = a as f32;
+                let bv = b as f32;
+                (av + (bv - av) * t).round().clamp(0.0, 255.0) as u8
+            };
+            let row_pixel = Color {
+                r: blend(top_bg.r, bottom_bg.r),
+                g: blend(top_bg.g, bottom_bg.g),
+                b: blend(top_bg.b, bottom_bg.b),
+            }
+            .to_pixel();
             for px in 0..buf_width {
                 let idx = py * buf_width + px;
                 if idx < buffer.len() {
-                    buffer[idx] = bar_bg;
+                    buffer[idx] = row_pixel;
                 }
             }
         }
 
         let tw = self.tab_width(tabs.len(), buf_width as u32);
-        let tab_strip_start = self.tab_strip_start_x();
         let text_y = (tab_bar_height.saturating_sub(self.cell_height)) / 2 + self.scaled_px(1);
         let tab_padding_h = self.scaled_px(14);
         let use_numbers = self.should_show_number(tw);
-
-        let active_idx = tabs.iter().position(|t| t.is_active);
 
         for (i, tab) in tabs.iter().enumerate() {
             let tab_x = self.tab_origin_x(i, tw);
@@ -735,50 +696,24 @@ impl Renderer {
             };
             let bg_pixel = bg.to_pixel();
 
-            // Flat tab shape: all tabs fill the full bar height.
-            // First tab gets a rounded top-left corner; all others are plain rectangles.
-            if i == 0 && tab_strip_start == 0 {
-                Self::draw_rect_with_top_left_radius(
+            // mac-like tab capsule instead of full-height square blocks.
+            if tab.is_active || is_hovered {
+                let inset_y = self.scaled_px(4) as i32;
+                let capsule_h = tab_bar_height.saturating_sub(self.scaled_px(6));
+                let radius = self.scaled_px(8);
+                let alpha = if tab.is_active { 255 } else { 215 };
+                self.draw_rounded_rect(
                     buffer,
                     buf_width,
-                    tab_x,
-                    0,
+                    bar_h,
+                    tab_x as i32,
+                    inset_y,
                     tw,
-                    tab_bar_height,
-                    self.first_tab_radius_px(),
+                    capsule_h,
+                    radius,
                     bg_pixel,
+                    alpha,
                 );
-            } else {
-                for py in 0..bar_h {
-                    for dx in 0..tw as usize {
-                        let px = tab_x as usize + dx;
-                        if px >= buf_width {
-                            continue;
-                        }
-                        let idx = py * buf_width + px;
-                        if idx < buffer.len() {
-                            buffer[idx] = bg_pixel;
-                        }
-                    }
-                }
-            }
-
-            // Vertical 1px separator between tabs.
-            // Hidden near active and hovered tabs to reduce visual noise.
-            let is_near_active = active_idx.is_some_and(|ai| i == ai || i + 1 == ai);
-            let is_near_hovered = hovered_tab.is_some_and(|hi| i == hi || i + 1 == hi);
-            if !tab.is_active && !is_near_active && !is_near_hovered && !is_hovered {
-                let sep_x = tab_x + tw - 1;
-                if (sep_x as usize) < buf_width {
-                    let sep_pixel = SEPARATOR_COLOR.to_pixel();
-                    let separator_pad = self.scaled_px(8) as usize;
-                    for py in separator_pad..bar_h.saturating_sub(separator_pad) {
-                        let idx = py * buf_width + sep_x as usize;
-                        if idx < buffer.len() {
-                            buffer[idx] = sep_pixel;
-                        }
-                    }
-                }
             }
 
             // Text color: active = bright white, hovered = subtext1, inactive = overlay0.
@@ -1031,18 +966,28 @@ impl Renderer {
             self.draw_window_maximize_icon(buffer, buf_width, bar_h, max_rect, control_fg);
         }
 
-        // Bottom separator — hidden under the active tab (tab merges with terminal area).
-        let sep_pixel = SEPARATOR_COLOR.to_pixel();
+        // Bottom separator + soft shadow.
+        let sep_pixel = Color {
+            r: 54,
+            g: 56,
+            b: 74,
+        }
+        .to_pixel();
         let py = bar_h - 1;
         for px in 0..buf_width {
-            let in_active = active_idx.is_some_and(|ai| {
-                let ax = self.tab_origin_x(ai, tw);
-                px >= ax as usize && px < (ax + tw) as usize
-            });
-            if !in_active {
-                let idx = py * buf_width + px;
+            let idx = py * buf_width + px;
+            if idx < buffer.len() {
+                buffer[idx] = sep_pixel;
+            }
+        }
+
+        if bar_h < _buf_height {
+            let shadow_row = bar_h;
+            let alpha = 36u8;
+            for px in 0..buf_width {
+                let idx = shadow_row * buf_width + px;
                 if idx < buffer.len() {
-                    buffer[idx] = sep_pixel;
+                    buffer[idx] = Self::blend_pixel(buffer[idx], 0x000000, alpha);
                 }
             }
         }
