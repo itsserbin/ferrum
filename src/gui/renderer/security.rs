@@ -147,18 +147,15 @@ impl Renderer {
         let mw_usize = mw as usize;
         let line_h = popup.line_height(self.cell_height) as usize;
 
-        let bg_pixel = Color {
-            r: 36,
-            g: 38,
-            b: 52,
-        }
-        .to_pixel();
         let header_pixel = SECURITY_ACCENT.to_pixel();
-        let radius = self.scaled_px(8);
+        let radius = self.scaled_px(10);
+        let tint = Color {
+            r: 128,
+            g: 150,
+            b: 182,
+        };
 
-        self.draw_elevated_panel(
-            buffer, buf_width, buf_height, mx, my, mw, mh, radius, bg_pixel,
-        );
+        self.draw_liquid_glass_panel(buffer, buf_width, buf_height, mx, my, mw, mh, radius, tint);
 
         let header_y = my + self.scaled_px(2);
         let header_x = mx + self.cell_width / 2;

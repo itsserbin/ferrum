@@ -434,7 +434,40 @@ impl Renderer {
         }
     }
 
-    pub(in crate::gui::renderer) fn draw_elevated_panel(
+    fn rounded_contains(px: i32, py: i32, w: i32, h: i32, r: i32) -> bool {
+        if px < 0 || py < 0 || px >= w || py >= h {
+            return false;
+        }
+        if r <= 0 {
+            return true;
+        }
+
+        let in_tl = px < r && py < r;
+        let in_tr = px >= w - r && py < r;
+        let in_bl = px < r && py >= h - r;
+        let in_br = px >= w - r && py >= h - r;
+        if !(in_tl || in_tr || in_bl || in_br) {
+            return true;
+        }
+
+        let cx = if in_tl || in_bl {
+            r as f32 - 0.5
+        } else {
+            (w - r) as f32 - 0.5
+        };
+        let cy = if in_tl || in_tr {
+            r as f32 - 0.5
+        } else {
+            (h - r) as f32 - 0.5
+        };
+
+        let dx = px as f32 + 0.5 - cx;
+        let dy = py as f32 + 0.5 - cy;
+        let rr = r as f32;
+        dx * dx + dy * dy <= rr * rr
+    }
+
+    pub(in crate::gui::renderer) fn draw_liquid_glass_panel(
         &self,
         buffer: &mut [u32],
         buf_width: usize,
@@ -444,37 +477,31 @@ impl Renderer {
         w: u32,
         h: u32,
         radius: u32,
-        fill: u32,
+        tint: Color,
     ) {
-        let shadow = 0x000000;
-        let step1 = self.scaled_px(1) as i32;
-        let step2 = self.scaled_px(3) as i32;
-        let step3 = self.scaled_px(6) as i32;
+        if w == 0 || h == 0 || buf_width == 0 || buf_height == 0 {
+            return;
+        }
+
         let x_i = x as i32;
         let y_i = y as i32;
+        let w_i = w as i32;
+        let h_i = h as i32;
+        let r_i = radius.min(w / 2).min(h / 2) as i32;
+        let blur_radius = self.scaled_px(3).clamp(2, 8) as i32;
+        let edge_soft = 1.75_f32;
 
+        // Soft drop shadow under the panel.
         self.draw_rounded_rect(
             buffer,
             buf_width,
             buf_height,
             x_i,
-            y_i + step1,
+            y_i + self.scaled_px(1) as i32,
             w,
             h,
             radius,
-            shadow,
-            46,
-        );
-        self.draw_rounded_rect(
-            buffer,
-            buf_width,
-            buf_height,
-            x_i,
-            y_i + step2,
-            w,
-            h,
-            radius + self.scaled_px(1),
-            shadow,
+            0x000000,
             28,
         );
         self.draw_rounded_rect(
@@ -482,16 +509,135 @@ impl Renderer {
             buf_width,
             buf_height,
             x_i,
-            y_i + step3,
+            y_i + self.scaled_px(3) as i32,
             w,
             h,
-            radius + self.scaled_px(2),
-            shadow,
-            16,
+            radius + self.scaled_px(1),
+            0x000000,
+            14,
         );
 
-        self.draw_rounded_rect(
-            buffer, buf_width, buf_height, x_i, y_i, w, h, radius, fill, 255,
-        );
+        // Copy only the panel neighborhood for blur sampling.
+        let src_x0 = (x_i - blur_radius - 1).max(0) as usize;
+        let src_y0 = (y_i - blur_radius - 1).max(0) as usize;
+        let src_x1 = (x_i + w_i + blur_radius + 1).min(buf_width as i32) as usize;
+        let src_y1 = (y_i + h_i + blur_radius + 1).min(buf_height as i32) as usize;
+        let src_w = src_x1.saturating_sub(src_x0);
+        let src_h = src_y1.saturating_sub(src_y0);
+        if src_w == 0 || src_h == 0 {
+            return;
+        }
+
+        let mut src = vec![0u32; src_w * src_h];
+        for row in 0..src_h {
+            let dst_row = row * src_w;
+            let src_row = (src_y0 + row) * buf_width + src_x0;
+            src[dst_row..(dst_row + src_w)].copy_from_slice(&buffer[src_row..(src_row + src_w)]);
+        }
+
+        let tint_px = tint.to_pixel();
+        let panel_alpha = 232u8;
+        let tint_alpha = 86u8;
+        let top_gloss = 76u8;
+        let bottom_shadow = 34u8;
+
+        for py in 0..h_i {
+            for px in 0..w_i {
+                if !Self::rounded_contains(px, py, w_i, h_i, r_i) {
+                    continue;
+                }
+
+                let gx = x_i + px;
+                let gy = y_i + py;
+                if gx < 0 || gy < 0 || gx >= buf_width as i32 || gy >= buf_height as i32 {
+                    continue;
+                }
+
+                // Backdrop blur sample.
+                let mut acc_r: u32 = 0;
+                let mut acc_g: u32 = 0;
+                let mut acc_b: u32 = 0;
+                let mut samples: u32 = 0;
+                let sy0 = (gy - blur_radius).max(src_y0 as i32);
+                let sy1 = (gy + blur_radius).min(src_y1 as i32 - 1);
+                let sx0 = (gx - blur_radius).max(src_x0 as i32);
+                let sx1 = (gx + blur_radius).min(src_x1 as i32 - 1);
+
+                for sy in sy0..=sy1 {
+                    let ry = (sy as usize - src_y0) * src_w;
+                    for sx in sx0..=sx1 {
+                        let rx = sx as usize - src_x0;
+                        let p = src[ry + rx];
+                        acc_r += (p >> 16) & 0xFF;
+                        acc_g += (p >> 8) & 0xFF;
+                        acc_b += p & 0xFF;
+                        samples += 1;
+                    }
+                }
+                if samples == 0 {
+                    continue;
+                }
+
+                let mut glass =
+                    ((acc_r / samples) << 16) | ((acc_g / samples) << 8) | (acc_b / samples);
+                glass = Self::blend_pixel(glass, tint_px, tint_alpha);
+
+                let top_t = if h_i <= 1 {
+                    1.0
+                } else {
+                    1.0 - py as f32 / (h_i - 1) as f32
+                };
+                let gloss_alpha = (top_t * top_t * top_gloss as f32).round() as u8;
+                glass = Self::blend_pixel(glass, 0xFFFFFF, gloss_alpha);
+
+                let bottom_t = if h_i <= 1 {
+                    0.0
+                } else {
+                    py as f32 / (h_i - 1) as f32
+                };
+                let shadow_alpha = (bottom_t * bottom_t * bottom_shadow as f32).round() as u8;
+                glass = Self::blend_pixel(glass, 0x0A0D14, shadow_alpha);
+
+                let edge_dist = (px.min(w_i - 1 - px).min(py).min(h_i - 1 - py)) as f32;
+                if edge_dist < edge_soft {
+                    let edge_t = (1.0 - edge_dist / edge_soft).clamp(0.0, 1.0);
+                    let rim_alpha = (edge_t * 92.0).round() as u8;
+                    let rim_color = if py < h_i / 2 { 0xFFFFFF } else { 0x1A202D };
+                    glass = Self::blend_pixel(glass, rim_color, rim_alpha);
+                }
+
+                let idx = gy as usize * buf_width + gx as usize;
+                if idx < buffer.len() {
+                    buffer[idx] = Self::blend_pixel(buffer[idx], glass, panel_alpha);
+                }
+            }
+        }
+
+        // Specular "liquid" streak near the top of the glass.
+        let streak_h = ((h as f32 * 0.34).round() as i32).max(self.scaled_px(4) as i32);
+        for py in 0..streak_h.min(h_i) {
+            let py_t = 1.0 - py as f32 / streak_h.max(1) as f32;
+            for px in 0..w_i {
+                if !Self::rounded_contains(px, py, w_i, h_i, r_i) {
+                    continue;
+                }
+                let wave = ((px as f32 / w_i.max(1) as f32) * std::f32::consts::PI)
+                    .sin()
+                    .mul_add(0.35, 0.65);
+                let alpha = (py_t * py_t * wave * 56.0).round() as u8;
+                if alpha == 0 {
+                    continue;
+                }
+                let gx = x_i + px;
+                let gy = y_i + py;
+                if gx < 0 || gy < 0 || gx >= buf_width as i32 || gy >= buf_height as i32 {
+                    continue;
+                }
+                let idx = gy as usize * buf_width + gx as usize;
+                if idx < buffer.len() {
+                    buffer[idx] = Self::blend_pixel(buffer[idx], 0xFFFFFF, alpha);
+                }
+            }
+        }
     }
 }

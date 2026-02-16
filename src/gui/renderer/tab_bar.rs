@@ -263,7 +263,17 @@ impl Renderer {
         let cx = (x + w / 2) as i32;
         let cy = (y + h / 2) as i32;
         let radius = (w.min(h) / 2).saturating_sub(1).max(4);
-        Self::draw_filled_circle(buffer, buf_width, cx, cy, radius, color.to_pixel());
+        let base = color.to_pixel();
+        let rim = Self::blend_pixel(base, 0x0A0D14, 96);
+        let gloss = Self::blend_pixel(base, 0xFFFFFF, 168);
+
+        Self::draw_filled_circle(buffer, buf_width, cx, cy, radius, rim);
+        Self::draw_filled_circle(buffer, buf_width, cx, cy, radius.saturating_sub(1), base);
+
+        let gloss_radius = (radius / 2).max(self.scaled_px(2));
+        let gloss_x = cx - (radius as i32 / 3);
+        let gloss_y = cy - (radius as i32 / 3);
+        Self::draw_filled_circle(buffer, buf_width, gloss_x, gloss_y, gloss_radius, gloss);
     }
 
     fn point_to_segment_distance(px: f32, py: f32, x0: f32, y0: f32, x1: f32, y1: f32) -> f32 {
@@ -608,15 +618,14 @@ impl Renderer {
             .min(buf_height as i32 - height as i32 - self.scaled_px(2) as i32)
             .max(self.scaled_px(2) as i32);
 
-        let radius = self.scaled_px(8);
-        let fill = Color {
-            r: 36,
-            g: 38,
-            b: 52,
-        }
-        .to_pixel();
-        self.draw_elevated_panel(
-            buffer, buf_width, buf_height, x as u32, y as u32, width, height, radius, fill,
+        let radius = self.scaled_px(10);
+        let tint = Color {
+            r: 132,
+            g: 154,
+            b: 184,
+        };
+        self.draw_liquid_glass_panel(
+            buffer, buf_width, buf_height, x as u32, y as u32, width, height, radius, tint,
         );
 
         let text_x = x as u32 + self.scaled_px(1) + padding_x;
@@ -649,11 +658,15 @@ impl Renderer {
         let tab_bar_height = self.tab_bar_height_px();
         let bar_h = tab_bar_height as usize;
         let top_bg = Color {
-            r: 28,
-            g: 30,
-            b: 43,
+            r: 62,
+            g: 70,
+            b: 92,
         };
-        let bottom_bg = TAB_BAR_BG;
+        let bottom_bg = Color {
+            r: 30,
+            g: 36,
+            b: 52,
+        };
 
         // Paint full bar background with a subtle vertical gradient (mac-like depth).
         for py in 0..bar_h {
@@ -673,6 +686,27 @@ impl Renderer {
                 let idx = py * buf_width + px;
                 if idx < buffer.len() {
                     buffer[idx] = row_pixel;
+                }
+            }
+        }
+
+        // Specular sheen sweep to make the bar feel like translucent liquid glass.
+        let sheen_h = self.scaled_px(8).min(tab_bar_height) as usize;
+        for py in 0..sheen_h {
+            let py_t = 1.0 - py as f32 / sheen_h.max(1) as f32;
+            let row_alpha = (py_t * py_t * 52.0).round() as u8;
+            for px in 0..buf_width {
+                let wave = (((px as f32 / buf_width.max(1) as f32) * std::f32::consts::TAU * 1.6)
+                    .sin()
+                    * 0.5)
+                    + 0.5;
+                let alpha = (row_alpha as f32 * (0.62 + 0.38 * wave)).round() as u8;
+                if alpha == 0 {
+                    continue;
+                }
+                let idx = py * buf_width + px;
+                if idx < buffer.len() {
+                    buffer[idx] = Self::blend_pixel(buffer[idx], 0xFFFFFF, alpha);
                 }
             }
         }
