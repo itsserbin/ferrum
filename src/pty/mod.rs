@@ -2,10 +2,14 @@ use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use std::io::{Read, Write};
 
 #[cfg(unix)]
-pub const DEFAULT_SHELL: &str = "/bin/bash";
+pub fn default_shell() -> String {
+    std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string())
+}
 
 #[cfg(windows)]
-pub const DEFAULT_SHELL: &str = "powershell.exe";
+pub fn default_shell() -> String {
+    "powershell.exe".to_string()
+}
 
 pub struct Session {
     master: Box<dyn portable_pty::MasterPty + Send>,
@@ -24,6 +28,8 @@ impl Session {
         })?;
 
         let mut cmd = CommandBuilder::new(shell);
+        #[cfg(target_os = "macos")]
+        cmd.arg("-l");
         cmd.env("TERM", "xterm-256color");
         let child = pair.slave.spawn_command(cmd)?;
 

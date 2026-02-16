@@ -43,7 +43,8 @@ impl FerrumWindow {
         let id = *next_tab_id;
         *next_tab_id += 1;
 
-        let session = pty::Session::spawn(pty::DEFAULT_SHELL, rows as u16, cols as u16)
+        let shell = pty::default_shell();
+        let session = pty::Session::spawn(&shell, rows as u16, cols as u16)
             .context("failed to spawn PTY session")?;
         let pty_writer = session.writer().context("failed to acquire PTY writer")?;
 
