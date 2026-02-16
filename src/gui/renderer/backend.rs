@@ -3,7 +3,7 @@ use std::sync::Arc;
 use softbuffer::Surface;
 use winit::window::Window;
 
-use super::{ContextMenu, CpuRenderer, SecurityPopup, TabBarHit, TabInfo, WindowButton};
+use super::{ContextMenu, CpuRenderer, SecurityPopup, TabBarHit, TabInfo};
 
 #[cfg(feature = "gpu")]
 use super::gpu::GpuRenderer;
@@ -109,27 +109,11 @@ impl RendererBackend {
         }
     }
 
-    pub fn scrollbar_width_px(&self) -> u32 {
-        match self {
-            RendererBackend::Cpu { renderer, .. } => renderer.scrollbar_width_px(),
-            #[cfg(feature = "gpu")]
-            RendererBackend::Gpu(gpu) => Renderer::scrollbar_width_px(gpu),
-        }
-    }
-
     pub fn scrollbar_hit_zone_px(&self) -> u32 {
         match self {
             RendererBackend::Cpu { renderer, .. } => renderer.scrollbar_hit_zone_px(),
             #[cfg(feature = "gpu")]
             RendererBackend::Gpu(gpu) => Renderer::scrollbar_hit_zone_px(gpu),
-        }
-    }
-
-    pub fn scrollbar_margin_px(&self) -> u32 {
-        match self {
-            RendererBackend::Cpu { renderer, .. } => renderer.scrollbar_margin_px(),
-            #[cfg(feature = "gpu")]
-            RendererBackend::Gpu(gpu) => Renderer::scrollbar_margin_px(gpu),
         }
     }
 
@@ -160,14 +144,6 @@ impl RendererBackend {
             RendererBackend::Cpu { renderer, .. } => renderer.tab_width(tab_count, buf_width),
             #[cfg(feature = "gpu")]
             RendererBackend::Gpu(gpu) => Renderer::tab_width(gpu, tab_count, buf_width),
-        }
-    }
-
-    pub fn tab_strip_start_x(&self) -> u32 {
-        match self {
-            RendererBackend::Cpu { renderer, .. } => renderer.tab_strip_start_x(),
-            #[cfg(feature = "gpu")]
-            RendererBackend::Gpu(gpu) => Renderer::tab_strip_start_x(gpu),
         }
     }
 
@@ -270,24 +246,6 @@ impl RendererBackend {
             #[cfg(feature = "gpu")]
             RendererBackend::Gpu(gpu) => {
                 Renderer::security_badge_rect(gpu, tab_index, tab_count, buf_width, security_count)
-            }
-        }
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    pub fn window_button_at_position(
-        &self,
-        x: f64,
-        y: f64,
-        buf_width: u32,
-    ) -> Option<WindowButton> {
-        match self {
-            RendererBackend::Cpu { renderer, .. } => {
-                renderer.window_button_at_position(x, y, buf_width)
-            }
-            #[cfg(feature = "gpu")]
-            RendererBackend::Gpu(gpu) => {
-                Renderer::window_button_at_position(gpu, x, y, buf_width)
             }
         }
     }

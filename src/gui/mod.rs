@@ -30,7 +30,7 @@ use crate::pty;
 
 use self::state::{
     App, ClosedTabInfo, DragState, FerrumWindow, PtyEvent, RenameState, ScrollbarState,
-    SelectionDragMode, TabState, WindowRequest,
+    SelectionDragMode, TabReorderAnimation, TabState, WindowRequest,
 };
 
 impl FerrumWindow {
@@ -63,6 +63,7 @@ impl FerrumWindow {
             closed_tabs: Vec::new(),
             renaming_tab: None,
             dragging_tab: None,
+            tab_reorder_animation: None,
             last_tab_click: None,
             last_topbar_empty_click: None,
             resize_direction: None,
@@ -130,7 +131,8 @@ impl App {
             attrs = attrs
                 .with_titlebar_transparent(true)
                 .with_title_hidden(true)
-                .with_fullsize_content_view(true);
+                .with_fullsize_content_view(true)
+                .with_movable_by_window_background(false);
         }
 
         #[cfg(not(target_os = "macos"))]
@@ -160,8 +162,13 @@ impl App {
 
     /// Creates a new window with a single detached tab.
     /// Immediately starts OS-level window drag (mouse button still held).
-    fn create_window_with_tab(&mut self, event_loop: &ActiveEventLoop, tab: TabState) {
-        let Some(win_id) = self.create_window(event_loop, None) else {
+    fn create_window_with_tab(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        tab: TabState,
+        position: Option<winit::dpi::PhysicalPosition<i32>>,
+    ) {
+        let Some(win_id) = self.create_window(event_loop, position) else {
             return;
         };
         if let Some(win) = self.windows.get_mut(&win_id) {

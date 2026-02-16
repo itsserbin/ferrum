@@ -56,7 +56,16 @@ pub(super) struct DragState {
     pub(super) start_y: f64,        // Mouse y at drag start.
     pub(super) current_x: f64,      // Current mouse x.
     pub(super) current_y: f64,      // Current mouse y.
-    pub(super) is_active: bool,     // True once 5px threshold exceeded.
+    pub(super) is_active: bool,     // True once threshold exceeded.
+    pub(super) indicator_x: f32,    // Smoothly interpolated insertion indicator x.
+}
+
+/// Post-reorder slide animation for tabs.
+pub(super) struct TabReorderAnimation {
+    pub(super) started: Instant,
+    pub(super) duration_ms: u32,
+    /// Per-tab pixel offsets at animation start (shrink toward 0 over duration).
+    pub(super) offsets: Vec<f32>,
 }
 
 /// Temporary inline rename state for the tab bar.
@@ -77,8 +86,11 @@ pub(super) enum SelectionDragMode {
 
 /// Request from a FerrumWindow to the App (window manager).
 pub(super) enum WindowRequest {
-    /// Detach a tab into a new window (use drag_window for positioning).
-    DetachTab { tab: TabState },
+    /// Detach a tab into a new window at the given screen position.
+    DetachTab {
+        tab: TabState,
+        cursor_pos: Option<winit::dpi::PhysicalPosition<i32>>,
+    },
     /// Close this window (all tabs gone or user closed).
     CloseWindow,
 }
@@ -105,6 +117,7 @@ pub(super) struct FerrumWindow {
     pub(super) closed_tabs: Vec<ClosedTabInfo>,
     pub(super) renaming_tab: Option<RenameState>,
     pub(super) dragging_tab: Option<DragState>,
+    pub(super) tab_reorder_animation: Option<TabReorderAnimation>,
     pub(super) last_tab_click: Option<(usize, std::time::Instant)>,
     pub(super) last_topbar_empty_click: Option<std::time::Instant>,
     pub(super) resize_direction: Option<ResizeDirection>,

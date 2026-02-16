@@ -58,6 +58,9 @@ impl ApplicationHandler for App {
                 win.hovered_tab = None;
                 win.security_popup = None;
                 if !focused {
+                    if win.dragging_tab.take().is_some() {
+                        win.window.set_cursor(CursorIcon::Default);
+                    }
                     win.commit_rename();
                     win.context_menu = None;
                 } else {
@@ -79,6 +82,9 @@ impl ApplicationHandler for App {
             WindowEvent::CursorLeft { .. } => {
                 win.hovered_tab = None;
                 win.resize_direction = None;
+                if win.dragging_tab.take().is_some() {
+                    win.window.set_cursor(CursorIcon::Default);
+                }
                 should_redraw = true;
             }
             WindowEvent::CursorMoved { position, .. } => {
@@ -168,8 +174,8 @@ impl App {
 
         for request in requests {
             match request {
-                WindowRequest::DetachTab { tab } => {
-                    self.create_window_with_tab(event_loop, tab);
+                WindowRequest::DetachTab { tab, cursor_pos } => {
+                    self.create_window_with_tab(event_loop, tab, cursor_pos);
                     // If source window is now empty, close it.
                     if self
                         .windows

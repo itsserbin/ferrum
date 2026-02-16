@@ -29,9 +29,7 @@ pub trait Renderer {
     fn window_padding_px(&self) -> u32;
     fn ui_scale(&self) -> f64;
     fn scaled_px(&self, base: u32) -> u32;
-    fn scrollbar_width_px(&self) -> u32;
     fn scrollbar_hit_zone_px(&self) -> u32;
-    fn scrollbar_margin_px(&self) -> u32;
 
     // ── Terminal rendering ──────────────────────────────────────────
 
@@ -87,6 +85,7 @@ pub trait Renderer {
         tabs: &[TabInfo],
         hovered_tab: Option<usize>,
         mouse_pos: (f64, f64),
+        tab_offsets: Option<&[f32]>,
     );
 
     fn draw_tab_drag_overlay(
@@ -97,7 +96,7 @@ pub trait Renderer {
         tabs: &[TabInfo],
         source_index: usize,
         current_x: f64,
-        insert_index: usize,
+        indicator_x: f32,
     );
 
     fn draw_tab_tooltip(

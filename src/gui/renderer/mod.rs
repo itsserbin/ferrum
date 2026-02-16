@@ -3,6 +3,7 @@ mod context_menu;
 mod cursor;
 #[cfg(feature = "gpu")]
 pub mod gpu;
+#[cfg(feature = "gpu")]
 pub mod metrics;
 mod scrollbar;
 mod security;
@@ -15,8 +16,7 @@ use fontdue::{Font, FontSettings};
 use std::collections::HashMap;
 
 pub use backend::RendererBackend;
-pub use metrics::FontMetrics;
-pub use traits::{BackendKind, Renderer};
+pub use traits::Renderer;
 
 pub(super) const FONT_SIZE: f32 = 15.0;
 pub(super) const LINE_PADDING: u32 = 2;
@@ -147,9 +147,6 @@ pub struct CpuRenderer {
     ascent: i32,
     glyph_cache: HashMap<char, GlyphBitmap>,
 }
-
-/// Default renderer type alias — currently CPU, will switch to GPU when ready.
-pub type DefaultRenderer = CpuRenderer;
 
 impl CpuRenderer {
     pub fn new() -> Self {
@@ -471,16 +468,8 @@ impl traits::Renderer for CpuRenderer {
         CpuRenderer::scaled_px(self, base)
     }
 
-    fn scrollbar_width_px(&self) -> u32 {
-        CpuRenderer::scrollbar_width_px(self)
-    }
-
     fn scrollbar_hit_zone_px(&self) -> u32 {
         CpuRenderer::scrollbar_hit_zone_px(self)
-    }
-
-    fn scrollbar_margin_px(&self) -> u32 {
-        CpuRenderer::scrollbar_margin_px(self)
     }
 
     fn render(
@@ -549,8 +538,9 @@ impl traits::Renderer for CpuRenderer {
         tabs: &[TabInfo],
         hovered_tab: Option<usize>,
         mouse_pos: (f64, f64),
+        tab_offsets: Option<&[f32]>,
     ) {
-        CpuRenderer::draw_tab_bar(self, buffer, buf_width, buf_height, tabs, hovered_tab, mouse_pos);
+        CpuRenderer::draw_tab_bar(self, buffer, buf_width, buf_height, tabs, hovered_tab, mouse_pos, tab_offsets);
     }
 
     fn draw_tab_drag_overlay(
@@ -561,7 +551,7 @@ impl traits::Renderer for CpuRenderer {
         tabs: &[TabInfo],
         source_index: usize,
         current_x: f64,
-        insert_index: usize,
+        indicator_x: f32,
     ) {
         CpuRenderer::draw_tab_drag_overlay(
             self,
@@ -571,7 +561,7 @@ impl traits::Renderer for CpuRenderer {
             tabs,
             source_index,
             current_x,
-            insert_index,
+            indicator_x,
         );
     }
 

@@ -1,10 +1,7 @@
-use super::{
-    FONT_SIZE, LINE_PADDING, SCROLLBAR_HIT_ZONE, SCROLLBAR_MARGIN, SCROLLBAR_WIDTH,
-    TAB_BAR_HEIGHT, WINDOW_PADDING,
-};
+use super::{FONT_SIZE, LINE_PADDING, SCROLLBAR_HIT_ZONE, TAB_BAR_HEIGHT, WINDOW_PADDING};
 use fontdue::Font;
 
-/// Shared font metrics used by both CPU and GPU renderers.
+/// Font metrics shared across renderers.
 ///
 /// Encapsulates cell dimensions, font size, and DPI scale, providing
 /// common metric calculations (scaled pixels, tab bar height, etc.).
@@ -52,15 +49,7 @@ impl FontMetrics {
         self.scaled_px(WINDOW_PADDING)
     }
 
-    pub fn scrollbar_width_px(&self) -> u32 {
-        self.scaled_px(SCROLLBAR_WIDTH)
-    }
-
     pub fn scrollbar_hit_zone_px(&self) -> u32 {
         self.scaled_px(SCROLLBAR_HIT_ZONE)
-    }
-
-    pub fn scrollbar_margin_px(&self) -> u32 {
-        self.scaled_px(SCROLLBAR_MARGIN)
     }
 }

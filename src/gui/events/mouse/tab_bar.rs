@@ -153,6 +153,7 @@ impl FerrumWindow {
                         current_x: mx,
                         current_y: my,
                         is_active: false,
+                        indicator_x: -1.0,
                     });
                 }
             }
@@ -206,7 +207,7 @@ impl FerrumWindow {
             return;
         };
         if !drag.is_active {
-            return; // Was never activated (< 5px movement), normal click already happened.
+            return; // Was never activated (< threshold movement), normal click already happened.
         }
 
         let source = drag.source_index;
@@ -226,8 +227,33 @@ impl FerrumWindow {
         };
 
         if dest != source && dest < tab_count {
+            // Compute per-tab pixel offsets BEFORE the move (for slide animation).
+            let tw = self.backend.tab_width(tab_count, buf_width) as f32;
+            let mut offsets = vec![0.0f32; tab_count];
+
+            // Tabs between source and dest shift by one tab width.
+            if source < dest {
+                // Tabs in [source+1..=dest] moved left by one position → animate from right.
+                for i in (source + 1)..=dest {
+                    offsets[i] = tw; // They were one position to the right.
+                }
+                // The moved tab itself went from source to dest → animate from left.
+                offsets[source] = -((dest - source) as f32 * tw);
+            } else {
+                // source > dest: tabs in [dest..source) moved right → animate from left.
+                for i in dest..source {
+                    offsets[i] = -tw;
+                }
+                offsets[source] = (source - dest) as f32 * tw;
+            }
+
+            // Perform the actual reorder.
             let tab = self.tabs.remove(source);
             self.tabs.insert(dest, tab);
+
+            // Fix up offsets to match new indices.
+            let moved_offset = offsets.remove(source);
+            offsets.insert(dest, moved_offset);
 
             if self.active_tab == source {
                 self.active_tab = dest;
@@ -236,6 +262,13 @@ impl FerrumWindow {
             } else if source > self.active_tab && dest <= self.active_tab {
                 self.active_tab += 1;
             }
+
+            // Start slide animation.
+            self.tab_reorder_animation = Some(TabReorderAnimation {
+                started: std::time::Instant::now(),
+                duration_ms: 150,
+                offsets,
+            });
         }
 
         // Always restore cursor after drag ends.

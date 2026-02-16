@@ -39,11 +39,8 @@ const CLOSE_HOVER_BG_COLOR: u32 = 0xF38BA8;
 #[cfg(not(target_os = "macos"))]
 const WIN_BTN_WIDTH: u32 = 46;
 
-const SCROLLBAR_BASE_ALPHA: f32 = 180.0 / 255.0;
 const SCROLLBAR_MIN_THUMB: u32 = 20;
 
-const SCROLLBAR_COLOR: u32 = 0x6C7086;
-const SCROLLBAR_HOVER_COLOR: u32 = 0x7F849C;
 const INSERTION_COLOR: u32 = 0xCBA6F7;
 
 /// Maximum number of UI draw commands per frame.
@@ -656,16 +653,8 @@ impl traits::Renderer for GpuRenderer {
         self.metrics.scaled_px(base)
     }
 
-    fn scrollbar_width_px(&self) -> u32 {
-        self.metrics.scrollbar_width_px()
-    }
-
     fn scrollbar_hit_zone_px(&self) -> u32 {
         self.metrics.scrollbar_hit_zone_px()
-    }
-
-    fn scrollbar_margin_px(&self) -> u32 {
-        self.metrics.scrollbar_margin_px()
     }
 
     // ── Terminal rendering ────────────────────────────────────────────
@@ -862,6 +851,7 @@ impl traits::Renderer for GpuRenderer {
         tabs: &[TabInfo],
         hovered_tab: Option<usize>,
         mouse_pos: (f64, f64),
+        tab_offsets: Option<&[f32]>,
     ) {
         let tab_bar_h = self.metrics.tab_bar_height_px() as f32;
         let bw = buf_width as u32;
@@ -876,7 +866,8 @@ impl traits::Renderer for GpuRenderer {
         let use_numbers = self.should_show_number(tw);
 
         for (i, tab) in tabs.iter().enumerate() {
-            let tab_x = self.tab_origin_x_val(i, tw) as f32;
+            let anim_offset = tab_offsets.and_then(|o| o.get(i)).copied().unwrap_or(0.0);
+            let tab_x = self.tab_origin_x_val(i, tw) as f32 + anim_offset;
             let is_hovered = hovered_tab == Some(i);
 
             // Tab background.
@@ -895,11 +886,11 @@ impl traits::Renderer for GpuRenderer {
             if tab.is_renaming {
                 // Simplified rename rendering — just show the text.
                 let rename_text = tab.rename_text.unwrap_or("");
-                let text_x = self.tab_origin_x_val(i, tw) + tab_padding_h;
+                let text_x = tab_x + tab_padding_h as f32;
                 let max_chars =
                     (tw.saturating_sub(tab_padding_h * 2) / self.metrics.cell_width) as usize;
                 let display: String = rename_text.chars().take(max_chars).collect();
-                self.push_text(text_x as f32, text_y as f32, &display, TAB_TEXT_ACTIVE, 1.0);
+                self.push_text(text_x, text_y as f32, &display, TAB_TEXT_ACTIVE, 1.0);
             } else if use_numbers {
                 let number_str = (i + 1).to_string();
                 let show_close = tab.is_active || is_hovered;
@@ -909,9 +900,8 @@ impl traits::Renderer for GpuRenderer {
                     0
                 };
                 let text_w = number_str.len() as u32 * self.metrics.cell_width;
-                let tx = self.tab_origin_x_val(i, tw)
-                    + (tw.saturating_sub(text_w + close_reserved)) / 2;
-                self.push_text(tx as f32, text_y as f32, &number_str, fg_color, 1.0);
+                let tx = tab_x + (tw.saturating_sub(text_w + close_reserved)) as f32 / 2.0;
+                self.push_text(tx, text_y as f32, &number_str, fg_color, 1.0);
 
                 if show_close {
                     self.draw_close_button_commands(i, tw, mouse_pos);
@@ -946,8 +936,8 @@ impl traits::Renderer for GpuRenderer {
                     tab_padding_h * 2 + close_reserved + security_reserved,
                 ) / self.metrics.cell_width) as usize;
                 let title: String = tab.title.chars().take(max_chars).collect();
-                let tx = self.tab_origin_x_val(i, tw) + tab_padding_h;
-                self.push_text(tx as f32, text_y as f32, &title, fg_color, 1.0);
+                let tx = tab_x + tab_padding_h as f32;
+                self.push_text(tx, text_y as f32, &title, fg_color, 1.0);
 
                 if show_close {
                     self.draw_close_button_commands(i, tw, mouse_pos);
@@ -1000,7 +990,7 @@ impl traits::Renderer for GpuRenderer {
         tabs: &[TabInfo],
         source_index: usize,
         current_x: f64,
-        insert_index: usize,
+        indicator_x: f32,
     ) {
         let tab_count = tabs.len();
         if source_index >= tab_count {
@@ -1009,9 +999,18 @@ impl traits::Renderer for GpuRenderer {
         let tw = self.tab_width_val(tab_count, buf_width as u32);
         let tab_bar_h = self.metrics.tab_bar_height_px() as f32;
 
-        // Ghost tab.
+        // Ghost tab: rounded rect + shadow + subtle border.
         let ghost_x = (current_x - tw as f64 / 2.0).round() as f32;
-        self.push_rect(ghost_x, 0.0, tw as f32, tab_bar_h, ACTIVE_TAB_BG, 0.6);
+        let ghost_y = self.metrics.scaled_px(2) as f32;
+        let ghost_h = tab_bar_h - self.metrics.scaled_px(4) as f32;
+        let ghost_radius = self.metrics.scaled_px(6) as f32;
+
+        // Shadow.
+        self.push_rounded_rect(ghost_x + 2.0, ghost_y + 2.0, tw as f32, ghost_h, ghost_radius, 0x000000, 0.24);
+        // Body.
+        self.push_rounded_rect(ghost_x, ghost_y, tw as f32, ghost_h, ghost_radius, ACTIVE_TAB_BG, 0.86);
+        // Border.
+        self.push_rounded_rect(ghost_x, ghost_y, tw as f32, ghost_h, ghost_radius, TAB_BORDER, 0.39);
 
         // Ghost title.
         let text_y = (self.metrics.tab_bar_height_px().saturating_sub(self.metrics.cell_height)) / 2
@@ -1024,15 +1023,14 @@ impl traits::Renderer for GpuRenderer {
             let max = (tw.saturating_sub(pad * 2) / self.metrics.cell_width) as usize;
             tabs[source_index].title.chars().take(max).collect()
         };
-        let lw = label.len() as u32 * self.metrics.cell_width;
+        let lw = label.chars().count() as u32 * self.metrics.cell_width;
         let tx = ghost_x + ((tw as i32 - lw as i32) / 2).max(4) as f32;
         self.push_text(tx, text_y as f32, &label, TAB_TEXT_ACTIVE, 1.0);
 
-        // Insertion indicator.
-        let ix = self.tab_origin_x_val(insert_index, tw) as f32;
+        // Smooth insertion indicator at lerped position.
         let indicator_pad = self.metrics.scaled_px(4) as f32;
         self.push_rect(
-            ix,
+            indicator_x,
             indicator_pad,
             self.metrics.scaled_px(2) as f32,
             tab_bar_h - indicator_pad * 2.0,

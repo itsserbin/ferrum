@@ -720,6 +720,7 @@ impl CpuRenderer {
         tabs: &[TabInfo],
         hovered_tab: Option<usize>,
         mouse_pos: (f64, f64),
+        tab_offsets: Option<&[f32]>,
     ) {
         let tab_bar_height = self.tab_bar_height_px();
         let bar_h = tab_bar_height as usize;
@@ -747,7 +748,8 @@ impl CpuRenderer {
         let tab_h = tab_bar_height; // Full height so bottom merges with terminal.
 
         for (i, tab) in tabs.iter().enumerate() {
-            let tab_x = self.tab_origin_x(i, tw);
+            let anim_offset = tab_offsets.and_then(|o| o.get(i)).copied().unwrap_or(0.0);
+            let tab_x = (self.tab_origin_x(i, tw) as f32 + anim_offset).round() as u32;
             let is_hovered = hovered_tab == Some(i);
 
             if tab.is_active {
@@ -1167,7 +1169,7 @@ impl CpuRenderer {
         tabs: &[TabInfo],
         source_index: usize,
         current_x: f64,
-        insert_index: usize,
+        indicator_x: f32,
     ) {
         let tab_count = tabs.len();
         if source_index >= tab_count {
@@ -1177,24 +1179,53 @@ impl CpuRenderer {
         let tab_bar_height = self.tab_bar_height_px();
         let bar_h = tab_bar_height as usize;
 
-        // Ghost tab: semi-transparent flat rectangle (60% opacity).
+        // Ghost tab: rounded rect with shadow + subtle border.
         let ghost_x = (current_x - tw as f64 / 2.0).round() as i32;
-        let ghost_color = ACTIVE_TAB_BG;
-        let alpha = 153u8; // 60%
+        let ghost_y = self.scaled_px(2) as i32;
+        let ghost_h = tab_bar_height - self.scaled_px(4);
+        let ghost_radius = self.scaled_px(6);
 
-        for py in 0..bar_h {
-            for dx in 0..tw as usize {
-                let px = ghost_x + dx as i32;
-                if px < 0 || px as usize >= buf_width || py >= buf_height {
-                    continue;
-                }
-                let idx = py * buf_width + px as usize;
-                if idx >= buffer.len() {
-                    continue;
-                }
-                buffer[idx] = Self::blend_rgb(buffer[idx], ghost_color, alpha);
-            }
-        }
+        // Shadow (offset +2, +2, slightly larger, dark).
+        self.draw_rounded_rect(
+            buffer,
+            buf_width,
+            buf_height,
+            ghost_x + 2,
+            ghost_y + 2,
+            tw,
+            ghost_h,
+            ghost_radius,
+            0x000000,
+            60,
+        );
+
+        // Ghost body.
+        self.draw_rounded_rect(
+            buffer,
+            buf_width,
+            buf_height,
+            ghost_x,
+            ghost_y,
+            tw,
+            ghost_h,
+            ghost_radius,
+            ACTIVE_TAB_BG,
+            220,
+        );
+
+        // Subtle border.
+        self.draw_rounded_rect(
+            buffer,
+            buf_width,
+            buf_height,
+            ghost_x,
+            ghost_y,
+            tw,
+            ghost_h,
+            ghost_radius,
+            TAB_BORDER,
+            100,
+        );
 
         // Ghost title text.
         let tab = &tabs[source_index];
@@ -1207,7 +1238,7 @@ impl CpuRenderer {
             let max = (tw.saturating_sub(pad * 2) / self.cell_width) as usize;
             tab.title.chars().take(max).collect()
         };
-        let lw = label.len() as u32 * self.cell_width;
+        let lw = label.chars().count() as u32 * self.cell_width;
         let tx = ghost_x + ((tw as i32 - lw as i32) / 2).max(4);
         for (ci, ch) in label.chars().enumerate() {
             let cx = tx + ci as i32 * self.cell_width as i32;
@@ -1224,8 +1255,8 @@ impl CpuRenderer {
             }
         }
 
-        // Insertion indicator: 2px vertical line in Mauve (#CBA6F7).
-        let ix = self.tab_origin_x(insert_index, tw);
+        // Smooth insertion indicator: 2px vertical line at lerped indicator_x.
+        let ix = indicator_x.round() as u32;
         let indicator_y_pad = self.scaled_px(4) as usize;
         for py in indicator_y_pad..bar_h.saturating_sub(indicator_y_pad) {
             for dx in 0..self.scaled_px(2) {

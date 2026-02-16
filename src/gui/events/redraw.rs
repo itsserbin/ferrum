@@ -10,21 +10,47 @@ const SCROLLBAR_FADE_START: Duration = Duration::from_millis(1500);
 const SCROLLBAR_FADE_END: Duration = Duration::from_millis(1800);
 const ANIMATION_FRAME_INTERVAL: Duration = Duration::from_millis(16);
 
+/// Quadratic ease-out: fast start, smooth deceleration.
+fn ease_out(t: f32) -> f32 {
+    1.0 - (1.0 - t) * (1.0 - t)
+}
+
 impl FerrumWindow {
     pub(in crate::gui) fn animation_schedule(&self, now: Instant) -> Option<(Instant, bool)> {
         let cursor = self.cursor_animation_schedule(now);
         let scrollbar = self.scrollbar_animation_schedule(now);
+        let tab_anim = self.tab_animation_schedule(now);
 
-        match (cursor, scrollbar) {
-            (None, None) => None,
-            (Some(schedule), None) | (None, Some(schedule)) => Some(schedule),
-            (Some((cursor_deadline, cursor_redraw)), Some((scroll_deadline, scroll_redraw))) => {
-                Some((
-                    cursor_deadline.min(scroll_deadline),
-                    cursor_redraw || scroll_redraw,
-                ))
-            }
+        let schedules = [cursor, scrollbar, tab_anim];
+        let mut result: Option<(Instant, bool)> = None;
+        for s in schedules.into_iter().flatten() {
+            result = Some(match result {
+                None => s,
+                Some((deadline, redraw)) => (deadline.min(s.0), redraw || s.1),
+            });
         }
+        result
+    }
+
+    fn tab_animation_schedule(&self, now: Instant) -> Option<(Instant, bool)> {
+        let anim = self.tab_reorder_animation.as_ref()?;
+        let elapsed = now.saturating_duration_since(anim.started);
+        let duration = Duration::from_millis(anim.duration_ms as u64);
+        if elapsed >= duration {
+            return None; // Animation finished, will be cleaned up on next redraw.
+        }
+        Some((now + ANIMATION_FRAME_INTERVAL, true))
+    }
+
+    /// Returns current animation offsets for tab slide animation (or None if not animating).
+    pub(in crate::gui) fn tab_animation_offsets(&self) -> Option<Vec<f32>> {
+        let anim = self.tab_reorder_animation.as_ref()?;
+        let elapsed = anim.started.elapsed().as_secs_f32();
+        let duration = anim.duration_ms as f32 / 1000.0;
+        let t = (elapsed / duration).min(1.0);
+        let factor = 1.0 - ease_out(t);
+        let offsets: Vec<f32> = anim.offsets.iter().map(|o| o * factor).collect();
+        Some(offsets)
     }
 
     fn cursor_animation_schedule(&self, now: Instant) -> Option<(Instant, bool)> {
@@ -166,18 +192,37 @@ impl FerrumWindow {
                 .tab_hover_tooltip(&tab_infos, self.hovered_tab, bw as u32);
 
         // Collect drag/overlay state needed during rendering.
-        let drag_info = self.dragging_tab.as_ref().and_then(|drag| {
+        // Smooth the insertion indicator position with lerp.
+        let drag_info = self.dragging_tab.as_mut().and_then(|drag| {
             if drag.is_active {
                 let insert_idx = self.backend.tab_insert_index_from_x(
                     drag.current_x,
                     self.tabs.len(),
                     bw as u32,
                 );
-                Some((drag.source_index, drag.current_x, insert_idx))
+                let tw = self.backend.tab_width(self.tabs.len(), bw as u32);
+                let target_x = self.backend.tab_origin_x(insert_idx, tw) as f32;
+                if drag.indicator_x < 0.0 {
+                    drag.indicator_x = target_x;
+                } else {
+                    drag.indicator_x += (target_x - drag.indicator_x) * 0.3;
+                }
+                Some((drag.source_index, drag.current_x, drag.indicator_x))
             } else {
                 None
             }
         });
+
+        // Compute per-tab animation offsets (slide after reorder).
+        let tab_offsets = self.tab_animation_offsets();
+
+        // Clean up finished animation.
+        if let Some(ref anim) = self.tab_reorder_animation {
+            let elapsed = anim.started.elapsed().as_millis() as u32;
+            if elapsed >= anim.duration_ms {
+                self.tab_reorder_animation = None;
+            }
+        }
 
         let dragging_active = self
             .dragging_tab
@@ -280,10 +325,11 @@ impl FerrumWindow {
                     &tab_infos,
                     self.hovered_tab,
                     self.mouse_pos,
+                    tab_offsets.as_deref(),
                 );
 
                 // 6) Draw drag overlay.
-                if let Some((source_index, current_x, insert_idx)) = drag_info {
+                if let Some((source_index, current_x, indicator_x)) = drag_info {
                     renderer.draw_tab_drag_overlay(
                         &mut buffer,
                         bw,
@@ -291,7 +337,7 @@ impl FerrumWindow {
                         &tab_infos,
                         source_index,
                         current_x,
-                        insert_idx,
+                        indicator_x,
                     );
                 }
 
@@ -407,10 +453,11 @@ impl FerrumWindow {
                     &tab_infos,
                     self.hovered_tab,
                     self.mouse_pos,
+                    tab_offsets.as_deref(),
                 );
 
                 // 5) Draw drag overlay.
-                if let Some((source_index, current_x, insert_idx)) = drag_info {
+                if let Some((source_index, current_x, indicator_x)) = drag_info {
                     gpu.draw_tab_drag_overlay(
                         &mut dummy,
                         bw,
@@ -418,7 +465,7 @@ impl FerrumWindow {
                         &tab_infos,
                         source_index,
                         current_x,
-                        insert_idx,
+                        indicator_x,
                     );
                 }
 
