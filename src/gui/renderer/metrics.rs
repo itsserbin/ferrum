@@ -13,6 +13,7 @@ pub struct FontMetrics {
     pub font_size: f32,
     pub ui_scale: f64,
     pub ascent: i32,
+    #[cfg_attr(target_os = "macos", allow(dead_code))]
     pub tab_bar_visible: bool,
 }
 

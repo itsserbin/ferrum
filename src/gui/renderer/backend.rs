@@ -58,6 +58,7 @@ impl RendererBackend {
         }
     }
 
+    #[cfg_attr(target_os = "macos", allow(dead_code))]
     pub fn set_tab_bar_visible(&mut self, visible: bool) {
         match self {
             RendererBackend::Cpu { renderer, .. } => renderer.set_tab_bar_visible(visible),

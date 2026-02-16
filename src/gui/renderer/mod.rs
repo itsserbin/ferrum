@@ -80,6 +80,7 @@ pub struct CpuRenderer {
     font: Font,
     font_size: f32,
     ui_scale: f64,
+    #[cfg_attr(target_os = "macos", allow(dead_code))]
     tab_bar_visible: bool,
     pub cell_width: u32,
     pub cell_height: u32,
@@ -169,6 +170,7 @@ impl CpuRenderer {
         }
     }
 
+    #[cfg_attr(target_os = "macos", allow(dead_code))]
     pub(crate) fn set_tab_bar_visible(&mut self, visible: bool) {
         #[cfg(target_os = "macos")]
         {
