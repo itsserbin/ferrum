@@ -175,7 +175,7 @@ impl super::Terminal {
             for col in 0..self.grid.cols {
                 let cell = if row < scroll_offset {
                     // Pull row from scrollback.
-                    let sb_idx = self.scrollback.len() - scroll_offset + row;
+                    let sb_idx = self.scrollback.len().saturating_sub(scroll_offset) + row;
                     if col < self.scrollback[sb_idx].cells.len() {
                         self.scrollback[sb_idx].cells[col].clone()
                     } else {

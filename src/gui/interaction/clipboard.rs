@@ -13,7 +13,7 @@ impl FerrumWindow {
         selection: Selection,
         scroll_offset: usize,
     ) -> String {
-        let viewport_start = terminal.scrollback.len() - scroll_offset;
+        let viewport_start = terminal.scrollback.len().saturating_sub(scroll_offset);
 
         // Convert absolute selection to viewport-relative
         let rel_selection = Selection {

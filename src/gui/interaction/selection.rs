@@ -63,7 +63,7 @@ impl FerrumWindow {
 
     fn viewport_start(&self) -> usize {
         match self.active_tab_ref() {
-            Some(tab) => tab.terminal.scrollback.len() - tab.scroll_offset,
+            Some(tab) => tab.terminal.scrollback.len().saturating_sub(tab.scroll_offset),
             None => 0,
         }
     }

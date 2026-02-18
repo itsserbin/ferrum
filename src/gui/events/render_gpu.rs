@@ -134,7 +134,7 @@ impl FerrumWindow {
 
         // 1) Render terminal grid.
         if let Some(tab) = self.tabs.get(self.active_tab) {
-            let viewport_start = tab.terminal.scrollback.len() - tab.scroll_offset;
+            let viewport_start = tab.terminal.scrollback.len().saturating_sub(tab.scroll_offset);
             if tab.scroll_offset == 0 {
                 gpu.render(
                     &mut dummy,
