@@ -14,12 +14,19 @@ impl super::Terminal {
         }
 
         // Main grid resize
-        let old_cols = self.grid.cols;
-        if old_cols != cols && self.alt_grid.is_none() {
-            // Width changed: reflow the grid
-            self.reflow_resize(rows, cols);
-        } else {
-            // Height only or alt screen: simple resize
+        // On Unix (macOS/Linux), shell handles resize via SIGWINCH - use simple resize
+        // On Windows, ConPTY doesn't redraw content - use reflow to preserve it
+        #[cfg(windows)]
+        {
+            let old_cols = self.grid.cols;
+            if old_cols != cols && self.alt_grid.is_none() {
+                self.reflow_resize(rows, cols);
+            } else {
+                self.simple_resize(rows, cols);
+            }
+        }
+        #[cfg(not(windows))]
+        {
             self.simple_resize(rows, cols);
         }
 
