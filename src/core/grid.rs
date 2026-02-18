@@ -90,6 +90,7 @@ impl Grid {
     /// Shift all rows in range [from..to) up by `count` positions.
     /// Rows at the top are lost (caller must save them first).
     /// Rows vacated at the bottom are filled with defaults.
+    #[allow(dead_code)]
     pub fn shift_up(&mut self, count: usize) {
         if count == 0 || count >= self.rows {
             return;

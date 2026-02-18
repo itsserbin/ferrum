@@ -37,28 +37,8 @@ impl super::Terminal {
         self.resize_at = Some(std::time::Instant::now());
     }
 
-    /// Simple resize without reflow (height-only changes or alt screen).
+    /// Simple resize - just resize the grid, let shell handle content via SIGWINCH.
     fn simple_resize(&mut self, rows: usize, cols: usize) {
-        let old_rows = self.grid.rows;
-        let is_alt = self.alt_grid.is_some();
-
-        // Vertical shrink: if cursor would be outside, push top rows to scrollback
-        if rows < old_rows && self.cursor_row >= rows {
-            let shift = self.cursor_row - rows + 1;
-            if !is_alt {
-                for r in 0..shift {
-                    let cells = self.grid.row_cells(r);
-                    let wrapped = self.grid.is_wrapped(r);
-                    self.scrollback.push_back(Row::from_cells(cells, wrapped));
-                    if self.scrollback.len() > self.max_scrollback {
-                        self.scrollback.pop_front();
-                    }
-                }
-            }
-            self.grid.shift_up(shift);
-            self.cursor_row -= shift;
-        }
-
         self.grid = self.grid.resized(rows, cols);
         self.cursor_row = self.cursor_row.min(rows.saturating_sub(1));
         self.cursor_col = self.cursor_col.min(cols.saturating_sub(1));

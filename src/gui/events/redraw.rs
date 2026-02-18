@@ -267,7 +267,12 @@ impl FerrumWindow {
     }
 
     pub(in crate::gui) fn apply_pending_resize(&mut self) {
-        if let Some((rows, cols)) = self.pending_grid_resize.take() {
+        if self.pending_grid_resize.take().is_some() {
+            // Recalculate grid size from current window dimensions to avoid race condition
+            // with native tab bar toggle on macOS (which can change window.inner_size()
+            // between on_resized() and this apply call).
+            let size = self.window.inner_size();
+            let (rows, cols) = self.calc_grid_size(size.width, size.height);
             self.resize_all_tabs(rows, cols);
             // Show mouse cursor after resize completes
             self.window.set_cursor_visible(true);
