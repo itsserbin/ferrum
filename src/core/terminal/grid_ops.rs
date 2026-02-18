@@ -40,48 +40,72 @@ impl super::Terminal {
     /// Reflow resize: reflow content to new width, preserving cursor position.
     ///
     /// Strategy:
-    /// 1. Collect scrollback + grid rows up to cursor into logical lines
+    /// 1. Collect scrollback + meaningful grid rows into logical lines
     /// 2. Rewrap logical lines to new column width
     /// 3. Fill grid from top, excess goes to scrollback
     /// 4. Cursor stays at same logical position
     fn reflow_resize(&mut self, rows: usize, cols: usize) {
-        // Only collect rows up to and including cursor row (not empty trailing rows)
-        let content_rows = self.cursor_row + 1;
+        // Keep explicit blank lines up to cursor row, but also preserve any visible
+        // content that may exist below the cursor (after cursor-addressing sequences).
+        let cursor_rows = self.cursor_row.saturating_add(1).min(self.grid.rows);
+        let default_cell = Cell::default();
+        let last_content_row = (0..self.grid.rows).rev().find(|&row| {
+            self.grid.is_wrapped(row)
+                || (0..self.grid.cols).any(|col| {
+                    // Safe: row/col come from bounded loops.
+                    self.grid.get_unchecked(row, col) != &default_cell
+                })
+        });
+        let content_rows = last_content_row
+            .map(|row| (row + 1).max(cursor_rows))
+            .unwrap_or(cursor_rows);
 
-        // 1. Collect content into logical lines
-        let mut lines: Vec<Vec<Cell>> = Vec::new();
+        // 1. Collect content into logical lines.
+        // `min_len` preserves cells up to cursor position in the line containing cursor,
+        // so trailing spaces before cursor are not trimmed away on reflow.
+        let mut lines: Vec<(Vec<Cell>, usize)> = Vec::new();
         let mut current_line: Vec<Cell> = Vec::new();
+        let mut current_min_len = 0usize;
 
         // First from scrollback
         for row in self.scrollback.iter() {
             current_line.extend(row.cells.iter().cloned());
             if !row.wrapped {
-                lines.push(std::mem::take(&mut current_line));
+                lines.push((std::mem::take(&mut current_line), current_min_len));
+                current_min_len = 0;
             }
         }
 
-        // Then from grid (only up to cursor row)
+        // Then from grid up to the computed content boundary.
         for r in 0..content_rows {
+            let line_start = current_line.len();
             current_line.extend(self.grid.row_cells(r));
+            if r == self.cursor_row {
+                let clamped_cursor_col = self.cursor_col.min(self.grid.cols);
+                current_min_len = current_min_len.max(line_start + clamped_cursor_col);
+            }
             if !self.grid.is_wrapped(r) {
-                lines.push(std::mem::take(&mut current_line));
+                lines.push((std::mem::take(&mut current_line), current_min_len));
+                current_min_len = 0;
             }
         }
 
         // Handle remaining content (if last row was wrapped)
         if !current_line.is_empty() {
-            lines.push(current_line);
+            lines.push((current_line, current_min_len));
         }
 
         // 2. Rewrap all lines to new width
         let mut rewrapped: Vec<Row> = Vec::new();
-        for line in &lines {
-            // Trim trailing spaces
+        for (line, min_len) in &lines {
+            // Trim only untouched default cells; keep styled spaces and explicit
+            // spaces before cursor in the active line.
             let len = line
                 .iter()
-                .rposition(|c| c.character != ' ')
+                .rposition(|c| c != &Cell::default())
                 .map(|i| i + 1)
                 .unwrap_or(0);
+            let len = len.max((*min_len).min(line.len()));
 
             if len == 0 {
                 rewrapped.push(Row::new(cols));
@@ -295,8 +319,49 @@ mod tests {
         let content_after = collect_all_content(&term);
 
         // Content should be preserved
-        assert_eq!(content_before, content_after,
-            "Content should be preserved after reflow");
+        assert_eq!(
+            content_before, content_after,
+            "Content should be preserved after reflow"
+        );
+    }
+
+    #[test]
+    fn reflow_preserves_rows_below_cursor() {
+        let mut term = Terminal::new(5, 10);
+        term.process(b"TOP");
+        term.process(b"\x1b[4;1HLOWER");
+
+        // Simulate app moving cursor up after writing lower content.
+        term.cursor_row = 1;
+        term.cursor_col = 0;
+
+        let before = collect_all_content(&term);
+        assert_eq!(before, "TOPLOWER");
+
+        term.resize(5, 12);
+
+        let after = collect_all_content(&term);
+        assert_eq!(
+            after, before,
+            "Rows below cursor must survive reflow resize"
+        );
+    }
+
+    #[test]
+    fn reflow_preserves_trailing_spaces_before_cursor() {
+        let mut term = Terminal::new(4, 10);
+        term.process(b"abc   ");
+        assert_eq!(term.cursor_row, 0);
+        assert_eq!(term.cursor_col, 6);
+
+        term.resize(4, 12);
+
+        assert_eq!(term.grid.get(0, 0).unwrap().character, 'a');
+        assert_eq!(term.grid.get(0, 1).unwrap().character, 'b');
+        assert_eq!(term.grid.get(0, 2).unwrap().character, 'c');
+        assert_eq!(term.grid.get(0, 3).unwrap().character, ' ');
+        assert_eq!(term.grid.get(0, 4).unwrap().character, ' ');
+        assert_eq!(term.grid.get(0, 5).unwrap().character, ' ');
     }
 
     #[test]
@@ -320,10 +385,18 @@ mod tests {
         term.resize(5, 10);
 
         // Cursor should be clamped to valid range
-        assert!(term.cursor_row < term.grid.rows,
-            "cursor_row {} should be < grid.rows {}", term.cursor_row, term.grid.rows);
-        assert!(term.cursor_col < term.grid.cols,
-            "cursor_col {} should be < grid.cols {}", term.cursor_col, term.grid.cols);
+        assert!(
+            term.cursor_row < term.grid.rows,
+            "cursor_row {} should be < grid.rows {}",
+            term.cursor_row,
+            term.grid.rows
+        );
+        assert!(
+            term.cursor_col < term.grid.cols,
+            "cursor_col {} should be < grid.cols {}",
+            term.cursor_col,
+            term.grid.cols
+        );
     }
 
     #[test]
@@ -338,8 +411,10 @@ mod tests {
         // Content should be rewrapped: now 2 rows instead of 3
         // Check that the full alphabet is preserved
         let content = collect_all_content(&term);
-        assert_eq!(content, "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-            "Content should be preserved after rewrap");
+        assert_eq!(
+            content, "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+            "Content should be preserved after rewrap"
+        );
 
         // The rewrapped content should have proper wrap flags
         // First row (20 chars) should be wrapped, second (6 chars) should not

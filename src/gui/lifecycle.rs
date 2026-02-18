@@ -134,32 +134,38 @@ impl ApplicationHandler for App {
 
         // Handle native macOS "+" button clicks (newWindowForTab: action).
         #[cfg(target_os = "macos")]
-        if platform::macos::take_new_tab_request() {
-            let focused_id = self
-                .windows
-                .iter()
-                .find(|(_, w)| w.window.has_focus())
-                .map(|(id, _)| *id);
-            if let Some(win_id) = focused_id {
-                if let Some(win) = self.windows.get_mut(&win_id) {
-                    win.pending_requests.push(WindowRequest::NewTab);
+        {
+            let new_tab_requests = platform::macos::take_new_tab_requests();
+            for _ in 0..new_tab_requests {
+                let focused_id = self
+                    .windows
+                    .iter()
+                    .find(|(_, w)| w.window.has_focus())
+                    .map(|(id, _)| *id);
+                if let Some(win_id) = focused_id {
+                    if let Some(win) = self.windows.get_mut(&win_id) {
+                        win.pending_requests.push(WindowRequest::NewTab);
+                    }
+                    self.process_window_requests(event_loop, win_id);
                 }
-                self.process_window_requests(event_loop, win_id);
             }
         }
 
         // Handle native macOS pin button clicks.
         #[cfg(target_os = "macos")]
-        if platform::macos::take_pin_button_request() {
-            let focused_id = self
-                .windows
-                .iter()
-                .find(|(_, w)| w.window.has_focus())
-                .map(|(id, _)| *id);
-            if let Some(win_id) = focused_id {
-                if let Some(win) = self.windows.get_mut(&win_id) {
-                    win.toggle_pin();
-                    win.window.request_redraw();
+        {
+            let pin_requests = platform::macos::take_pin_button_requests();
+            for _ in 0..pin_requests {
+                let focused_id = self
+                    .windows
+                    .iter()
+                    .find(|(_, w)| w.window.has_focus())
+                    .map(|(id, _)| *id);
+                if let Some(win_id) = focused_id {
+                    if let Some(win) = self.windows.get_mut(&win_id) {
+                        win.toggle_pin();
+                        win.window.request_redraw();
+                    }
                 }
             }
         }
@@ -233,7 +239,16 @@ impl App {
                     }
                 }
                 WindowRequest::CloseWindow => {
-                    self.windows.remove(&window_id);
+                    #[cfg(target_os = "macos")]
+                    {
+                        if let Some(win) = self.windows.remove(&window_id) {
+                            platform::macos::remove_toolbar_item(&win.window);
+                        }
+                    }
+                    #[cfg(not(target_os = "macos"))]
+                    {
+                        self.windows.remove(&window_id);
+                    }
                 }
                 WindowRequest::NewWindow => {
                     let tab_title = format!("bash #{}", self.windows.len() + 1);
@@ -280,7 +295,10 @@ impl App {
                             }
                             if let Some(existing) = existing_win {
                                 platform::macos::add_as_tab(&existing, &new_win.window);
-                                platform::macos::set_native_tab_group_pin_state(&existing, group_pinned);
+                                platform::macos::set_native_tab_group_pin_state(
+                                    &existing,
+                                    group_pinned,
+                                );
                                 new_win.pinned = group_pinned;
                             }
                             new_win.window.request_redraw();
@@ -309,7 +327,10 @@ impl App {
                             }
                             if let Some(existing) = existing_win {
                                 platform::macos::add_as_tab(&existing, &new_win.window);
-                                platform::macos::set_native_tab_group_pin_state(&existing, group_pinned);
+                                platform::macos::set_native_tab_group_pin_state(
+                                    &existing,
+                                    group_pinned,
+                                );
                                 new_win.pinned = group_pinned;
                             }
                             new_win.window.request_redraw();

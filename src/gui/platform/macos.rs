@@ -1,20 +1,19 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use objc2::MainThreadMarker;
 use objc2::msg_send;
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, Sel};
 use objc2_app_kit::{
-    NSFloatingWindowLevel, NSNormalWindowLevel,
-    NSBezelStyle, NSButton, NSImage, NSLayoutAttribute, NSTitlebarAccessoryViewController, NSView,
-    NSWindow, NSWindowTabbingMode,
+    NSBezelStyle, NSButton, NSFloatingWindowLevel, NSImage, NSLayoutAttribute, NSNormalWindowLevel,
+    NSTitlebarAccessoryViewController, NSView, NSWindow, NSWindowTabbingMode,
 };
 use objc2_foundation::ns_string;
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use winit::window::Window;
 
 /// Flag: native "+" button was clicked, need to create a new tab.
-static NEW_TAB_REQUESTED: AtomicBool = AtomicBool::new(false);
+static NEW_TAB_REQUESTED: AtomicUsize = AtomicUsize::new(0);
 
 // SAFETY: These are raw Objective-C runtime C functions from libobjc.dylib.
 // They have a stable ABI on macOS and are the foundation of the Objective-C runtime.
@@ -65,7 +64,7 @@ unsafe extern "C" fn handle_new_window_for_tab(
     _cmd: *const core::ffi::c_void,
     _sender: *mut core::ffi::c_void,
 ) {
-    NEW_TAB_REQUESTED.store(true, Ordering::SeqCst);
+    NEW_TAB_REQUESTED.fetch_add(1, Ordering::SeqCst);
 }
 
 /// Extracts the NSWindow from a winit Window via raw-window-handle.
@@ -292,9 +291,9 @@ pub fn sync_native_tab_bar_visibility(window: &Window) {
     }
 }
 
-/// Returns true and resets the flag if the native "+" button was clicked.
-pub fn take_new_tab_request() -> bool {
-    NEW_TAB_REQUESTED.swap(false, Ordering::SeqCst)
+/// Returns and resets the native "+" click counter.
+pub fn take_new_tab_requests() -> usize {
+    NEW_TAB_REQUESTED.swap(0, Ordering::SeqCst)
 }
 
 // =============================================================================
@@ -305,7 +304,7 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 /// Flag: pin button was clicked, need to toggle pin state.
-static PIN_BUTTON_CLICKED: AtomicBool = AtomicBool::new(false);
+static PIN_BUTTON_CLICKED: AtomicUsize = AtomicUsize::new(0);
 
 /// Map from NSWindow pointer to its toolbar item (for updating icon state).
 /// We store raw addresses as usize to keep the static map `Send + Sync`.
@@ -328,12 +327,12 @@ unsafe extern "C" fn handle_pin_button_click(
     _cmd: *const core::ffi::c_void,
     _sender: *mut core::ffi::c_void,
 ) {
-    PIN_BUTTON_CLICKED.store(true, Ordering::SeqCst);
+    PIN_BUTTON_CLICKED.fetch_add(1, Ordering::SeqCst);
 }
 
-/// Returns true and resets the flag if the pin button was clicked.
-pub fn take_pin_button_request() -> bool {
-    PIN_BUTTON_CLICKED.swap(false, Ordering::SeqCst)
+/// Returns and resets the pin-button click counter.
+pub fn take_pin_button_requests() -> usize {
+    PIN_BUTTON_CLICKED.swap(0, Ordering::SeqCst)
 }
 
 fn window_and_group_ptrs(ns_window: &Retained<NSWindow>) -> std::collections::HashSet<usize> {
@@ -511,4 +510,20 @@ pub fn set_pin_button_state(window: &Window, pinned: bool) {
     };
     let window_ptr = Retained::as_ptr(&ns_window) as usize;
     set_pin_button_state_for_window_ptr(window_ptr, pinned);
+}
+
+/// Removes toolbar bookkeeping for a window being destroyed.
+pub fn remove_toolbar_item(window: &Window) {
+    let Some(ns_window) = get_ns_window(window) else {
+        return;
+    };
+    let window_ptr = Retained::as_ptr(&ns_window) as usize;
+    let mut map = TOOLBAR_ITEMS.lock().unwrap();
+    let Some(items) = map.as_mut() else {
+        return;
+    };
+    items.remove(&window_ptr);
+    if items.is_empty() {
+        *map = None;
+    }
 }
