@@ -57,15 +57,18 @@ impl super::Terminal {
         self.cursor_col = self.cursor_col.min(cols.saturating_sub(1));
     }
 
-    /// Reflow resize: reflow all content (scrollback + grid) to new width.
+    /// Reflow resize: reflow content to new width, preserving cursor position.
     ///
     /// Strategy:
-    /// 1. Collect all rows (scrollback + grid) into logical lines
+    /// 1. Collect scrollback + grid rows up to cursor into logical lines
     /// 2. Rewrap logical lines to new column width
-    /// 3. Split result: excess goes to scrollback, last N rows fill grid
-    /// 4. Adjust cursor position to match reflowed content
+    /// 3. Fill grid from top, excess goes to scrollback
+    /// 4. Cursor stays at same logical position
     fn reflow_resize(&mut self, rows: usize, cols: usize) {
-        // 1. Collect all content into logical lines
+        // Only collect rows up to and including cursor row (not empty trailing rows)
+        let content_rows = self.cursor_row + 1;
+
+        // 1. Collect content into logical lines
         let mut lines: Vec<Vec<Cell>> = Vec::new();
         let mut current_line: Vec<Cell> = Vec::new();
 
@@ -77,15 +80,15 @@ impl super::Terminal {
             }
         }
 
-        // Then from grid
-        for r in 0..self.grid.rows {
+        // Then from grid (only up to cursor row)
+        for r in 0..content_rows {
             current_line.extend(self.grid.row_cells(r));
             if !self.grid.is_wrapped(r) {
                 lines.push(std::mem::take(&mut current_line));
             }
         }
 
-        // Handle remaining content
+        // Handle remaining content (if last row was wrapped)
         if !current_line.is_empty() {
             lines.push(current_line);
         }
@@ -117,8 +120,7 @@ impl super::Terminal {
             }
         }
 
-        // 3. Split into scrollback and grid
-        // Keep content at the top of grid, not bottom
+        // 3. Split into scrollback and grid (content stays at top)
         let total_rows = rewrapped.len();
 
         self.scrollback.clear();
@@ -134,6 +136,8 @@ impl super::Terminal {
                 }
                 self.grid.set_wrapped(i, row.wrapped);
             }
+            // Cursor at end of content
+            self.cursor_row = total_rows.saturating_sub(1);
         } else {
             // Content overflows - excess goes to scrollback
             let scrollback_count = total_rows - rows;
@@ -154,10 +158,10 @@ impl super::Terminal {
                 }
                 self.grid.set_wrapped(i, row.wrapped);
             }
+            // Cursor at bottom (content filled the grid)
+            self.cursor_row = rows.saturating_sub(1);
         }
 
-        // 4. Clamp cursor to valid range
-        self.cursor_row = self.cursor_row.min(rows.saturating_sub(1));
         self.cursor_col = self.cursor_col.min(cols.saturating_sub(1));
     }
 
