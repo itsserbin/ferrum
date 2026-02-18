@@ -291,3 +291,345 @@ pub fn sync_native_tab_bar_visibility(window: &Window) {
 pub fn take_new_tab_request() -> bool {
     NEW_TAB_REQUESTED.swap(false, Ordering::SeqCst)
 }
+
+// =============================================================================
+// Pin Button (NSToolbar) Support
+// =============================================================================
+
+use std::collections::HashMap;
+use std::sync::Mutex;
+
+/// Flag: pin button was clicked, need to toggle pin state.
+static PIN_BUTTON_CLICKED: AtomicBool = AtomicBool::new(false);
+
+/// Map from NSWindow pointer to its toolbar item (for updating icon state).
+/// We store the raw pointer to the NSToolbarItem so we can update it later.
+static TOOLBAR_ITEMS: Mutex<Option<HashMap<usize, *mut core::ffi::c_void>>> = Mutex::new(None);
+
+/// ObjC method implementation for pin button action.
+///
+/// # Safety
+///
+/// This function is designed to be called by the Objective-C runtime as a method
+/// implementation. It must have the correct calling convention (extern "C") and
+/// signature matching the Objective-C method type encoding "v@:@":
+/// - `_this`: The receiver object (self in Objective-C)
+/// - `_cmd`: The selector being invoked
+/// - `_sender`: The sender object passed to the action method
+///
+/// The function only performs an atomic store operation, which is inherently safe.
+unsafe extern "C" fn handle_pin_button_click(
+    _this: *mut core::ffi::c_void,
+    _cmd: *const core::ffi::c_void,
+    _sender: *mut core::ffi::c_void,
+) {
+    PIN_BUTTON_CLICKED.store(true, Ordering::SeqCst);
+}
+
+/// Returns true and resets the flag if the pin button was clicked.
+pub fn take_pin_button_request() -> bool {
+    PIN_BUTTON_CLICKED.swap(false, Ordering::SeqCst)
+}
+
+/// Sets up an NSToolbar with a pin button for the given window.
+///
+/// The toolbar appears right after the traffic lights (red/yellow/green buttons).
+/// The pin button uses SF Symbols "pin" (outline) and "pin.fill" (filled) icons.
+pub fn setup_toolbar(window: &Window) {
+    let Some(ns_window) = get_ns_window(window) else {
+        return;
+    };
+
+    // SAFETY: This block creates an NSToolbar with a pin button item.
+    // All operations use valid Objective-C selectors and proper memory management.
+    //
+    // 1. objc_getClass: Gets class objects for NSToolbar, NSToolbarItem, NSImage
+    // 2. objc_msgSend with alloc/init: Standard Objective-C object creation pattern
+    // 3. All selectors used are documented AppKit APIs available on macOS 10.13+
+    // 4. The toolbar is retained by the window when set via setToolbar:
+    // 5. We store the toolbar item pointer for later icon updates
+    unsafe {
+        // Get class pointers
+        unsafe extern "C" {
+            fn objc_getClass(name: *const core::ffi::c_char) -> *const core::ffi::c_void;
+        }
+
+        let toolbar_cls = objc_getClass(c"NSToolbar".as_ptr());
+        let toolbar_item_cls = objc_getClass(c"NSToolbarItem".as_ptr());
+        let image_cls = objc_getClass(c"NSImage".as_ptr());
+
+        if toolbar_cls.is_null() || toolbar_item_cls.is_null() || image_cls.is_null() {
+            eprintln!("[ferrum] Failed to get NSToolbar/NSToolbarItem/NSImage classes");
+            return;
+        }
+
+        // Create toolbar identifier
+        let toolbar_id = ns_string!("com.ferrum.toolbar");
+        let pin_item_id = ns_string!("com.ferrum.toolbar.pin");
+
+        // Selectors
+        let sel_alloc = sel_registerName(c"alloc".as_ptr());
+        let sel_init_with_id = sel_registerName(c"initWithIdentifier:".as_ptr());
+        let sel_set_delegate = sel_registerName(c"setDelegate:".as_ptr());
+        let sel_set_toolbar = sel_registerName(c"setToolbar:".as_ptr());
+        let sel_set_image = sel_registerName(c"setImage:".as_ptr());
+        let sel_set_label = sel_registerName(c"setLabel:".as_ptr());
+        let sel_set_target = sel_registerName(c"setTarget:".as_ptr());
+        let sel_set_action = sel_registerName(c"setAction:".as_ptr());
+        let sel_image_with_system_symbol =
+            sel_registerName(c"imageWithSystemSymbolName:accessibilityDescription:".as_ptr());
+
+        // Create NSToolbar
+        let toolbar_alloc = objc_msgSend(toolbar_cls, sel_alloc);
+        if toolbar_alloc.is_null() {
+            return;
+        }
+        let toolbar = objc_msgSend(toolbar_alloc, sel_init_with_id, toolbar_id);
+        if toolbar.is_null() {
+            return;
+        }
+
+        // Create NSToolbarItem for the pin button
+        let item_alloc = objc_msgSend(toolbar_item_cls, sel_alloc);
+        if item_alloc.is_null() {
+            return;
+        }
+        let item = objc_msgSend(item_alloc, sel_init_with_id, pin_item_id);
+        if item.is_null() {
+            return;
+        }
+
+        // Set up SF Symbol image for the pin (outline version = unpinned)
+        let symbol_name = ns_string!("pin");
+        let accessibility_desc = ns_string!("Pin Window");
+        let image = objc_msgSend(
+            image_cls,
+            sel_image_with_system_symbol,
+            symbol_name,
+            accessibility_desc,
+        );
+
+        if !image.is_null() {
+            let _: () = msg_send![item as *const AnyObject, setImage: image];
+        }
+
+        // Set label and tooltip
+        let label = ns_string!("Pin");
+        let _: () = msg_send![item as *const AnyObject, setLabel: label];
+        let _: () = msg_send![item as *const AnyObject, setToolTip: ns_string!("Pin window on top")];
+
+        // Install the click handler on the window delegate (or window class)
+        let sel_pin_action = sel_registerName(c"ferrumPinButtonClicked:".as_ptr());
+        let imp: unsafe extern "C" fn() =
+            core::mem::transmute(handle_pin_button_click as unsafe extern "C" fn(_, _, _));
+        let types = c"v@:@".as_ptr();
+
+        // Add method to window's class for the action
+        let win_cls = object_getClass(Retained::as_ptr(&ns_window).cast());
+        if !win_cls.is_null() {
+            class_addMethod(win_cls, sel_pin_action, imp, types);
+        }
+
+        // Set target and action for the toolbar item
+        let _: () = msg_send![item as *const AnyObject, setTarget: &*ns_window];
+        let _: () = msg_send![item as *const AnyObject, setAction: sel_pin_action];
+
+        // Store the item pointer for later updates
+        let window_ptr = Retained::as_ptr(&ns_window) as usize;
+        {
+            let mut map = TOOLBAR_ITEMS.lock().unwrap();
+            let items = map.get_or_insert_with(HashMap::new);
+            items.insert(window_ptr, item);
+        }
+
+        // Create a simple toolbar delegate that returns our item
+        // We'll use the window as the delegate and add the necessary methods
+        let sel_toolbar_items = sel_registerName(c"toolbarAllowedItemIdentifiers:".as_ptr());
+        let sel_toolbar_default = sel_registerName(c"toolbarDefaultItemIdentifiers:".as_ptr());
+        let sel_toolbar_item_for_id =
+            sel_registerName(c"toolbar:itemForItemIdentifier:willBeInsertedIntoToolbar:".as_ptr());
+
+        // We need to implement delegate methods. Since this is complex, let's use
+        // a simpler approach: directly insert the item into the toolbar.
+        // NSToolbar has insertItemWithItemIdentifier:atIndex: but it requires the delegate
+        // to provide items. Instead, let's use the view-based toolbar item approach.
+
+        // Alternative: Create a button-based toolbar item directly
+        let button_cls = objc_getClass(c"NSButton".as_ptr());
+        if !button_cls.is_null() {
+            let sel_button_with_image =
+                sel_registerName(c"buttonWithImage:target:action:".as_ptr());
+
+            // Create button with SF Symbol
+            let button = objc_msgSend(
+                button_cls,
+                sel_button_with_image,
+                image,
+                Retained::as_ptr(&ns_window),
+                sel_pin_action,
+            );
+
+            if !button.is_null() {
+                // Set the button as the view for the toolbar item
+                let _: () = msg_send![item as *const AnyObject, setView: button];
+
+                // Set bordered style for the button
+                let _: () = msg_send![button as *const AnyObject, setBordered: false];
+                let _: () = msg_send![button as *const AnyObject, setBezelStyle: 0i64]; // NSBezelStyleRegularSquare
+            }
+        }
+
+        // Configure toolbar display mode and size
+        let sel_set_display_mode = sel_registerName(c"setDisplayMode:".as_ptr());
+        let sel_set_size_mode = sel_registerName(c"setSizeMode:".as_ptr());
+        let _: () = msg_send![toolbar as *const AnyObject, setDisplayMode: 1i64]; // NSToolbarDisplayModeIconOnly
+        let _: () = msg_send![toolbar as *const AnyObject, setSizeMode: 1i64]; // NSToolbarSizeModeSmall
+
+        // For a toolbar without delegate, we need to use a different approach.
+        // Let's add the titlebar accessory view instead, which is simpler and
+        // positions the button near the traffic lights.
+
+        // Create NSTitlebarAccessoryViewController
+        let accessory_vc_cls = objc_getClass(c"NSTitlebarAccessoryViewController".as_ptr());
+        if accessory_vc_cls.is_null() {
+            eprintln!("[ferrum] Failed to get NSTitlebarAccessoryViewController class");
+            return;
+        }
+
+        let sel_init = sel_registerName(c"init".as_ptr());
+        let sel_set_view = sel_registerName(c"setView:".as_ptr());
+        let sel_set_layout_attribute = sel_registerName(c"setLayoutAttribute:".as_ptr());
+        let sel_add_accessory = sel_registerName(c"addTitlebarAccessoryViewController:".as_ptr());
+
+        let accessory_vc_alloc = objc_msgSend(accessory_vc_cls, sel_alloc);
+        if accessory_vc_alloc.is_null() {
+            return;
+        }
+        let accessory_vc = objc_msgSend(accessory_vc_alloc, sel_init);
+        if accessory_vc.is_null() {
+            return;
+        }
+
+        // Create button for the accessory
+        if !button_cls.is_null() && !image.is_null() {
+            let sel_button_with_image =
+                sel_registerName(c"buttonWithImage:target:action:".as_ptr());
+
+            let button = objc_msgSend(
+                button_cls,
+                sel_button_with_image,
+                image,
+                Retained::as_ptr(&ns_window),
+                sel_pin_action,
+            );
+
+            if !button.is_null() {
+                // Style the button
+                let _: () = msg_send![button as *const AnyObject, setBordered: false];
+                let _: () = msg_send![button as *const AnyObject, setBezelStyle: 0i64];
+
+                // Set frame size for the button
+                let sel_set_frame = sel_registerName(c"setFrame:".as_ptr());
+                // CGRect: origin (x, y), size (width, height) - using 24x24 button
+                #[repr(C)]
+                struct CGRect {
+                    x: f64,
+                    y: f64,
+                    width: f64,
+                    height: f64,
+                }
+                let frame = CGRect {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 28.0,
+                    height: 28.0,
+                };
+                let _: () = msg_send![button as *const AnyObject, setFrame: frame];
+
+                // Store button reference for later icon updates
+                {
+                    let mut map = TOOLBAR_ITEMS.lock().unwrap();
+                    let items = map.get_or_insert_with(HashMap::new);
+                    items.insert(window_ptr, button);
+                }
+
+                // Set the button as the view for the accessory
+                let _: () = msg_send![accessory_vc as *const AnyObject, setView: button];
+
+                // Set layout attribute to position after traffic lights (left side)
+                // NSLayoutAttributeLeft = 1, NSLayoutAttributeRight = 2
+                // NSLayoutAttributeLeading = 5 positions after traffic lights
+                let _: () = msg_send![accessory_vc as *const AnyObject, setLayoutAttribute: 5i64];
+
+                // Add accessory to window
+                let _: () = msg_send![&ns_window, addTitlebarAccessoryViewController: accessory_vc];
+
+                eprintln!("[ferrum] Pin button toolbar installed");
+            }
+        }
+    }
+}
+
+/// Updates the pin button icon state (outline = unpinned, filled = pinned).
+pub fn set_pin_button_state(window: &Window, pinned: bool) {
+    let Some(ns_window) = get_ns_window(window) else {
+        return;
+    };
+
+    let window_ptr = Retained::as_ptr(&ns_window) as usize;
+    let button_ptr = {
+        let map = TOOLBAR_ITEMS.lock().unwrap();
+        map.as_ref().and_then(|m| m.get(&window_ptr).copied())
+    };
+
+    let Some(button) = button_ptr else {
+        return;
+    };
+
+    // SAFETY: button is a valid NSButton pointer stored during setup_toolbar().
+    // We update its image to reflect the pinned state.
+    unsafe {
+        unsafe extern "C" {
+            fn objc_getClass(name: *const core::ffi::c_char) -> *const core::ffi::c_void;
+        }
+
+        let image_cls = objc_getClass(c"NSImage".as_ptr());
+        if image_cls.is_null() {
+            return;
+        }
+
+        let sel_image_with_system_symbol =
+            sel_registerName(c"imageWithSystemSymbolName:accessibilityDescription:".as_ptr());
+
+        // Use "pin.fill" for pinned state, "pin" for unpinned
+        let symbol_name = if pinned {
+            ns_string!("pin.fill")
+        } else {
+            ns_string!("pin")
+        };
+        let accessibility_desc = if pinned {
+            ns_string!("Unpin Window")
+        } else {
+            ns_string!("Pin Window")
+        };
+
+        let image = objc_msgSend(
+            image_cls,
+            sel_image_with_system_symbol,
+            symbol_name,
+            accessibility_desc,
+        );
+
+        if !image.is_null() {
+            let _: () = msg_send![button as *const AnyObject, setImage: image];
+        }
+
+        // Update tooltip
+        let tooltip = if pinned {
+            ns_string!("Unpin window")
+        } else {
+            ns_string!("Pin window on top")
+        };
+        let _: () = msg_send![button as *const AnyObject, setToolTip: tooltip];
+    }
+}

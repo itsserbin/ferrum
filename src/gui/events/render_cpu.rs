@@ -228,6 +228,7 @@ impl FerrumWindow {
                     self.hovered_tab,
                     self.mouse_pos,
                     tab_offsets.as_deref(),
+                    self.pinned,
                 );
 
                 // 6) Draw drag overlay.

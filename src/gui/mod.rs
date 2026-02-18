@@ -19,7 +19,7 @@ use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::keyboard::{Key, KeyCode, ModifiersState, NamedKey, PhysicalKey};
 #[cfg(target_os = "windows")]
 use winit::platform::windows::{CornerPreference, WindowAttributesExtWindows};
-use winit::window::{CursorIcon, ResizeDirection, Window, WindowId};
+use winit::window::{CursorIcon, ResizeDirection, Window, WindowId, WindowLevel};
 
 use crate::core::terminal::Terminal;
 use crate::core::{MouseMode, Position, SecurityGuard, Selection};
@@ -83,6 +83,7 @@ impl FerrumWindow {
             next_native_tab_sync_at: None,
             scroll_accumulator: 0.0,
             pending_requests: Vec::new(),
+            pinned: false,
         }
     }
 
@@ -105,6 +106,20 @@ impl FerrumWindow {
     /// Returns the active tab as shared reference.
     fn active_tab_ref(&self) -> Option<&TabState> {
         self.tabs.get(self.active_tab)
+    }
+
+    /// Toggles the pinned (always-on-top) state of this window.
+    pub(super) fn toggle_pin(&mut self) {
+        self.pinned = !self.pinned;
+        let level = if self.pinned {
+            WindowLevel::AlwaysOnTop
+        } else {
+            WindowLevel::Normal
+        };
+        self.window.set_window_level(level);
+
+        #[cfg(target_os = "macos")]
+        platform::macos::set_pin_button_state(&self.window, self.pinned);
     }
 }
 
@@ -174,6 +189,10 @@ impl App {
         // Configure native macOS tab grouping.
         #[cfg(target_os = "macos")]
         platform::macos::configure_native_tabs(&window);
+
+        // Set up the toolbar with pin button.
+        #[cfg(target_os = "macos")]
+        platform::macos::setup_toolbar(&window);
 
         let id = window.id();
         let ferrum_win = FerrumWindow::new(window, context);

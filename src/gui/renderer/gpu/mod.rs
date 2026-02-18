@@ -412,8 +412,9 @@ impl traits::Renderer for GpuRenderer {
         hovered_tab: Option<usize>,
         mouse_pos: (f64, f64),
         tab_offsets: Option<&[f32]>,
+        pinned: bool,
     ) {
-        self.draw_tab_bar_impl(buf_width, tabs, hovered_tab, mouse_pos, tab_offsets);
+        self.draw_tab_bar_impl(buf_width, tabs, hovered_tab, mouse_pos, tab_offsets, pinned);
     }
 
     fn draw_tab_drag_overlay(

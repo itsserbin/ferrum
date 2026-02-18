@@ -90,6 +90,7 @@ pub trait Renderer {
         hovered_tab: Option<usize>,
         mouse_pos: (f64, f64),
         tab_offsets: Option<&[f32]>,
+        pinned: bool,
     );
 
     fn draw_tab_drag_overlay(

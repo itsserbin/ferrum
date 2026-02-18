@@ -143,6 +143,22 @@ impl ApplicationHandler for App {
             }
         }
 
+        // Handle native macOS pin button clicks.
+        #[cfg(target_os = "macos")]
+        if platform::macos::take_pin_button_request() {
+            let focused_id = self
+                .windows
+                .iter()
+                .find(|(_, w)| w.window.has_focus())
+                .map(|(id, _)| *id);
+            if let Some(win_id) = focused_id {
+                if let Some(win) = self.windows.get_mut(&win_id) {
+                    win.toggle_pin();
+                    win.window.request_redraw();
+                }
+            }
+        }
+
         let now = std::time::Instant::now();
         let mut next_wakeup: Option<std::time::Instant> = None;
 

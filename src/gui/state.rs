@@ -148,6 +148,8 @@ pub(super) struct FerrumWindow {
     pub(super) scroll_accumulator: f64,
     /// Pending requests from this window to the App (detach, close, etc.).
     pub(super) pending_requests: Vec<WindowRequest>,
+    /// Whether this window is pinned (always-on-top).
+    pub(super) pinned: bool,
 }
 
 /// App is now a window manager holding multiple FerrumWindows.

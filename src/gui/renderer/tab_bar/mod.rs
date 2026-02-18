@@ -32,8 +32,13 @@ pub(self) const WIN_BTN_WIDTH: u32 = 46;
 // Insertion indicator color (Catppuccin Mocha Mauve).
 pub(self) const INSERTION_COLOR: u32 = 0xCBA6F7;
 
+// Pin button active color (Catppuccin Mocha Lavender - same as active accent).
+#[cfg(not(target_os = "macos"))]
+const PIN_ACTIVE_COLOR: u32 = 0xB4BEFE;
+
 impl CpuRenderer {
     /// Draws top tab bar including tabs, controls, and separators.
+    #[allow(clippy::too_many_arguments)]
     pub fn draw_tab_bar(
         &mut self,
         buffer: &mut [u32],
@@ -43,6 +48,7 @@ impl CpuRenderer {
         _hovered_tab: Option<usize>,
         mouse_pos: (f64, f64),
         tab_offsets: Option<&[f32]>,
+        pinned: bool,
     ) {
         let tab_bar_height = self.tab_bar_height_px();
         let bar_h = tab_bar_height as usize;
@@ -348,6 +354,10 @@ impl CpuRenderer {
         };
         self.draw_tab_plus_icon(buffer, buf_width, bar_h, plus_rect, plus_fg);
 
+        // Pin button (non-macOS).
+        #[cfg(not(target_os = "macos"))]
+        self.draw_pin_button(buffer, buf_width, bar_h, mouse_pos, pinned);
+
         // Window control buttons (non-macOS).
         #[cfg(not(target_os = "macos"))]
         self.draw_window_buttons(buffer, buf_width, bar_h, mouse_pos);
@@ -401,6 +411,108 @@ impl CpuRenderer {
             active_mix,
         ));
         self.draw_tab_close_icon(buffer, buf_width, buf_height, (cx, cy, cw, ch), close_fg);
+    }
+
+    /// Draws the pin button at the left of the tab bar (non-macOS).
+    #[cfg(not(target_os = "macos"))]
+    fn draw_pin_button(
+        &self,
+        buffer: &mut [u32],
+        buf_width: usize,
+        buf_height: usize,
+        mouse_pos: (f64, f64),
+        pinned: bool,
+    ) {
+        let (pin_x, pin_y, pin_w, pin_h) = self.pin_button_rect();
+        let is_hovered = Self::point_in_rect(mouse_pos.0, mouse_pos.1, (pin_x, pin_y, pin_w, pin_h));
+
+        // Draw hover background.
+        if is_hovered {
+            self.draw_rounded_rect(
+                buffer,
+                buf_width,
+                buf_height,
+                pin_x as i32,
+                pin_y as i32,
+                pin_w,
+                pin_h,
+                self.scaled_px(5),
+                INACTIVE_TAB_HOVER,
+                255,
+            );
+        }
+
+        // Icon color: active (lavender) when pinned, inactive otherwise.
+        let icon_color = if pinned {
+            PIN_ACTIVE_COLOR
+        } else if is_hovered {
+            TAB_TEXT_ACTIVE
+        } else {
+            TAB_TEXT_INACTIVE
+        };
+
+        self.draw_pin_icon(buffer, buf_width, buf_height, (pin_x, pin_y, pin_w, pin_h), icon_color, pinned);
+    }
+
+    /// Draws a Bootstrap-style vertical pushpin icon.
+    #[cfg(not(target_os = "macos"))]
+    fn draw_pin_icon(
+        &self,
+        buffer: &mut [u32],
+        buf_width: usize,
+        buf_height: usize,
+        rect: (u32, u32, u32, u32),
+        color: u32,
+        _pinned: bool,
+    ) {
+        let (x, y, w, h) = rect;
+        let cx = (x as f32 + w as f32 / 2.0) as i32;
+        let cy = (y as f32 + h as f32 / 2.0) as i32;
+        let s = self.ui_scale() as f32;
+        let t = (1.2 * s).clamp(1.0, 2.0);
+
+        // Dimensions (scaled)
+        let head_w = (6.0 * s) as i32;
+        let head_h = (2.0 * s) as i32;
+        let body_w = (3.0 * s) as i32;
+        let body_h = (4.0 * s) as i32;
+        let platform_w = (7.0 * s) as i32;
+        let platform_h = (1.5 * s) as i32;
+        let needle_h = (4.0 * s) as i32;
+
+        let top = cy - (6.0 * s) as i32;
+
+        // Helper to draw filled rect
+        let draw_rect = |buf: &mut [u32], rx: i32, ry: i32, rw: i32, rh: i32| {
+            for py in ry.max(0)..(ry + rh).min(buf_height as i32) {
+                for px in rx.max(0)..(rx + rw).min(buf_width as i32) {
+                    let idx = py as usize * buf_width + px as usize;
+                    if idx < buf.len() {
+                        buf[idx] = color;
+                    }
+                }
+            }
+        };
+
+        // 1. Top head
+        draw_rect(buffer, cx - head_w / 2, top, head_w, head_h);
+
+        // 2. Body
+        let body_top = top + head_h;
+        draw_rect(buffer, cx - body_w / 2, body_top, body_w, body_h);
+
+        // 3. Platform
+        let platform_top = body_top + body_h;
+        draw_rect(buffer, cx - platform_w / 2, platform_top, platform_w, platform_h);
+
+        // 4. Needle
+        let needle_top = (platform_top + platform_h) as f32;
+        Self::draw_stroked_line(
+            buffer, buf_width, buf_height,
+            cx as f32, needle_top,
+            cx as f32, needle_top + needle_h as f32,
+            t, color
+        );
     }
 
     /// Draws the 3 window control buttons at the right edge (non-macOS).

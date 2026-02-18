@@ -8,6 +8,10 @@ use super::{
     TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE,
 };
 
+// Pin button active color (Catppuccin Mocha Lavender).
+#[cfg(not(target_os = "macos"))]
+const PIN_ACTIVE_COLOR: u32 = 0xB4BEFE;
+
 use super::super::TabInfo;
 
 #[cfg(not(target_os = "macos"))]
@@ -16,6 +20,14 @@ use super::WIN_BTN_WIDTH;
 impl super::GpuRenderer {
     // ── Tab bar math (mirrors CpuRenderer) ────────────────────────────
 
+    /// Pin button size in pixels (non-macOS).
+    #[cfg(not(target_os = "macos"))]
+    const PIN_BUTTON_SIZE: u32 = 24;
+
+    /// Gap between pin button and first tab (non-macOS).
+    #[cfg(not(target_os = "macos"))]
+    const PIN_BUTTON_GAP: u32 = 8;
+
     pub(super) fn tab_strip_start_x_val(&self) -> u32 {
         #[cfg(target_os = "macos")]
         {
@@ -23,12 +35,30 @@ impl super::GpuRenderer {
         }
         #[cfg(target_os = "windows")]
         {
+            // WINDOW_PADDING + pin button + gap
             self.metrics.scaled_px(14)
+                + self.metrics.scaled_px(Self::PIN_BUTTON_SIZE)
+                + self.metrics.scaled_px(Self::PIN_BUTTON_GAP)
         }
         #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
         {
+            // WINDOW_PADDING + pin button + gap
             self.metrics.scaled_px(8)
+                + self.metrics.scaled_px(Self::PIN_BUTTON_SIZE)
+                + self.metrics.scaled_px(Self::PIN_BUTTON_GAP)
         }
+    }
+
+    /// Returns rectangle for pin button (non-macOS only).
+    #[cfg(not(target_os = "macos"))]
+    pub(super) fn pin_button_rect(&self) -> (u32, u32, u32, u32) {
+        let btn_size = self.metrics.scaled_px(Self::PIN_BUTTON_SIZE);
+        #[cfg(target_os = "windows")]
+        let x = self.metrics.scaled_px(14);
+        #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+        let x = self.metrics.scaled_px(8);
+        let y = (self.metrics.tab_bar_height_px().saturating_sub(btn_size)) / 2;
+        (x, y, btn_size, btn_size)
     }
 
     pub(super) fn plus_button_reserved_width(&self) -> u32 {
@@ -130,6 +160,7 @@ impl super::GpuRenderer {
         _hovered_tab: Option<usize>,
         mouse_pos: (f64, f64),
         tab_offsets: Option<&[f32]>,
+        pinned: bool,
     ) {
         let tab_bar_h = self.metrics.tab_bar_height_px() as f32;
         let bw = buf_width as u32;
@@ -354,6 +385,10 @@ impl super::GpuRenderer {
             1.0,
         );
 
+        // Pin button (non-macOS).
+        #[cfg(not(target_os = "macos"))]
+        self.draw_pin_button_commands(mouse_pos, pinned);
+
         // Window control buttons (non-macOS).
         #[cfg(not(target_os = "macos"))]
         self.draw_window_buttons_commands(bw, mouse_pos);
@@ -361,6 +396,67 @@ impl super::GpuRenderer {
         // Bottom separator line.
         let sep_y = tab_bar_h - 1.0;
         self.push_rect(0.0, sep_y, bw as f32, 1.0, TAB_BORDER, 0.7);
+    }
+
+    /// Draws the pin button at the left of the tab bar (non-macOS).
+    #[cfg(not(target_os = "macos"))]
+    fn draw_pin_button_commands(&mut self, mouse_pos: (f64, f64), pinned: bool) {
+        let (pin_x, pin_y, pin_w, pin_h) = self.pin_button_rect();
+        let is_hovered = Self::point_in_rect(mouse_pos.0, mouse_pos.1, (pin_x, pin_y, pin_w, pin_h));
+
+        // Draw hover background.
+        if is_hovered {
+            self.push_rounded_rect(
+                pin_x as f32,
+                pin_y as f32,
+                pin_w as f32,
+                pin_h as f32,
+                self.metrics.scaled_px(5) as f32,
+                INACTIVE_TAB_HOVER,
+                1.0,
+            );
+        }
+
+        // Icon color: active (lavender) when pinned, inactive otherwise.
+        let icon_color = if pinned {
+            PIN_ACTIVE_COLOR
+        } else if is_hovered {
+            TAB_TEXT_ACTIVE
+        } else {
+            TAB_TEXT_INACTIVE
+        };
+
+        // Draw Bootstrap-style vertical pushpin icon
+        let cx = pin_x as f32 + pin_w as f32 / 2.0;
+        let cy = pin_y as f32 + pin_h as f32 / 2.0;
+        let s = self.metrics.ui_scale as f32;
+        let t = (1.2 * s).clamp(1.0, 2.0);
+
+        // Dimensions (scaled)
+        let head_w = 6.0 * s;      // width of top head
+        let head_h = 2.0 * s;      // height of top head
+        let body_w = 3.0 * s;      // width of body
+        let body_h = 4.0 * s;      // height of body
+        let platform_w = 7.0 * s;  // width of middle platform
+        let platform_h = 1.5 * s;  // height of platform
+        let needle_h = 4.0 * s;    // length of needle
+
+        let top = cy - 6.0 * s;    // start from top
+
+        // 1. Top head (wide rectangle)
+        self.push_rect(cx - head_w / 2.0, top, head_w, head_h, icon_color, 1.0);
+
+        // 2. Body (narrower rectangle below head)
+        let body_top = top + head_h;
+        self.push_rect(cx - body_w / 2.0, body_top, body_w, body_h, icon_color, 1.0);
+
+        // 3. Platform/base (wider rectangle where pin enters surface)
+        let platform_top = body_top + body_h;
+        self.push_rect(cx - platform_w / 2.0, platform_top, platform_w, platform_h, icon_color, 1.0);
+
+        // 4. Needle (thin line pointing down)
+        let needle_top = platform_top + platform_h;
+        self.push_line(cx, needle_top, cx, needle_top + needle_h, t, icon_color, 1.0);
     }
 
     pub(super) fn draw_tab_drag_overlay_impl(

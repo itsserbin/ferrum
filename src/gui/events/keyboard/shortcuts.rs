@@ -192,6 +192,12 @@ impl FerrumWindow {
             return false;
         }
 
+        // Pin/Unpin window (always-on-top toggle).
+        if Self::physical_key_is(physical, KeyCode::KeyP) {
+            self.toggle_pin();
+            return true;
+        }
+
         if Self::physical_key_is(physical, KeyCode::KeyT) {
             let Some(closed) = self.closed_tabs.pop() else {
                 return true;

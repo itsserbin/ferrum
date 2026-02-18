@@ -535,6 +535,7 @@ impl traits::Renderer for CpuRenderer {
         hovered_tab: Option<usize>,
         mouse_pos: (f64, f64),
         tab_offsets: Option<&[f32]>,
+        pinned: bool,
     ) {
         CpuRenderer::draw_tab_bar(
             self,
@@ -545,6 +546,7 @@ impl traits::Renderer for CpuRenderer {
             hovered_tab,
             mouse_pos,
             tab_offsets,
+            pinned,
         );
     }
 

@@ -57,6 +57,9 @@ pub enum TabBarHit {
     CloseTab(usize),
     /// Clicked on the new-tab button.
     NewTab,
+    /// Clicked on the pin button (non-macOS).
+    #[cfg(not(target_os = "macos"))]
+    PinButton,
     /// Clicked on a window control button (non-macOS).
     #[cfg(not(target_os = "macos"))]
     WindowButton(WindowButton),

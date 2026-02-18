@@ -123,6 +123,8 @@ impl FerrumWindow {
                 }
                 #[cfg(not(target_os = "macos"))]
                 TabBarHit::WindowButton(_) => CursorIcon::Pointer,
+                #[cfg(not(target_os = "macos"))]
+                TabBarHit::PinButton => CursorIcon::Pointer,
                 TabBarHit::Empty => CursorIcon::Default,
             }
         } else {

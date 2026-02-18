@@ -203,6 +203,12 @@ impl FerrumWindow {
                     let _ = self.window.drag_window();
                 }
             }
+            #[cfg(not(target_os = "macos"))]
+            TabBarHit::PinButton => {
+                self.last_topbar_empty_click = None;
+                self.last_tab_click = None;
+                self.toggle_pin();
+            }
         }
     }
 

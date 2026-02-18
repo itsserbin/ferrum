@@ -30,6 +30,19 @@ impl super::GpuRenderer {
             return TabBarHit::WindowButton(btn);
         }
 
+        // Pin button (non-macOS).
+        #[cfg(not(target_os = "macos"))]
+        {
+            let (pin_x, pin_y, pin_w, pin_h) = self.pin_button_rect();
+            if x >= pin_x as f64
+                && x < (pin_x + pin_w) as f64
+                && y >= pin_y as f64
+                && y < (pin_y + pin_h) as f64
+            {
+                return TabBarHit::PinButton;
+            }
+        }
+
         let tw = self.tab_width_val(tab_count, buf_width);
         let tab_strip_start = self.tab_strip_start_x_val();
 

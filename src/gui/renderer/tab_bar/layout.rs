@@ -43,6 +43,14 @@ const PLUS_BUTTON_GAP: u32 = 4;
 /// Tab padding horizontal (left/right spacing for text).
 pub(super) const TAB_PADDING_H: u32 = 14;
 
+/// Pin button size in pixels (non-macOS).
+#[cfg(not(target_os = "macos"))]
+const PIN_BUTTON_SIZE: u32 = 24;
+
+/// Gap between pin button and first tab (non-macOS).
+#[cfg(not(target_os = "macos"))]
+const PIN_BUTTON_GAP: u32 = 8;
+
 impl super::super::CpuRenderer {
     /// Computes adaptive tab width with overflow compression.
     /// Tabs shrink from max (MAX_TAB_WIDTH) down to MIN_TAB_WIDTH when many tabs are open.
@@ -58,7 +66,15 @@ impl super::super::CpuRenderer {
     }
 
     pub(crate) fn tab_strip_start_x(&self) -> u32 {
-        self.scaled_px(TAB_STRIP_START_X)
+        #[cfg(not(target_os = "macos"))]
+        {
+            // On Windows/Linux: WINDOW_PADDING + pin button + gap
+            self.scaled_px(TAB_STRIP_START_X) + self.scaled_px(PIN_BUTTON_SIZE) + self.scaled_px(PIN_BUTTON_GAP)
+        }
+        #[cfg(target_os = "macos")]
+        {
+            self.scaled_px(TAB_STRIP_START_X)
+        }
     }
 
     pub(in crate::gui::renderer) fn plus_button_reserved_width(&self) -> u32 {
@@ -124,6 +140,15 @@ impl super::super::CpuRenderer {
         (x, y, btn_size, btn_size)
     }
 
+    /// Returns rectangle for pin button (non-macOS only).
+    #[cfg(not(target_os = "macos"))]
+    pub(in crate::gui::renderer) fn pin_button_rect(&self) -> (u32, u32, u32, u32) {
+        let btn_size = self.scaled_px(PIN_BUTTON_SIZE);
+        let x = self.scaled_px(TAB_STRIP_START_X);
+        let y = (self.tab_bar_height_px().saturating_sub(btn_size)) / 2;
+        (x, y, btn_size, btn_size)
+    }
+
     /// Hit-tests the tab bar and returns the clicked target.
     pub fn hit_test_tab_bar(&self, x: f64, y: f64, tab_count: usize, buf_width: u32) -> TabBarHit {
         if y >= self.tab_bar_height_px() as f64 {
@@ -134,6 +159,15 @@ impl super::super::CpuRenderer {
         #[cfg(not(target_os = "macos"))]
         if let Some(btn) = self.window_button_at_position(x, y, buf_width) {
             return TabBarHit::WindowButton(btn);
+        }
+
+        // Pin button (non-macOS).
+        #[cfg(not(target_os = "macos"))]
+        {
+            let (pin_x, pin_y, pin_w, pin_h) = self.pin_button_rect();
+            if x >= pin_x as f64 && x < (pin_x + pin_w) as f64 && y >= pin_y as f64 && y < (pin_y + pin_h) as f64 {
+                return TabBarHit::PinButton;
+            }
         }
 
         let tw = self.tab_width(tab_count, buf_width);
