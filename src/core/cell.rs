@@ -10,15 +10,20 @@ pub struct Cell {
     pub underline: bool,
 }
 
+impl Cell {
+    /// A default cell constant for use with `unwrap_or` when `Grid::get()` returns `None`.
+    pub const DEFAULT: Cell = Cell {
+        character: ' ',
+        fg: Color::DEFAULT_FG,
+        bg: Color::DEFAULT_BG,
+        bold: false,
+        reverse: false,
+        underline: false,
+    };
+}
+
 impl Default for Cell {
     fn default() -> Self {
-        Cell {
-            character: ' ',
-            fg: Color::DEFAULT_FG,
-            bg: Color::DEFAULT_BG,
-            bold: false,
-            reverse: false,
-            underline: false,
-        }
+        Cell::DEFAULT
     }
 }

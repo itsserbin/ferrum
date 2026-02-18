@@ -174,7 +174,9 @@ impl super::Terminal {
                     }
                 } else {
                     // Pull row from the live grid.
-                    self.grid.get(row - scroll_offset, col).clone()
+                    // Safe: row - scroll_offset is in bounds since row >= scroll_offset
+                    // and row < self.grid.rows, col < self.grid.cols
+                    self.grid.get_unchecked(row - scroll_offset, col).clone()
                 };
                 display.set(row, col, cell);
             }
@@ -196,7 +198,8 @@ impl super::Terminal {
 
         for row in (top + 1)..=bottom {
             for col in 0..self.grid.cols {
-                let cell = self.grid.get(row, col).clone();
+                // Safe: row and col are within grid bounds (row <= bottom < grid.rows)
+                let cell = self.grid.get_unchecked(row, col).clone();
                 self.grid.set(row - 1, col, cell);
             }
             // Also copy the wrapped flag
@@ -212,7 +215,8 @@ impl super::Terminal {
     pub(super) fn scroll_down_region(&mut self, top: usize, bottom: usize) {
         for row in (top..bottom).rev() {
             for col in 0..self.grid.cols {
-                let cell = self.grid.get(row, col).clone();
+                // Safe: row and col are within grid bounds (row < bottom <= grid.rows)
+                let cell = self.grid.get_unchecked(row, col).clone();
                 self.grid.set(row + 1, col, cell);
             }
             // Also copy the wrapped flag
@@ -272,7 +276,8 @@ mod tests {
         // Grid
         for r in 0..term.grid.rows {
             for c in 0..term.grid.cols {
-                let ch = term.grid.get(r, c).character;
+                // Safe: iterating within grid bounds
+                let ch = term.grid.get_unchecked(r, c).character;
                 if ch != ' ' {
                     content.push(ch);
                 }
@@ -357,10 +362,10 @@ mod tests {
         term.resize(6, 10);
 
         // Content should still be in grid (not moved to scrollback)
-        assert_eq!(term.grid.get(0, 0).character, 'T');
-        assert_eq!(term.grid.get(0, 1).character, 'e');
-        assert_eq!(term.grid.get(0, 2).character, 's');
-        assert_eq!(term.grid.get(0, 3).character, 't');
+        assert_eq!(term.grid.get(0, 0).unwrap().character, 'T');
+        assert_eq!(term.grid.get(0, 1).unwrap().character, 'e');
+        assert_eq!(term.grid.get(0, 2).unwrap().character, 's');
+        assert_eq!(term.grid.get(0, 3).unwrap().character, 't');
     }
 
     #[test]

@@ -1,5 +1,12 @@
 use crate::gui::*;
 
+/// X10 mouse protocol base offset for button and coordinate encoding.
+const X10_MOUSE_BASE_OFFSET: u8 = 32;
+/// X10 mouse protocol coordinate offset (1-indexed + 32).
+const X10_COORD_OFFSET: u8 = 33;
+/// X10 mouse protocol button code for release events.
+const X10_BUTTON_RELEASE: u8 = 3;
+
 fn csi_modifier_param(modifiers: ModifiersState) -> Option<u8> {
     let mut param = 1;
     let mut has_modifier = false;
@@ -105,9 +112,13 @@ pub(super) fn encode_mouse_event(
         format!("\x1b[<{};{};{}{}", button, col + 1, row + 1, suffix).into_bytes()
     } else {
         // Legacy X10: \x1b[M{cb}{cx}{cy} with single-byte coordinates.
-        let cb = if pressed { button + 32 } else { 3 + 32 }; // Release is encoded as button 3.
-        let cx = (col as u8).saturating_add(33);
-        let cy = (row as u8).saturating_add(33);
+        let cb = if pressed {
+            button + X10_MOUSE_BASE_OFFSET
+        } else {
+            X10_BUTTON_RELEASE + X10_MOUSE_BASE_OFFSET
+        };
+        let cx = (col as u8).saturating_add(X10_COORD_OFFSET);
+        let cy = (row as u8).saturating_add(X10_COORD_OFFSET);
         vec![0x1b, b'[', b'M', cb, cx, cy]
     }
 }

@@ -13,7 +13,8 @@ pub(in super::super) fn handle_inline_edit_csi(
             let n = term.param(params, 1).max(1) as usize;
             for col in term.cursor_col..term.grid.cols {
                 if col + n < term.grid.cols {
-                    let cell = term.grid.get(term.cursor_row, col + n).clone();
+                    // Safe: col + n < grid.cols, and cursor_row is in bounds
+                    let cell = term.grid.get_unchecked(term.cursor_row, col + n).clone();
                     term.grid.set(term.cursor_row, col, cell);
                 } else {
                     term.grid.set(term.cursor_row, col, Cell::default());
@@ -26,7 +27,8 @@ pub(in super::super) fn handle_inline_edit_csi(
             let n = term.param(params, 1).max(1) as usize;
             for col in (term.cursor_col..term.grid.cols).rev() {
                 if col >= term.cursor_col + n {
-                    let cell = term.grid.get(term.cursor_row, col - n).clone();
+                    // Safe: col - n >= cursor_col >= 0, and col < grid.cols
+                    let cell = term.grid.get_unchecked(term.cursor_row, col - n).clone();
                     term.grid.set(term.cursor_row, col, cell);
                 } else {
                     term.grid.set(term.cursor_row, col, Cell::default());
@@ -68,7 +70,8 @@ mod tests {
     /// Helper: read row 0 as a String (all cols).
     fn read_row(term: &Terminal) -> String {
         (0..term.grid.cols)
-            .map(|c| term.grid.get(0, c).character)
+            // Safe: iterating within grid bounds
+            .map(|c| term.grid.get_unchecked(0, c).character)
             .collect()
     }
 

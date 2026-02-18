@@ -4,6 +4,8 @@ mod drag_overlay;
 mod layout;
 mod primitives;
 
+use layout::{CLOSE_BUTTON_MARGIN, CLOSE_BUTTON_SIZE, TAB_PADDING_H};
+
 use super::*;
 
 // Catppuccin Mocha palette — flat Chrome-style tab bar.
@@ -62,7 +64,7 @@ impl CpuRenderer {
 
         let tw = self.tab_width(tabs.len(), buf_width as u32);
         let text_y = (tab_bar_height.saturating_sub(self.cell_height)) / 2 + self.scaled_px(1);
-        let tab_padding_h = self.scaled_px(14);
+        let tab_padding_h = self.scaled_px(TAB_PADDING_H);
         let use_numbers = self.should_show_number(tw);
         let tab_inset_y = 0u32; // Tabs start from top of bar.
         let tab_h = tab_bar_height; // Full height so bottom merges with terminal.
@@ -217,7 +219,7 @@ impl CpuRenderer {
                 let number_str = (i + 1).to_string();
                 let show_close = tab.is_active || hover_t > 0.05;
                 let close_reserved = if show_close {
-                    self.scaled_px(20) + self.scaled_px(6)
+                    self.scaled_px(CLOSE_BUTTON_SIZE) + self.scaled_px(CLOSE_BUTTON_MARGIN)
                 } else {
                     0
                 };
@@ -244,7 +246,7 @@ impl CpuRenderer {
                 // Normal mode: show title with close button and security badge.
                 let show_close = tab.is_active || hover_t > 0.05;
                 let close_reserved = if show_close {
-                    self.scaled_px(20) + self.scaled_px(6)
+                    self.scaled_px(CLOSE_BUTTON_SIZE) + self.scaled_px(CLOSE_BUTTON_MARGIN)
                 } else {
                     0
                 };

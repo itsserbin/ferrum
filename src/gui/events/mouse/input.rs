@@ -212,6 +212,11 @@ impl FerrumWindow {
 
         let track_height = track_bottom - track_top;
 
+        // Guard against division by zero with extremely small windows.
+        if track_height <= 0.0 {
+            return false;
+        }
+
         // Check if click is on the thumb or on the track.
         if let Some((thumb_y, thumb_height)) = self.backend.scrollbar_thumb_bounds(
             buf_height,

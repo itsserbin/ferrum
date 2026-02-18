@@ -17,7 +17,8 @@ impl CpuRenderer {
         for row in 0..grid.rows {
             let abs_row = viewport_start + row;
             for col in 0..grid.cols {
-                let cell = grid.get(row, col);
+                // Safe: iterating within grid bounds
+                let cell = grid.get_unchecked(row, col);
                 let x = col as u32 * self.cell_width + x_offset;
                 let y = row as u32 * self.cell_height + y_offset;
 

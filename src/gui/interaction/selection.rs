@@ -21,19 +21,22 @@ impl FerrumWindow {
             return None;
         }
 
-        let ch = grid.get(row, col).character;
+        // Safe: bounds checked above
+        let ch = grid.get_unchecked(row, col).character;
         if !Self::is_word_char(ch) {
             let pos = Position { row, col };
             return Some((pos, pos));
         }
 
         let mut start_col = col;
-        while start_col > 0 && Self::is_word_char(grid.get(row, start_col - 1).character) {
+        // Safe: start_col - 1 >= 0, and row is in bounds
+        while start_col > 0 && Self::is_word_char(grid.get_unchecked(row, start_col - 1).character) {
             start_col -= 1;
         }
 
         let mut end_col = col;
-        while end_col + 1 < grid.cols && Self::is_word_char(grid.get(row, end_col + 1).character) {
+        // Safe: end_col + 1 < grid.cols, and row is in bounds
+        while end_col + 1 < grid.cols && Self::is_word_char(grid.get_unchecked(row, end_col + 1).character) {
             end_col += 1;
         }
 

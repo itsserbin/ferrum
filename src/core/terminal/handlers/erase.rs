@@ -91,7 +91,7 @@ mod tests {
         // Before cursor on row 1: preserved
         for c in 0..3 {
             assert_eq!(
-                term.grid.get(1, c).character,
+                term.grid.get_unchecked(1, c).character,
                 'A',
                 "row 1 col {} should be A",
                 c
@@ -100,7 +100,7 @@ mod tests {
         // Row 0: fully preserved
         for c in 0..10 {
             assert_eq!(
-                term.grid.get(0, c).character,
+                term.grid.get_unchecked(0, c).character,
                 'A',
                 "row 0 col {} should be A",
                 c
@@ -109,7 +109,7 @@ mod tests {
         // From cursor to end of row 1: erased
         for c in 3..10 {
             assert_eq!(
-                term.grid.get(1, c).character,
+                term.grid.get_unchecked(1, c).character,
                 ' ',
                 "row 1 col {} should be erased",
                 c
@@ -119,7 +119,7 @@ mod tests {
         for r in 2..4 {
             for c in 0..10 {
                 assert_eq!(
-                    term.grid.get(r, c).character,
+                    term.grid.get_unchecked(r, c).character,
                     ' ',
                     "row {} col {} should be erased",
                     r,
@@ -138,7 +138,7 @@ mod tests {
         // Row 0: fully erased
         for c in 0..10 {
             assert_eq!(
-                term.grid.get(0, c).character,
+                term.grid.get_unchecked(0, c).character,
                 ' ',
                 "row 0 col {} should be erased",
                 c
@@ -147,7 +147,7 @@ mod tests {
         // Row 1 up to and including cursor: erased
         for c in 0..=3 {
             assert_eq!(
-                term.grid.get(1, c).character,
+                term.grid.get_unchecked(1, c).character,
                 ' ',
                 "row 1 col {} should be erased",
                 c
@@ -156,7 +156,7 @@ mod tests {
         // Row 1 after cursor: preserved
         for c in 4..10 {
             assert_eq!(
-                term.grid.get(1, c).character,
+                term.grid.get_unchecked(1, c).character,
                 'A',
                 "row 1 col {} should be A",
                 c
@@ -166,7 +166,7 @@ mod tests {
         for r in 2..4 {
             for c in 0..10 {
                 assert_eq!(
-                    term.grid.get(r, c).character,
+                    term.grid.get_unchecked(r, c).character,
                     'A',
                     "row {} col {} should be A",
                     r,
@@ -183,7 +183,7 @@ mod tests {
         for r in 0..4 {
             for c in 0..10 {
                 assert_eq!(
-                    term.grid.get(r, c).character,
+                    term.grid.get_unchecked(r, c).character,
                     ' ',
                     "row {} col {} should be erased",
                     r,
@@ -202,7 +202,7 @@ mod tests {
         // Same as 0J: from cursor to end erased
         for c in 3..10 {
             assert_eq!(
-                term.grid.get(1, c).character,
+                term.grid.get_unchecked(1, c).character,
                 ' ',
                 "row 1 col {} should be erased",
                 c
@@ -211,7 +211,7 @@ mod tests {
         for r in 2..4 {
             for c in 0..10 {
                 assert_eq!(
-                    term.grid.get(r, c).character,
+                    term.grid.get_unchecked(r, c).character,
                     ' ',
                     "row {} col {} should be erased",
                     r,
@@ -222,7 +222,7 @@ mod tests {
         // Before cursor preserved
         for c in 0..3 {
             assert_eq!(
-                term.grid.get(1, c).character,
+                term.grid.get_unchecked(1, c).character,
                 'A',
                 "row 1 col {} should be A",
                 c
@@ -230,7 +230,7 @@ mod tests {
         }
         for c in 0..10 {
             assert_eq!(
-                term.grid.get(0, c).character,
+                term.grid.get_unchecked(0, c).character,
                 'A',
                 "row 0 col {} should be A",
                 c
@@ -246,12 +246,12 @@ mod tests {
         term.process(b"\x1b[0K");
         // Cols 0..2 preserved
         for c in 0..3 {
-            assert_eq!(term.grid.get(0, c).character, 'A', "col {} should be A", c);
+            assert_eq!(term.grid.get_unchecked(0, c).character, 'A', "col {} should be A", c);
         }
         // Cols 3..9 erased
         for c in 3..10 {
             assert_eq!(
-                term.grid.get(0, c).character,
+                term.grid.get_unchecked(0, c).character,
                 ' ',
                 "col {} should be erased",
                 c
@@ -268,7 +268,7 @@ mod tests {
         // Cols 0..3 erased (inclusive)
         for c in 0..=3 {
             assert_eq!(
-                term.grid.get(0, c).character,
+                term.grid.get_unchecked(0, c).character,
                 ' ',
                 "col {} should be erased",
                 c
@@ -276,7 +276,7 @@ mod tests {
         }
         // Cols 4..9 preserved
         for c in 4..10 {
-            assert_eq!(term.grid.get(0, c).character, 'A', "col {} should be A", c);
+            assert_eq!(term.grid.get_unchecked(0, c).character, 'A', "col {} should be A", c);
         }
     }
 
@@ -288,7 +288,7 @@ mod tests {
         term.process(b"\x1b[2K");
         for c in 0..10 {
             assert_eq!(
-                term.grid.get(0, c).character,
+                term.grid.get_unchecked(0, c).character,
                 ' ',
                 "col {} should be erased",
                 c
@@ -304,11 +304,11 @@ mod tests {
         term.process(b"\x1b[K");
         // Same as 0K
         for c in 0..3 {
-            assert_eq!(term.grid.get(0, c).character, 'A', "col {} should be A", c);
+            assert_eq!(term.grid.get_unchecked(0, c).character, 'A', "col {} should be A", c);
         }
         for c in 3..10 {
             assert_eq!(
-                term.grid.get(0, c).character,
+                term.grid.get_unchecked(0, c).character,
                 ' ',
                 "col {} should be erased",
                 c

@@ -17,7 +17,7 @@ mod ui_commands;
 use fontdue::Font;
 use wgpu;
 
-use crate::core::{Color, CursorStyle, Grid, Selection};
+use crate::core::{Cell, Color, CursorStyle, Grid, Selection};
 
 #[cfg(not(target_os = "macos"))]
 use super::WindowButton;
@@ -117,7 +117,8 @@ impl traits::Renderer for GpuRenderer {
         } else {
             1.0
         };
-        if (self.metrics.ui_scale - scale).abs() < f64::EPSILON {
+        const SCALE_EPSILON: f64 = 1e-6;
+        if (self.metrics.ui_scale - scale).abs() < SCALE_EPSILON {
             return;
         }
         self.metrics.ui_scale = scale;
@@ -185,7 +186,8 @@ impl traits::Renderer for GpuRenderer {
         for row in 0..rows {
             let abs_row = viewport_start + row;
             for col in 0..cols {
-                let cell = grid.get(row, col);
+                // Safe: iterating within grid bounds
+                let cell = grid.get_unchecked(row, col);
                 let selected = selection.is_some_and(|s| s.contains(abs_row, col));
                 let codepoint = cell.character as u32;
 
@@ -276,7 +278,7 @@ impl traits::Renderer for GpuRenderer {
             CursorStyle::BlinkingBlock | CursorStyle::SteadyBlock => {
                 // Filled block — draw bg rect + inverted glyph.
                 self.push_rect(x, y, cw, ch, cursor_color, 1.0);
-                let cell = grid.get(row, col);
+                let cell = grid.get(row, col).unwrap_or(&Cell::DEFAULT);
                 if cell.character != ' ' {
                     let cp = cell.character as u32;
                     let info = self.atlas.get_or_insert(

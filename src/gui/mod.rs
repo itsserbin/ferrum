@@ -30,6 +30,11 @@ use crate::gui::renderer::{
 };
 use crate::pty;
 
+/// Minimum number of columns for the terminal window.
+const MIN_WINDOW_COLS: u32 = 40;
+/// Minimum number of rows for the terminal window.
+const MIN_WINDOW_ROWS: u32 = 10;
+
 use self::state::{
     App, ClosedTabInfo, DragState, FerrumWindow, PtyEvent, RenameState, ScrollbarState,
     SelectionDragMode, TabReorderAnimation, TabState, WindowRequest,
@@ -127,13 +132,13 @@ impl App {
         let tmp = CpuRenderer::new();
         #[cfg(target_os = "macos")]
         let min_size = winit::dpi::LogicalSize::new(
-            (tmp.cell_width * 40 + WINDOW_PADDING * 2) as f64,
-            (tmp.cell_height * 10 + WINDOW_PADDING * 2) as f64,
+            (tmp.cell_width * MIN_WINDOW_COLS + WINDOW_PADDING * 2) as f64,
+            (tmp.cell_height * MIN_WINDOW_ROWS + WINDOW_PADDING * 2) as f64,
         );
         #[cfg(not(target_os = "macos"))]
         let min_size = winit::dpi::LogicalSize::new(
-            (tmp.cell_width * 40 + WINDOW_PADDING * 2) as f64,
-            (tmp.cell_height * 10 + TAB_BAR_HEIGHT + WINDOW_PADDING * 2) as f64,
+            (tmp.cell_width * MIN_WINDOW_COLS + WINDOW_PADDING * 2) as f64,
+            (tmp.cell_height * MIN_WINDOW_ROWS + TAB_BAR_HEIGHT + WINDOW_PADDING * 2) as f64,
         );
         let mut attrs = Window::default_attributes()
             .with_title("Ferrum")

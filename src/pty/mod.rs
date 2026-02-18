@@ -168,7 +168,14 @@ impl Session {
 
 impl Drop for Session {
     fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        if let Err(e) = self.child.kill() {
+            // Don't log InvalidInput error - process may have already exited
+            if e.kind() != std::io::ErrorKind::InvalidInput {
+                eprintln!("Failed to kill PTY child process: {}", e);
+            }
+        }
+        if let Err(e) = self.child.wait() {
+            eprintln!("Failed to wait on PTY child process: {}", e);
+        }
     }
 }

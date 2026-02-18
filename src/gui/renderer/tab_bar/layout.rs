@@ -10,37 +10,59 @@ use crate::core::Color;
 #[cfg(not(target_os = "macos"))]
 use super::WIN_BTN_WIDTH;
 
+/// Maximum tab width in pixels (before HiDPI scaling).
+const MAX_TAB_WIDTH: u32 = 240;
+
+/// Tab strip start offset for macOS (accounts for traffic light buttons).
+#[cfg(target_os = "macos")]
+const TAB_STRIP_START_X: u32 = 78;
+
+/// Tab strip start offset for Windows.
+#[cfg(target_os = "windows")]
+const TAB_STRIP_START_X: u32 = 14;
+
+/// Tab strip start offset for Linux and other platforms.
+#[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+const TAB_STRIP_START_X: u32 = 8;
+
+/// Plus button extra margin for reservation calculation.
+const PLUS_BUTTON_MARGIN: u32 = 20;
+
+/// Close button size in pixels.
+pub(super) const CLOSE_BUTTON_SIZE: u32 = 20;
+
+/// Close button margin from tab edge.
+pub(super) const CLOSE_BUTTON_MARGIN: u32 = 6;
+
+/// Plus button size in pixels.
+const PLUS_BUTTON_SIZE: u32 = 24;
+
+/// Plus button gap from last tab.
+const PLUS_BUTTON_GAP: u32 = 4;
+
+/// Tab padding horizontal (left/right spacing for text).
+pub(super) const TAB_PADDING_H: u32 = 14;
+
 impl super::super::CpuRenderer {
     /// Computes adaptive tab width with overflow compression.
-    /// Tabs shrink from max (240px) down to MIN_TAB_WIDTH when many tabs are open.
+    /// Tabs shrink from max (MAX_TAB_WIDTH) down to MIN_TAB_WIDTH when many tabs are open.
     pub fn tab_width(&self, tab_count: usize, buf_width: u32) -> u32 {
         let reserved = self.tab_strip_start_x()
             + self.plus_button_reserved_width()
-            + self.scaled_px(8)
+            + self.scaled_px(PLUS_BUTTON_GAP * 2)
             + self.window_buttons_reserved_width();
         let available = buf_width.saturating_sub(reserved);
         let min_tab_width = self.scaled_px(MIN_TAB_WIDTH);
-        let max_tab_width = self.scaled_px(240);
+        let max_tab_width = self.scaled_px(MAX_TAB_WIDTH);
         (available / tab_count.max(1) as u32).clamp(min_tab_width, max_tab_width)
     }
 
     pub(crate) fn tab_strip_start_x(&self) -> u32 {
-        #[cfg(target_os = "macos")]
-        {
-            self.scaled_px(78)
-        }
-        #[cfg(target_os = "windows")]
-        {
-            self.scaled_px(14)
-        }
-        #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
-        {
-            self.scaled_px(8)
-        }
+        self.scaled_px(TAB_STRIP_START_X)
     }
 
     pub(in crate::gui::renderer) fn plus_button_reserved_width(&self) -> u32 {
-        self.cell_width + self.scaled_px(20)
+        self.cell_width + self.scaled_px(PLUS_BUTTON_MARGIN)
     }
 
     /// Returns total width reserved for window control buttons.
@@ -84,8 +106,8 @@ impl super::super::CpuRenderer {
         tab_index: usize,
         tw: u32,
     ) -> (u32, u32, u32, u32) {
-        let btn_size = self.scaled_px(20);
-        let x = self.tab_origin_x(tab_index, tw) + tw - btn_size - self.scaled_px(6);
+        let btn_size = self.scaled_px(CLOSE_BUTTON_SIZE);
+        let x = self.tab_origin_x(tab_index, tw) + tw - btn_size - self.scaled_px(CLOSE_BUTTON_MARGIN);
         let y = (self.tab_bar_height_px().saturating_sub(btn_size)) / 2;
         (x, y, btn_size, btn_size)
     }
@@ -96,8 +118,8 @@ impl super::super::CpuRenderer {
         tab_count: usize,
         tw: u32,
     ) -> (u32, u32, u32, u32) {
-        let btn_size = self.scaled_px(24);
-        let x = self.tab_strip_start_x() + tab_count as u32 * tw + self.scaled_px(4);
+        let btn_size = self.scaled_px(PLUS_BUTTON_SIZE);
+        let x = self.tab_strip_start_x() + tab_count as u32 * tw + self.scaled_px(PLUS_BUTTON_GAP);
         let y = (self.tab_bar_height_px().saturating_sub(btn_size)) / 2;
         (x, y, btn_size, btn_size)
     }
@@ -229,10 +251,10 @@ impl super::super::CpuRenderer {
         tw: u32,
         is_hovered: bool,
     ) -> usize {
-        let tab_padding_h = self.scaled_px(14);
+        let tab_padding_h = self.scaled_px(TAB_PADDING_H);
         let show_close = tab.is_active || is_hovered;
         let close_reserved = if show_close {
-            self.scaled_px(20) + self.scaled_px(6)
+            self.scaled_px(CLOSE_BUTTON_SIZE) + self.scaled_px(CLOSE_BUTTON_MARGIN)
         } else {
             0
         };

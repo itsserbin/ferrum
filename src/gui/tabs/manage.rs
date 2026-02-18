@@ -53,7 +53,7 @@ impl FerrumWindow {
         if index >= self.tabs.len() {
             return;
         }
-        let title = format!("{} (копія)", self.tabs[index].title);
+        let title = format!("{} (copy)", self.tabs[index].title);
         let size = self.window.inner_size();
         let (rows, cols) = self.calc_grid_size(size.width, size.height);
         self.new_tab_with_title(rows, cols, Some(title), next_tab_id, tx);

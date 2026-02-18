@@ -11,6 +11,7 @@ pub struct Row {
 
 impl Row {
     pub fn new(cols: usize) -> Self {
+        assert!(cols > 0, "Row cols must be positive, got {}", cols);
         Row {
             cells: vec![Cell::default(); cols],
             wrapped: false,
@@ -31,6 +32,8 @@ pub struct Grid {
 
 impl Grid {
     pub fn new(rows: usize, cols: usize) -> Self {
+        assert!(rows > 0, "Grid rows must be positive, got {}", rows);
+        assert!(cols > 0, "Grid cols must be positive, got {}", cols);
         Grid {
             rows_data: (0..rows).map(|_| Row::new(cols)).collect(),
             rows,
@@ -38,7 +41,24 @@ impl Grid {
         }
     }
 
-    pub fn get(&self, row: usize, col: usize) -> &Cell {
+    /// Returns a reference to the cell at (row, col), or None if out of bounds.
+    pub fn get(&self, row: usize, col: usize) -> Option<&Cell> {
+        if row < self.rows && col < self.cols {
+            Some(&self.rows_data[row].cells[col])
+        } else {
+            None
+        }
+    }
+
+    /// Returns a reference to the cell at (row, col) without bounds checking.
+    ///
+    /// This is safe to call in performance-critical loops where bounds are already verified
+    /// (e.g., iterating `0..grid.rows` and `0..grid.cols`).
+    ///
+    /// # Panics
+    /// Panics if row >= self.rows or col >= self.cols.
+    #[inline]
+    pub fn get_unchecked(&self, row: usize, col: usize) -> &Cell {
         &self.rows_data[row].cells[col]
     }
 
@@ -69,7 +89,8 @@ impl Grid {
         let mut new_grid = Grid::new(rows, cols);
         for row in 0..rows.min(self.rows) {
             for col in 0..cols.min(self.cols) {
-                new_grid.set(row, col, self.get(row, col).clone());
+                // Safe: iterating within both grids' bounds
+                new_grid.set(row, col, self.get_unchecked(row, col).clone());
             }
             new_grid.set_wrapped(row, self.is_wrapped(row));
         }
@@ -82,15 +103,20 @@ impl Grid {
     }
 
     /// Get the Row struct for a given row index.
-    #[allow(dead_code)]
+    ///
+    /// Useful for inspecting row metadata (e.g., wrapped flag) without copying cells.
+    /// Currently only used in tests; kept for future reflow/scrollback features.
+    #[cfg(test)]
     pub fn get_row(&self, row: usize) -> &Row {
         &self.rows_data[row]
     }
 
-    /// Shift all rows in range [from..to) up by `count` positions.
+    /// Shift all rows up by `count` positions.
     /// Rows at the top are lost (caller must save them first).
     /// Rows vacated at the bottom are filled with defaults.
-    #[allow(dead_code)]
+    ///
+    /// Currently only used in tests; kept for potential scrolling optimizations.
+    #[cfg(test)]
     pub fn shift_up(&mut self, count: usize) {
         if count == 0 || count >= self.rows {
             return;
@@ -109,7 +135,9 @@ impl Grid {
     /// Shift all rows down by `count` positions.
     /// Rows at the bottom are lost.
     /// Rows vacated at the top are filled with defaults.
-    #[allow(dead_code)]
+    ///
+    /// Currently only used in tests; kept for potential scrolling optimizations.
+    #[cfg(test)]
     pub fn shift_down(&mut self, count: usize) {
         if count == 0 || count >= self.rows {
             return;
@@ -126,7 +154,9 @@ impl Grid {
     }
 
     /// Set an entire row from a Vec<Cell>, padding or truncating to fit cols.
-    #[allow(dead_code)]
+    ///
+    /// Currently only used in tests; kept for potential scrollback restoration features.
+    #[cfg(test)]
     pub fn set_row(&mut self, row: usize, cells: Vec<Cell>) {
         for col in 0..self.cols {
             if col < cells.len() {
@@ -135,26 +165,6 @@ impl Grid {
                 self.rows_data[row].cells[col] = Cell::default();
             }
         }
-    }
-
-    /// Set an entire row from a Row struct (preserves wrapped flag).
-    #[allow(dead_code)]
-    pub fn set_row_data(&mut self, row: usize, row_data: Row) {
-        if row < self.rows {
-            // Resize cells to match grid columns
-            let mut cells = row_data.cells;
-            cells.resize(self.cols, Cell::default());
-            self.rows_data[row] = Row {
-                cells,
-                wrapped: row_data.wrapped,
-            };
-        }
-    }
-
-    /// Get all rows as Row structs (for reflow).
-    #[allow(dead_code)]
-    pub fn all_rows(&self) -> &[Row] {
-        &self.rows_data
     }
 }
 
@@ -169,7 +179,7 @@ mod tests {
         let default = Cell::default();
         for row in 0..3 {
             for col in 0..5 {
-                assert_eq!(grid.get(row, col), &default);
+                assert_eq!(grid.get(row, col), Some(&default));
             }
         }
     }
@@ -182,7 +192,15 @@ mod tests {
             ..Cell::default()
         };
         grid.set(1, 2, cell.clone());
-        assert_eq!(grid.get(1, 2), &cell);
+        assert_eq!(grid.get(1, 2), Some(&cell));
+    }
+
+    #[test]
+    fn get_out_of_bounds_returns_none() {
+        let grid = Grid::new(3, 5);
+        assert_eq!(grid.get(10, 0), None);
+        assert_eq!(grid.get(0, 10), None);
+        assert_eq!(grid.get(100, 100), None);
     }
 
     #[test]
@@ -207,11 +225,11 @@ mod tests {
         grid.set(2, 2, cell.clone());
 
         let bigger = grid.resized(5, 5);
-        assert_eq!(bigger.get(0, 0), &cell);
-        assert_eq!(bigger.get(2, 2), &cell);
+        assert_eq!(bigger.get(0, 0), Some(&cell));
+        assert_eq!(bigger.get(2, 2), Some(&cell));
         // New cells should be default
-        assert_eq!(bigger.get(3, 3), &Cell::default());
-        assert_eq!(bigger.get(4, 4), &Cell::default());
+        assert_eq!(bigger.get(3, 3), Some(&Cell::default()));
+        assert_eq!(bigger.get(4, 4), Some(&Cell::default()));
     }
 
     #[test]
@@ -231,10 +249,10 @@ mod tests {
         let smaller = grid.resized(3, 3);
         assert_eq!(smaller.rows, 3);
         assert_eq!(smaller.cols, 3);
-        assert_eq!(smaller.get(0, 0), &cell_a);
+        assert_eq!(smaller.get(0, 0), Some(&cell_a));
         // (4,4) is outside the new 3x3 grid, so it should not be present
         // Just verify the grid is 3x3 and contains expected data
-        assert_eq!(smaller.get(2, 2), &Cell::default());
+        assert_eq!(smaller.get(2, 2), Some(&Cell::default()));
     }
 
     #[test]
@@ -267,9 +285,9 @@ mod tests {
 
         grid.shift_up(1);
 
-        assert_eq!(grid.get(0, 0).character, 'B');
-        assert_eq!(grid.get(1, 0).character, 'C');
-        assert_eq!(grid.get(2, 0).character, ' ');
+        assert_eq!(grid.get(0, 0).unwrap().character, 'B');
+        assert_eq!(grid.get(1, 0).unwrap().character, 'C');
+        assert_eq!(grid.get(2, 0).unwrap().character, ' ');
     }
 
     #[test]
@@ -302,9 +320,9 @@ mod tests {
 
         grid.shift_down(1);
 
-        assert_eq!(grid.get(0, 0).character, ' ');
-        assert_eq!(grid.get(1, 0).character, 'A');
-        assert_eq!(grid.get(2, 0).character, 'B');
+        assert_eq!(grid.get(0, 0).unwrap().character, ' ');
+        assert_eq!(grid.get(1, 0).unwrap().character, 'A');
+        assert_eq!(grid.get(2, 0).unwrap().character, 'B');
     }
 
     #[test]
@@ -322,12 +340,44 @@ mod tests {
         ];
         grid.set_row(0, cells);
 
-        assert_eq!(grid.get(0, 0).character, 'X');
-        assert_eq!(grid.get(0, 1).character, 'Y');
+        assert_eq!(grid.get(0, 0).unwrap().character, 'X');
+        assert_eq!(grid.get(0, 1).unwrap().character, 'Y');
         // Remaining cols should be padded with defaults
-        assert_eq!(grid.get(0, 2), &Cell::default());
-        assert_eq!(grid.get(0, 3), &Cell::default());
+        assert_eq!(grid.get(0, 2), Some(&Cell::default()));
+        assert_eq!(grid.get(0, 3), Some(&Cell::default()));
         // Row 1 should be untouched
-        assert_eq!(grid.get(1, 0), &Cell::default());
+        assert_eq!(grid.get(1, 0), Some(&Cell::default()));
+    }
+
+    #[test]
+    #[should_panic(expected = "Grid rows must be positive")]
+    fn grid_new_zero_rows_panics() {
+        Grid::new(0, 5);
+    }
+
+    #[test]
+    #[should_panic(expected = "Grid cols must be positive")]
+    fn grid_new_zero_cols_panics() {
+        Grid::new(5, 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "Row cols must be positive")]
+    fn row_new_zero_cols_panics() {
+        Row::new(0);
+    }
+
+    #[test]
+    #[should_panic(expected = "Grid rows must be positive")]
+    fn grid_resized_zero_rows_panics() {
+        let grid = Grid::new(3, 3);
+        grid.resized(0, 3);
+    }
+
+    #[test]
+    #[should_panic(expected = "Grid cols must be positive")]
+    fn grid_resized_zero_cols_panics() {
+        let grid = Grid::new(3, 3);
+        grid.resized(3, 0);
     }
 }

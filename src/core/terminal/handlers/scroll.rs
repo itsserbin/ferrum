@@ -91,7 +91,8 @@ mod tests {
     /// Helper: get the character in every column of a row as a single char
     /// (assumes all cols in a row have the same char for our tests).
     fn row_char(term: &Terminal, row: usize) -> char {
-        term.grid.get(row, 0).character
+        // Safe: tests use known valid coordinates
+        term.grid.get_unchecked(row, 0).character
     }
 
     #[test]

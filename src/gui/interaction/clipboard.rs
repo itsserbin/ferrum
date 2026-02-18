@@ -62,7 +62,8 @@ impl FerrumWindow {
             };
 
             for col in col_start..=col_end {
-                text.push(grid.get(row, col).character);
+                // Safe: selection was clamped to grid bounds above
+                text.push(grid.get_unchecked(row, col).character);
             }
             if row < end.row {
                 text.push('\n');
@@ -96,16 +97,23 @@ impl FerrumWindow {
         };
 
         if let Some(ref mut clipboard) = self.clipboard {
-            let _ = clipboard.set_text(&text);
+            if let Err(e) = clipboard.set_text(&text) {
+                eprintln!("Failed to copy to clipboard: {}", e);
+            }
         }
     }
 
     pub(in crate::gui) fn paste_clipboard(&mut self) {
-        let text = self
-            .clipboard
-            .as_mut()
-            .and_then(|cb| cb.get_text().ok())
-            .unwrap_or_default();
+        let text = match self.clipboard.as_mut() {
+            Some(cb) => match cb.get_text() {
+                Ok(text) => text,
+                Err(e) => {
+                    eprintln!("Failed to read from clipboard: {}", e);
+                    return;
+                }
+            },
+            None => return,
+        };
 
         if text.is_empty() {
             return;

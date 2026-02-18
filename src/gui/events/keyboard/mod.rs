@@ -148,7 +148,8 @@ impl FerrumWindow {
         let row = tab.terminal.cursor_row.min(rows.saturating_sub(1));
         let mut line = Vec::with_capacity(cols);
         for col in 0..cols {
-            line.push(tab.terminal.grid.get(row, col).character);
+            // Safe: col < cols and row < rows
+            line.push(tab.terminal.grid.get_unchecked(row, col).character);
         }
 
         Self::word_motion_target_col_for_line(&line, cursor_col, motion)

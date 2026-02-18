@@ -82,7 +82,8 @@ mod tests {
     }
 
     fn cell_at(term: &Terminal, row: usize, col: usize) -> &Cell {
-        term.grid.get(row, col)
+        // Safe: tests use known valid coordinates
+        term.grid.get_unchecked(row, col)
     }
 
     #[test]

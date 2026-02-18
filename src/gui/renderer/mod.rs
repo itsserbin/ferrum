@@ -140,7 +140,8 @@ impl CpuRenderer {
         } else {
             1.0
         };
-        if (self.ui_scale - scale).abs() < f64::EPSILON {
+        const SCALE_EPSILON: f64 = 1e-6;
+        if (self.ui_scale - scale).abs() < SCALE_EPSILON {
             return;
         }
         self.ui_scale = scale;

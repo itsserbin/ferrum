@@ -1,4 +1,5 @@
 use super::*;
+use crate::core::Cell;
 
 impl CpuRenderer {
     #[allow(clippy::too_many_arguments)]
@@ -19,7 +20,7 @@ impl CpuRenderer {
         match style {
             CursorStyle::BlinkingBlock | CursorStyle::SteadyBlock => {
                 // Filled block with inverted foreground/background.
-                let cell = grid.get(row, col);
+                let cell = grid.get(row, col).unwrap_or(&Cell::DEFAULT);
                 self.draw_bg(buffer, buf_width, buf_height, x, y, Color::DEFAULT_FG);
                 if cell.character != ' ' {
                     self.draw_char(

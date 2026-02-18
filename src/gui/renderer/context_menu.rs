@@ -3,9 +3,9 @@ use super::*;
 impl ContextMenu {
     pub fn for_tab(x: u32, y: u32, tab_index: usize) -> Self {
         let items = vec![
-            (ContextAction::RenameTab, "Перейменувати"),
-            (ContextAction::DuplicateTab, "Дублювати"),
-            (ContextAction::CloseTab, "Закрити"),
+            (ContextAction::RenameTab, "Rename"),
+            (ContextAction::DuplicateTab, "Duplicate"),
+            (ContextAction::CloseTab, "Close"),
         ];
         ContextMenu {
             x,
@@ -20,9 +20,9 @@ impl ContextMenu {
 
     pub fn for_terminal_selection(x: u32, y: u32) -> Self {
         let items = vec![
-            (ContextAction::CopySelection, "Копіювати"),
-            (ContextAction::Paste, "Вставити"),
-            (ContextAction::ClearSelection, "Очистити виділення"),
+            (ContextAction::CopySelection, "Copy"),
+            (ContextAction::Paste, "Paste"),
+            (ContextAction::ClearSelection, "Clear Selection"),
         ];
         ContextMenu {
             x,

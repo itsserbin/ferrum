@@ -223,7 +223,8 @@ impl FerrumWindow {
             self.ui_animation_last_tick = now;
 
             let factor = (dt * UI_ANIMATION_SPEED).clamp(0.0, 1.0);
-            if factor <= f32::EPSILON {
+            const ANIMATION_EPSILON: f32 = 1e-6;
+            if factor <= ANIMATION_EPSILON {
                 return;
             }
 
@@ -282,7 +283,8 @@ impl FerrumWindow {
     pub(crate) fn on_scale_factor_changed(&mut self, scale_factor: f64) {
         let prev_scale = self.backend.ui_scale();
         self.backend.set_scale(scale_factor);
-        if (self.backend.ui_scale() - prev_scale).abs() < f64::EPSILON {
+        const SCALE_EPSILON: f64 = 1e-6;
+        if (self.backend.ui_scale() - prev_scale).abs() < SCALE_EPSILON {
             return;
         }
 
