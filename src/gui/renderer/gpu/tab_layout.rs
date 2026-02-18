@@ -160,7 +160,7 @@ impl super::GpuRenderer {
         _hovered_tab: Option<usize>,
         mouse_pos: (f64, f64),
         tab_offsets: Option<&[f32]>,
-        pinned: bool,
+        _pinned: bool,
     ) {
         let tab_bar_h = self.metrics.tab_bar_height_px() as f32;
         let bw = buf_width as u32;
@@ -387,7 +387,7 @@ impl super::GpuRenderer {
 
         // Pin button (non-macOS).
         #[cfg(not(target_os = "macos"))]
-        self.draw_pin_button_commands(mouse_pos, pinned);
+        self.draw_pin_button_commands(mouse_pos, _pinned);
 
         // Window control buttons (non-macOS).
         #[cfg(not(target_os = "macos"))]

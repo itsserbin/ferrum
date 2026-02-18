@@ -13,20 +13,13 @@ impl super::Terminal {
             *alt = alt.resized(rows, cols);
         }
 
-        // Main grid resize
-        // On Unix (macOS/Linux), shell handles resize via SIGWINCH - use simple resize
-        // On Windows, ConPTY doesn't redraw content - use reflow to preserve it
-        #[cfg(windows)]
-        {
-            let old_cols = self.grid.cols;
-            if old_cols != cols && self.alt_grid.is_none() {
-                self.reflow_resize(rows, cols);
-            } else {
-                self.simple_resize(rows, cols);
-            }
-        }
-        #[cfg(not(windows))]
-        {
+        // Main grid resize:
+        // - Reflow on width changes in the main grid to preserve wrapped content
+        // - Fallback to simple resize for alt grid or row-only changes
+        let old_cols = self.grid.cols;
+        if old_cols != cols && self.alt_grid.is_none() {
+            self.reflow_resize(rows, cols);
+        } else {
             self.simple_resize(rows, cols);
         }
 

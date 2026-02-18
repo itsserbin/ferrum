@@ -48,7 +48,7 @@ impl CpuRenderer {
         _hovered_tab: Option<usize>,
         mouse_pos: (f64, f64),
         tab_offsets: Option<&[f32]>,
-        pinned: bool,
+        _pinned: bool,
     ) {
         let tab_bar_height = self.tab_bar_height_px();
         let bar_h = tab_bar_height as usize;
@@ -356,7 +356,7 @@ impl CpuRenderer {
 
         // Pin button (non-macOS).
         #[cfg(not(target_os = "macos"))]
-        self.draw_pin_button(buffer, buf_width, bar_h, mouse_pos, pinned);
+        self.draw_pin_button(buffer, buf_width, bar_h, mouse_pos, _pinned);
 
         // Window control buttons (non-macOS).
         #[cfg(not(target_os = "macos"))]

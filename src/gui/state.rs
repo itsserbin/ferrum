@@ -128,8 +128,11 @@ pub(super) struct FerrumWindow {
     pub(super) hovered_tab: Option<usize>,
     pub(super) context_menu: Option<ContextMenu>,
     pub(super) security_popup: Option<SecurityPopup>,
+    #[cfg(not(target_os = "macos"))]
     pub(super) tab_hover_progress: Vec<f32>,
+    #[cfg(not(target_os = "macos"))]
     pub(super) close_hover_progress: Vec<f32>,
+    #[cfg(not(target_os = "macos"))]
     pub(super) ui_animation_last_tick: std::time::Instant,
     pub(super) closed_tabs: Vec<ClosedTabInfo>,
     pub(super) renaming_tab: Option<RenameState>,

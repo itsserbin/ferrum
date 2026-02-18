@@ -19,7 +19,9 @@ use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::keyboard::{Key, KeyCode, ModifiersState, NamedKey, PhysicalKey};
 #[cfg(target_os = "windows")]
 use winit::platform::windows::{CornerPreference, WindowAttributesExtWindows};
-use winit::window::{CursorIcon, ResizeDirection, Window, WindowId, WindowLevel};
+#[cfg(not(target_os = "macos"))]
+use winit::window::WindowLevel;
+use winit::window::{CursorIcon, ResizeDirection, Window, WindowId};
 
 use crate::core::terminal::Terminal;
 use crate::core::{MouseMode, Position, SecurityGuard, Selection};
@@ -65,8 +67,11 @@ impl FerrumWindow {
             hovered_tab: None,
             context_menu: None,
             security_popup: None,
+            #[cfg(not(target_os = "macos"))]
             tab_hover_progress: Vec::new(),
+            #[cfg(not(target_os = "macos"))]
             close_hover_progress: Vec::new(),
+            #[cfg(not(target_os = "macos"))]
             ui_animation_last_tick: std::time::Instant::now(),
             closed_tabs: Vec::new(),
             renaming_tab: None,
@@ -110,16 +115,24 @@ impl FerrumWindow {
 
     /// Toggles the pinned (always-on-top) state of this window.
     pub(super) fn toggle_pin(&mut self) {
-        self.pinned = !self.pinned;
-        let level = if self.pinned {
-            WindowLevel::AlwaysOnTop
-        } else {
-            WindowLevel::Normal
-        };
-        self.window.set_window_level(level);
-
         #[cfg(target_os = "macos")]
-        platform::macos::set_pin_button_state(&self.window, self.pinned);
+        {
+            let current = platform::macos::is_window_pinned(&self.window);
+            let next = !current;
+            platform::macos::set_native_tab_group_pin_state(&self.window, next);
+            self.pinned = next;
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            self.pinned = !self.pinned;
+            let level = if self.pinned {
+                WindowLevel::AlwaysOnTop
+            } else {
+                WindowLevel::Normal
+            };
+            self.window.set_window_level(level);
+        }
     }
 }
 
@@ -190,7 +203,7 @@ impl App {
         #[cfg(target_os = "macos")]
         platform::macos::configure_native_tabs(&window);
 
-        // Set up the toolbar with pin button.
+        // Set up macOS titlebar pin button.
         #[cfg(target_os = "macos")]
         platform::macos::setup_toolbar(&window);
 

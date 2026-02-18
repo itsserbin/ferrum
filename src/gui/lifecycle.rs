@@ -74,6 +74,11 @@ impl ApplicationHandler for App {
                     win.context_menu = None;
                 } else {
                     win.suppress_click_to_cursor_once = true;
+                    #[cfg(target_os = "macos")]
+                    {
+                        win.pinned = platform::macos::is_window_pinned(&win.window);
+                        platform::macos::set_pin_button_state(&win.window, win.pinned);
+                    }
                 }
                 should_redraw = true;
             }
@@ -254,6 +259,9 @@ impl App {
                 #[cfg(target_os = "macos")]
                 WindowRequest::NewTab => {
                     let existing_win = self.windows.get(&window_id).map(|w| w.window.clone());
+                    let group_pinned = existing_win
+                        .as_ref()
+                        .is_some_and(|w| platform::macos::is_window_pinned(w));
                     // Title based on current window count (not global ID).
                     let tab_title = format!("bash #{}", self.windows.len() + 1);
                     if let Some(new_id) = self.create_window(event_loop, None) {
@@ -272,6 +280,8 @@ impl App {
                             }
                             if let Some(existing) = existing_win {
                                 platform::macos::add_as_tab(&existing, &new_win.window);
+                                platform::macos::set_native_tab_group_pin_state(&existing, group_pinned);
+                                new_win.pinned = group_pinned;
                             }
                             new_win.window.request_redraw();
                         }
@@ -280,6 +290,9 @@ impl App {
                 #[cfg(target_os = "macos")]
                 WindowRequest::ReopenTab { title } => {
                     let existing_win = self.windows.get(&window_id).map(|w| w.window.clone());
+                    let group_pinned = existing_win
+                        .as_ref()
+                        .is_some_and(|w| platform::macos::is_window_pinned(w));
                     if let Some(new_id) = self.create_window(event_loop, None) {
                         if let Some(new_win) = self.windows.get_mut(&new_id) {
                             let size = new_win.window.inner_size();
@@ -296,6 +309,8 @@ impl App {
                             }
                             if let Some(existing) = existing_win {
                                 platform::macos::add_as_tab(&existing, &new_win.window);
+                                platform::macos::set_native_tab_group_pin_state(&existing, group_pinned);
+                                new_win.pinned = group_pinned;
                             }
                             new_win.window.request_redraw();
                         }
