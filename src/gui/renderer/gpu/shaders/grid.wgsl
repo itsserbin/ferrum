@@ -113,7 +113,8 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     var color = vec4<f32>(unpack_rgb(bg), 1.0);
 
     // Sample glyph from atlas for visible codepoints (skip space and below).
-    if cell.codepoint > 32u {
+    let glyph_count = arrayLength(&glyphs);
+    if cell.codepoint > 32u && cell.codepoint < glyph_count {
         let glyph = glyphs[cell.codepoint];
 
         if glyph.w > 0.0 {

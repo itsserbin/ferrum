@@ -214,7 +214,6 @@ impl App {
                 WindowRequest::CloseWindow => {
                     self.windows.remove(&window_id);
                 }
-                #[cfg(target_os = "macos")]
                 WindowRequest::NewWindow => {
                     let tab_title = format!("bash #{}", self.windows.len() + 1);
                     if let Some(new_id) = self.create_window(event_loop, None) {
@@ -228,6 +227,7 @@ impl App {
                                 &mut self.next_tab_id,
                                 &self.tx,
                             );
+                            #[cfg(target_os = "macos")]
                             if let Some(tab) = new_win.tabs.first() {
                                 new_win.window.set_title(&tab.title);
                             }

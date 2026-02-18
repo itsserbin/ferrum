@@ -18,6 +18,8 @@ impl FerrumWindow {
                 } else {
                     0
                 },
+                hover_progress: 0.0,
+                close_hover_progress: 0.0,
                 is_renaming: false,
                 rename_text: None,
                 rename_cursor: 0,
@@ -287,7 +289,7 @@ impl FerrumWindow {
 
         let buf_width = self.window.inner_size().width;
         let tw = self.backend.tab_width(self.tabs.len(), buf_width);
-        let tab_padding_h = 14u32;
+        let tab_padding_h = self.backend.scaled_px(14);
         let text_x = self.backend.tab_origin_x(rename.tab_index, tw) + tab_padding_h;
 
         // Calculate cursor byte position from mouse x coordinate.
@@ -348,7 +350,7 @@ impl FerrumWindow {
 
         let buf_width = self.window.inner_size().width;
         let tw = self.backend.tab_width(self.tabs.len(), buf_width);
-        let tab_padding_h = 14u32;
+        let tab_padding_h = self.backend.scaled_px(14);
         let text_x = self.backend.tab_origin_x(rename.tab_index, tw) + tab_padding_h;
 
         let char_offset = if mx < text_x as f64 {

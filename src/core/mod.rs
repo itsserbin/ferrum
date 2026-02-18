@@ -9,7 +9,7 @@ pub mod terminal;
 
 pub use cell::Cell;
 pub use color::Color;
-pub use grid::Grid;
+pub use grid::{Grid, Row};
 pub use position::Position;
 pub use security::{SecurityConfig, SecurityEventKind, SecurityGuard};
 pub use selection::{Selection, SelectionPoint};

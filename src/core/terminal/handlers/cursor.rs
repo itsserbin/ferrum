@@ -11,6 +11,8 @@ pub(in super::super) fn handle_cursor_csi(
             let mut iter = params.iter();
             let row = iter.next().and_then(|p| p.first().copied()).unwrap_or(1);
             let col = iter.next().and_then(|p| p.first().copied()).unwrap_or(1);
+
+            // Accept ConPTY's cursor position as authoritative.
             term.cursor_row = (row as usize).saturating_sub(1).min(term.grid.rows - 1);
             term.cursor_col = (col as usize).saturating_sub(1).min(term.grid.cols - 1);
             true

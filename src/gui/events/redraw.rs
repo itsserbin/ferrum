@@ -8,6 +8,12 @@ const BLINK_WAKE_TOLERANCE: Duration = Duration::from_millis(20);
 const SCROLLBAR_FADE_START: Duration = Duration::from_millis(1500);
 const SCROLLBAR_FADE_END: Duration = Duration::from_millis(1800);
 const ANIMATION_FRAME_INTERVAL: Duration = Duration::from_millis(16);
+#[cfg(not(target_os = "macos"))]
+const UI_ANIMATION_SPEED: f32 = 18.0;
+#[cfg(not(target_os = "macos"))]
+const UI_SETTLE_EPSILON: f32 = 0.01;
+#[cfg(not(target_os = "macos"))]
+const CONTEXT_MENU_OPEN_DURATION: Duration = Duration::from_millis(140);
 #[cfg(target_os = "macos")]
 const NATIVE_TAB_SYNC_INTERVAL: Duration = Duration::from_millis(60);
 #[cfg(target_os = "macos")]
@@ -31,8 +37,9 @@ impl FerrumWindow {
         let cursor = self.cursor_animation_schedule(now);
         let scrollbar = self.scrollbar_animation_schedule(now);
         let tab_anim = self.tab_animation_schedule(now);
+        let ui_anim = self.ui_animation_schedule(now);
 
-        let schedules = [cursor, scrollbar, tab_anim];
+        let schedules = [cursor, scrollbar, tab_anim, ui_anim];
         let mut result: Option<(Instant, bool)> = None;
         for s in schedules.into_iter().flatten() {
             result = Some(match result {
@@ -119,6 +126,137 @@ impl FerrumWindow {
         None
     }
 
+    fn ui_animation_schedule(&self, now: Instant) -> Option<(Instant, bool)> {
+        #[cfg(target_os = "macos")]
+        {
+            let _ = now;
+            None
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let close_hover = self.close_hovered_tab();
+            let mut pending = false;
+
+            for i in 0..self.tabs.len() {
+                let tab_target = if self.hovered_tab == Some(i) && i != self.active_tab {
+                    1.0
+                } else {
+                    0.0
+                };
+                let close_target = if close_hover == Some(i) { 1.0 } else { 0.0 };
+
+                let tab_value = self.tab_hover_progress.get(i).copied().unwrap_or(0.0);
+                let close_value = self.close_hover_progress.get(i).copied().unwrap_or(0.0);
+                if (tab_value - tab_target).abs() > UI_SETTLE_EPSILON
+                    || (close_value - close_target).abs() > UI_SETTLE_EPSILON
+                {
+                    pending = true;
+                    break;
+                }
+            }
+
+            if let Some(menu) = self.context_menu.as_ref() {
+                if menu.opened_at.elapsed() < CONTEXT_MENU_OPEN_DURATION {
+                    pending = true;
+                } else {
+                    for i in 0..menu.items.len() {
+                        let target = if menu.hover_index == Some(i) {
+                            1.0
+                        } else {
+                            0.0
+                        };
+                        let value = menu.hover_progress.get(i).copied().unwrap_or(0.0);
+                        if (value - target).abs() > UI_SETTLE_EPSILON {
+                            pending = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if pending {
+                Some((now + ANIMATION_FRAME_INTERVAL, true))
+            } else {
+                None
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    fn close_hovered_tab(&self) -> Option<usize> {
+        if self.mouse_pos.1 >= self.backend.tab_bar_height_px() as f64 {
+            return None;
+        }
+        let buf_width = self.window.inner_size().width;
+        match self.backend.hit_test_tab_bar(
+            self.mouse_pos.0,
+            self.mouse_pos.1,
+            self.tabs.len(),
+            buf_width,
+        ) {
+            crate::gui::renderer::TabBarHit::CloseTab(idx) => Some(idx),
+            _ => None,
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    fn animate_scalar(value: &mut f32, target: f32, factor: f32) {
+        *value += (target - *value) * factor;
+        if (*value - target).abs() < 0.002 {
+            *value = target;
+        }
+    }
+
+    pub(in crate::gui) fn advance_ui_animations(&mut self) {
+        #[cfg(target_os = "macos")]
+        {
+            return;
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            let now = Instant::now();
+            let dt = now
+                .saturating_duration_since(self.ui_animation_last_tick)
+                .as_secs_f32()
+                .clamp(0.0, 0.05);
+            self.ui_animation_last_tick = now;
+
+            let factor = (dt * UI_ANIMATION_SPEED).clamp(0.0, 1.0);
+            if factor <= f32::EPSILON {
+                return;
+            }
+
+            self.tab_hover_progress.resize(self.tabs.len(), 0.0);
+            self.close_hover_progress.resize(self.tabs.len(), 0.0);
+            let close_hover = self.close_hovered_tab();
+
+            for i in 0..self.tabs.len() {
+                let tab_target = if self.hovered_tab == Some(i) && i != self.active_tab {
+                    1.0
+                } else {
+                    0.0
+                };
+                Self::animate_scalar(&mut self.tab_hover_progress[i], tab_target, factor);
+
+                let close_target = if close_hover == Some(i) { 1.0 } else { 0.0 };
+                Self::animate_scalar(&mut self.close_hover_progress[i], close_target, factor);
+            }
+
+            if let Some(menu) = self.context_menu.as_mut() {
+                menu.hover_progress.resize(menu.items.len(), 0.0);
+                for i in 0..menu.items.len() {
+                    let target = if menu.hover_index == Some(i) {
+                        1.0
+                    } else {
+                        0.0
+                    };
+                    Self::animate_scalar(&mut menu.hover_progress[i], target, factor);
+                }
+            }
+        }
+    }
+
     #[cfg(target_os = "macos")]
     fn native_tab_sync_schedule(&self, now: Instant) -> Option<(Instant, bool)> {
         if self.pending_native_tab_syncs == 0 {
@@ -131,6 +269,8 @@ impl FerrumWindow {
     pub(in crate::gui) fn apply_pending_resize(&mut self) {
         if let Some((rows, cols)) = self.pending_grid_resize.take() {
             self.resize_all_tabs(rows, cols);
+            // Show mouse cursor after resize completes
+            self.window.set_cursor_visible(true);
         }
     }
 
@@ -150,6 +290,8 @@ impl FerrumWindow {
         let (rows, cols) = self.calc_grid_size(size.width, size.height);
         // Coalesce rapid OS resize events and apply only the latest grid size on redraw.
         self.pending_grid_resize = Some((rows, cols));
+        // Hide mouse cursor during resize to avoid visual glitches
+        self.window.set_cursor_visible(false);
         self.window.request_redraw();
     }
 
@@ -168,6 +310,7 @@ impl FerrumWindow {
         }
         self.refresh_tab_bar_visibility();
         self.apply_pending_resize();
+        self.advance_ui_animations();
 
         let size = self.window.inner_size();
 

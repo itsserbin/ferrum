@@ -1,23 +1,49 @@
 use super::*;
 
 impl ContextMenu {
-    pub fn new(x: u32, y: u32, tab_index: usize) -> Self {
+    pub fn for_tab(x: u32, y: u32, tab_index: usize) -> Self {
+        let items = vec![
+            (ContextAction::RenameTab, "Перейменувати"),
+            (ContextAction::DuplicateTab, "Дублювати"),
+            (ContextAction::CloseTab, "Закрити"),
+        ];
         ContextMenu {
             x,
             y,
-            tab_index,
-            items: vec![
-                (ContextAction::Rename, "Перейменувати"),
-                (ContextAction::Duplicate, "Дублювати"),
-                (ContextAction::Close, "Закрити"),
-            ],
+            target: ContextMenuTarget::Tab { tab_index },
+            hover_progress: vec![0.0; items.len()],
+            items,
             hover_index: None,
+            opened_at: std::time::Instant::now(),
+        }
+    }
+
+    pub fn for_terminal_selection(x: u32, y: u32) -> Self {
+        let items = vec![
+            (ContextAction::CopySelection, "Копіювати"),
+            (ContextAction::Paste, "Вставити"),
+            (ContextAction::ClearSelection, "Очистити виділення"),
+        ];
+        ContextMenu {
+            x,
+            y,
+            target: ContextMenuTarget::TerminalSelection,
+            hover_progress: vec![0.0; items.len()],
+            items,
+            hover_index: None,
+            opened_at: std::time::Instant::now(),
         }
     }
 
     /// Menu width in pixels.
     pub(crate) fn width(&self, cell_width: u32) -> u32 {
-        cell_width * 16
+        let label_chars = self
+            .items
+            .iter()
+            .map(|(_, label)| label.chars().count() as u32)
+            .max()
+            .unwrap_or(12);
+        cell_width * label_chars.saturating_add(4).max(16)
     }
 
     /// Single menu item height in pixels.
@@ -69,25 +95,44 @@ impl CpuRenderer {
         let mx = menu.x;
         let my = menu.y;
 
-        let hover_pixel = 0x31394D;
+        let hover_pixel = 0x3A3F57;
         let radius = self.scaled_px(6);
+        let open_t = (menu.opened_at.elapsed().as_secs_f32() / 0.14).clamp(0.0, 1.0);
+        let open_ease = 1.0 - (1.0 - open_t) * (1.0 - open_t);
+        let panel_alpha = (228.0 + open_ease * 20.0).round().clamp(0.0, 255.0) as u8;
 
         self.draw_rounded_rect(
-            buffer, buf_width, buf_height, mx as i32, my as i32, mw, mh, radius, 0x1E2433, 248,
+            buffer,
+            buf_width,
+            buf_height,
+            mx as i32,
+            my as i32,
+            mw,
+            mh,
+            radius,
+            0x1E2433,
+            panel_alpha,
         );
         self.draw_rounded_rect(
-            buffer, buf_width, buf_height, mx as i32, my as i32, mw, mh, radius, 0xFFFFFF, 20,
+            buffer, buf_width, buf_height, mx as i32, my as i32, mw, mh, radius, 0xFFFFFF, 30,
         );
 
         // Draw menu items.
         for (i, (action, label)) in menu.items.iter().enumerate() {
             let item_y = my + self.scaled_px(2) + i as u32 * ih;
+            let hover_t = menu
+                .hover_progress
+                .get(i)
+                .copied()
+                .unwrap_or(0.0)
+                .clamp(0.0, 1.0);
 
             // Hover highlight for the active row.
-            if menu.hover_index == Some(i) {
+            if hover_t > 0.01 {
                 let hover_x = mx + self.scaled_px(4);
                 let hover_w = mw.saturating_sub(self.scaled_px(8));
                 let hover_h = ih.saturating_sub(self.scaled_px(1));
+                let alpha = (120.0 + hover_t * 100.0).round().clamp(0.0, 255.0) as u8;
                 self.draw_rounded_rect(
                     buffer,
                     buf_width,
@@ -98,11 +143,11 @@ impl CpuRenderer {
                     hover_h,
                     self.scaled_px(6),
                     hover_pixel,
-                    220,
+                    alpha,
                 );
             }
 
-            let fg = if *action == ContextAction::Close {
+            let fg = if *action == ContextAction::CloseTab {
                 Color {
                     r: 243,
                     g: 139,

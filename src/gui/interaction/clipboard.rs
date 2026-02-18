@@ -1,5 +1,7 @@
 use crate::core::terminal::Terminal;
 use crate::core::{Grid, Selection, SelectionPoint};
+#[cfg(test)]
+use crate::core::Row;
 use crate::gui::*;
 
 const BRACKETED_PASTE_START: &[u8] = b"\x1b[200~";
@@ -156,8 +158,8 @@ mod tests {
         set_row(&mut terminal.grid, 0, "LIVE0");
         set_row(&mut terminal.grid, 1, "LIVE1");
         set_row(&mut terminal.grid, 2, "LIVE2");
-        terminal.scrollback.push_back(row_cells("SB000", 5));
-        terminal.scrollback.push_back(row_cells("SB001", 5));
+        terminal.scrollback.push_back(Row::from_cells(row_cells("SB000", 5), false));
+        terminal.scrollback.push_back(Row::from_cells(row_cells("SB001", 5), false));
 
         // scrollback has 2 entries. With scroll_offset=0, viewport_start=2.
         // Live grid row 0 is absolute row 2.

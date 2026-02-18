@@ -139,22 +139,38 @@ impl super::GpuRenderer {
         let mx = menu.x as f32;
         let my = menu.y as f32;
         let radius = self.metrics.scaled_px(6) as f32;
+        let open_t = (menu.opened_at.elapsed().as_secs_f32() / 0.14).clamp(0.0, 1.0);
+        let open_ease = 1.0 - (1.0 - open_t) * (1.0 - open_t);
 
         // Background.
-        self.push_rounded_rect(mx, my, mw, mh, radius, 0x1E2433, 0.97);
-        self.push_rounded_rect(mx, my, mw, mh, radius, 0xFFFFFF, 0.08);
+        self.push_rounded_rect(mx, my, mw, mh, radius, 0x1E2433, 0.9 + open_ease * 0.08);
+        self.push_rounded_rect(mx, my, mw, mh, radius, 0xFFFFFF, 0.1);
 
         for (i, (action, label)) in menu.items.iter().enumerate() {
             let item_y = my + self.metrics.scaled_px(2) as f32 + i as f32 * ih;
+            let hover_t = menu
+                .hover_progress
+                .get(i)
+                .copied()
+                .unwrap_or(0.0)
+                .clamp(0.0, 1.0);
 
-            if menu.hover_index == Some(i) {
+            if hover_t > 0.01 {
                 let hover_x = mx + self.metrics.scaled_px(4) as f32;
                 let hover_w = mw - self.metrics.scaled_px(8) as f32;
                 let hover_h = ih - self.metrics.scaled_px(1) as f32;
-                self.push_rounded_rect(hover_x, item_y, hover_w, hover_h, radius, 0x31394D, 0.86);
+                self.push_rounded_rect(
+                    hover_x,
+                    item_y,
+                    hover_w,
+                    hover_h,
+                    radius,
+                    0x3A3F57,
+                    0.45 + hover_t * 0.45,
+                );
             }
 
-            let fg = if *action == ContextAction::Close {
+            let fg = if *action == ContextAction::CloseTab {
                 0xF38BA8
             } else {
                 Color::DEFAULT_FG.to_pixel()

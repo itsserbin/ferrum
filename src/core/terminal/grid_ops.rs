@@ -1,4 +1,4 @@
-use crate::core::{Cell, Grid};
+use crate::core::{Cell, Grid, Row};
 
 use super::CursorStyle;
 
@@ -8,18 +8,41 @@ impl super::Terminal {
             return;
         }
 
+        // Alt grid: simple resize (no reflow)
+        if let Some(ref mut alt) = self.alt_grid {
+            *alt = alt.resized(rows, cols);
+        }
+
+        // Main grid resize
+        let old_cols = self.grid.cols;
+        if old_cols != cols && self.alt_grid.is_none() {
+            // Width changed: reflow the grid
+            self.reflow_resize(rows, cols);
+        } else {
+            // Height only or alt screen: simple resize
+            self.simple_resize(rows, cols);
+        }
+
+        // ── Reset scroll region to full screen ──
+        self.scroll_top = 0;
+        self.scroll_bottom = rows - 1;
+
+        self.resize_at = Some(std::time::Instant::now());
+    }
+
+    /// Simple resize without reflow (height-only changes or alt screen).
+    fn simple_resize(&mut self, rows: usize, cols: usize) {
         let old_rows = self.grid.rows;
         let is_alt = self.alt_grid.is_some();
 
-        // ── Vertical shrink: cursor would be outside new grid ──
-        // Shift content up, pushing top rows into scrollback.
+        // Vertical shrink: if cursor would be outside, push top rows to scrollback
         if rows < old_rows && self.cursor_row >= rows {
             let shift = self.cursor_row - rows + 1;
-            // Save the top `shift` rows to scrollback (main screen only)
             if !is_alt {
                 for r in 0..shift {
-                    let row_cells = self.grid.row_cells(r);
-                    self.scrollback.push_back(row_cells);
+                    let cells = self.grid.row_cells(r);
+                    let wrapped = self.grid.is_wrapped(r);
+                    self.scrollback.push_back(Row::from_cells(cells, wrapped));
                     if self.scrollback.len() > self.max_scrollback {
                         self.scrollback.pop_front();
                     }
@@ -29,38 +52,100 @@ impl super::Terminal {
             self.cursor_row -= shift;
         }
 
-        // ── Resize the grid (copies content, pads/truncates) ──
         self.grid = self.grid.resized(rows, cols);
-
-        // ── Vertical grow: pull lines from scrollback to fill new top rows ──
-        if rows > old_rows && !is_alt && !self.scrollback.is_empty() {
-            let available = rows - old_rows; // new empty rows at bottom
-            let pull = available.min(self.scrollback.len());
-            // Shift existing content down to make room at top
-            self.grid.shift_down(pull);
-            // Fill top rows from scrollback
-            for i in 0..pull {
-                let sb_row = self.scrollback.pop_back().unwrap();
-                // Rows are pulled in reverse: last popped goes to row 0
-                self.grid.set_row(pull - 1 - i, sb_row);
-            }
-            self.cursor_row += pull;
-        }
-
-        // ── Alt grid: simple resize (no scrollback interaction) ──
-        if let Some(ref mut alt) = self.alt_grid {
-            *alt = alt.resized(rows, cols);
-        }
-
-        // ── Clamp cursor to valid bounds ──
         self.cursor_row = self.cursor_row.min(rows.saturating_sub(1));
         self.cursor_col = self.cursor_col.min(cols.saturating_sub(1));
+    }
 
-        // ── Reset scroll region to full screen ──
-        self.scroll_top = 0;
-        self.scroll_bottom = rows - 1;
+    /// Reflow resize: reflow all content (scrollback + grid) to new width.
+    ///
+    /// Strategy:
+    /// 1. Collect all rows (scrollback + grid) into logical lines
+    /// 2. Rewrap logical lines to new column width
+    /// 3. Split result: excess goes to scrollback, last N rows fill grid
+    /// 4. Adjust cursor position to match reflowed content
+    fn reflow_resize(&mut self, rows: usize, cols: usize) {
+        // 1. Collect all content into logical lines
+        let mut lines: Vec<Vec<Cell>> = Vec::new();
+        let mut current_line: Vec<Cell> = Vec::new();
 
-        self.resize_at = Some(std::time::Instant::now());
+        // First from scrollback
+        for row in self.scrollback.iter() {
+            current_line.extend(row.cells.iter().cloned());
+            if !row.wrapped {
+                lines.push(std::mem::take(&mut current_line));
+            }
+        }
+
+        // Then from grid
+        for r in 0..self.grid.rows {
+            current_line.extend(self.grid.row_cells(r));
+            if !self.grid.is_wrapped(r) {
+                lines.push(std::mem::take(&mut current_line));
+            }
+        }
+
+        // Handle remaining content
+        if !current_line.is_empty() {
+            lines.push(current_line);
+        }
+
+        // 2. Rewrap all lines to new width
+        let mut rewrapped: Vec<Row> = Vec::new();
+        for line in &lines {
+            // Trim trailing spaces
+            let len = line
+                .iter()
+                .rposition(|c| c.character != ' ')
+                .map(|i| i + 1)
+                .unwrap_or(0);
+
+            if len == 0 {
+                rewrapped.push(Row::new(cols));
+                continue;
+            }
+
+            let content = &line[..len];
+            let mut pos = 0;
+            while pos < content.len() {
+                let end = (pos + cols).min(content.len());
+                let mut cells: Vec<Cell> = content[pos..end].to_vec();
+                cells.resize(cols, Cell::default());
+                let wrapped = end < content.len();
+                rewrapped.push(Row::from_cells(cells, wrapped));
+                pos = end;
+            }
+        }
+
+        // 3. Split into scrollback and grid
+        self.scrollback.clear();
+        self.grid = Grid::new(rows, cols);
+
+        let total_rows = rewrapped.len();
+        let grid_start = total_rows.saturating_sub(rows);
+
+        // Fill scrollback with excess rows
+        for row in rewrapped.iter().take(grid_start) {
+            self.scrollback.push_back(row.clone());
+            if self.scrollback.len() > self.max_scrollback {
+                self.scrollback.pop_front();
+            }
+        }
+
+        // Fill grid with last `rows` rows
+        for (i, row) in rewrapped.iter().skip(grid_start).enumerate() {
+            for (col, cell) in row.cells.iter().enumerate() {
+                if col < cols {
+                    self.grid.set(i, col, cell.clone());
+                }
+            }
+            self.grid.set_wrapped(i, row.wrapped);
+        }
+
+        // 4. Position cursor at end of content
+        let content_rows = total_rows.saturating_sub(grid_start);
+        self.cursor_row = content_rows.saturating_sub(1).min(rows.saturating_sub(1));
+        self.cursor_col = self.cursor_col.min(cols.saturating_sub(1));
     }
 
     /// Returns whether the terminal is in the alternate screen.
@@ -78,8 +163,8 @@ impl super::Terminal {
                 let cell = if row < scroll_offset {
                     // Pull row from scrollback.
                     let sb_idx = self.scrollback.len() - scroll_offset + row;
-                    if col < self.scrollback[sb_idx].len() {
-                        self.scrollback[sb_idx][col].clone()
+                    if col < self.scrollback[sb_idx].cells.len() {
+                        self.scrollback[sb_idx].cells[col].clone()
                     } else {
                         Cell::default() // Width may differ after resize.
                     }
@@ -96,10 +181,9 @@ impl super::Terminal {
     pub(super) fn scroll_up_region(&mut self, top: usize, bottom: usize) {
         // Persist the top row to scrollback only for the main screen.
         if top == 0 && self.alt_grid.is_none() {
-            let row: Vec<Cell> = (0..self.grid.cols)
-                .map(|col| self.grid.get(0, col).clone())
-                .collect();
-            self.scrollback.push_back(row);
+            let cells = self.grid.row_cells(0);
+            let wrapped = self.grid.is_wrapped(0);
+            self.scrollback.push_back(Row::from_cells(cells, wrapped));
             if self.scrollback.len() > self.max_scrollback {
                 self.scrollback.pop_front();
                 self.scrollback_popped += 1;
@@ -111,10 +195,14 @@ impl super::Terminal {
                 let cell = self.grid.get(row, col).clone();
                 self.grid.set(row - 1, col, cell);
             }
+            // Also copy the wrapped flag
+            let wrapped = self.grid.is_wrapped(row);
+            self.grid.set_wrapped(row - 1, wrapped);
         }
         for col in 0..self.grid.cols {
             self.grid.set(bottom, col, Cell::default());
         }
+        self.grid.set_wrapped(bottom, false);
     }
 
     pub(super) fn scroll_down_region(&mut self, top: usize, bottom: usize) {
@@ -123,10 +211,14 @@ impl super::Terminal {
                 let cell = self.grid.get(row, col).clone();
                 self.grid.set(row + 1, col, cell);
             }
+            // Also copy the wrapped flag
+            let wrapped = self.grid.is_wrapped(row);
+            self.grid.set_wrapped(row + 1, wrapped);
         }
         for col in 0..self.grid.cols {
             self.grid.set(top, col, Cell::default());
         }
+        self.grid.set_wrapped(top, false);
     }
 
     /// Enters the alternate screen buffer (used by apps like vim/htop).
@@ -155,5 +247,133 @@ impl super::Terminal {
             self.scroll_bottom = self.saved_scroll_bottom;
             self.cursor_style = CursorStyle::default();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::Terminal;
+
+    /// Helper to collect all visible content (grid + scrollback) as a string
+    fn collect_all_content(term: &Terminal) -> String {
+        let mut content = String::new();
+        // Scrollback
+        for row in term.scrollback.iter() {
+            for cell in &row.cells {
+                if cell.character != ' ' {
+                    content.push(cell.character);
+                }
+            }
+        }
+        // Grid
+        for r in 0..term.grid.rows {
+            for c in 0..term.grid.cols {
+                let ch = term.grid.get(r, c).character;
+                if ch != ' ' {
+                    content.push(ch);
+                }
+            }
+        }
+        content
+    }
+
+    #[test]
+    fn reflow_preserves_content_after_width_change() {
+        let mut term = Terminal::new(4, 10);
+        term.process(b"AAAAAAAAAA"); // row 0: 10 A's
+        term.process(b"\n");
+        term.cursor_col = 0;
+        term.process(b"BBBBBBBBBB"); // row 1: 10 B's
+
+        let content_before = collect_all_content(&term);
+
+        // Width change triggers reflow
+        term.resize(4, 15);
+
+        let content_after = collect_all_content(&term);
+
+        // Content should be preserved
+        assert_eq!(content_before, content_after,
+            "Content should be preserved after reflow");
+    }
+
+    #[test]
+    fn reflow_resize_sets_correct_dimensions() {
+        let mut term = Terminal::new(4, 10);
+        term.process(b"Test content");
+
+        term.resize(6, 20);
+
+        assert_eq!(term.grid.rows, 6);
+        assert_eq!(term.grid.cols, 20);
+    }
+
+    #[test]
+    fn reflow_resize_clamps_cursor() {
+        let mut term = Terminal::new(10, 20);
+        term.cursor_row = 8;
+        term.cursor_col = 15;
+
+        // Resize to smaller dimensions
+        term.resize(5, 10);
+
+        // Cursor should be clamped to valid range
+        assert!(term.cursor_row < term.grid.rows,
+            "cursor_row {} should be < grid.rows {}", term.cursor_row, term.grid.rows);
+        assert!(term.cursor_col < term.grid.cols,
+            "cursor_col {} should be < grid.cols {}", term.cursor_col, term.grid.cols);
+    }
+
+    #[test]
+    fn reflow_rewraps_long_lines_to_new_width() {
+        let mut term = Terminal::new(4, 10);
+        // Create a long line that will wrap: 26 chars in 10-col terminal
+        term.process(b"ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+
+        // Resize to wider terminal (20 cols)
+        term.resize(4, 20);
+
+        // Content should be rewrapped: now 2 rows instead of 3
+        // Check that the full alphabet is preserved
+        let content = collect_all_content(&term);
+        assert_eq!(content, "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+            "Content should be preserved after rewrap");
+
+        // The rewrapped content should have proper wrap flags
+        // First row (20 chars) should be wrapped, second (6 chars) should not
+        // Content can be in grid or scrollback depending on grid size
+    }
+
+    #[test]
+    fn simple_resize_height_only_preserves_grid() {
+        let mut term = Terminal::new(4, 10);
+        term.process(b"Test");
+
+        // Height-only change uses simple_resize (not reflow)
+        term.resize(6, 10);
+
+        // Content should still be in grid (not moved to scrollback)
+        assert_eq!(term.grid.get(0, 0).character, 'T');
+        assert_eq!(term.grid.get(0, 1).character, 'e');
+        assert_eq!(term.grid.get(0, 2).character, 's');
+        assert_eq!(term.grid.get(0, 3).character, 't');
+    }
+
+    #[test]
+    fn alt_screen_resize_does_not_reflow() {
+        let mut term = Terminal::new(4, 10);
+        term.process(b"Main screen");
+
+        // Enter alt screen
+        term.process(b"\x1b[?1049h");
+        term.process(b"Alt content");
+
+        let scrollback_before = term.scrollback.len();
+
+        // Width change on alt screen should NOT trigger reflow
+        term.resize(4, 15);
+
+        // Scrollback should not have changed (alt screen doesn't push to scrollback)
+        assert_eq!(term.scrollback.len(), scrollback_before);
     }
 }

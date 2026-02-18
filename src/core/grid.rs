@@ -1,7 +1,30 @@
 use crate::core::Cell;
 
+/// A single row with its cells and a wrapped flag.
+/// `wrapped = true` means this row continues on the next row (soft wrap).
+/// `wrapped = false` means this row ends with a logical line break (hard wrap / newline).
+#[derive(Clone)]
+pub struct Row {
+    pub cells: Vec<Cell>,
+    pub wrapped: bool,
+}
+
+impl Row {
+    pub fn new(cols: usize) -> Self {
+        Row {
+            cells: vec![Cell::default(); cols],
+            wrapped: false,
+        }
+    }
+
+    /// Create a row from cells (for scrollback restoration).
+    pub fn from_cells(cells: Vec<Cell>, wrapped: bool) -> Self {
+        Row { cells, wrapped }
+    }
+}
+
 pub struct Grid {
-    cells: Vec<Vec<Cell>>,
+    rows_data: Vec<Row>,
     pub rows: usize,
     pub cols: usize,
 }
@@ -9,35 +32,59 @@ pub struct Grid {
 impl Grid {
     pub fn new(rows: usize, cols: usize) -> Self {
         Grid {
-            cells: vec![vec![Cell::default(); cols]; rows],
+            rows_data: (0..rows).map(|_| Row::new(cols)).collect(),
             rows,
             cols,
         }
     }
 
     pub fn get(&self, row: usize, col: usize) -> &Cell {
-        &self.cells[row][col]
+        &self.rows_data[row].cells[col]
     }
 
     pub fn set(&mut self, row: usize, col: usize, cell: Cell) {
         if row < self.rows && col < self.cols {
-            self.cells[row][col] = cell;
+            self.rows_data[row].cells[col] = cell;
         }
     }
 
+    /// Check if a row is soft-wrapped (continues on next row).
+    pub fn is_wrapped(&self, row: usize) -> bool {
+        if row < self.rows {
+            self.rows_data[row].wrapped
+        } else {
+            false
+        }
+    }
+
+    /// Mark a row as soft-wrapped (true) or hard-wrapped/newline (false).
+    pub fn set_wrapped(&mut self, row: usize, wrapped: bool) {
+        if row < self.rows {
+            self.rows_data[row].wrapped = wrapped;
+        }
+    }
+
+    /// Simple resize without reflow (used for alt screen).
     pub fn resized(&self, rows: usize, cols: usize) -> Grid {
         let mut new_grid = Grid::new(rows, cols);
         for row in 0..rows.min(self.rows) {
             for col in 0..cols.min(self.cols) {
                 new_grid.set(row, col, self.get(row, col).clone());
             }
+            new_grid.set_wrapped(row, self.is_wrapped(row));
         }
         new_grid
     }
 
     /// Extract a row as a Vec<Cell>, for saving to scrollback.
     pub fn row_cells(&self, row: usize) -> Vec<Cell> {
-        self.cells[row].clone()
+        self.rows_data[row].cells.clone()
+    }
+
+    /// Get the Row struct for a given row index.
+    #[allow(dead_code)]
+    pub fn get_row(&self, row: usize) -> &Row {
+        &self.rows_data[row]
     }
 
     /// Shift all rows in range [from..to) up by `count` positions.
@@ -49,47 +96,64 @@ impl Grid {
         }
         for row in 0..self.rows {
             if row + count < self.rows {
-                // Move row+count into row
-                self.cells.swap(row, row + count);
+                self.rows_data.swap(row, row + count);
             }
         }
         // Clear the bottom `count` rows
         for row in (self.rows - count)..self.rows {
-            for col in 0..self.cols {
-                self.cells[row][col] = Cell::default();
-            }
+            self.rows_data[row] = Row::new(self.cols);
         }
     }
 
     /// Shift all rows down by `count` positions.
     /// Rows at the bottom are lost.
     /// Rows vacated at the top are filled with defaults.
+    #[allow(dead_code)]
     pub fn shift_down(&mut self, count: usize) {
         if count == 0 || count >= self.rows {
             return;
         }
         for row in (0..self.rows).rev() {
             if row >= count {
-                self.cells.swap(row, row - count);
+                self.rows_data.swap(row, row - count);
             }
         }
         // Clear the top `count` rows
         for row in 0..count {
-            for col in 0..self.cols {
-                self.cells[row][col] = Cell::default();
-            }
+            self.rows_data[row] = Row::new(self.cols);
         }
     }
 
     /// Set an entire row from a Vec<Cell>, padding or truncating to fit cols.
+    #[allow(dead_code)]
     pub fn set_row(&mut self, row: usize, cells: Vec<Cell>) {
         for col in 0..self.cols {
             if col < cells.len() {
-                self.cells[row][col] = cells[col].clone();
+                self.rows_data[row].cells[col] = cells[col].clone();
             } else {
-                self.cells[row][col] = Cell::default();
+                self.rows_data[row].cells[col] = Cell::default();
             }
         }
+    }
+
+    /// Set an entire row from a Row struct (preserves wrapped flag).
+    #[allow(dead_code)]
+    pub fn set_row_data(&mut self, row: usize, row_data: Row) {
+        if row < self.rows {
+            // Resize cells to match grid columns
+            let mut cells = row_data.cells;
+            cells.resize(self.cols, Cell::default());
+            self.rows_data[row] = Row {
+                cells,
+                wrapped: row_data.wrapped,
+            };
+        }
+    }
+
+    /// Get all rows as Row structs (for reflow).
+    #[allow(dead_code)]
+    pub fn all_rows(&self) -> &[Row] {
+        &self.rows_data
     }
 }
 

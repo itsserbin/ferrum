@@ -4,7 +4,8 @@
 
 use super::{
     ACTIVE_TAB_BG, BAR_BG, INACTIVE_TAB_HOVER, INSERTION_COLOR, MIN_TAB_WIDTH,
-    MIN_TAB_WIDTH_FOR_TITLE, TAB_BORDER, TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE,
+    MIN_TAB_WIDTH_FOR_TITLE, RENAME_FIELD_BG, RENAME_FIELD_BORDER, RENAME_SELECTION_BG, TAB_BORDER,
+    TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE,
 };
 
 use super::super::TabInfo;
@@ -20,7 +21,11 @@ impl super::GpuRenderer {
         {
             self.metrics.scaled_px(78)
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "windows")]
+        {
+            self.metrics.scaled_px(14)
+        }
+        #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
         {
             self.metrics.scaled_px(8)
         }
@@ -122,7 +127,7 @@ impl super::GpuRenderer {
         &mut self,
         buf_width: usize,
         tabs: &[TabInfo],
-        hovered_tab: Option<usize>,
+        _hovered_tab: Option<usize>,
         mouse_pos: (f64, f64),
         tab_offsets: Option<&[f32]>,
     ) {
@@ -153,13 +158,20 @@ impl super::GpuRenderer {
         for (i, tab) in tabs.iter().enumerate() {
             let anim_offset = tab_offsets.and_then(|o| o.get(i)).copied().unwrap_or(0.0);
             let tab_x = self.tab_origin_x_val(i, tw) as f32 + anim_offset;
-            let is_hovered = hovered_tab == Some(i);
+            let hover_t = tab.hover_progress.clamp(0.0, 1.0);
 
             // Tab background.
             if tab.is_active {
                 self.push_rect(tab_x, 0.0, tw as f32, tab_bar_h, ACTIVE_TAB_BG, 1.0);
-            } else if is_hovered {
-                self.push_rect(tab_x, 0.0, tw as f32, tab_bar_h, INACTIVE_TAB_HOVER, 1.0);
+            } else if hover_t > 0.01 {
+                self.push_rect(
+                    tab_x,
+                    0.0,
+                    tw as f32,
+                    tab_bar_h,
+                    INACTIVE_TAB_HOVER,
+                    hover_t.min(1.0),
+                );
             }
 
             let fg_color = if tab.is_active {
@@ -169,16 +181,84 @@ impl super::GpuRenderer {
             };
 
             if tab.is_renaming {
-                // Simplified rename rendering -- just show the text.
                 let rename_text = tab.rename_text.unwrap_or("");
                 let text_x = tab_x + tab_padding_h as f32;
                 let max_chars =
                     (tw.saturating_sub(tab_padding_h * 2) / self.metrics.cell_width) as usize;
-                let display: String = rename_text.chars().take(max_chars).collect();
-                self.push_text(text_x, text_y as f32, &display, TAB_TEXT_ACTIVE, 1.0);
+                let selection_chars = tab.rename_selection.and_then(|(start, end)| {
+                    if start >= end {
+                        return None;
+                    }
+                    let start_chars = rename_text
+                        .get(..start)
+                        .map_or(0, |prefix| prefix.chars().count());
+                    let end_chars = rename_text
+                        .get(..end)
+                        .map_or(start_chars, |prefix| prefix.chars().count());
+                    Some((start_chars.min(max_chars), end_chars.min(max_chars)))
+                });
+
+                let field_pad_x = self.metrics.scaled_px(3);
+                let field_x = tab_x + tab_padding_h.saturating_sub(field_pad_x) as f32;
+                let field_y = text_y.saturating_sub(self.metrics.scaled_px(2)) as f32;
+                let field_w = (tw.saturating_sub(tab_padding_h * 2) + field_pad_x * 2) as f32;
+                let field_h = (self.metrics.cell_height + self.metrics.scaled_px(4)) as f32;
+                self.push_rounded_rect(
+                    field_x,
+                    field_y,
+                    field_w,
+                    field_h,
+                    self.metrics.scaled_px(6) as f32,
+                    RENAME_FIELD_BG,
+                    0.96,
+                );
+                self.push_rounded_rect(
+                    field_x,
+                    field_y,
+                    field_w,
+                    field_h,
+                    self.metrics.scaled_px(6) as f32,
+                    RENAME_FIELD_BORDER,
+                    0.35,
+                );
+
+                for (ci, ch) in rename_text.chars().take(max_chars).enumerate() {
+                    let cx = text_x + ci as f32 * self.metrics.cell_width as f32;
+                    let selected =
+                        selection_chars.is_some_and(|(start, end)| ci >= start && ci < end);
+                    if selected {
+                        self.push_rect(
+                            cx,
+                            text_y as f32,
+                            self.metrics.cell_width as f32,
+                            self.metrics.cell_height as f32,
+                            RENAME_SELECTION_BG,
+                            0.94,
+                        );
+                        self.push_text(cx, text_y as f32, &ch.to_string(), BAR_BG, 1.0);
+                    } else {
+                        self.push_text(cx, text_y as f32, &ch.to_string(), TAB_TEXT_ACTIVE, 1.0);
+                    }
+                }
+
+                let cursor_chars = rename_text
+                    .get(..tab.rename_cursor)
+                    .map_or(0, |prefix| prefix.chars().count())
+                    .min(max_chars);
+                let cursor_x = text_x + cursor_chars as f32 * self.metrics.cell_width as f32;
+                self.push_rect(
+                    cursor_x,
+                    (text_y + self.metrics.scaled_px(1)) as f32,
+                    self.metrics.scaled_px(2) as f32,
+                    self.metrics
+                        .cell_height
+                        .saturating_sub(self.metrics.scaled_px(2)) as f32,
+                    TAB_TEXT_ACTIVE,
+                    0.9,
+                );
             } else if use_numbers {
                 let number_str = (i + 1).to_string();
-                let show_close = tab.is_active || is_hovered;
+                let show_close = tab.is_active || hover_t > 0.05;
                 let close_reserved = if show_close {
                     self.metrics.scaled_px(20) + self.metrics.scaled_px(6)
                 } else {
@@ -189,11 +269,11 @@ impl super::GpuRenderer {
                 self.push_text(tx, text_y as f32, &number_str, fg_color, 1.0);
 
                 if show_close {
-                    self.draw_close_button_commands(i, tw, mouse_pos);
+                    self.draw_close_button_commands(i, tw, tab.close_hover_progress);
                 }
             } else {
                 // Normal mode: title + close button.
-                let show_close = tab.is_active || is_hovered;
+                let show_close = tab.is_active || hover_t > 0.05;
                 let close_reserved = if show_close {
                     self.metrics.scaled_px(20) + self.metrics.scaled_px(6)
                 } else {
@@ -225,7 +305,7 @@ impl super::GpuRenderer {
                 self.push_text(tx, text_y as f32, &title, fg_color, 1.0);
 
                 if show_close {
-                    self.draw_close_button_commands(i, tw, mouse_pos);
+                    self.draw_close_button_commands(i, tw, tab.close_hover_progress);
                 }
             }
         }

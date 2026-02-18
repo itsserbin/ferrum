@@ -10,6 +10,21 @@ impl FerrumWindow {
             None => return,
         };
 
+        // Don't move cursor if scrolled - user is viewing scrollback, not live content
+        if tab.scroll_offset > 0 {
+            return;
+        }
+
+        // Don't move cursor shortly after resize - cursor position may not be synced with shell
+        // Use longer timeout (2 seconds) until reflow sync is properly fixed
+        if tab
+            .terminal
+            .resize_at
+            .is_some_and(|t| t.elapsed().as_millis() < 2000)
+        {
+            return;
+        }
+
         let cur_row = tab.terminal.cursor_row;
         let cur_col = tab.terminal.cursor_col;
         let alt_screen = tab.terminal.is_alt_screen();
@@ -52,12 +67,24 @@ impl FerrumWindow {
             if target_row != cur_row {
                 return;
             }
-            if target_col < cur_col {
-                for _ in 0..(cur_col - target_col) {
+
+            // Find the last non-space column on this row to avoid sending arrows
+            // past the actual content (cmd.exe interprets RIGHT on empty input
+            // as "copy from previous command").
+            let last_content = (0..tab.terminal.grid.cols)
+                .rev()
+                .find(|&c| tab.terminal.grid.get(cur_row, c).character != ' ');
+
+            // Only allow movement within content bounds
+            let max_col = last_content.map(|c| c + 1).unwrap_or(0);
+            let safe_target = target_col.min(max_col);
+
+            if safe_target < cur_col {
+                for _ in 0..(cur_col - safe_target) {
                     bytes.extend_from_slice(b"\x1b[D");
                 }
-            } else if target_col > cur_col {
-                for _ in 0..(target_col - cur_col) {
+            } else if safe_target > cur_col {
+                for _ in 0..(safe_target - cur_col) {
                     bytes.extend_from_slice(b"\x1b[C");
                 }
             }

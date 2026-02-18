@@ -98,8 +98,7 @@ pub(super) enum WindowRequest {
     },
     /// Close this window (all tabs gone or user closed).
     CloseWindow,
-    /// Create a new standalone window (Cmd+N on macOS).
-    #[cfg(target_os = "macos")]
+    /// Create a new standalone window (Ctrl/Cmd+N).
     NewWindow,
     /// Create a new native macOS tab (new window in tab group).
     #[cfg(target_os = "macos")]
@@ -129,6 +128,9 @@ pub(super) struct FerrumWindow {
     pub(super) hovered_tab: Option<usize>,
     pub(super) context_menu: Option<ContextMenu>,
     pub(super) security_popup: Option<SecurityPopup>,
+    pub(super) tab_hover_progress: Vec<f32>,
+    pub(super) close_hover_progress: Vec<f32>,
+    pub(super) ui_animation_last_tick: std::time::Instant,
     pub(super) closed_tabs: Vec<ClosedTabInfo>,
     pub(super) renaming_tab: Option<RenameState>,
     pub(super) dragging_tab: Option<DragState>,

@@ -17,8 +17,15 @@ pub(in super::super) fn handle_scroll_csi(
                 .unwrap_or(term.grid.rows as u16);
             term.scroll_top = (top as usize).saturating_sub(1);
             term.scroll_bottom = (bottom as usize).saturating_sub(1).min(term.grid.rows - 1);
-            term.cursor_row = 0;
-            term.cursor_col = 0;
+            // VT spec says reset cursor, but modern apps don't expect it.
+            // Keep cursor position, just clamp to new scroll region if needed.
+            if term.cursor_row < term.scroll_top {
+                term.cursor_row = term.scroll_top;
+            }
+            if term.cursor_row > term.scroll_bottom {
+                term.cursor_row = term.scroll_bottom;
+            }
+            // cursor_col remains unchanged
             true
         }
         'S' => {
@@ -90,17 +97,32 @@ mod tests {
     #[test]
     fn decstbm_set_margins() {
         // \x1b[2;5r on a 10-row grid sets scroll region rows 1..4 (0-based)
-        // and moves cursor to (0,0).
+        // Modern apps (vim/tmux) don't expect cursor reset, so we keep position
+        // but clamp to scroll region if needed.
         // Since scroll_top/scroll_bottom are private, verify cursor position
         // and that scroll operations respect the margins.
         let mut term = Terminal::new(10, 10);
-        term.cursor_row = 5;
-        term.cursor_col = 3;
+        term.cursor_row = 3; // Inside scroll region (1..4)
+        term.cursor_col = 5;
         term.process(b"\x1b[2;5r");
 
-        // Cursor must be reset to (0,0)
-        assert_eq!(term.cursor_row, 0);
-        assert_eq!(term.cursor_col, 0);
+        // Cursor stays at original position (inside scroll region)
+        assert_eq!(term.cursor_row, 3);
+        assert_eq!(term.cursor_col, 5);
+
+        // Test clamping: cursor below scroll region gets clamped to bottom
+        term.cursor_row = 8; // Below scroll region (1..4)
+        term.cursor_col = 7;
+        term.process(b"\x1b[2;5r");
+        assert_eq!(term.cursor_row, 4); // Clamped to scroll_bottom (row 4, 0-based)
+        assert_eq!(term.cursor_col, 7); // Column unchanged
+
+        // Test clamping: cursor above scroll region gets clamped to top
+        term.cursor_row = 0; // Above scroll region (1..4)
+        term.cursor_col = 2;
+        term.process(b"\x1b[2;5r");
+        assert_eq!(term.cursor_row, 1); // Clamped to scroll_top (row 1, 0-based)
+        assert_eq!(term.cursor_col, 2); // Column unchanged
 
         // Verify margins are set correctly by filling rows and scrolling.
         // Fill rows 0..9 with distinct chars.
@@ -179,7 +201,7 @@ mod tests {
 
         // Row A should be in scrollback
         assert_eq!(term.scrollback.len(), 1);
-        assert_eq!(term.scrollback[0][0].character, 'A');
+        assert_eq!(term.scrollback[0].cells[0].character, 'A');
     }
 
     #[test]

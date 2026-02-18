@@ -1,18 +1,30 @@
 /// Tab context menu actions.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ContextAction {
-    Close,
-    Rename,
-    Duplicate,
+    CloseTab,
+    RenameTab,
+    DuplicateTab,
+    CopySelection,
+    Paste,
+    ClearSelection,
 }
 
-/// Context menu state for one tab.
+/// Context menu origin/target.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ContextMenuTarget {
+    Tab { tab_index: usize },
+    TerminalSelection,
+}
+
+/// Context menu state.
 pub struct ContextMenu {
     pub x: u32,
     pub y: u32,
-    pub tab_index: usize,
+    pub target: ContextMenuTarget,
     pub items: Vec<(ContextAction, &'static str)>,
     pub hover_index: Option<usize>,
+    pub hover_progress: Vec<f32>,
+    pub opened_at: std::time::Instant,
 }
 
 /// Render-time tab metadata.
@@ -20,6 +32,8 @@ pub struct TabInfo<'a> {
     pub title: &'a str,
     pub is_active: bool,
     pub security_count: usize,
+    pub hover_progress: f32,
+    pub close_hover_progress: f32,
     pub is_renaming: bool,
     pub rename_text: Option<&'a str>,
     pub rename_cursor: usize,

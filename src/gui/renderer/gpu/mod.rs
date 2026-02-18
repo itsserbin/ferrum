@@ -38,7 +38,10 @@ const INACTIVE_TAB_HOVER: u32 = 0x313244;
 const TAB_TEXT_ACTIVE: u32 = 0xCDD6F4;
 const TAB_TEXT_INACTIVE: u32 = 0x6C7086;
 const TAB_BORDER: u32 = 0x313244;
-const CLOSE_HOVER_BG_COLOR: u32 = 0xF38BA8;
+const CLOSE_HOVER_BG_COLOR: u32 = 0x585B70;
+const RENAME_FIELD_BG: u32 = 0x24273A;
+const RENAME_FIELD_BORDER: u32 = 0x6C7086;
+const RENAME_SELECTION_BG: u32 = 0xB4BEFE;
 
 #[cfg(not(target_os = "macos"))]
 const WIN_BTN_WIDTH: u32 = 46;
@@ -184,6 +187,17 @@ impl traits::Renderer for GpuRenderer {
             for col in 0..cols {
                 let cell = grid.get(row, col);
                 let selected = selection.is_some_and(|s| s.contains(abs_row, col));
+                let codepoint = cell.character as u32;
+
+                // Ensure non-ASCII terminal glyphs exist in the atlas before grid shading.
+                if codepoint > 32 && codepoint >= 128 {
+                    let _ = self.atlas.get_or_insert(
+                        codepoint,
+                        &self.font,
+                        self.metrics.font_size,
+                        &self.queue,
+                    );
+                }
 
                 let mut attrs = 0u32;
                 if cell.bold {
@@ -214,7 +228,7 @@ impl traits::Renderer for GpuRenderer {
                 }
 
                 self.grid_cells.push(PackedCell {
-                    codepoint: cell.character as u32,
+                    codepoint,
                     fg: fg.to_pixel(),
                     bg: cell.bg.to_pixel(),
                     attrs,

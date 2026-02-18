@@ -73,7 +73,9 @@ impl FerrumWindow {
             if tab.terminal.grid.rows == rows && tab.terminal.grid.cols == cols {
                 continue;
             }
+
             tab.terminal.resize(rows, cols);
+
             if let Err(err) = tab.session.resize(rows as u16, cols as u16) {
                 eprintln!("Failed to resize PTY for tab {}: {err}", tab.id);
             }

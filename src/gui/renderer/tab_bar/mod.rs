@@ -13,7 +13,9 @@ const INACTIVE_TAB_HOVER: u32 = 0x313244; // Surface0
 const TAB_TEXT_ACTIVE: u32 = 0xCDD6F4; // Text
 const TAB_TEXT_INACTIVE: u32 = 0x6C7086; // Overlay0
 pub(self) const TAB_BORDER: u32 = 0x313244; // Surface0
-const CLOSE_HOVER_BG_COLOR: u32 = 0xF38BA8; // Red
+const CLOSE_HOVER_BG_COLOR: u32 = 0x585B70; // Surface2
+const RENAME_FIELD_BG: u32 = 0x24273A; // Distinct editable-field background
+const RENAME_FIELD_BORDER: u32 = 0x6C7086; // Subtle field border
 
 // Window button colors (non-macOS).
 #[cfg(not(target_os = "macos"))]
@@ -36,7 +38,7 @@ impl CpuRenderer {
         buf_width: usize,
         buf_height: usize,
         tabs: &[TabInfo],
-        hovered_tab: Option<usize>,
+        _hovered_tab: Option<usize>,
         mouse_pos: (f64, f64),
         tab_offsets: Option<&[f32]>,
     ) {
@@ -68,7 +70,7 @@ impl CpuRenderer {
         for (i, tab) in tabs.iter().enumerate() {
             let anim_offset = tab_offsets.and_then(|o| o.get(i)).copied().unwrap_or(0.0);
             let tab_x = (self.tab_origin_x(i, tw) as f32 + anim_offset).round() as u32;
-            let is_hovered = hovered_tab == Some(i);
+            let hover_t = tab.hover_progress.clamp(0.0, 1.0);
 
             if tab.is_active {
                 // Active tab: flat fill that merges with terminal.
@@ -87,9 +89,10 @@ impl CpuRenderer {
                         }
                     }
                 }
-            } else if is_hovered {
+            } else if hover_t > 0.01 {
                 // Inactive tab hover: flat fill highlight.
                 let fill_bg = INACTIVE_TAB_HOVER;
+                let alpha = (hover_t * 220.0).round().clamp(0.0, 255.0) as u8;
                 for py in tab_inset_y as usize..(tab_inset_y + tab_h) as usize {
                     if py >= bar_h {
                         break;
@@ -99,7 +102,7 @@ impl CpuRenderer {
                         if px < buf_width {
                             let idx = py * buf_width + px;
                             if idx < buffer.len() {
-                                buffer[idx] = fill_bg;
+                                buffer[idx] = Self::blend_pixel(buffer[idx], fill_bg, alpha);
                             }
                         }
                     }
@@ -132,18 +135,35 @@ impl CpuRenderer {
                     Some((start_chars.min(max_chars), end_chars.min(max_chars)))
                 });
 
-                let rename_bg = INACTIVE_TAB_HOVER;
-                for py in (text_y as usize)..(text_y + self.cell_height) as usize {
-                    for dx in (tab_padding_h as usize - self.scaled_px(2) as usize)
-                        ..(tw - tab_padding_h + self.scaled_px(2)) as usize
-                    {
-                        let px = tab_x as usize + dx;
-                        if px < buf_width && py * buf_width + px < buffer.len() {
-                            let idx = py * buf_width + px;
-                            buffer[idx] = rename_bg;
-                        }
-                    }
-                }
+                let field_pad_x = self.scaled_px(3);
+                let field_x = tab_x + tab_padding_h.saturating_sub(field_pad_x);
+                let field_y = text_y.saturating_sub(self.scaled_px(2));
+                let field_w = tw.saturating_sub(tab_padding_h * 2) + field_pad_x * 2;
+                let field_h = self.cell_height + self.scaled_px(4);
+                self.draw_rounded_rect(
+                    buffer,
+                    buf_width,
+                    bar_h,
+                    field_x as i32,
+                    field_y as i32,
+                    field_w,
+                    field_h,
+                    self.scaled_px(6),
+                    RENAME_FIELD_BG,
+                    245,
+                );
+                self.draw_rounded_rect(
+                    buffer,
+                    buf_width,
+                    bar_h,
+                    field_x as i32,
+                    field_y as i32,
+                    field_w,
+                    field_h,
+                    self.scaled_px(6),
+                    RENAME_FIELD_BORDER,
+                    90,
+                );
 
                 for (ci, ch) in rename_text.chars().take(max_chars).enumerate() {
                     let cx = text_x + ci as u32 * self.cell_width;
@@ -178,19 +198,24 @@ impl CpuRenderer {
                     .map_or(0, |prefix| prefix.chars().count())
                     .min(max_chars);
                 let cursor_x = text_x + cursor_chars as u32 * self.cell_width;
-                self.draw_char_at(
-                    buffer,
-                    buf_width,
-                    bar_h,
-                    cursor_x,
-                    text_y,
-                    '|',
-                    Color::DEFAULT_FG,
-                );
+                let cursor_w = self.scaled_px(2);
+                let cursor_h = self.cell_height.saturating_sub(self.scaled_px(2));
+                let cursor_y = text_y + self.scaled_px(1);
+                for py in cursor_y as usize..(cursor_y + cursor_h) as usize {
+                    if py >= bar_h {
+                        break;
+                    }
+                    for px in cursor_x as usize..(cursor_x + cursor_w) as usize {
+                        if px < buf_width && py * buf_width + px < buffer.len() {
+                            let idx = py * buf_width + px;
+                            buffer[idx] = Self::blend_pixel(buffer[idx], TAB_TEXT_ACTIVE, 220);
+                        }
+                    }
+                }
             } else if use_numbers {
                 // Overflow mode: show tab number (1-based) instead of title.
                 let number_str = (i + 1).to_string();
-                let show_close = tab.is_active || is_hovered;
+                let show_close = tab.is_active || hover_t > 0.05;
                 let close_reserved = if show_close {
                     self.scaled_px(20) + self.scaled_px(6)
                 } else {
@@ -205,11 +230,19 @@ impl CpuRenderer {
                 }
 
                 if show_close {
-                    self.draw_close_button(buffer, buf_width, bar_h, i, tab, tw, mouse_pos);
+                    self.draw_close_button(
+                        buffer,
+                        buf_width,
+                        bar_h,
+                        i,
+                        tab,
+                        tw,
+                        tab.close_hover_progress,
+                    );
                 }
             } else {
                 // Normal mode: show title with close button and security badge.
-                let show_close = tab.is_active || is_hovered;
+                let show_close = tab.is_active || hover_t > 0.05;
                 let close_reserved = if show_close {
                     self.scaled_px(20) + self.scaled_px(6)
                 } else {
@@ -275,7 +308,15 @@ impl CpuRenderer {
                 }
 
                 if show_close {
-                    self.draw_close_button(buffer, buf_width, bar_h, i, tab, tw, mouse_pos);
+                    self.draw_close_button(
+                        buffer,
+                        buf_width,
+                        bar_h,
+                        i,
+                        tab,
+                        tw,
+                        tab.close_hover_progress,
+                    );
                 }
             }
         }
@@ -331,19 +372,15 @@ impl CpuRenderer {
         tab_index: usize,
         _tab: &TabInfo,
         tw: u32,
-        mouse_pos: (f64, f64),
+        hover_progress: f32,
     ) {
         let (cx, cy, cw, ch) = self.close_button_rect(tab_index, tw);
-        let is_close_hovered = mouse_pos.0 >= cx as f64
-            && mouse_pos.0 < (cx + cw) as f64
-            && mouse_pos.1 >= cy as f64
-            && mouse_pos.1 < (cy + ch) as f64
-            && mouse_pos.1 < self.tab_bar_height_px() as f64;
-
-        if is_close_hovered {
+        let hover_t = hover_progress.clamp(0.0, 1.0);
+        if hover_t > 0.01 {
             let circle_r = cw.min(ch) / 2;
             let circle_cx = (cx + cw / 2) as i32;
             let circle_cy = (cy + ch / 2) as i32;
+            let alpha = (90.0 + hover_t * 125.0).round().clamp(0.0, 255.0) as u8;
             Self::draw_filled_circle(
                 buffer,
                 buf_width,
@@ -351,10 +388,16 @@ impl CpuRenderer {
                 circle_cy,
                 circle_r,
                 CLOSE_HOVER_BG_COLOR,
+                alpha,
             );
         }
 
-        let close_fg = Color::from_pixel(TAB_TEXT_INACTIVE);
+        let active_mix = (hover_t * 175.0).round().clamp(0.0, 255.0) as u8;
+        let close_fg = Color::from_pixel(Self::blend_rgb(
+            TAB_TEXT_INACTIVE,
+            TAB_TEXT_ACTIVE,
+            active_mix,
+        ));
         self.draw_tab_close_icon(buffer, buf_width, buf_height, (cx, cy, cw, ch), close_fg);
     }
 

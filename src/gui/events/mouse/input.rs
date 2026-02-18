@@ -47,7 +47,8 @@ impl FerrumWindow {
                     // Right click on a tab opens its context menu.
                     if let TabBarHit::Tab(idx) | TabBarHit::CloseTab(idx) = self.tab_bar_hit(mx, my)
                     {
-                        self.context_menu = Some(ContextMenu::new(mx as u32, tab_bar_height, idx));
+                        self.context_menu =
+                            Some(ContextMenu::for_tab(mx as u32, tab_bar_height, idx));
                     }
                     return;
                 }
@@ -59,7 +60,22 @@ impl FerrumWindow {
                 }
 
                 self.context_menu = None;
-                self.paste_clipboard();
+
+                let (row, col) = self.pixel_to_grid(mx, my);
+                let abs_row = self.screen_to_abs(row);
+                let clicked_selection = self
+                    .active_tab_ref()
+                    .and_then(|tab| tab.selection)
+                    .is_some_and(|selection| selection.contains(abs_row, col));
+
+                if clicked_selection {
+                    self.context_menu = Some(ContextMenu::for_terminal_selection(
+                        mx.max(0.0) as u32,
+                        my.max(0.0) as u32,
+                    ));
+                } else {
+                    self.paste_clipboard();
+                }
             }
             ElementState::Released => {
                 if self.is_mouse_reporting() {

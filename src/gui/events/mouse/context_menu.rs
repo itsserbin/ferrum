@@ -1,4 +1,4 @@
-use crate::gui::renderer::ContextAction;
+use crate::gui::renderer::{ContextAction, ContextMenuTarget};
 use crate::gui::*;
 
 impl FerrumWindow {
@@ -20,11 +20,31 @@ impl FerrumWindow {
 
         if let Some(item_idx) = self.backend.hit_test_context_menu(&menu, mx, my) {
             let action = menu.items[item_idx].0;
-            let tab_idx = menu.tab_index;
             match action {
-                ContextAction::Close => self.close_tab(tab_idx),
-                ContextAction::Rename => self.start_rename(tab_idx),
-                ContextAction::Duplicate => self.duplicate_tab(tab_idx, next_tab_id, tx),
+                ContextAction::CloseTab => {
+                    if let ContextMenuTarget::Tab { tab_index } = menu.target {
+                        self.close_tab(tab_index);
+                    }
+                }
+                ContextAction::RenameTab => {
+                    if let ContextMenuTarget::Tab { tab_index } = menu.target {
+                        self.start_rename(tab_index);
+                    }
+                }
+                ContextAction::DuplicateTab => {
+                    if let ContextMenuTarget::Tab { tab_index } = menu.target {
+                        self.duplicate_tab(tab_index, next_tab_id, tx);
+                    }
+                }
+                ContextAction::CopySelection => self.copy_selection(),
+                ContextAction::Paste => self.paste_clipboard(),
+                ContextAction::ClearSelection => {
+                    if let Some(tab) = self.active_tab_mut() {
+                        tab.selection = None;
+                    }
+                    self.selection_anchor = None;
+                    self.keyboard_selection_anchor = None;
+                }
             }
             true
         } else {

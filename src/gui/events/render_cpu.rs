@@ -43,6 +43,12 @@ impl FerrumWindow {
                         title: &t.title,
                         is_active: i == self.active_tab,
                         security_count,
+                        hover_progress: self.tab_hover_progress.get(i).copied().unwrap_or(0.0),
+                        close_hover_progress: self
+                            .close_hover_progress
+                            .get(i)
+                            .copied()
+                            .unwrap_or(0.0),
                         is_renaming,
                         rename_text: if is_renaming {
                             renaming.as_ref().map(|(_, text, _, _)| *text)

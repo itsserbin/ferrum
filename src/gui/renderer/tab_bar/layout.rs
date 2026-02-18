@@ -29,7 +29,11 @@ impl super::super::CpuRenderer {
         {
             self.scaled_px(78)
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "windows")]
+        {
+            self.scaled_px(14)
+        }
+        #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
         {
             self.scaled_px(8)
         }

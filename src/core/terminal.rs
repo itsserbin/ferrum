@@ -1,4 +1,4 @@
-use crate::core::{Cell, Color, Grid, SecurityConfig, SecurityEventKind};
+use crate::core::{Cell, Color, Grid, Row, SecurityConfig, SecurityEventKind};
 use std::collections::VecDeque;
 use unicode_width::UnicodeWidthChar;
 use vte::{Params, Parser, Perform};
@@ -53,7 +53,7 @@ pub struct Terminal {
     scroll_bottom: usize,
     saved_scroll_top: usize,
     saved_scroll_bottom: usize,
-    pub scrollback: VecDeque<Vec<Cell>>,
+    pub scrollback: VecDeque<Row>,
     max_scrollback: usize,
     pub decckm: bool,               // Application Cursor Key Mode (ESC[?1h/l)
     pub cursor_visible: bool,       // DECTCEM (mode 25)
@@ -63,7 +63,7 @@ pub struct Terminal {
     pub security_config: SecurityConfig,
     pending_security_events: Vec<SecurityEventKind>,
     pub cursor_style: CursorStyle,
-    resize_at: Option<std::time::Instant>,
+    pub resize_at: Option<std::time::Instant>,
     scrollback_popped: usize,
     parser: Parser,
 }
@@ -295,6 +295,8 @@ impl Perform for Terminal {
         let width = UnicodeWidthChar::width(c).unwrap_or(1);
 
         if self.cursor_col + width > self.grid.cols {
+            // Mark current row as soft-wrapped before moving to next row
+            self.grid.set_wrapped(self.cursor_row, true);
             self.cursor_col = 0;
             self.cursor_row += 1;
             if self.cursor_row > self.scroll_bottom {
@@ -337,8 +339,10 @@ impl Perform for Terminal {
 
     fn execute(&mut self, byte: u8) {
         match byte {
-            10 => {
-                // \n
+            10 | 11 | 12 => {
+                // LF/VT/FF: move to next row, keep current column.
+                // Mark current row as NOT wrapped (hard line break).
+                self.grid.set_wrapped(self.cursor_row, false);
                 self.cursor_row += 1;
                 if self.cursor_row > self.scroll_bottom {
                     self.scroll_up_region(self.scroll_top, self.scroll_bottom);
@@ -517,8 +521,18 @@ mod tests {
         term.process(b"A\nB");
 
         assert_eq!(term.grid.get(0, 0).character, 'A');
-        // LF moves down one row; col stays after A (col 1)
+        // LF moves down one row; col stays after A (col 1).
         assert_eq!(term.grid.get(1, 1).character, 'B');
+    }
+
+    #[test]
+    fn execute_vt_and_ff_behave_like_newline() {
+        let mut term = Terminal::new(6, 80);
+        term.process(b"A\x0bB\x0cC");
+
+        assert_eq!(term.grid.get(0, 0).character, 'A');
+        assert_eq!(term.grid.get(1, 1).character, 'B');
+        assert_eq!(term.grid.get(2, 2).character, 'C');
     }
 
     #[test]
@@ -642,7 +656,7 @@ mod tests {
 
         // Row A should go to scrollback
         assert_eq!(term.scrollback.len(), 1);
-        assert_eq!(term.scrollback[0][0].character, 'A');
+        assert_eq!(term.scrollback[0].cells[0].character, 'A');
 
         // Content shifts up: B->row0, C->row1, D->row2, blank->row3
         assert_eq!(term.grid.get(0, 0).character, 'B');

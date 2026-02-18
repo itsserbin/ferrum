@@ -17,6 +17,8 @@ use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::keyboard::{Key, KeyCode, ModifiersState, NamedKey, PhysicalKey};
+#[cfg(target_os = "windows")]
+use winit::platform::windows::{CornerPreference, WindowAttributesExtWindows};
 use winit::window::{CursorIcon, ResizeDirection, Window, WindowId};
 
 use crate::core::terminal::Terminal;
@@ -58,6 +60,9 @@ impl FerrumWindow {
             hovered_tab: None,
             context_menu: None,
             security_popup: None,
+            tab_hover_progress: Vec::new(),
+            close_hover_progress: Vec::new(),
+            ui_animation_last_tick: std::time::Instant::now(),
             closed_tabs: Vec::new(),
             renaming_tab: None,
             dragging_tab: None,
@@ -139,6 +144,12 @@ impl App {
         #[cfg(not(target_os = "macos"))]
         {
             attrs = attrs.with_decorations(false);
+        }
+        #[cfg(target_os = "windows")]
+        {
+            attrs = attrs
+                .with_corner_preference(CornerPreference::Round)
+                .with_undecorated_shadow(true);
         }
 
         if let Some(pos) = position {

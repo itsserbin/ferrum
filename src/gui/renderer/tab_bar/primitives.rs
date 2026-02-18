@@ -37,8 +37,9 @@ impl super::super::CpuRenderer {
         cy: i32,
         radius: u32,
         color: u32,
+        alpha: u8,
     ) {
-        if buf_w == 0 || buffer.is_empty() || radius == 0 {
+        if buf_w == 0 || buffer.is_empty() || radius == 0 || alpha == 0 {
             return;
         }
 
@@ -69,8 +70,8 @@ impl super::super::CpuRenderer {
                     continue;
                 }
 
-                let alpha = (coverage * 255.0).round() as u8;
-                buffer[idx] = Self::blend_rgb(buffer[idx], color, alpha);
+                let aa_alpha = (coverage * alpha as f32).round().clamp(0.0, 255.0) as u8;
+                buffer[idx] = Self::blend_rgb(buffer[idx], color, aa_alpha);
             }
         }
     }

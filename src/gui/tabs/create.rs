@@ -134,11 +134,33 @@ fn last_login_message() -> String {
 #[cfg(windows)]
 fn last_login_message() -> String {
     use std::fmt::Write as _;
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
+    let dow_names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    let mon_names = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ];
     let mut msg = String::new();
-    let _ = write!(msg, "Last login: {now}\r\n");
+    unsafe {
+        let now = libc::time(std::ptr::null_mut());
+        let mut tm: libc::tm = std::mem::zeroed();
+        if libc::localtime_s(&mut tm, &now) == 0 {
+            let _ = write!(
+                msg,
+                "Last login: {} {} {:2} {:02}:{:02}:{:02} {}\r\n",
+                dow_names[tm.tm_wday as usize],
+                mon_names[tm.tm_mon as usize],
+                tm.tm_mday,
+                tm.tm_hour,
+                tm.tm_min,
+                tm.tm_sec,
+                tm.tm_year + 1900,
+            );
+        } else {
+            let epoch = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            let _ = write!(msg, "Last login: {epoch}\r\n");
+        }
+    }
     msg
 }

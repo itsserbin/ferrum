@@ -98,6 +98,24 @@ impl FerrumWindow {
             }
         }
 
+        let size = self.window.inner_size();
+        self.hovered_tab = self
+            .backend
+            .hit_test_tab_hover(mx, my, self.tabs.len(), size.width);
+
+        // Track hovered context-menu item.
+        if let Some(ref mut menu) = self.context_menu {
+            menu.hover_index = self.backend.hit_test_context_menu(menu, mx, my);
+            self.hovered_tab = None;
+            let cursor = if menu.hover_index.is_some() {
+                CursorIcon::Pointer
+            } else {
+                CursorIcon::Default
+            };
+            self.window.set_cursor(cursor);
+            return;
+        }
+
         let cursor = if my < tab_bar_height {
             match self.tab_bar_hit(mx, my) {
                 TabBarHit::Tab(_) | TabBarHit::CloseTab(_) | TabBarHit::NewTab => {
@@ -111,17 +129,6 @@ impl FerrumWindow {
             CursorIcon::Text
         };
         self.window.set_cursor(cursor);
-
-        // Track hovered tab for visual feedback.
-        let size = self.window.inner_size();
-        self.hovered_tab = self
-            .backend
-            .hit_test_tab_hover(mx, my, self.tabs.len(), size.width);
-
-        // Track hovered context-menu item.
-        if let Some(ref mut menu) = self.context_menu {
-            menu.hover_index = self.backend.hit_test_context_menu(menu, mx, my);
-        }
 
         // Handle rename field drag selection in tab bar.
         if my < tab_bar_height {
