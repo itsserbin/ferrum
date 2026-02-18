@@ -118,33 +118,46 @@ impl super::Terminal {
         }
 
         // 3. Split into scrollback and grid
+        // Keep content at the top of grid, not bottom
+        let total_rows = rewrapped.len();
+
         self.scrollback.clear();
         self.grid = Grid::new(rows, cols);
 
-        let total_rows = rewrapped.len();
-        let grid_start = total_rows.saturating_sub(rows);
-
-        // Fill scrollback with excess rows
-        for row in rewrapped.iter().take(grid_start) {
-            self.scrollback.push_back(row.clone());
-            if self.scrollback.len() > self.max_scrollback {
-                self.scrollback.pop_front();
+        if total_rows <= rows {
+            // All content fits in grid - fill from top
+            for (i, row) in rewrapped.iter().enumerate() {
+                for (col, cell) in row.cells.iter().enumerate() {
+                    if col < cols {
+                        self.grid.set(i, col, cell.clone());
+                    }
+                }
+                self.grid.set_wrapped(i, row.wrapped);
             }
-        }
+        } else {
+            // Content overflows - excess goes to scrollback
+            let scrollback_count = total_rows - rows;
 
-        // Fill grid with last `rows` rows
-        for (i, row) in rewrapped.iter().skip(grid_start).enumerate() {
-            for (col, cell) in row.cells.iter().enumerate() {
-                if col < cols {
-                    self.grid.set(i, col, cell.clone());
+            for row in rewrapped.iter().take(scrollback_count) {
+                self.scrollback.push_back(row.clone());
+                if self.scrollback.len() > self.max_scrollback {
+                    self.scrollback.pop_front();
                 }
             }
-            self.grid.set_wrapped(i, row.wrapped);
+
+            // Fill grid with remaining rows
+            for (i, row) in rewrapped.iter().skip(scrollback_count).enumerate() {
+                for (col, cell) in row.cells.iter().enumerate() {
+                    if col < cols {
+                        self.grid.set(i, col, cell.clone());
+                    }
+                }
+                self.grid.set_wrapped(i, row.wrapped);
+            }
         }
 
-        // 4. Position cursor at end of content
-        let content_rows = total_rows.saturating_sub(grid_start);
-        self.cursor_row = content_rows.saturating_sub(1).min(rows.saturating_sub(1));
+        // 4. Clamp cursor to valid range
+        self.cursor_row = self.cursor_row.min(rows.saturating_sub(1));
         self.cursor_col = self.cursor_col.min(cols.saturating_sub(1));
     }
 
