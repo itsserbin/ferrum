@@ -1,5 +1,7 @@
 use crate::gui::*;
 
+use super::super::super::state::RenameState;
+
 fn selected_range(anchor: Option<usize>, cursor: usize) -> Option<(usize, usize)> {
     let anchor = anchor?;
     if anchor == cursor {
@@ -78,6 +80,133 @@ fn word_right_boundary(s: &str, mut idx: usize) -> usize {
     idx
 }
 
+/// Handles ArrowLeft, ArrowRight, Home, End navigation within the rename field.
+fn handle_rename_navigation(rename: &mut RenameState, key: &NamedKey, ctrl: bool, shift: bool) {
+    match key {
+        NamedKey::Home => {
+            if shift {
+                if rename.selection_anchor.is_none() {
+                    rename.selection_anchor = Some(rename.cursor);
+                }
+            } else {
+                rename.selection_anchor = None;
+            }
+            rename.cursor = 0;
+        }
+        NamedKey::End => {
+            if shift {
+                if rename.selection_anchor.is_none() {
+                    rename.selection_anchor = Some(rename.cursor);
+                }
+            } else {
+                rename.selection_anchor = None;
+            }
+            rename.cursor = rename.text.len();
+        }
+        NamedKey::ArrowLeft => {
+            if !shift {
+                if let Some((start, _)) = selected_range(rename.selection_anchor, rename.cursor) {
+                    rename.cursor = start;
+                } else {
+                    rename.cursor = if ctrl {
+                        word_left_boundary(&rename.text, rename.cursor)
+                    } else {
+                        prev_char_boundary(&rename.text, rename.cursor)
+                    };
+                }
+                rename.selection_anchor = None;
+            } else {
+                if rename.selection_anchor.is_none() {
+                    rename.selection_anchor = Some(rename.cursor);
+                }
+                rename.cursor = if ctrl {
+                    word_left_boundary(&rename.text, rename.cursor)
+                } else {
+                    prev_char_boundary(&rename.text, rename.cursor)
+                };
+            }
+        }
+        NamedKey::ArrowRight => {
+            if !shift {
+                if let Some((_, end)) = selected_range(rename.selection_anchor, rename.cursor) {
+                    rename.cursor = end;
+                } else {
+                    rename.cursor = if ctrl {
+                        word_right_boundary(&rename.text, rename.cursor)
+                    } else {
+                        next_char_boundary(&rename.text, rename.cursor)
+                    };
+                }
+                rename.selection_anchor = None;
+            } else {
+                if rename.selection_anchor.is_none() {
+                    rename.selection_anchor = Some(rename.cursor);
+                }
+                rename.cursor = if ctrl {
+                    word_right_boundary(&rename.text, rename.cursor)
+                } else {
+                    next_char_boundary(&rename.text, rename.cursor)
+                };
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Handles Backspace and Delete within the rename field, including selection deletion.
+fn handle_rename_deletion(rename: &mut RenameState, key: &NamedKey, ctrl: bool) {
+    match key {
+        NamedKey::Backspace => {
+            if let Some((start, end)) = selected_range(rename.selection_anchor, rename.cursor) {
+                rename.text.replace_range(start..end, "");
+                rename.cursor = start;
+            } else {
+                let start = if ctrl {
+                    word_left_boundary(&rename.text, rename.cursor)
+                } else {
+                    prev_char_boundary(&rename.text, rename.cursor)
+                };
+                if start < rename.cursor {
+                    rename.text.replace_range(start..rename.cursor, "");
+                    rename.cursor = start;
+                }
+            }
+            rename.selection_anchor = None;
+        }
+        NamedKey::Delete => {
+            if let Some((start, end)) = selected_range(rename.selection_anchor, rename.cursor) {
+                rename.text.replace_range(start..end, "");
+                rename.cursor = start;
+            } else {
+                let end = if ctrl {
+                    word_right_boundary(&rename.text, rename.cursor)
+                } else {
+                    next_char_boundary(&rename.text, rename.cursor)
+                };
+                if end > rename.cursor {
+                    rename.text.replace_range(rename.cursor..end, "");
+                }
+            }
+            rename.selection_anchor = None;
+        }
+        _ => {}
+    }
+}
+
+/// Handles character input within the rename field, replacing any selection.
+fn handle_rename_text_input(rename: &mut RenameState, s: &str) {
+    if s.is_empty() || s.chars().any(char::is_control) {
+        return;
+    }
+    if let Some((start, end)) = selected_range(rename.selection_anchor, rename.cursor) {
+        rename.text.replace_range(start..end, "");
+        rename.cursor = start;
+    }
+    rename.text.insert_str(rename.cursor, s);
+    rename.cursor += s.len();
+    rename.selection_anchor = None;
+}
+
 impl FerrumWindow {
     pub(in crate::gui::events::keyboard) fn handle_rename_input(&mut self, key: &Key) -> bool {
         enum RenameOutcome {
@@ -93,20 +222,15 @@ impl FerrumWindow {
         // Ctrl/Alt shortcuts that should commit rename and pass through to normal handling.
         if ctrl || alt {
             let pass_through = match key {
-                // Ctrl+A (select all in rename) is handled below, NOT passed through.
                 Key::Character(c) if ctrl && !alt && c.as_str().eq_ignore_ascii_case("a") => false,
-                // Tab shortcuts: Ctrl+Tab, Ctrl+Shift+Tab.
                 Key::Named(NamedKey::Tab) if ctrl => true,
-                // Ctrl+T (new tab), Ctrl+W (close tab), Ctrl+digit (switch tab),
-                // Ctrl+Shift+T (reopen tab).
                 Key::Character(_) if ctrl => true,
-                // Alt+digit (switch tab).
                 Key::Character(_) if alt => true,
                 _ => false,
             };
             if pass_through {
                 self.commit_rename();
-                return false; // Let the shortcut handler process this key.
+                return false;
             }
         }
 
@@ -124,139 +248,22 @@ impl FerrumWindow {
                     rename.cursor = rename.text.len();
                     RenameOutcome::Continue
                 }
-                Key::Named(NamedKey::Home) => {
-                    if shift {
-                        if rename.selection_anchor.is_none() {
-                            rename.selection_anchor = Some(rename.cursor);
-                        }
-                    } else {
-                        rename.selection_anchor = None;
-                    }
-                    rename.cursor = 0;
+                Key::Named(
+                    nav @ (NamedKey::Home
+                    | NamedKey::End
+                    | NamedKey::ArrowLeft
+                    | NamedKey::ArrowRight),
+                ) => {
+                    handle_rename_navigation(rename, nav, ctrl, shift);
                     RenameOutcome::Continue
                 }
-                Key::Named(NamedKey::End) => {
-                    if shift {
-                        if rename.selection_anchor.is_none() {
-                            rename.selection_anchor = Some(rename.cursor);
-                        }
-                    } else {
-                        rename.selection_anchor = None;
-                    }
-                    rename.cursor = rename.text.len();
+                Key::Named(del @ (NamedKey::Backspace | NamedKey::Delete)) => {
+                    handle_rename_deletion(rename, del, ctrl);
                     RenameOutcome::Continue
-                }
-                Key::Named(NamedKey::ArrowLeft) => {
-                    if !shift {
-                        if let Some((start, _)) =
-                            selected_range(rename.selection_anchor, rename.cursor)
-                        {
-                            rename.cursor = start;
-                        } else {
-                            rename.cursor = if ctrl {
-                                word_left_boundary(&rename.text, rename.cursor)
-                            } else {
-                                prev_char_boundary(&rename.text, rename.cursor)
-                            };
-                        }
-                        rename.selection_anchor = None;
-                    } else {
-                        if rename.selection_anchor.is_none() {
-                            rename.selection_anchor = Some(rename.cursor);
-                        }
-                        rename.cursor = if ctrl {
-                            word_left_boundary(&rename.text, rename.cursor)
-                        } else {
-                            prev_char_boundary(&rename.text, rename.cursor)
-                        };
-                    }
-                    RenameOutcome::Continue
-                }
-                Key::Named(NamedKey::ArrowRight) => {
-                    if !shift {
-                        if let Some((_, end)) =
-                            selected_range(rename.selection_anchor, rename.cursor)
-                        {
-                            rename.cursor = end;
-                        } else {
-                            rename.cursor = if ctrl {
-                                word_right_boundary(&rename.text, rename.cursor)
-                            } else {
-                                next_char_boundary(&rename.text, rename.cursor)
-                            };
-                        }
-                        rename.selection_anchor = None;
-                    } else {
-                        if rename.selection_anchor.is_none() {
-                            rename.selection_anchor = Some(rename.cursor);
-                        }
-                        rename.cursor = if ctrl {
-                            word_right_boundary(&rename.text, rename.cursor)
-                        } else {
-                            next_char_boundary(&rename.text, rename.cursor)
-                        };
-                    }
-                    RenameOutcome::Continue
-                }
-                Key::Named(NamedKey::Backspace) => {
-                    if let Some((start, end)) =
-                        selected_range(rename.selection_anchor, rename.cursor)
-                    {
-                        rename.text.replace_range(start..end, "");
-                        rename.cursor = start;
-                        rename.selection_anchor = None;
-                        RenameOutcome::Continue
-                    } else {
-                        let start = if ctrl {
-                            word_left_boundary(&rename.text, rename.cursor)
-                        } else {
-                            prev_char_boundary(&rename.text, rename.cursor)
-                        };
-                        if start < rename.cursor {
-                            rename.text.replace_range(start..rename.cursor, "");
-                            rename.cursor = start;
-                        }
-                        rename.selection_anchor = None;
-                        RenameOutcome::Continue
-                    }
-                }
-                Key::Named(NamedKey::Delete) => {
-                    if let Some((start, end)) =
-                        selected_range(rename.selection_anchor, rename.cursor)
-                    {
-                        rename.text.replace_range(start..end, "");
-                        rename.cursor = start;
-                        rename.selection_anchor = None;
-                        RenameOutcome::Continue
-                    } else {
-                        let end = if ctrl {
-                            word_right_boundary(&rename.text, rename.cursor)
-                        } else {
-                            next_char_boundary(&rename.text, rename.cursor)
-                        };
-                        if end > rename.cursor {
-                            rename.text.replace_range(rename.cursor..end, "");
-                        }
-                        rename.selection_anchor = None;
-                        RenameOutcome::Continue
-                    }
                 }
                 Key::Character(c) if allow_text_input => {
-                    let s = c.as_str();
-                    if s.is_empty() || s.chars().any(char::is_control) {
-                        RenameOutcome::Continue
-                    } else {
-                        if let Some((start, end)) =
-                            selected_range(rename.selection_anchor, rename.cursor)
-                        {
-                            rename.text.replace_range(start..end, "");
-                            rename.cursor = start;
-                        }
-                        rename.text.insert_str(rename.cursor, s);
-                        rename.cursor += s.len();
-                        rename.selection_anchor = None;
-                        RenameOutcome::Continue
-                    }
+                    handle_rename_text_input(rename, c.as_str());
+                    RenameOutcome::Continue
                 }
                 _ => RenameOutcome::Continue,
             }
