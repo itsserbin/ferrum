@@ -1,6 +1,8 @@
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
-impl super::super::super::CpuRenderer {
+use crate::gui::renderer::CpuRenderer;
+
+impl CpuRenderer {
     /// Draws a rounded rect with only the top corners rounded (bottom corners square).
     /// Used for active/hovered tab shapes that merge with the terminal below.
     #[allow(clippy::too_many_arguments)]

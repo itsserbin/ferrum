@@ -38,11 +38,11 @@ impl CpuRenderer {
         } else {
             0
         };
-        let text_w = number_str.len() as u32 * self.cell_width;
+        let text_w = number_str.len() as u32 * self.metrics.cell_width;
         let text_x = tab_x + (tw.saturating_sub(text_w + close_reserved)) / 2;
 
         for (ci, ch) in number_str.chars().enumerate() {
-            let cx = text_x + ci as u32 * self.cell_width;
+            let cx = text_x + ci as u32 * self.metrics.cell_width;
             self.draw_char(buffer, buf_width, bar_h, cx, text_y, ch, fg);
         }
 
@@ -130,7 +130,7 @@ impl CpuRenderer {
         let text_x = tab_x + tab_padding_h;
 
         for (ci, ch) in title.chars().enumerate() {
-            let cx = text_x + ci as u32 * self.cell_width;
+            let cx = text_x + ci as u32 * self.metrics.cell_width;
             self.draw_char(buffer, buf_width, bar_h, cx, text_y, ch, fg);
         }
     }
@@ -155,7 +155,7 @@ impl CpuRenderer {
                 let count_text = tab.security_count.min(99).to_string();
                 let count_x = sx + sw + self.scaled_px(2);
                 for (ci, ch) in count_text.chars().enumerate() {
-                    let cx = count_x + ci as u32 * self.cell_width;
+                    let cx = count_x + ci as u32 * self.metrics.cell_width;
                     self.draw_char(buffer, buf_width, bar_h, cx, text_y, ch, SECURITY_ACCENT);
                 }
             }

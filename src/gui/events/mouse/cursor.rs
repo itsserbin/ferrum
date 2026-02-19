@@ -67,7 +67,11 @@ impl FerrumWindow {
             return;
         }
 
-        self.update_hover(mx, my);
+        // Update hovered tab based on current mouse position.
+        let size = self.window.inner_size();
+        self.hovered_tab = self
+            .backend
+            .hit_test_tab_hover(mx, my, self.tabs.len(), size.width);
 
         // Track hovered context-menu item.
         if let Some(ref mut menu) = self.context_menu {

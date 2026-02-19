@@ -160,5 +160,4 @@ impl traits::Renderer for GpuRenderer {
     ) {
         self.draw_security_popup_impl(buf_width, buf_height, popup);
     }
-
 }

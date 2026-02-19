@@ -41,5 +41,4 @@ impl FerrumWindow {
         });
         self.context_menu = None;
     }
-
 }

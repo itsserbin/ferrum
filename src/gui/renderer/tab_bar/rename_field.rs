@@ -101,7 +101,7 @@ impl CpuRenderer {
         selection_chars: Option<(usize, usize)>,
     ) {
         for (ci, ch) in rename_text.chars().take(max_chars).enumerate() {
-            let cx = text_x + ci as u32 * self.cell_width;
+            let cx = text_x + ci as u32 * self.metrics.cell_width;
             let selected = selection_chars.is_some_and(|(start, end)| ci >= start && ci < end);
             if selected {
                 self.draw_bg(buffer, buf_width, bar_h, cx, text_y, ACTIVE_ACCENT);
@@ -129,9 +129,9 @@ impl CpuRenderer {
             .get(..rename_cursor)
             .map_or(0, |prefix| prefix.chars().count())
             .min(max_chars);
-        let cursor_x = text_x + cursor_chars as u32 * self.cell_width;
+        let cursor_x = text_x + cursor_chars as u32 * self.metrics.cell_width;
         let cursor_w = self.scaled_px(2);
-        let cursor_h = self.cell_height.saturating_sub(self.scaled_px(2));
+        let cursor_h = self.metrics.cell_height.saturating_sub(self.scaled_px(2));
         let cursor_y = text_y + self.scaled_px(1);
         for py in cursor_y as usize..(cursor_y + cursor_h) as usize {
             if py >= bar_h {

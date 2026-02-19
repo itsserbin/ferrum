@@ -77,7 +77,7 @@ impl super::super::CpuRenderer {
 
         // Ghost title text.
         for (ci, ch) in layout.title_text.chars().enumerate() {
-            let cx = layout.title_x + ci as i32 * self.cell_width as i32;
+            let cx = layout.title_x + ci as i32 * self.metrics.cell_width as i32;
             if cx >= 0 && (cx as usize) < buf_width {
                 self.draw_char(
                     buffer,

@@ -2,8 +2,9 @@
 
 use crate::core::Color;
 use crate::gui::renderer::shared::ui_layout;
+use crate::gui::renderer::CpuRenderer;
 
-impl super::super::super::CpuRenderer {
+impl CpuRenderer {
     pub(in crate::gui::renderer) fn draw_tab_plus_icon(
         &self,
         buffer: &mut [u32],
@@ -24,5 +25,4 @@ impl super::super::super::CpuRenderer {
             buffer, buf_width, buf_height, x1, y1, x2, y2, layout.thickness, pixel,
         );
     }
-
 }

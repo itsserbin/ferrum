@@ -11,12 +11,6 @@ use super::types::GlyphBitmap;
 pub struct CpuRenderer {
     pub(in crate::gui::renderer) font: Font,
     pub(in crate::gui::renderer) metrics: FontMetrics,
-    /// Convenience mirror of `metrics.cell_width` for code that accesses
-    /// this field directly (e.g. tab_bar modules).
-    pub(in crate::gui::renderer) cell_width: u32,
-    /// Convenience mirror of `metrics.cell_height` for code that accesses
-    /// this field directly (e.g. tab_bar modules).
-    pub(in crate::gui::renderer) cell_height: u32,
     pub(in crate::gui::renderer) glyph_cache: HashMap<char, GlyphBitmap>,
 }
 
@@ -39,21 +33,15 @@ impl CpuRenderer {
         };
         metrics.recompute(&font);
 
-        let cell_width = metrics.cell_width;
-        let cell_height = metrics.cell_height;
         CpuRenderer {
             font,
             metrics,
-            cell_width,
-            cell_height,
             glyph_cache: HashMap::new(),
         }
     }
 
     pub(in crate::gui::renderer) fn recompute_metrics(&mut self) {
         self.metrics.recompute(&self.font);
-        self.cell_width = self.metrics.cell_width;
-        self.cell_height = self.metrics.cell_height;
         self.glyph_cache.clear();
     }
 

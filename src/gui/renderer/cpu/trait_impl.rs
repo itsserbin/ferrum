@@ -174,5 +174,4 @@ impl traits::Renderer for CpuRenderer {
     ) {
         CpuRenderer::draw_security_popup(self, buffer, buf_width, buf_height, popup);
     }
-
 }

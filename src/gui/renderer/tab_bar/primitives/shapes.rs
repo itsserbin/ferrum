@@ -1,6 +1,8 @@
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
-impl super::super::super::CpuRenderer {
+use crate::gui::renderer::CpuRenderer;
+
+impl CpuRenderer {
     /// Draws a filled circle at a given center with a given radius.
     pub(in crate::gui::renderer) fn draw_filled_circle(
         buffer: &mut [u32],

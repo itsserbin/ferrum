@@ -6,7 +6,6 @@ mod tab_bar;
 mod tab_bar_actions;
 mod tab_bar_rename;
 mod tab_drag;
-mod tab_hover;
 mod terminal_click;
 mod wheel;
 

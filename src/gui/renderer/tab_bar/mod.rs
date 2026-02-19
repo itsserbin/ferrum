@@ -2,7 +2,6 @@
 
 mod buttons;
 mod drag_overlay;
-mod hit_test;
 mod layout;
 mod primitives;
 mod rename_field;

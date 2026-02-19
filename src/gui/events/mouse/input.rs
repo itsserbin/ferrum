@@ -94,14 +94,8 @@ impl FerrumWindow {
         let size = self.window.inner_size();
         let (buf_width, buf_height) = (size.width as usize, size.height as usize);
 
-        if self
-            .backend
+        self.backend
             .hit_test_security_popup(&popup, mx, my, buf_width, buf_height)
-        {
-            return true;
-        }
-
-        false
     }
 
     fn on_left_mouse_input(

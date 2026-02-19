@@ -111,5 +111,4 @@ impl super::GpuRenderer {
             1.0,
         );
     }
-
 }
