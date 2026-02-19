@@ -1,3 +1,4 @@
+use super::shared::tab_math::{self, TabLayoutMetrics};
 use super::*;
 
 impl SecurityPopup {
@@ -79,34 +80,14 @@ impl CpuRenderer {
         buf_width: u32,
         security_count: usize,
     ) -> Option<(u32, u32, u32, u32)> {
-        if security_count == 0 || tab_index >= tab_count {
-            return None;
-        }
-
-        let tw = self.tab_width(tab_count, buf_width);
-        let tab_x = self.tab_origin_x(tab_index, tw);
-        let badge_min = self.scaled_px(10);
-        let badge_max = self.scaled_px(15);
-        let badge_size = self
-            .cell_height
-            .saturating_sub(self.scaled_px(10))
-            .clamp(badge_min, badge_max);
-        let count_chars = if security_count > 1 {
-            security_count.min(99).to_string().len() as u32
-        } else {
-            0
+        let m = TabLayoutMetrics {
+            cell_width: self.cell_width,
+            cell_height: self.cell_height,
+            ui_scale: self.ui_scale(),
+            tab_bar_height: self.tab_bar_height_px(),
         };
-        let count_width = if count_chars > 0 {
-            count_chars * self.cell_width + self.scaled_px(2)
-        } else {
-            0
-        };
-        let indicator_width = badge_size + count_width;
-        let right_gutter = self.cell_width + self.scaled_px(10); // Keep clear space for the close button area.
-        let indicator_right = tab_x + tw.saturating_sub(right_gutter);
-        let x = indicator_right.saturating_sub(indicator_width + self.scaled_px(2));
-        let y = (self.tab_bar_height_px().saturating_sub(badge_size)) / 2;
-        Some((x, y, badge_size, badge_size))
+        tab_math::security_badge_rect(&m, tab_index, tab_count, buf_width, security_count)
+            .map(|r| r.to_tuple())
     }
 
     fn security_popup_rect(

@@ -2,7 +2,7 @@
 
 #[cfg(not(target_os = "macos"))]
 use super::super::WindowButton;
-use super::super::{MIN_TAB_WIDTH, MIN_TAB_WIDTH_FOR_TITLE};
+use super::super::shared::tab_math::{self, TabLayoutMetrics};
 use super::super::{TabBarHit, TabInfo};
 use super::{ACTIVE_TAB_BG, TAB_BORDER};
 use crate::core::Color;
@@ -10,91 +10,32 @@ use crate::core::Color;
 #[cfg(not(target_os = "macos"))]
 use super::WIN_BTN_WIDTH;
 
-/// Maximum tab width in pixels (before HiDPI scaling).
-const MAX_TAB_WIDTH: u32 = 240;
-
-/// Tab strip start offset for macOS (accounts for traffic light buttons).
-#[cfg(target_os = "macos")]
-const TAB_STRIP_START_X: u32 = 78;
-
-/// Tab strip start offset for Windows.
-#[cfg(target_os = "windows")]
-const TAB_STRIP_START_X: u32 = 14;
-
-/// Tab strip start offset for Linux and other platforms.
-#[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
-const TAB_STRIP_START_X: u32 = 8;
-
-/// Plus button extra margin for reservation calculation.
-const PLUS_BUTTON_MARGIN: u32 = 20;
-
-/// Close button size in pixels.
-pub(super) const CLOSE_BUTTON_SIZE: u32 = 20;
-
-/// Close button margin from tab edge.
-pub(super) const CLOSE_BUTTON_MARGIN: u32 = 6;
-
-/// Plus button size in pixels.
-const PLUS_BUTTON_SIZE: u32 = 24;
-
-/// Plus button gap from last tab.
-const PLUS_BUTTON_GAP: u32 = 4;
-
-/// Tab padding horizontal (left/right spacing for text).
-pub(super) const TAB_PADDING_H: u32 = 14;
-
-/// Pin button size in pixels (non-macOS).
-#[cfg(not(target_os = "macos"))]
-const PIN_BUTTON_SIZE: u32 = 24;
-
-/// Gap between pin button and first tab (non-macOS).
-#[cfg(not(target_os = "macos"))]
-const PIN_BUTTON_GAP: u32 = 8;
-
 impl super::super::CpuRenderer {
+    /// Builds a `TabLayoutMetrics` from the current CPU renderer state.
+    fn tab_layout_metrics(&self) -> TabLayoutMetrics {
+        TabLayoutMetrics {
+            cell_width: self.cell_width,
+            cell_height: self.cell_height,
+            ui_scale: self.ui_scale(),
+            tab_bar_height: self.tab_bar_height_px(),
+        }
+    }
+
     /// Computes adaptive tab width with overflow compression.
     /// Tabs shrink from max (MAX_TAB_WIDTH) down to MIN_TAB_WIDTH when many tabs are open.
     pub fn tab_width(&self, tab_count: usize, buf_width: u32) -> u32 {
-        let reserved = self.tab_strip_start_x()
-            + self.plus_button_reserved_width()
-            + self.scaled_px(PLUS_BUTTON_GAP * 2)
-            + self.window_buttons_reserved_width();
-        let available = buf_width.saturating_sub(reserved);
-        let min_tab_width = self.scaled_px(MIN_TAB_WIDTH);
-        let max_tab_width = self.scaled_px(MAX_TAB_WIDTH);
-        (available / tab_count.max(1) as u32).clamp(min_tab_width, max_tab_width)
+        let m = self.tab_layout_metrics();
+        tab_math::calculate_tab_width(&m, tab_count, buf_width)
     }
 
     pub(crate) fn tab_strip_start_x(&self) -> u32 {
-        #[cfg(not(target_os = "macos"))]
-        {
-            // On Windows/Linux: WINDOW_PADDING + pin button + gap
-            self.scaled_px(TAB_STRIP_START_X) + self.scaled_px(PIN_BUTTON_SIZE) + self.scaled_px(PIN_BUTTON_GAP)
-        }
-        #[cfg(target_os = "macos")]
-        {
-            self.scaled_px(TAB_STRIP_START_X)
-        }
-    }
-
-    pub(in crate::gui::renderer) fn plus_button_reserved_width(&self) -> u32 {
-        self.cell_width + self.scaled_px(PLUS_BUTTON_MARGIN)
-    }
-
-    /// Returns total width reserved for window control buttons.
-    pub(in crate::gui::renderer) fn window_buttons_reserved_width(&self) -> u32 {
-        #[cfg(not(target_os = "macos"))]
-        {
-            self.scaled_px(WIN_BTN_WIDTH) * 3
-        }
-        #[cfg(target_os = "macos")]
-        {
-            0
-        }
+        let m = self.tab_layout_metrics();
+        tab_math::tab_strip_start_x(&m)
     }
 
     pub(crate) fn tab_origin_x(&self, tab_index: usize, tw: u32) -> u32 {
-        self.tab_strip_start_x() + tab_index as u32 * tw
+        let m = self.tab_layout_metrics();
+        tab_math::tab_origin_x(&m, tab_index, tw)
     }
 
     pub(crate) fn tab_insert_index_from_x(
@@ -103,17 +44,8 @@ impl super::super::CpuRenderer {
         tab_count: usize,
         buf_width: u32,
     ) -> usize {
-        let tw = self.tab_width(tab_count, buf_width);
-        let start = self.tab_strip_start_x() as f64;
-        let mut idx = tab_count;
-        for i in 0..tab_count {
-            let center = start + i as f64 * tw as f64 + tw as f64 / 2.0;
-            if x < center {
-                idx = i;
-                break;
-            }
-        }
-        idx
+        let m = self.tab_layout_metrics();
+        tab_math::tab_insert_index_from_x(&m, x, tab_count, buf_width)
     }
 
     /// Returns rectangle for per-tab close button.
@@ -122,10 +54,8 @@ impl super::super::CpuRenderer {
         tab_index: usize,
         tw: u32,
     ) -> (u32, u32, u32, u32) {
-        let btn_size = self.scaled_px(CLOSE_BUTTON_SIZE);
-        let x = self.tab_origin_x(tab_index, tw) + tw - btn_size - self.scaled_px(CLOSE_BUTTON_MARGIN);
-        let y = (self.tab_bar_height_px().saturating_sub(btn_size)) / 2;
-        (x, y, btn_size, btn_size)
+        let m = self.tab_layout_metrics();
+        tab_math::close_button_rect(&m, tab_index, tw).to_tuple()
     }
 
     /// Returns rectangle for new-tab button.
@@ -134,19 +64,15 @@ impl super::super::CpuRenderer {
         tab_count: usize,
         tw: u32,
     ) -> (u32, u32, u32, u32) {
-        let btn_size = self.scaled_px(PLUS_BUTTON_SIZE);
-        let x = self.tab_strip_start_x() + tab_count as u32 * tw + self.scaled_px(PLUS_BUTTON_GAP);
-        let y = (self.tab_bar_height_px().saturating_sub(btn_size)) / 2;
-        (x, y, btn_size, btn_size)
+        let m = self.tab_layout_metrics();
+        tab_math::plus_button_rect(&m, tab_count, tw).to_tuple()
     }
 
     /// Returns rectangle for pin button (non-macOS only).
     #[cfg(not(target_os = "macos"))]
     pub(in crate::gui::renderer) fn pin_button_rect(&self) -> (u32, u32, u32, u32) {
-        let btn_size = self.scaled_px(PIN_BUTTON_SIZE);
-        let x = self.scaled_px(TAB_STRIP_START_X);
-        let y = (self.tab_bar_height_px().saturating_sub(btn_size)) / 2;
-        (x, y, btn_size, btn_size)
+        let m = self.tab_layout_metrics();
+        tab_math::pin_button_rect(&m).to_tuple()
     }
 
     /// Hit-tests the tab bar and returns the clicked target.
@@ -276,7 +202,8 @@ impl super::super::CpuRenderer {
 
     /// Returns true if the given tab width is too narrow to display the title.
     pub(in crate::gui::renderer) fn should_show_number(&self, tw: u32) -> bool {
-        tw < self.scaled_px(MIN_TAB_WIDTH_FOR_TITLE)
+        let m = self.tab_layout_metrics();
+        tab_math::should_show_number(&m, tw)
     }
 
     pub(in crate::gui::renderer) fn title_max_chars(
@@ -285,32 +212,9 @@ impl super::super::CpuRenderer {
         tw: u32,
         is_hovered: bool,
     ) -> usize {
-        let tab_padding_h = self.scaled_px(TAB_PADDING_H);
+        let m = self.tab_layout_metrics();
         let show_close = tab.is_active || is_hovered;
-        let close_reserved = if show_close {
-            self.scaled_px(CLOSE_BUTTON_SIZE) + self.scaled_px(CLOSE_BUTTON_MARGIN)
-        } else {
-            0
-        };
-        let security_reserved = if tab.security_count > 0 {
-            let count_chars = tab.security_count.min(99).to_string().len() as u32;
-            let count_width = if tab.security_count > 1 {
-                count_chars * self.cell_width + self.scaled_px(2)
-            } else {
-                0
-            };
-            let badge_min = self.scaled_px(10);
-            let badge_max = self.scaled_px(15);
-            self.cell_height
-                .saturating_sub(self.scaled_px(10))
-                .clamp(badge_min, badge_max)
-                + count_width
-                + self.scaled_px(6)
-        } else {
-            0
-        };
-        (tw.saturating_sub(tab_padding_h * 2 + close_reserved + security_reserved)
-            / self.cell_width) as usize
+        tab_math::tab_title_max_chars(&m, tw, show_close, tab.security_count)
     }
 
     /// Returns full tab title when hover should show a tooltip (compressed or truncated label).

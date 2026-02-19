@@ -2,10 +2,10 @@
 
 //! Tab bar layout math and drawing helpers for the GPU renderer.
 
+use super::super::shared::tab_math::{self, TabLayoutMetrics};
 use super::{
-    ACTIVE_TAB_BG, BAR_BG, INACTIVE_TAB_HOVER, INSERTION_COLOR, MIN_TAB_WIDTH,
-    MIN_TAB_WIDTH_FOR_TITLE, RENAME_FIELD_BG, RENAME_FIELD_BORDER, RENAME_SELECTION_BG, TAB_BORDER,
-    TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE,
+    ACTIVE_TAB_BG, BAR_BG, INACTIVE_TAB_HOVER, INSERTION_COLOR, RENAME_FIELD_BG,
+    RENAME_FIELD_BORDER, RENAME_SELECTION_BG, TAB_BORDER, TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE,
 };
 
 // Pin button active color (Catppuccin Mocha Lavender).
@@ -18,95 +18,53 @@ use super::super::TabInfo;
 use super::WIN_BTN_WIDTH;
 
 impl super::GpuRenderer {
-    // ── Tab bar math (mirrors CpuRenderer) ────────────────────────────
+    // ── Tab bar math (delegates to shared tab_math) ──────────────────────
 
-    /// Pin button size in pixels (non-macOS).
-    #[cfg(not(target_os = "macos"))]
-    const PIN_BUTTON_SIZE: u32 = 24;
-
-    /// Gap between pin button and first tab (non-macOS).
-    #[cfg(not(target_os = "macos"))]
-    const PIN_BUTTON_GAP: u32 = 8;
+    /// Builds a `TabLayoutMetrics` from the current GPU renderer state.
+    fn tab_layout_metrics(&self) -> TabLayoutMetrics {
+        TabLayoutMetrics {
+            cell_width: self.metrics.cell_width,
+            cell_height: self.metrics.cell_height,
+            ui_scale: self.metrics.ui_scale,
+            tab_bar_height: self.metrics.tab_bar_height_px(),
+        }
+    }
 
     pub(super) fn tab_strip_start_x_val(&self) -> u32 {
-        #[cfg(target_os = "macos")]
-        {
-            self.metrics.scaled_px(78)
-        }
-        #[cfg(target_os = "windows")]
-        {
-            // WINDOW_PADDING + pin button + gap
-            self.metrics.scaled_px(14)
-                + self.metrics.scaled_px(Self::PIN_BUTTON_SIZE)
-                + self.metrics.scaled_px(Self::PIN_BUTTON_GAP)
-        }
-        #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
-        {
-            // WINDOW_PADDING + pin button + gap
-            self.metrics.scaled_px(8)
-                + self.metrics.scaled_px(Self::PIN_BUTTON_SIZE)
-                + self.metrics.scaled_px(Self::PIN_BUTTON_GAP)
-        }
+        let m = self.tab_layout_metrics();
+        tab_math::tab_strip_start_x(&m)
     }
 
     /// Returns rectangle for pin button (non-macOS only).
     #[cfg(not(target_os = "macos"))]
     pub(super) fn pin_button_rect(&self) -> (u32, u32, u32, u32) {
-        let btn_size = self.metrics.scaled_px(Self::PIN_BUTTON_SIZE);
-        #[cfg(target_os = "windows")]
-        let x = self.metrics.scaled_px(14);
-        #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
-        let x = self.metrics.scaled_px(8);
-        let y = (self.metrics.tab_bar_height_px().saturating_sub(btn_size)) / 2;
-        (x, y, btn_size, btn_size)
-    }
-
-    pub(super) fn plus_button_reserved_width(&self) -> u32 {
-        self.metrics.cell_width + self.metrics.scaled_px(20)
-    }
-
-    pub(super) fn window_buttons_reserved_width(&self) -> u32 {
-        #[cfg(not(target_os = "macos"))]
-        {
-            self.metrics.scaled_px(WIN_BTN_WIDTH) * 3
-        }
-        #[cfg(target_os = "macos")]
-        {
-            0
-        }
+        let m = self.tab_layout_metrics();
+        tab_math::pin_button_rect(&m).to_tuple()
     }
 
     pub(super) fn tab_width_val(&self, tab_count: usize, buf_width: u32) -> u32 {
-        let reserved = self.tab_strip_start_x_val()
-            + self.plus_button_reserved_width()
-            + self.metrics.scaled_px(8)
-            + self.window_buttons_reserved_width();
-        let available = buf_width.saturating_sub(reserved);
-        let min_tw = self.metrics.scaled_px(MIN_TAB_WIDTH);
-        let max_tw = self.metrics.scaled_px(240);
-        (available / tab_count.max(1) as u32).clamp(min_tw, max_tw)
+        let m = self.tab_layout_metrics();
+        tab_math::calculate_tab_width(&m, tab_count, buf_width)
     }
 
     pub(super) fn tab_origin_x_val(&self, tab_index: usize, tw: u32) -> u32 {
-        self.tab_strip_start_x_val() + tab_index as u32 * tw
+        let m = self.tab_layout_metrics();
+        tab_math::tab_origin_x(&m, tab_index, tw)
     }
 
     pub(super) fn close_button_rect(&self, tab_index: usize, tw: u32) -> (u32, u32, u32, u32) {
-        let btn_size = self.metrics.scaled_px(20);
-        let x = self.tab_origin_x_val(tab_index, tw) + tw - btn_size - self.metrics.scaled_px(6);
-        let y = (self.metrics.tab_bar_height_px().saturating_sub(btn_size)) / 2;
-        (x, y, btn_size, btn_size)
+        let m = self.tab_layout_metrics();
+        tab_math::close_button_rect(&m, tab_index, tw).to_tuple()
     }
 
     pub(super) fn plus_button_rect(&self, tab_count: usize, tw: u32) -> (u32, u32, u32, u32) {
-        let btn_size = self.metrics.scaled_px(24);
-        let x = self.tab_strip_start_x_val() + tab_count as u32 * tw + self.metrics.scaled_px(4);
-        let y = (self.metrics.tab_bar_height_px().saturating_sub(btn_size)) / 2;
-        (x, y, btn_size, btn_size)
+        let m = self.tab_layout_metrics();
+        tab_math::plus_button_rect(&m, tab_count, tw).to_tuple()
     }
 
     pub(super) fn should_show_number(&self, tw: u32) -> bool {
-        tw < self.metrics.scaled_px(MIN_TAB_WIDTH_FOR_TITLE)
+        let m = self.tab_layout_metrics();
+        tab_math::should_show_number(&m, tw)
     }
 
     pub(super) fn security_badge_rect_val(
@@ -116,34 +74,9 @@ impl super::GpuRenderer {
         buf_width: u32,
         security_count: usize,
     ) -> Option<(u32, u32, u32, u32)> {
-        if security_count == 0 || tab_index >= tab_count {
-            return None;
-        }
-        let tw = self.tab_width_val(tab_count, buf_width);
-        let tab_x = self.tab_origin_x_val(tab_index, tw);
-        let badge_min = self.metrics.scaled_px(10);
-        let badge_max = self.metrics.scaled_px(15);
-        let badge_size = self
-            .metrics
-            .cell_height
-            .saturating_sub(self.metrics.scaled_px(10))
-            .clamp(badge_min, badge_max);
-        let count_chars = if security_count > 1 {
-            security_count.min(99).to_string().len() as u32
-        } else {
-            0
-        };
-        let count_width = if count_chars > 0 {
-            count_chars * self.metrics.cell_width + self.metrics.scaled_px(2)
-        } else {
-            0
-        };
-        let indicator_width = badge_size + count_width;
-        let right_gutter = self.metrics.cell_width + self.metrics.scaled_px(10);
-        let indicator_right = tab_x + tw.saturating_sub(right_gutter);
-        let x = indicator_right.saturating_sub(indicator_width + self.metrics.scaled_px(2));
-        let y = (self.metrics.tab_bar_height_px().saturating_sub(badge_size)) / 2;
-        Some((x, y, badge_size, badge_size))
+        let m = self.tab_layout_metrics();
+        tab_math::security_badge_rect(&m, tab_index, tab_count, buf_width, security_count)
+            .map(|r| r.to_tuple())
     }
 
     pub(super) fn point_in_rect(x: f64, y: f64, rect: (u32, u32, u32, u32)) -> bool {
@@ -151,7 +84,7 @@ impl super::GpuRenderer {
         x >= rx as f64 && x < (rx + rw) as f64 && y >= ry as f64 && y < (ry + rh) as f64
     }
 
-    // ── Tab bar trait method implementations ──────────────────────────
+    // ── Tab bar rendering: orchestrator ─────────────────────────────────
 
     pub(super) fn draw_tab_bar_impl(
         &mut self,
@@ -162,187 +95,235 @@ impl super::GpuRenderer {
         tab_offsets: Option<&[f32]>,
         _pinned: bool,
     ) {
-        let tab_bar_h = self.metrics.tab_bar_height_px() as f32;
         let bw = buf_width as u32;
+        let tw = self.tab_width_val(tabs.len(), bw);
+        let m = self.tab_layout_metrics();
+        let text_y = tab_math::tab_text_y(&m);
+        let use_numbers = self.should_show_number(tw);
 
-        // Bar background.
+        self.tab_bar_background_commands(bw);
+
+        for (i, tab) in tabs.iter().enumerate() {
+            let anim_offset = tab_offsets.and_then(|o| o.get(i)).copied().unwrap_or(0.0);
+            let tab_x = self.tab_origin_x_val(i, tw) as f32 + anim_offset;
+
+            self.tab_background_commands(tab, tab_x, tw);
+
+            if tab.is_renaming {
+                self.tab_rename_commands(tab, tab_x, tw, text_y);
+            } else if use_numbers {
+                self.tab_number_commands(i, tab, tab_x, tw, text_y);
+            } else {
+                self.tab_content_commands(i, tab, tab_x, tw, text_y);
+            }
+        }
+
+        self.plus_button_commands(tabs.len(), tw, mouse_pos);
+
+        #[cfg(not(target_os = "macos"))]
+        self.draw_pin_button_commands(mouse_pos, _pinned);
+
+        #[cfg(not(target_os = "macos"))]
+        self.draw_window_buttons_commands(bw, mouse_pos);
+
+        // Bottom separator line.
+        let tab_bar_h = self.metrics.tab_bar_height_px() as f32;
+        let sep_y = tab_bar_h - 1.0;
+        self.push_rect(0.0, sep_y, bw as f32, 1.0, TAB_BORDER, 0.7);
+    }
+
+    // ── Tab bar rendering: sub-functions ────────────────────────────────
+
+    /// Draws the tab bar background rectangle.
+    fn tab_bar_background_commands(&mut self, buf_width: u32) {
+        let tab_bar_h = self.metrics.tab_bar_height_px() as f32;
         self.push_rounded_rect(
             0.0,
             0.0,
-            bw as f32,
+            buf_width as f32,
             tab_bar_h,
             self.metrics.scaled_px(10) as f32,
             BAR_BG,
             1.0,
         );
+    }
 
-        let tw = self.tab_width_val(tabs.len(), bw);
-        let text_y = (self
-            .metrics
-            .tab_bar_height_px()
-            .saturating_sub(self.metrics.cell_height))
-            / 2
-            + self.metrics.scaled_px(1);
-        let tab_padding_h = self.metrics.scaled_px(14);
-        let use_numbers = self.should_show_number(tw);
+    /// Draws the background for a single tab (active, hovered, or nothing).
+    fn tab_background_commands(&mut self, tab: &TabInfo, tab_x: f32, tw: u32) {
+        let tab_bar_h = self.metrics.tab_bar_height_px() as f32;
+        let hover_t = tab.hover_progress.clamp(0.0, 1.0);
 
-        for (i, tab) in tabs.iter().enumerate() {
-            let anim_offset = tab_offsets.and_then(|o| o.get(i)).copied().unwrap_or(0.0);
-            let tab_x = self.tab_origin_x_val(i, tw) as f32 + anim_offset;
-            let hover_t = tab.hover_progress.clamp(0.0, 1.0);
+        if tab.is_active {
+            self.push_rect(tab_x, 0.0, tw as f32, tab_bar_h, ACTIVE_TAB_BG, 1.0);
+        } else if hover_t > 0.01 {
+            self.push_rect(
+                tab_x,
+                0.0,
+                tw as f32,
+                tab_bar_h,
+                INACTIVE_TAB_HOVER,
+                hover_t.min(1.0),
+            );
+        }
+    }
 
-            // Tab background.
-            if tab.is_active {
-                self.push_rect(tab_x, 0.0, tw as f32, tab_bar_h, ACTIVE_TAB_BG, 1.0);
-            } else if hover_t > 0.01 {
-                self.push_rect(
-                    tab_x,
-                    0.0,
-                    tw as f32,
-                    tab_bar_h,
-                    INACTIVE_TAB_HOVER,
-                    hover_t.min(1.0),
-                );
+    /// Draws the rename-mode UI for a tab: field background, border, text,
+    /// selection highlight, and cursor.
+    fn tab_rename_commands(&mut self, tab: &TabInfo, tab_x: f32, tw: u32, text_y: u32) {
+        let tab_padding_h = self.metrics.scaled_px(tab_math::TAB_PADDING_H);
+        let rename_text = tab.rename_text.unwrap_or("");
+        let text_x = tab_x + tab_padding_h as f32;
+        let m = self.tab_layout_metrics();
+        let max_chars = tab_math::rename_field_max_chars(&m, tw);
+
+        let selection_chars = tab.rename_selection.and_then(|(start, end)| {
+            if start >= end {
+                return None;
             }
+            let start_chars = rename_text
+                .get(..start)
+                .map_or(0, |prefix| prefix.chars().count());
+            let end_chars = rename_text
+                .get(..end)
+                .map_or(start_chars, |prefix| prefix.chars().count());
+            Some((start_chars.min(max_chars), end_chars.min(max_chars)))
+        });
 
-            let fg_color = if tab.is_active {
-                TAB_TEXT_ACTIVE
-            } else {
-                TAB_TEXT_INACTIVE
-            };
+        // Rename field background and border.
+        let r = tab_math::rename_field_rect(&m, tab_x.round() as u32, tw);
+        let field_x = tab_x + tab_padding_h.saturating_sub(self.metrics.scaled_px(3)) as f32;
+        let field_y = r.y as f32;
+        let field_w = r.w as f32;
+        let field_h = r.h as f32;
+        let radius = self.metrics.scaled_px(6) as f32;
+        self.push_rounded_rect(field_x, field_y, field_w, field_h, radius, RENAME_FIELD_BG, 0.96);
+        self.push_rounded_rect(
+            field_x,
+            field_y,
+            field_w,
+            field_h,
+            radius,
+            RENAME_FIELD_BORDER,
+            0.35,
+        );
 
-            if tab.is_renaming {
-                let rename_text = tab.rename_text.unwrap_or("");
-                let text_x = tab_x + tab_padding_h as f32;
-                let max_chars =
-                    (tw.saturating_sub(tab_padding_h * 2) / self.metrics.cell_width) as usize;
-                let selection_chars = tab.rename_selection.and_then(|(start, end)| {
-                    if start >= end {
-                        return None;
-                    }
-                    let start_chars = rename_text
-                        .get(..start)
-                        .map_or(0, |prefix| prefix.chars().count());
-                    let end_chars = rename_text
-                        .get(..end)
-                        .map_or(start_chars, |prefix| prefix.chars().count());
-                    Some((start_chars.min(max_chars), end_chars.min(max_chars)))
-                });
-
-                let field_pad_x = self.metrics.scaled_px(3);
-                let field_x = tab_x + tab_padding_h.saturating_sub(field_pad_x) as f32;
-                let field_y = text_y.saturating_sub(self.metrics.scaled_px(2)) as f32;
-                let field_w = (tw.saturating_sub(tab_padding_h * 2) + field_pad_x * 2) as f32;
-                let field_h = (self.metrics.cell_height + self.metrics.scaled_px(4)) as f32;
-                self.push_rounded_rect(
-                    field_x,
-                    field_y,
-                    field_w,
-                    field_h,
-                    self.metrics.scaled_px(6) as f32,
-                    RENAME_FIELD_BG,
-                    0.96,
-                );
-                self.push_rounded_rect(
-                    field_x,
-                    field_y,
-                    field_w,
-                    field_h,
-                    self.metrics.scaled_px(6) as f32,
-                    RENAME_FIELD_BORDER,
-                    0.35,
-                );
-
-                for (ci, ch) in rename_text.chars().take(max_chars).enumerate() {
-                    let cx = text_x + ci as f32 * self.metrics.cell_width as f32;
-                    let selected =
-                        selection_chars.is_some_and(|(start, end)| ci >= start && ci < end);
-                    if selected {
-                        self.push_rect(
-                            cx,
-                            text_y as f32,
-                            self.metrics.cell_width as f32,
-                            self.metrics.cell_height as f32,
-                            RENAME_SELECTION_BG,
-                            0.94,
-                        );
-                        self.push_text(cx, text_y as f32, &ch.to_string(), BAR_BG, 1.0);
-                    } else {
-                        self.push_text(cx, text_y as f32, &ch.to_string(), TAB_TEXT_ACTIVE, 1.0);
-                    }
-                }
-
-                let cursor_chars = rename_text
-                    .get(..tab.rename_cursor)
-                    .map_or(0, |prefix| prefix.chars().count())
-                    .min(max_chars);
-                let cursor_x = text_x + cursor_chars as f32 * self.metrics.cell_width as f32;
+        // Rename text characters with optional selection highlight.
+        for (ci, ch) in rename_text.chars().take(max_chars).enumerate() {
+            let cx = text_x + ci as f32 * self.metrics.cell_width as f32;
+            let selected =
+                selection_chars.is_some_and(|(start, end)| ci >= start && ci < end);
+            if selected {
                 self.push_rect(
-                    cursor_x,
-                    (text_y + self.metrics.scaled_px(1)) as f32,
-                    self.metrics.scaled_px(2) as f32,
-                    self.metrics
-                        .cell_height
-                        .saturating_sub(self.metrics.scaled_px(2)) as f32,
-                    TAB_TEXT_ACTIVE,
-                    0.9,
+                    cx,
+                    text_y as f32,
+                    self.metrics.cell_width as f32,
+                    self.metrics.cell_height as f32,
+                    RENAME_SELECTION_BG,
+                    0.94,
                 );
-            } else if use_numbers {
-                let number_str = (i + 1).to_string();
-                let show_close = tab.is_active || hover_t > 0.05;
-                let close_reserved = if show_close {
-                    self.metrics.scaled_px(20) + self.metrics.scaled_px(6)
-                } else {
-                    0
-                };
-                let text_w = number_str.len() as u32 * self.metrics.cell_width;
-                let tx = tab_x + (tw.saturating_sub(text_w + close_reserved)) as f32 / 2.0;
-                self.push_text(tx, text_y as f32, &number_str, fg_color, 1.0);
-
-                if show_close {
-                    self.draw_close_button_commands(i, tw, tab.close_hover_progress);
-                }
+                self.push_text(cx, text_y as f32, &ch.to_string(), BAR_BG, 1.0);
             } else {
-                // Normal mode: title + close button.
-                let show_close = tab.is_active || hover_t > 0.05;
-                let close_reserved = if show_close {
-                    self.metrics.scaled_px(20) + self.metrics.scaled_px(6)
-                } else {
-                    0
-                };
-                let security_reserved = if tab.security_count > 0 {
-                    let count_chars = tab.security_count.min(99).to_string().len() as u32;
-                    let count_width = if tab.security_count > 1 {
-                        count_chars * self.metrics.cell_width + self.metrics.scaled_px(2)
-                    } else {
-                        0
-                    };
-                    let badge_min = self.metrics.scaled_px(10);
-                    let badge_max = self.metrics.scaled_px(15);
-                    self.metrics
-                        .cell_height
-                        .saturating_sub(self.metrics.scaled_px(10))
-                        .clamp(badge_min, badge_max)
-                        + count_width
-                        + self.metrics.scaled_px(6)
-                } else {
-                    0
-                };
-                let max_chars = (tw
-                    .saturating_sub(tab_padding_h * 2 + close_reserved + security_reserved)
-                    / self.metrics.cell_width) as usize;
-                let title: String = tab.title.chars().take(max_chars).collect();
-                let tx = tab_x + tab_padding_h as f32;
-                self.push_text(tx, text_y as f32, &title, fg_color, 1.0);
-
-                if show_close {
-                    self.draw_close_button_commands(i, tw, tab.close_hover_progress);
-                }
+                self.push_text(cx, text_y as f32, &ch.to_string(), TAB_TEXT_ACTIVE, 1.0);
             }
         }
 
-        // New-tab (+) button.
-        let plus_rect = self.plus_button_rect(tabs.len(), tw);
+        // Rename cursor.
+        let cursor_chars = rename_text
+            .get(..tab.rename_cursor)
+            .map_or(0, |prefix| prefix.chars().count())
+            .min(max_chars);
+        let cursor_x = text_x + cursor_chars as f32 * self.metrics.cell_width as f32;
+        self.push_rect(
+            cursor_x,
+            (text_y + self.metrics.scaled_px(1)) as f32,
+            self.metrics.scaled_px(2) as f32,
+            self.metrics
+                .cell_height
+                .saturating_sub(self.metrics.scaled_px(2)) as f32,
+            TAB_TEXT_ACTIVE,
+            0.9,
+        );
+    }
+
+    /// Draws a tab in number mode (narrow tabs): centered number + optional close button.
+    fn tab_number_commands(
+        &mut self,
+        tab_index: usize,
+        tab: &TabInfo,
+        tab_x: f32,
+        tw: u32,
+        text_y: u32,
+    ) {
+        let hover_t = tab.hover_progress.clamp(0.0, 1.0);
+        let fg_color = if tab.is_active {
+            TAB_TEXT_ACTIVE
+        } else {
+            TAB_TEXT_INACTIVE
+        };
+
+        let m = self.tab_layout_metrics();
+        let number_str = (tab_index + 1).to_string();
+        let show_close = tab.is_active || hover_t > 0.05;
+        let close_reserved = if show_close {
+            tab_math::close_button_reserved_width(&m)
+        } else {
+            0
+        };
+        let text_w = number_str.len() as u32 * self.metrics.cell_width;
+        let tx = tab_x + (tw.saturating_sub(text_w + close_reserved)) as f32 / 2.0;
+        self.push_text(tx, text_y as f32, &number_str, fg_color, 1.0);
+
+        if show_close {
+            self.draw_close_button_commands(tab_index, tw, tab.close_hover_progress);
+        }
+    }
+
+    /// Draws a tab in normal mode: title text + optional close button.
+    /// Delegates to `tab_title_commands` and `tab_close_button_commands`.
+    fn tab_content_commands(
+        &mut self,
+        tab_index: usize,
+        tab: &TabInfo,
+        tab_x: f32,
+        tw: u32,
+        text_y: u32,
+    ) {
+        let hover_t = tab.hover_progress.clamp(0.0, 1.0);
+        let show_close = tab.is_active || hover_t > 0.05;
+
+        self.tab_title_commands(tab, tab_x, tw, text_y, show_close);
+
+        if show_close {
+            self.draw_close_button_commands(tab_index, tw, tab.close_hover_progress);
+        }
+    }
+
+    /// Draws the tab title text, truncated to fit the available space.
+    fn tab_title_commands(
+        &mut self,
+        tab: &TabInfo,
+        tab_x: f32,
+        tw: u32,
+        text_y: u32,
+        show_close: bool,
+    ) {
+        let fg_color = if tab.is_active {
+            TAB_TEXT_ACTIVE
+        } else {
+            TAB_TEXT_INACTIVE
+        };
+
+        let m = self.tab_layout_metrics();
+        let max_chars = tab_math::tab_title_max_chars(&m, tw, show_close, tab.security_count);
+        let tab_padding_h = self.metrics.scaled_px(tab_math::TAB_PADDING_H);
+        let title: String = tab.title.chars().take(max_chars).collect();
+        let tx = tab_x + tab_padding_h as f32;
+        self.push_text(tx, text_y as f32, &title, fg_color, 1.0);
+    }
+
+    /// Draws the new-tab (+) button with hover highlight.
+    fn plus_button_commands(&mut self, tab_count: usize, tw: u32, mouse_pos: (f64, f64)) {
+        let plus_rect = self.plus_button_rect(tab_count, tw);
         let plus_hover = Self::point_in_rect(mouse_pos.0, mouse_pos.1, plus_rect);
         if plus_hover {
             let (px, py, pw, ph) = plus_rect;
@@ -384,18 +365,6 @@ impl super::GpuRenderer {
             plus_fg,
             1.0,
         );
-
-        // Pin button (non-macOS).
-        #[cfg(not(target_os = "macos"))]
-        self.draw_pin_button_commands(mouse_pos, _pinned);
-
-        // Window control buttons (non-macOS).
-        #[cfg(not(target_os = "macos"))]
-        self.draw_window_buttons_commands(bw, mouse_pos);
-
-        // Bottom separator line.
-        let sep_y = tab_bar_h - 1.0;
-        self.push_rect(0.0, sep_y, bw as f32, 1.0, TAB_BORDER, 0.7);
     }
 
     /// Draws the pin button at the left of the tab bar (non-macOS).
@@ -459,6 +428,8 @@ impl super::GpuRenderer {
         self.push_line(cx, needle_top, cx, needle_top + needle_h, t, icon_color, 1.0);
     }
 
+    // ── Other tab bar methods (unchanged) ───────────────────────────────
+
     pub(super) fn draw_tab_drag_overlay_impl(
         &mut self,
         buf_width: usize,
@@ -512,18 +483,13 @@ impl super::GpuRenderer {
         );
 
         // Ghost title.
-        let text_y = (self
-            .metrics
-            .tab_bar_height_px()
-            .saturating_sub(self.metrics.cell_height))
-            / 2
-            + self.metrics.scaled_px(1);
+        let m = self.tab_layout_metrics();
+        let text_y = tab_math::tab_text_y(&m);
         let use_numbers = self.should_show_number(tw);
         let label: String = if use_numbers {
             (source_index + 1).to_string()
         } else {
-            let pad = self.metrics.scaled_px(14);
-            let max = (tw.saturating_sub(pad * 2) / self.metrics.cell_width) as usize;
+            let max = tab_math::rename_field_max_chars(&m, tw);
             tabs[source_index].title.chars().take(max).collect()
         };
         let lw = label.chars().count() as u32 * self.metrics.cell_width;
@@ -597,33 +563,9 @@ impl super::GpuRenderer {
             return Some(tab.title);
         }
 
-        let tab_padding_h = self.metrics.scaled_px(14);
         let show_close = tab.is_active || hovered_tab == Some(idx);
-        let close_reserved = if show_close {
-            self.metrics.scaled_px(20) + self.metrics.scaled_px(6)
-        } else {
-            0
-        };
-        let security_reserved = if tab.security_count > 0 {
-            let count_chars = tab.security_count.min(99).to_string().len() as u32;
-            let count_width = if tab.security_count > 1 {
-                count_chars * self.metrics.cell_width + self.metrics.scaled_px(2)
-            } else {
-                0
-            };
-            let badge_min = self.metrics.scaled_px(10);
-            let badge_max = self.metrics.scaled_px(15);
-            self.metrics
-                .cell_height
-                .saturating_sub(self.metrics.scaled_px(10))
-                .clamp(badge_min, badge_max)
-                + count_width
-                + self.metrics.scaled_px(6)
-        } else {
-            0
-        };
-        let max_chars = (tw.saturating_sub(tab_padding_h * 2 + close_reserved + security_reserved)
-            / self.metrics.cell_width) as usize;
+        let m = self.tab_layout_metrics();
+        let max_chars = tab_math::tab_title_max_chars(&m, tw, show_close, tab.security_count);
         let title_chars = tab.title.chars().count();
         (title_chars > max_chars).then_some(tab.title)
     }
@@ -634,16 +576,7 @@ impl super::GpuRenderer {
         tab_count: usize,
         buf_width: u32,
     ) -> usize {
-        let tw = self.tab_width_val(tab_count, buf_width);
-        let start = self.tab_strip_start_x_val() as f64;
-        let mut idx = tab_count;
-        for i in 0..tab_count {
-            let center = start + i as f64 * tw as f64 + tw as f64 / 2.0;
-            if x < center {
-                idx = i;
-                break;
-            }
-        }
-        idx
+        let m = self.tab_layout_metrics();
+        tab_math::tab_insert_index_from_x(&m, x, tab_count, buf_width)
     }
 }

@@ -2,6 +2,54 @@ use crate::core::{Cell, Grid, Row};
 
 use super::CursorStyle;
 
+/// A logical line collected from scrollback and grid content.
+///
+/// Represents one logical line of text that may span multiple physical rows
+/// when soft-wrapped. The `min_len` field preserves trailing spaces before
+/// the cursor position so they are not trimmed during rewrapping.
+struct LogicalLine {
+    cells: Vec<Cell>,
+    /// Minimum number of cells to preserve (for cursor-position trailing spaces).
+    min_len: usize,
+}
+
+/// Rewrap logical lines to fit a new column width.
+///
+/// This is a pure function with no side effects: it takes collected logical lines
+/// and a target width, and produces a flat list of physical rows with correct
+/// wrap flags.
+fn rewrap_lines(lines: &[LogicalLine], new_cols: usize) -> Vec<Row> {
+    let mut rewrapped: Vec<Row> = Vec::new();
+    for logical_line in lines {
+        // Trim only untouched default cells; keep styled spaces and explicit
+        // spaces before cursor in the active line.
+        let len = logical_line
+            .cells
+            .iter()
+            .rposition(|c| c != &Cell::default())
+            .map(|i| i + 1)
+            .unwrap_or(0);
+        let len = len.max(logical_line.min_len.min(logical_line.cells.len()));
+
+        if len == 0 {
+            rewrapped.push(Row::new(new_cols));
+            continue;
+        }
+
+        let content = &logical_line.cells[..len];
+        let mut pos = 0;
+        while pos < content.len() {
+            let end = (pos + new_cols).min(content.len());
+            let mut cells: Vec<Cell> = content[pos..end].to_vec();
+            cells.resize(new_cols, Cell::default());
+            let wrapped = end < content.len();
+            rewrapped.push(Row::from_cells(cells, wrapped));
+            pos = end;
+        }
+    }
+    rewrapped
+}
+
 impl super::Terminal {
     pub fn resize(&mut self, rows: usize, cols: usize) {
         if self.grid.rows == rows && self.grid.cols == cols {
@@ -44,9 +92,75 @@ impl super::Terminal {
     /// 2. Rewrap logical lines to new column width
     /// 3. Fill grid from top, excess goes to scrollback
     /// 4. Cursor stays at same logical position
-    fn reflow_resize(&mut self, rows: usize, cols: usize) {
+    fn reflow_resize(&mut self, new_rows: usize, new_cols: usize) {
+        // Stage 1: collect all logical lines from scrollback + grid
+        let logical_lines = self.collect_logical_lines();
+
+        // Stage 2: rewrap to new width (pure function)
+        let rewrapped = rewrap_lines(&logical_lines, new_cols);
+
+        // Stage 3: fill new grid and restore cursor
+        self.fill_grid_from_rewrapped(&rewrapped, new_rows, new_cols);
+    }
+
+    /// Collect scrollback and meaningful grid rows into logical lines.
+    ///
+    /// Merges consecutive soft-wrapped physical rows into single logical lines.
+    /// Tracks `min_len` to preserve trailing spaces before the cursor position.
+    fn collect_logical_lines(&self) -> Vec<LogicalLine> {
         // Keep explicit blank lines up to cursor row, but also preserve any visible
         // content that may exist below the cursor (after cursor-addressing sequences).
+        let content_rows = self.compute_content_rows();
+
+        let mut lines: Vec<LogicalLine> = Vec::new();
+        let mut current_cells: Vec<Cell> = Vec::new();
+        let mut current_min_len = 0usize;
+
+        // First from scrollback
+        for row in self.scrollback.iter() {
+            current_cells.extend(row.cells.iter().cloned());
+            if !row.wrapped {
+                lines.push(LogicalLine {
+                    cells: std::mem::take(&mut current_cells),
+                    min_len: current_min_len,
+                });
+                current_min_len = 0;
+            }
+        }
+
+        // Then from grid up to the computed content boundary.
+        for r in 0..content_rows {
+            let line_start = current_cells.len();
+            current_cells.extend(self.grid.row_cells(r));
+            if r == self.cursor_row {
+                let clamped_cursor_col = self.cursor_col.min(self.grid.cols);
+                current_min_len = current_min_len.max(line_start + clamped_cursor_col);
+            }
+            if !self.grid.is_wrapped(r) {
+                lines.push(LogicalLine {
+                    cells: std::mem::take(&mut current_cells),
+                    min_len: current_min_len,
+                });
+                current_min_len = 0;
+            }
+        }
+
+        // Handle remaining content (if last row was wrapped)
+        if !current_cells.is_empty() {
+            lines.push(LogicalLine {
+                cells: current_cells,
+                min_len: current_min_len,
+            });
+        }
+
+        lines
+    }
+
+    /// Compute the number of grid rows that contain meaningful content.
+    ///
+    /// Includes all rows up to the cursor position, plus any rows below the cursor
+    /// that contain non-default content (e.g., after cursor-addressing sequences).
+    fn compute_content_rows(&self) -> usize {
         let cursor_rows = self.cursor_row.saturating_add(1).min(self.grid.rows);
         let default_cell = Cell::default();
         let last_content_row = (0..self.grid.rows).rev().find(|&row| {
@@ -56,85 +170,32 @@ impl super::Terminal {
                     self.grid.get_unchecked(row, col) != &default_cell
                 })
         });
-        let content_rows = last_content_row
+        last_content_row
             .map(|row| (row + 1).max(cursor_rows))
-            .unwrap_or(cursor_rows);
+            .unwrap_or(cursor_rows)
+    }
 
-        // 1. Collect content into logical lines.
-        // `min_len` preserves cells up to cursor position in the line containing cursor,
-        // so trailing spaces before cursor are not trimmed away on reflow.
-        let mut lines: Vec<(Vec<Cell>, usize)> = Vec::new();
-        let mut current_line: Vec<Cell> = Vec::new();
-        let mut current_min_len = 0usize;
-
-        // First from scrollback
-        for row in self.scrollback.iter() {
-            current_line.extend(row.cells.iter().cloned());
-            if !row.wrapped {
-                lines.push((std::mem::take(&mut current_line), current_min_len));
-                current_min_len = 0;
-            }
-        }
-
-        // Then from grid up to the computed content boundary.
-        for r in 0..content_rows {
-            let line_start = current_line.len();
-            current_line.extend(self.grid.row_cells(r));
-            if r == self.cursor_row {
-                let clamped_cursor_col = self.cursor_col.min(self.grid.cols);
-                current_min_len = current_min_len.max(line_start + clamped_cursor_col);
-            }
-            if !self.grid.is_wrapped(r) {
-                lines.push((std::mem::take(&mut current_line), current_min_len));
-                current_min_len = 0;
-            }
-        }
-
-        // Handle remaining content (if last row was wrapped)
-        if !current_line.is_empty() {
-            lines.push((current_line, current_min_len));
-        }
-
-        // 2. Rewrap all lines to new width
-        let mut rewrapped: Vec<Row> = Vec::new();
-        for (line, min_len) in &lines {
-            // Trim only untouched default cells; keep styled spaces and explicit
-            // spaces before cursor in the active line.
-            let len = line
-                .iter()
-                .rposition(|c| c != &Cell::default())
-                .map(|i| i + 1)
-                .unwrap_or(0);
-            let len = len.max((*min_len).min(line.len()));
-
-            if len == 0 {
-                rewrapped.push(Row::new(cols));
-                continue;
-            }
-
-            let content = &line[..len];
-            let mut pos = 0;
-            while pos < content.len() {
-                let end = (pos + cols).min(content.len());
-                let mut cells: Vec<Cell> = content[pos..end].to_vec();
-                cells.resize(cols, Cell::default());
-                let wrapped = end < content.len();
-                rewrapped.push(Row::from_cells(cells, wrapped));
-                pos = end;
-            }
-        }
-
-        // 3. Split into scrollback and grid (content stays at top)
+    /// Fill the grid and scrollback from rewrapped rows, and restore cursor position.
+    ///
+    /// If all rewrapped content fits in the grid, it is placed at the top with the
+    /// cursor at the last content row. Otherwise, excess rows go to scrollback and
+    /// the cursor is placed at the bottom.
+    fn fill_grid_from_rewrapped(
+        &mut self,
+        rewrapped: &[Row],
+        new_rows: usize,
+        new_cols: usize,
+    ) {
         let total_rows = rewrapped.len();
 
         self.scrollback.clear();
-        self.grid = Grid::new(rows, cols);
+        self.grid = Grid::new(new_rows, new_cols);
 
-        if total_rows <= rows {
+        if total_rows <= new_rows {
             // All content fits in grid - fill from top
             for (i, row) in rewrapped.iter().enumerate() {
                 for (col, cell) in row.cells.iter().enumerate() {
-                    if col < cols {
+                    if col < new_cols {
                         self.grid.set(i, col, cell.clone());
                     }
                 }
@@ -144,7 +205,7 @@ impl super::Terminal {
             self.cursor_row = total_rows.saturating_sub(1);
         } else {
             // Content overflows - excess goes to scrollback
-            let scrollback_count = total_rows - rows;
+            let scrollback_count = total_rows - new_rows;
 
             for row in rewrapped.iter().take(scrollback_count) {
                 self.scrollback.push_back(row.clone());
@@ -156,17 +217,17 @@ impl super::Terminal {
             // Fill grid with remaining rows
             for (i, row) in rewrapped.iter().skip(scrollback_count).enumerate() {
                 for (col, cell) in row.cells.iter().enumerate() {
-                    if col < cols {
+                    if col < new_cols {
                         self.grid.set(i, col, cell.clone());
                     }
                 }
                 self.grid.set_wrapped(i, row.wrapped);
             }
             // Cursor at bottom (content filled the grid)
-            self.cursor_row = rows.saturating_sub(1);
+            self.cursor_row = new_rows.saturating_sub(1);
         }
 
-        self.cursor_col = self.cursor_col.min(cols.saturating_sub(1));
+        self.cursor_col = self.cursor_col.min(new_cols.saturating_sub(1));
     }
 
     /// Returns whether the terminal is in the alternate screen.
@@ -278,6 +339,7 @@ impl super::Terminal {
 #[cfg(test)]
 mod tests {
     use super::super::Terminal;
+    use super::*;
 
     /// Helper to collect all visible content (grid + scrollback) as a string
     fn collect_all_content(term: &Terminal) -> String {
@@ -303,22 +365,162 @@ mod tests {
         content
     }
 
+    // ── Tests for the rewrap_lines pure function ──
+
+    #[test]
+    fn rewrap_lines_empty_line_produces_blank_row() {
+        let lines = vec![LogicalLine {
+            cells: vec![],
+            min_len: 0,
+        }];
+        let result = rewrap_lines(&lines, 10);
+        assert_eq!(result.len(), 1);
+        assert!(!result[0].wrapped);
+        assert_eq!(result[0].cells.len(), 10);
+        for cell in &result[0].cells {
+            assert_eq!(*cell, Cell::default());
+        }
+    }
+
+    #[test]
+    fn rewrap_lines_short_line_fits_in_one_row() {
+        let cells: Vec<Cell> = "Hello"
+            .chars()
+            .map(|c| Cell {
+                character: c,
+                ..Cell::default()
+            })
+            .collect();
+        let lines = vec![LogicalLine {
+            cells,
+            min_len: 0,
+        }];
+        let result = rewrap_lines(&lines, 10);
+        assert_eq!(result.len(), 1);
+        assert!(!result[0].wrapped);
+        assert_eq!(result[0].cells[0].character, 'H');
+        assert_eq!(result[0].cells[4].character, 'o');
+    }
+
+    #[test]
+    fn rewrap_lines_long_line_wraps_to_multiple_rows() {
+        let cells: Vec<Cell> = "ABCDEFGHIJ"
+            .chars()
+            .map(|c| Cell {
+                character: c,
+                ..Cell::default()
+            })
+            .collect();
+        let lines = vec![LogicalLine {
+            cells,
+            min_len: 0,
+        }];
+        let result = rewrap_lines(&lines, 4);
+        assert_eq!(result.len(), 3);
+        assert!(result[0].wrapped);
+        assert!(result[1].wrapped);
+        assert!(!result[2].wrapped);
+        assert_eq!(result[0].cells[0].character, 'A');
+        assert_eq!(result[0].cells[3].character, 'D');
+        assert_eq!(result[1].cells[0].character, 'E');
+        assert_eq!(result[2].cells[0].character, 'I');
+        assert_eq!(result[2].cells[1].character, 'J');
+    }
+
+    #[test]
+    fn rewrap_lines_preserves_min_len_trailing_spaces() {
+        let cells: Vec<Cell> = "abc   "
+            .chars()
+            .map(|c| Cell {
+                character: c,
+                ..Cell::default()
+            })
+            .collect();
+        let lines = vec![LogicalLine {
+            cells,
+            min_len: 6,
+        }];
+        let result = rewrap_lines(&lines, 10);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].cells[0].character, 'a');
+        assert_eq!(result[0].cells[1].character, 'b');
+        assert_eq!(result[0].cells[2].character, 'c');
+        assert_eq!(result[0].cells[3].character, ' ');
+        assert_eq!(result[0].cells[4].character, ' ');
+        assert_eq!(result[0].cells[5].character, ' ');
+    }
+
+    #[test]
+    fn rewrap_lines_trims_trailing_default_cells_without_min_len() {
+        let mut cells: Vec<Cell> = "abc"
+            .chars()
+            .map(|c| Cell {
+                character: c,
+                ..Cell::default()
+            })
+            .collect();
+        cells.resize(10, Cell::default());
+        let lines = vec![LogicalLine {
+            cells,
+            min_len: 0,
+        }];
+        let result = rewrap_lines(&lines, 5);
+        assert_eq!(result.len(), 1);
+        assert!(!result[0].wrapped);
+        assert_eq!(result[0].cells[0].character, 'a');
+        assert_eq!(result[0].cells[1].character, 'b');
+        assert_eq!(result[0].cells[2].character, 'c');
+    }
+
+    #[test]
+    fn rewrap_lines_multiple_logical_lines() {
+        let line1_cells: Vec<Cell> = "ABCD"
+            .chars()
+            .map(|c| Cell {
+                character: c,
+                ..Cell::default()
+            })
+            .collect();
+        let line2_cells: Vec<Cell> = "EF"
+            .chars()
+            .map(|c| Cell {
+                character: c,
+                ..Cell::default()
+            })
+            .collect();
+        let lines = vec![
+            LogicalLine {
+                cells: line1_cells,
+                min_len: 0,
+            },
+            LogicalLine {
+                cells: line2_cells,
+                min_len: 0,
+            },
+        ];
+        let result = rewrap_lines(&lines, 3);
+        assert_eq!(result.len(), 3);
+        assert!(result[0].wrapped);
+        assert!(!result[1].wrapped);
+        assert!(!result[2].wrapped);
+    }
+
+    // ── Integration tests (existing, preserved exactly) ──
+
     #[test]
     fn reflow_preserves_content_after_width_change() {
         let mut term = Terminal::new(4, 10);
-        term.process(b"AAAAAAAAAA"); // row 0: 10 A's
+        term.process(b"AAAAAAAAAA");
         term.process(b"\n");
         term.cursor_col = 0;
-        term.process(b"BBBBBBBBBB"); // row 1: 10 B's
+        term.process(b"BBBBBBBBBB");
 
         let content_before = collect_all_content(&term);
 
-        // Width change triggers reflow
         term.resize(4, 15);
 
         let content_after = collect_all_content(&term);
 
-        // Content should be preserved
         assert_eq!(
             content_before, content_after,
             "Content should be preserved after reflow"
@@ -331,7 +533,6 @@ mod tests {
         term.process(b"TOP");
         term.process(b"\x1b[4;1HLOWER");
 
-        // Simulate app moving cursor up after writing lower content.
         term.cursor_row = 1;
         term.cursor_col = 0;
 
@@ -381,10 +582,8 @@ mod tests {
         term.cursor_row = 8;
         term.cursor_col = 15;
 
-        // Resize to smaller dimensions
         term.resize(5, 10);
 
-        // Cursor should be clamped to valid range
         assert!(
             term.cursor_row < term.grid.rows,
             "cursor_row {} should be < grid.rows {}",
@@ -402,23 +601,15 @@ mod tests {
     #[test]
     fn reflow_rewraps_long_lines_to_new_width() {
         let mut term = Terminal::new(4, 10);
-        // Create a long line that will wrap: 26 chars in 10-col terminal
         term.process(b"ABCDEFGHIJKLMNOPQRSTUVWXYZ");
 
-        // Resize to wider terminal (20 cols)
         term.resize(4, 20);
 
-        // Content should be rewrapped: now 2 rows instead of 3
-        // Check that the full alphabet is preserved
         let content = collect_all_content(&term);
         assert_eq!(
             content, "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
             "Content should be preserved after rewrap"
         );
-
-        // The rewrapped content should have proper wrap flags
-        // First row (20 chars) should be wrapped, second (6 chars) should not
-        // Content can be in grid or scrollback depending on grid size
     }
 
     #[test]
@@ -426,10 +617,8 @@ mod tests {
         let mut term = Terminal::new(4, 10);
         term.process(b"Test");
 
-        // Height-only change uses simple_resize (not reflow)
         term.resize(6, 10);
 
-        // Content should still be in grid (not moved to scrollback)
         assert_eq!(term.grid.get(0, 0).unwrap().character, 'T');
         assert_eq!(term.grid.get(0, 1).unwrap().character, 'e');
         assert_eq!(term.grid.get(0, 2).unwrap().character, 's');
@@ -441,16 +630,13 @@ mod tests {
         let mut term = Terminal::new(4, 10);
         term.process(b"Main screen");
 
-        // Enter alt screen
         term.process(b"\x1b[?1049h");
         term.process(b"Alt content");
 
         let scrollback_before = term.scrollback.len();
 
-        // Width change on alt screen should NOT trigger reflow
         term.resize(4, 15);
 
-        // Scrollback should not have changed (alt screen doesn't push to scrollback)
         assert_eq!(term.scrollback.len(), scrollback_before);
     }
 }

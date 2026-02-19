@@ -23,10 +23,7 @@ use crate::core::{Cell, Color, CursorStyle, Grid, Selection};
 use super::WindowButton;
 use super::metrics::FontMetrics;
 use super::traits;
-use super::{
-    ContextMenu, FONT_SIZE, MIN_TAB_WIDTH, MIN_TAB_WIDTH_FOR_TITLE, SecurityPopup, TabBarHit,
-    TabInfo,
-};
+use super::{ContextMenu, FONT_SIZE, SecurityPopup, TabBarHit, TabInfo};
 
 use atlas::GlyphAtlas;
 use buffers::*;

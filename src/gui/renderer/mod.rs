@@ -7,6 +7,7 @@ pub mod gpu;
 pub mod metrics;
 mod scrollbar;
 mod security;
+pub mod shared;
 mod tab_bar;
 mod terminal;
 pub mod traits;
@@ -69,12 +70,6 @@ pub(super) const SECURITY_ACCENT: Color = Color {
     g: 226,
     b: 175,
 };
-
-/// Minimum tab width before switching to number-only display.
-pub(super) const MIN_TAB_WIDTH_FOR_TITLE: u32 = 60;
-
-/// Absolute minimum tab width (number + close button).
-pub(super) const MIN_TAB_WIDTH: u32 = 36;
 
 use types::GlyphBitmap;
 pub use types::*;

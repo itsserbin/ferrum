@@ -1,14 +1,6 @@
 use crate::gui::renderer::TabBarHit;
 use crate::gui::*;
 
-/// Vertical distance from tab bar center at which a drag becomes a detach.
-#[cfg(not(target_os = "macos"))]
-const DETACH_THRESHOLD_Y: u32 = 30;
-
-/// Minimum mouse movement to activate a tab drag (logical pixels).
-#[cfg(not(target_os = "macos"))]
-const DRAG_ACTIVATION_THRESHOLD: u32 = 5;
-
 /// Resize edge thickness in logical pixels.
 #[cfg(not(target_os = "macos"))]
 const RESIZE_EDGE: u32 = 4;
@@ -69,43 +61,18 @@ impl FerrumWindow {
             self.resize_direction = None;
         }
 
-        // Update drag state tracking (custom tab bar only — not on macOS).
+        // Update drag state tracking (custom tab bar only -- not on macOS).
         #[cfg(not(target_os = "macos"))]
-        if let Some(ref mut drag) = self.dragging_tab {
-            drag.current_x = mx;
-            drag.current_y = my;
-            if !drag.is_active {
-                let dx = mx - drag.start_x;
-                let dy = my - drag.start_y;
-                let threshold = self.backend.scaled_px(DRAG_ACTIVATION_THRESHOLD) as f64;
-                if (dx * dx + dy * dy).sqrt() > threshold {
-                    drag.is_active = true;
-                }
-            }
-            if drag.is_active {
-                // Detach: cursor moved far enough vertically from the tab bar.
-                let detach_threshold_y = self.backend.scaled_px(DETACH_THRESHOLD_Y) as f64;
-                let beyond_below = my > tab_bar_height + detach_threshold_y;
-                let beyond_above = my < self.backend.scaled_px(DRAG_ACTIVATION_THRESHOLD) as f64;
-                if (beyond_below || beyond_above) && self.tabs.len() > 1 {
-                    self.detach_dragged_tab();
-                    return;
-                }
-
-                self.window.set_cursor(CursorIcon::Grabbing);
-                self.window.request_redraw();
-                return;
-            }
+        if self.update_drag(mx, my) {
+            return;
         }
 
-        let size = self.window.inner_size();
-        self.hovered_tab = self
-            .backend
-            .hit_test_tab_hover(mx, my, self.tabs.len(), size.width);
+        self.update_hover(mx, my);
 
         // Track hovered context-menu item.
         if let Some(ref mut menu) = self.context_menu {
             menu.hover_index = self.backend.hit_test_context_menu(menu, mx, my);
+            // Clear hover inline to avoid borrow conflict with context_menu.
             self.hovered_tab = None;
             let cursor = if menu.hover_index.is_some() {
                 CursorIcon::Pointer
@@ -232,44 +199,5 @@ impl FerrumWindow {
         if self.is_selecting {
             self.update_drag_selection(row, col);
         }
-    }
-
-    /// Detaches the currently dragged tab into a new window (called during drag, button still held).
-    #[cfg(not(target_os = "macos"))]
-    fn detach_dragged_tab(&mut self) {
-        let Some(drag) = self.dragging_tab.take() else {
-            return;
-        };
-        if drag.source_index >= self.tabs.len() {
-            return;
-        }
-
-        // Compute new window position so it appears under the cursor.
-        let cursor_pos = self.window.outer_position().ok().map(|outer| {
-            winit::dpi::PhysicalPosition::new(
-                outer.x + drag.current_x as i32 - 100,
-                outer.y + drag.current_y as i32 - 10,
-            )
-        });
-
-        self.adjust_rename_after_tab_remove(drag.source_index);
-        self.adjust_security_popup_after_tab_remove(drag.source_index);
-        let tab = self.tabs.remove(drag.source_index);
-        self.refresh_tab_bar_visibility();
-
-        if !self.tabs.is_empty() {
-            let len_before = self.tabs.len() + 1;
-            self.active_tab = crate::gui::tabs::normalized_active_index_after_remove(
-                self.active_tab,
-                len_before,
-                drag.source_index,
-            )
-            .unwrap_or(0);
-        }
-
-        self.pending_requests
-            .push(WindowRequest::DetachTab { tab, cursor_pos });
-        self.window.set_cursor(CursorIcon::Default);
-        self.window.request_redraw();
     }
 }
