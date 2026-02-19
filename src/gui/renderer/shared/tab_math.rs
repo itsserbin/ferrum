@@ -77,7 +77,7 @@ impl Rect {
     }
 
     /// Returns `true` when `(px, py)` falls inside this rectangle.
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn contains(&self, px: f64, py: f64) -> bool {
         px >= self.x as f64
             && px < (self.x + self.w) as f64

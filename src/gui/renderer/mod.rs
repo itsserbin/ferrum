@@ -90,6 +90,10 @@ pub(super) const SECURITY_ACCENT: Color = Color {
 /// Minimum scrollbar thumb height in base UI pixels.
 pub(super) const SCROLLBAR_MIN_THUMB: u32 = 20;
 
+/// Base alpha for the scrollbar thumb (semi-transparent look).
+/// CPU uses as `u32`, GPU uses as `f32 / 255.0`.
+pub(super) const SCROLLBAR_BASE_ALPHA: u32 = 180;
+
 // -- Tab bar palette (Catppuccin Mocha, flat Chrome-style) --
 
 /// Mantle — bar background.
@@ -129,7 +133,7 @@ pub(super) const RENAME_FIELD_BG: u32 = 0x24273A;
 pub(super) const RENAME_FIELD_BORDER: u32 = 0x6C7086;
 
 /// Rename selection highlight (Catppuccin Mocha Lavender #B4BEFE).
-#[cfg_attr(target_os = "macos", allow(dead_code))]
+#[cfg_attr(not(feature = "gpu"), allow(dead_code))]
 pub(super) const RENAME_SELECTION_BG: u32 = 0xB4BEFE;
 
 /// Tab drag insertion indicator (Catppuccin Mocha Mauve #CBA6F7).

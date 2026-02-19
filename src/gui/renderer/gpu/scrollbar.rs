@@ -47,7 +47,7 @@ impl super::GpuRenderer {
         } else {
             SCROLLBAR_COLOR.to_pixel()
         };
-        let base_alpha = 180.0 / 255.0;
+        let base_alpha = super::super::SCROLLBAR_BASE_ALPHA as f32 / 255.0;
         let alpha = base_alpha * opacity;
 
         self.push_rounded_rect(

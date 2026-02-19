@@ -42,9 +42,4 @@ impl FerrumWindow {
         self.context_menu = None;
     }
 
-    /// Closes the security popup if one is open.
-    #[allow(dead_code)]
-    pub(in crate::gui::events::mouse) fn close_security_popup(&mut self) {
-        self.security_popup = None;
-    }
 }

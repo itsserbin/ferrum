@@ -139,8 +139,6 @@ pub enum WindowButtonKind {
 pub struct WindowButtonLayout {
     /// Button x-origin (physical pixels).
     pub x: u32,
-    /// Button y-origin (always 0 — top of bar).
-    pub y: u32,
     /// Button width (physical pixels).
     pub w: u32,
     /// Button height (physical pixels, equals bar height).
@@ -179,7 +177,6 @@ pub fn window_buttons_layout(
             && mouse_pos.1 < bar_height as f64;
         WindowButtonLayout {
             x: btn_x,
-            y: 0,
             w: btn_width,
             h: bar_height,
             hovered,
@@ -231,12 +228,6 @@ pub fn icon_stroke_thickness(ui_scale: f64) -> f32 {
 /// (which casts to integer) and the GPU renderer (which uses `f32` directly)
 /// can consume them.
 pub struct PlusIconLayout {
-    /// Center X of the icon (physical pixels).
-    pub center_x: f32,
-    /// Center Y of the icon (physical pixels).
-    pub center_y: f32,
-    /// Half-length of each arm of the plus sign (physical pixels).
-    pub half: f32,
     /// Stroke thickness (physical pixels).
     pub thickness: f32,
     /// Horizontal line: `(x1, y1, x2, y2)`.
@@ -261,9 +252,6 @@ pub fn compute_plus_icon_layout(rect: (u32, u32, u32, u32), ui_scale: f64) -> Pl
     let v_line = (center_x, center_y - half, center_x, center_y + half);
 
     PlusIconLayout {
-        center_x,
-        center_y,
-        half,
         thickness,
         h_line,
         v_line,
@@ -841,29 +829,39 @@ mod tests {
     fn plus_icon_centered() {
         let layout = compute_plus_icon_layout((100, 20, 24, 24), 1.0);
         // Center should be at (100 + 12, 20 + 12) = (112, 32)
-        assert!((layout.center_x - 112.0).abs() < 0.01);
-        assert!((layout.center_y - 32.0).abs() < 0.01);
+        // Horizontal line y-coords give center_y; vertical line x-coords give center_x
+        let center_x = layout.v_line.0;
+        let center_y = layout.h_line.1;
+        assert!((center_x - 112.0).abs() < 0.01);
+        assert!((center_y - 32.0).abs() < 0.01);
     }
 
     #[test]
     fn plus_icon_half_clamped() {
         // Very small rect: min(4,4) * 0.25 = 1.0, clamped to 2.5
         let layout = compute_plus_icon_layout((0, 0, 4, 4), 1.0);
-        assert!((layout.half - 2.5).abs() < 0.01);
+        let half = layout.h_line.2 - layout.v_line.0; // right end - center_x
+        assert!((half - 2.5).abs() < 0.01);
         // Large rect: min(100,100) * 0.25 = 25.0, clamped to 5.0
         let layout = compute_plus_icon_layout((0, 0, 100, 100), 1.0);
-        assert!((layout.half - 5.0).abs() < 0.01);
+        let half = layout.h_line.2 - layout.v_line.0;
+        assert!((half - 5.0).abs() < 0.01);
     }
 
     #[test]
     fn plus_icon_lines_cross_at_center() {
         let layout = compute_plus_icon_layout((100, 20, 24, 24), 1.0);
-        // Horizontal line y should equal center_y
-        assert!((layout.h_line.1 - layout.center_y).abs() < 0.01);
-        assert!((layout.h_line.3 - layout.center_y).abs() < 0.01);
-        // Vertical line x should equal center_x
-        assert!((layout.v_line.0 - layout.center_x).abs() < 0.01);
-        assert!((layout.v_line.2 - layout.center_x).abs() < 0.01);
+        // Horizontal line y should be constant (both endpoints equal)
+        assert!((layout.h_line.1 - layout.h_line.3).abs() < 0.01);
+        // Vertical line x should be constant (both endpoints equal)
+        assert!((layout.v_line.0 - layout.v_line.2).abs() < 0.01);
+        // And they should cross: v_line.x == h_line midpoint x, h_line.y == v_line midpoint y
+        let center_x = layout.v_line.0;
+        let center_y = layout.h_line.1;
+        let h_mid_x = (layout.h_line.0 + layout.h_line.2) / 2.0;
+        let v_mid_y = (layout.v_line.1 + layout.v_line.3) / 2.0;
+        assert!((center_x - h_mid_x).abs() < 0.01);
+        assert!((center_y - v_mid_y).abs() < 0.01);
     }
 
     #[test]
@@ -877,7 +875,7 @@ mod tests {
     #[test]
     fn minimize_icon_has_one_line() {
         let btn = WindowButtonLayout {
-            x: 100, y: 0, w: 46, h: 36, hovered: false, kind: WindowButtonKind::Minimize,
+            x: 100, w: 46, h: 36, hovered: false, kind: WindowButtonKind::Minimize,
         };
         let icon = compute_window_button_icon_lines(&btn, 1.0, 5);
         assert_eq!(icon.lines.len(), 1);
@@ -889,7 +887,7 @@ mod tests {
     #[test]
     fn maximize_icon_has_four_lines() {
         let btn = WindowButtonLayout {
-            x: 100, y: 0, w: 46, h: 36, hovered: false, kind: WindowButtonKind::Maximize,
+            x: 100, w: 46, h: 36, hovered: false, kind: WindowButtonKind::Maximize,
         };
         let icon = compute_window_button_icon_lines(&btn, 1.0, 5);
         assert_eq!(icon.lines.len(), 4);
@@ -898,7 +896,7 @@ mod tests {
     #[test]
     fn close_icon_has_two_lines() {
         let btn = WindowButtonLayout {
-            x: 100, y: 0, w: 46, h: 36, hovered: false, kind: WindowButtonKind::Close,
+            x: 100, w: 46, h: 36, hovered: false, kind: WindowButtonKind::Close,
         };
         let icon = compute_window_button_icon_lines(&btn, 1.0, 5);
         assert_eq!(icon.lines.len(), 2);
@@ -907,7 +905,7 @@ mod tests {
     #[test]
     fn window_button_icon_uses_shared_thickness() {
         let btn = WindowButtonLayout {
-            x: 0, y: 0, w: 46, h: 36, hovered: false, kind: WindowButtonKind::Minimize,
+            x: 0, w: 46, h: 36, hovered: false, kind: WindowButtonKind::Minimize,
         };
         let icon = compute_window_button_icon_lines(&btn, 1.5, 5);
         assert!((icon.thickness - icon_stroke_thickness(1.5)).abs() < 0.001);

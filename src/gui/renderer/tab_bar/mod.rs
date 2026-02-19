@@ -16,12 +16,6 @@ use super::*;
 // are centralized in the parent `renderer/mod.rs` and imported via `use super::*`.
 // WIN_BTN_WIDTH comes from `shared::tab_math`.
 
-// Window button colors that remain local (non-macOS only).
-#[cfg(not(target_os = "macos"))]
-const WIN_BTN_ICON: u32 = 0x6C7086; // Overlay0
-#[cfg(not(target_os = "macos"))]
-const WIN_BTN_HOVER: u32 = 0x313244; // Surface0
-
 impl CpuRenderer {
     /// Draws top tab bar including tabs, controls, and separators.
     #[allow(clippy::too_many_arguments)]

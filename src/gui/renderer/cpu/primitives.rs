@@ -120,6 +120,28 @@ impl CpuRenderer {
         color: u32,
         alpha: u8,
     ) {
+        Self::draw_rounded_impl(
+            buffer, buf_width, buf_height, x, y, w, h, radius, color, alpha,
+            Self::rounded_coverage,
+        );
+    }
+
+    /// Shared pixel iteration for rounded rectangle drawing.
+    /// The `coverage_fn` determines which corners are rounded.
+    #[allow(clippy::too_many_arguments)]
+    pub(in crate::gui::renderer) fn draw_rounded_impl(
+        buffer: &mut [u32],
+        buf_width: usize,
+        buf_height: usize,
+        x: i32,
+        y: i32,
+        w: u32,
+        h: u32,
+        radius: u32,
+        color: u32,
+        alpha: u8,
+        coverage_fn: fn(i32, i32, i32, i32, i32) -> f32,
+    ) {
         if w == 0 || h == 0 || alpha == 0 || buf_width == 0 || buf_height == 0 {
             return;
         }
@@ -140,7 +162,7 @@ impl CpuRenderer {
                     continue;
                 }
 
-                let coverage = Self::rounded_coverage(px, py, w as i32, h as i32, r);
+                let coverage = coverage_fn(px, py, w as i32, h as i32, r);
                 if coverage <= 0.0 {
                     continue;
                 }

@@ -1,10 +1,7 @@
 use super::*;
 use super::shared::scrollbar_math;
 
-/// Base alpha for the scrollbar thumb even at full opacity (semi-transparent look).
-const SCROLLBAR_BASE_ALPHA: u32 = 180;
-
-// SCROLLBAR_MIN_THUMB comes from `use super::*`.
+// SCROLLBAR_BASE_ALPHA and SCROLLBAR_MIN_THUMB come from `use super::*`.
 
 impl CpuRenderer {
     /// Renders an overlay scrollbar thumb with alpha blending over existing buffer content.

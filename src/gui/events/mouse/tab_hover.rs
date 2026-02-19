@@ -10,9 +10,4 @@ impl FerrumWindow {
             .hit_test_tab_hover(mx, my, self.tabs.len(), size.width);
     }
 
-    /// Clears the hover state when the cursor leaves the tab bar area.
-    #[allow(dead_code)]
-    pub(in crate::gui::events::mouse) fn clear_hover(&mut self) {
-        self.hovered_tab = None;
-    }
 }

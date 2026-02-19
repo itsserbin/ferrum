@@ -1,15 +1,16 @@
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
 use super::super::CpuRenderer;
+#[cfg(not(target_os = "macos"))]
+use super::super::traits::Renderer;
 
 #[cfg(not(target_os = "macos"))]
 use super::super::shared::{tab_math, ui_layout};
 #[cfg(not(target_os = "macos"))]
 use super::{INACTIVE_TAB_HOVER, PIN_ACTIVE_COLOR, TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE};
 
-// Window button colors (non-macOS).
 #[cfg(not(target_os = "macos"))]
-use super::{WIN_BTN_CLOSE_HOVER, WIN_BTN_HOVER, WIN_BTN_ICON};
+use super::WIN_BTN_CLOSE_HOVER;
 
 impl CpuRenderer {
     /// Draws the pin button at the left of the tab bar (non-macOS).
@@ -128,9 +129,9 @@ impl CpuRenderer {
             let colors = ui_layout::window_button_colors(
                 btn.kind,
                 btn.hovered,
-                WIN_BTN_HOVER,
+                INACTIVE_TAB_HOVER,
                 WIN_BTN_CLOSE_HOVER,
-                WIN_BTN_ICON,
+                TAB_TEXT_INACTIVE,
                 0xFFFFFF,
             );
 
