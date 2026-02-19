@@ -11,26 +11,34 @@ pub(in super::super) fn handle_private_mode(
     if intermediates != [b'?'] {
         return false;
     }
+    if action != 'h' && action != 'l' {
+        return false;
+    }
 
-    let mode = term.param(params, 0);
-    match (action, mode) {
-        ('h', 1) => term.set_decckm(true), // DECCKM: application cursor keys
-        ('l', 1) => term.set_decckm(false), // DECCKM: normal cursor keys
-        ('h', 25) => term.set_cursor_visible(true),
-        ('l', 25) => term.set_cursor_visible(false),
-        ('h', 1049) => term.enter_alt_screen(),
-        ('l', 1049) => term.leave_alt_screen(),
-        // Mouse tracking modes
-        ('h', 1000) => term.set_mouse_mode(MouseMode::Normal),
-        ('l', 1000) => term.set_mouse_mode(MouseMode::Off),
-        ('h', 1002) => term.set_mouse_mode(MouseMode::ButtonEvent),
-        ('l', 1002) => term.set_mouse_mode(MouseMode::Off),
-        ('h', 1003) => term.set_mouse_mode(MouseMode::AnyEvent),
-        ('l', 1003) => term.set_mouse_mode(MouseMode::Off),
-        // SGR extended mouse format
-        ('h', 1006) => term.set_sgr_mouse(true),
-        ('l', 1006) => term.set_sgr_mouse(false),
-        _ => {}
+    // DEC private modes may contain multiple semicolon-separated params (e.g. ?1002;1006h).
+    for param in params.iter() {
+        let Some(mode) = param.first().copied() else {
+            continue;
+        };
+        match (action, mode) {
+            ('h', 1) => term.set_decckm(true), // DECCKM: application cursor keys
+            ('l', 1) => term.set_decckm(false), // DECCKM: normal cursor keys
+            ('h', 25) => term.set_cursor_visible(true),
+            ('l', 25) => term.set_cursor_visible(false),
+            ('h', 1049) => term.enter_alt_screen(),
+            ('l', 1049) => term.leave_alt_screen(),
+            // Mouse tracking modes
+            ('h', 1000) => term.set_mouse_mode(MouseMode::Normal),
+            ('l', 1000) => term.set_mouse_mode(MouseMode::Off),
+            ('h', 1002) => term.set_mouse_mode(MouseMode::ButtonEvent),
+            ('l', 1002) => term.set_mouse_mode(MouseMode::Off),
+            ('h', 1003) => term.set_mouse_mode(MouseMode::AnyEvent),
+            ('l', 1003) => term.set_mouse_mode(MouseMode::Off),
+            // SGR extended mouse format
+            ('h', 1006) => term.set_sgr_mouse(true),
+            ('l', 1006) => term.set_sgr_mouse(false),
+            _ => {}
+        }
     }
     true
 }
@@ -153,6 +161,28 @@ mod tests {
         let mut term = Terminal::new(4, 10);
         term.process(b"\x1b[?1003h");
         assert!(term.mouse_mode == MouseMode::AnyEvent);
+    }
+
+    #[test]
+    fn private_mode_multi_param_enables_all_modes() {
+        let mut term = Terminal::new(4, 10);
+        term.process(b"\x1b[?1002;1006h");
+        assert!(term.mouse_mode == MouseMode::ButtonEvent);
+        assert!(term.sgr_mouse);
+
+        term.process(b"\x1b[?1002;1006l");
+        assert!(term.mouse_mode == MouseMode::Off);
+        assert!(!term.sgr_mouse);
+    }
+
+    #[test]
+    fn private_query_not_swallowed_by_mode_handler() {
+        let mut term = Terminal::new(4, 10);
+        term.cursor_row = 1;
+        term.cursor_col = 2;
+
+        term.process(b"\x1b[?6n");
+        assert_eq!(term.drain_responses(), b"\x1b[2;3R".to_vec());
     }
 
     #[test]

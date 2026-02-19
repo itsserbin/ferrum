@@ -192,7 +192,7 @@ impl traits::Renderer for GpuRenderer {
                 let codepoint = cell.character as u32;
 
                 // Ensure non-ASCII terminal glyphs exist in the atlas before grid shading.
-                if codepoint > 32 && codepoint >= 128 {
+                if codepoint >= 128 {
                     let _ = self.atlas.get_or_insert(
                         codepoint,
                         &self.font,

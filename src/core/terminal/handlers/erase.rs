@@ -30,7 +30,13 @@ pub(in super::super) fn handle_erase_csi(
                         term.grid.set(term.cursor_row, col, Cell::default());
                     }
                 }
-                2 | 3 => term.grid = Grid::new(term.grid.rows, term.grid.cols),
+                2 => term.grid = Grid::new(term.grid.rows, term.grid.cols),
+                3 => {
+                    let cleared = term.scrollback.len();
+                    term.scrollback.clear();
+                    // Keep selection anchoring in sync with absolute-row space.
+                    term.scrollback_popped = term.scrollback_popped.saturating_add(cleared);
+                }
                 _ => {}
             }
             true
@@ -191,6 +197,26 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn ed_erase_saved_lines_only() {
+        let mut term = Terminal::new(2, 4);
+        term.process(b"AAAA\nBBBB\nCCCC\n");
+        assert!(
+            !term.scrollback.is_empty(),
+            "expected scrollback before CSI 3J"
+        );
+        let visible_before = term.grid.get_unchecked(0, 0).character;
+
+        term.process(b"\x1b[3J");
+
+        assert!(term.scrollback.is_empty(), "CSI 3J should clear scrollback");
+        assert_eq!(
+            term.grid.get_unchecked(0, 0).character,
+            visible_before,
+            "CSI 3J should not clear visible grid"
+        );
     }
 
     #[test]

@@ -39,6 +39,17 @@ fn reports_cursor_position_response() {
     assert_eq!(term.drain_responses(), b"\x1b[2;4R".to_vec());
 }
 
+#[test]
+fn reports_cursor_position_response_for_private_query() {
+    let mut term = Terminal::new(3, 5);
+    term.cursor_row = 2;
+    term.cursor_col = 4;
+
+    term.process(b"\x1b[?6n");
+
+    assert_eq!(term.drain_responses(), b"\x1b[3;5R".to_vec());
+}
+
 // ── Perform trait: print ──
 
 #[test]
@@ -80,6 +91,16 @@ fn print_wide_char() {
 
     assert_eq!(term.grid.get(0, 0).unwrap().character, '漢');
     assert_eq!(term.grid.get(0, 1).unwrap().character, ' '); // placeholder
+    assert_eq!(term.cursor_col, 2);
+}
+
+#[test]
+fn print_combining_mark_is_not_dropped() {
+    let mut term = Terminal::new(4, 80);
+    term.process("e\u{0301}".as_bytes()); // e + combining acute accent
+
+    assert_eq!(term.grid.get(0, 0).unwrap().character, 'e');
+    assert_eq!(term.grid.get(0, 1).unwrap().character, '\u{0301}');
     assert_eq!(term.cursor_col, 2);
 }
 

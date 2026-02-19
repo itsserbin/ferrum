@@ -6,6 +6,8 @@ const X10_MOUSE_BASE_OFFSET: u8 = 32;
 const X10_COORD_OFFSET: u8 = 33;
 /// X10 mouse protocol button code for release events.
 const X10_BUTTON_RELEASE: u8 = 3;
+/// Maximum coordinate encodable in legacy X10 single-byte format after applying offset.
+const X10_MAX_ENCODED_POS: usize = (u8::MAX - X10_COORD_OFFSET) as usize;
 
 fn csi_modifier_param(modifiers: ModifiersState) -> Option<u8> {
     let mut param = 1;
@@ -117,8 +119,8 @@ pub(super) fn encode_mouse_event(
         } else {
             X10_BUTTON_RELEASE + X10_MOUSE_BASE_OFFSET
         };
-        let cx = (col as u8).saturating_add(X10_COORD_OFFSET);
-        let cy = (row as u8).saturating_add(X10_COORD_OFFSET);
+        let cx = (col.min(X10_MAX_ENCODED_POS) as u8).saturating_add(X10_COORD_OFFSET);
+        let cy = (row.min(X10_MAX_ENCODED_POS) as u8).saturating_add(X10_COORD_OFFSET);
         vec![0x1b, b'[', b'M', cb, cx, cy]
     }
 }

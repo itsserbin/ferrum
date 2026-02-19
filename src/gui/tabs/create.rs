@@ -84,7 +84,7 @@ impl FerrumWindow {
                     }
                 }
             })
-            .expect("Failed to spawn PTY reader thread");
+            .context("failed to spawn PTY reader thread")?;
 
         let mut terminal = Terminal::new(rows, cols);
 

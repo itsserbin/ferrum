@@ -1,5 +1,7 @@
 use crate::core::terminal::Terminal;
-use crate::core::{Grid, Selection, SelectionPoint};
+use crate::core::{Selection, SelectionPoint};
+#[cfg(test)]
+use crate::core::Grid;
 #[cfg(test)]
 use crate::core::Row;
 use crate::gui::*;
@@ -8,46 +10,25 @@ const BRACKETED_PASTE_START: &[u8] = b"\x1b[200~";
 const BRACKETED_PASTE_END: &[u8] = b"\x1b[201~";
 
 impl FerrumWindow {
-    fn selected_text_from_terminal(
-        terminal: &Terminal,
-        selection: Selection,
-        scroll_offset: usize,
-    ) -> String {
-        let viewport_start = terminal.scrollback.len().saturating_sub(scroll_offset);
-
-        // Convert absolute selection to viewport-relative
-        let rel_selection = Selection {
-            start: SelectionPoint {
-                row: selection.start.row.saturating_sub(viewport_start),
-                col: selection.start.col,
-            },
-            end: SelectionPoint {
-                row: selection.end.row.saturating_sub(viewport_start),
-                col: selection.end.col,
-            },
-        };
-
-        if scroll_offset == 0 {
-            return Self::selected_text_from_grid(&terminal.grid, rel_selection);
-        }
-
-        let display = terminal.build_display(scroll_offset);
-        Self::selected_text_from_grid(&display, rel_selection)
-    }
-
-    fn selected_text_from_grid(grid: &Grid, selection: Selection) -> String {
-        if grid.rows == 0 || grid.cols == 0 {
+    fn selected_text_from_terminal(terminal: &Terminal, selection: Selection) -> String {
+        if terminal.grid.cols == 0 {
             return String::new();
         }
+        let total_rows = terminal.scrollback.len() + terminal.grid.rows;
+        if total_rows == 0 {
+            return String::new();
+        }
+        let max_row = total_rows - 1;
+        let max_col = terminal.grid.cols - 1;
 
         let clamped = Selection {
             start: SelectionPoint {
-                row: selection.start.row.min(grid.rows - 1),
-                col: selection.start.col.min(grid.cols - 1),
+                row: selection.start.row.min(max_row),
+                col: selection.start.col.min(max_col),
             },
             end: SelectionPoint {
-                row: selection.end.row.min(grid.rows - 1),
-                col: selection.end.col.min(grid.cols - 1),
+                row: selection.end.row.min(max_row),
+                col: selection.end.col.min(max_col),
             },
         };
         let (start, end) = clamped.normalized();
@@ -55,15 +36,22 @@ impl FerrumWindow {
         let mut text = String::new();
         for row in start.row..=end.row {
             let col_start = if row == start.row { start.col } else { 0 };
-            let col_end = if row == end.row {
-                end.col
-            } else {
-                grid.cols - 1
-            };
+            let col_end = if row == end.row { end.col } else { max_col };
 
             for col in col_start..=col_end {
-                // Safe: selection was clamped to grid bounds above
-                text.push(grid.get_unchecked(row, col).character);
+                let ch = if row < terminal.scrollback.len() {
+                    terminal.scrollback[row]
+                        .cells
+                        .get(col)
+                        .map_or(' ', |cell| cell.character)
+                } else {
+                    // Safe: clamped above, and row is in the visible grid range here.
+                    terminal
+                        .grid
+                        .get_unchecked(row - terminal.scrollback.len(), col)
+                        .character
+                };
+                text.push(ch);
             }
             if row < end.row {
                 text.push('\n');
@@ -93,7 +81,7 @@ impl FerrumWindow {
                 None => return,
             };
             let Some(sel) = tab.selection else { return };
-            Self::selected_text_from_terminal(&tab.terminal, sel, tab.scroll_offset)
+            Self::selected_text_from_terminal(&tab.terminal, sel)
         };
 
         if let Some(ref mut clipboard) = self.clipboard {
@@ -169,23 +157,21 @@ mod tests {
         terminal.scrollback.push_back(Row::from_cells(row_cells("SB000", 5), false));
         terminal.scrollback.push_back(Row::from_cells(row_cells("SB001", 5), false));
 
-        // scrollback has 2 entries. With scroll_offset=0, viewport_start=2.
-        // Live grid row 0 is absolute row 2.
+        // Scrollback has 2 entries. Live grid row 0 is absolute row 2.
         let selection = Selection {
             start: SelectionPoint { row: 2, col: 0 },
             end: SelectionPoint { row: 2, col: 4 },
         };
 
-        let live_text = FerrumWindow::selected_text_from_terminal(&terminal, selection, 0);
+        let live_text = FerrumWindow::selected_text_from_terminal(&terminal, selection);
         assert_eq!(live_text, "LIVE0");
 
-        // With scroll_offset=1, viewport_start=1. Viewport row 0 is SB001 (absolute row 1).
+        // Absolute row 1 is the second scrollback line.
         let scrollback_selection = Selection {
             start: SelectionPoint { row: 1, col: 0 },
             end: SelectionPoint { row: 1, col: 4 },
         };
-        let scrollback_text =
-            FerrumWindow::selected_text_from_terminal(&terminal, scrollback_selection, 1);
+        let scrollback_text = FerrumWindow::selected_text_from_terminal(&terminal, scrollback_selection);
         assert_eq!(scrollback_text, "SB001");
     }
 }

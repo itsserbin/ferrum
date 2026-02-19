@@ -97,9 +97,14 @@ impl FerrumWindow {
     ) {
         if state != ElementState::Pressed {
             // Mouse release in tab bar area.
-            if self.is_selecting && self.renaming_tab.is_some() {
-                self.is_selecting = false;
+            // End any active pointer selection state so terminal drag-selection doesn't stick.
+            if self.is_selecting && self.renaming_tab.is_none() && self.is_mouse_reporting() {
+                // If PTY owns mouse reporting, still emit release even when cursor is over tab bar.
+                let (row, col) = self.pixel_to_grid(mx, my);
+                self.send_mouse_event(0, col, row, false);
             }
+            self.is_selecting = false;
+            self.selection_anchor = None;
             self.handle_tab_drag_release();
             return;
         }

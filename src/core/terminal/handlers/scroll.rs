@@ -9,14 +9,24 @@ pub(in super::super) fn handle_scroll_csi(
     match action {
         'r' => {
             // DECSTBM — Set Top and Bottom Margins
+            let rows = term.grid.rows;
             let mut iter = params.iter();
             let top = iter.next().and_then(|p| p.first().copied()).unwrap_or(1);
             let bottom = iter
                 .next()
                 .and_then(|p| p.first().copied())
-                .unwrap_or(term.grid.rows as u16);
-            term.scroll_top = (top as usize).saturating_sub(1);
-            term.scroll_bottom = (bottom as usize).saturating_sub(1).min(term.grid.rows - 1);
+                .unwrap_or(rows as u16);
+
+            let top_1_based = if top == 0 { 1 } else { top as usize }.min(rows);
+            let bottom_1_based = if bottom == 0 { rows } else { bottom as usize }.min(rows);
+
+            // Invalid region (top >= bottom) is ignored.
+            if top_1_based >= bottom_1_based {
+                return true;
+            }
+
+            term.scroll_top = top_1_based - 1;
+            term.scroll_bottom = bottom_1_based - 1;
             // VT spec says reset cursor, but modern apps don't expect it.
             // Keep cursor position, just clamp to new scroll region if needed.
             if term.cursor_row < term.scroll_top {
@@ -46,6 +56,9 @@ pub(in super::super) fn handle_scroll_csi(
         }
         'L' => {
             // Insert Lines
+            if term.cursor_row < term.scroll_top || term.cursor_row > term.scroll_bottom {
+                return true;
+            }
             let n = term.param(params, 1).max(1) as usize;
             for _ in 0..n {
                 term.scroll_down_region(term.cursor_row, term.scroll_bottom);
@@ -54,6 +67,9 @@ pub(in super::super) fn handle_scroll_csi(
         }
         'M' => {
             // Delete Lines
+            if term.cursor_row < term.scroll_top || term.cursor_row > term.scroll_bottom {
+                return true;
+            }
             let n = term.param(params, 1).max(1) as usize;
             for _ in 0..n {
                 term.scroll_up_region(term.cursor_row, term.scroll_bottom);
@@ -277,5 +293,43 @@ mod tests {
         assert_eq!(row_char(&term, 2), ' ');
         // Row 3 (below region): unchanged
         assert_eq!(row_char(&term, 3), 'D');
+    }
+
+    #[test]
+    fn decstbm_invalid_region_is_ignored() {
+        let mut term = Terminal::new(6, 5);
+        term.cursor_row = 5;
+        term.cursor_col = 3;
+
+        term.process(b"\x1b[5;2r");
+
+        assert_eq!(term.cursor_row, 5);
+        assert_eq!(term.cursor_col, 3);
+    }
+
+    #[test]
+    fn il_outside_scroll_region_is_noop() {
+        let mut term = filled_term(5, 4);
+        term.process(b"\x1b[2;4r"); // region: rows 1..3 (0-based)
+        term.cursor_row = 0; // outside region
+
+        let before: Vec<char> = (0..5).map(|row| row_char(&term, row)).collect();
+        term.process(b"\x1b[1L");
+        let after: Vec<char> = (0..5).map(|row| row_char(&term, row)).collect();
+
+        assert_eq!(after, before);
+    }
+
+    #[test]
+    fn dl_outside_scroll_region_is_noop() {
+        let mut term = filled_term(5, 4);
+        term.process(b"\x1b[2;4r"); // region: rows 1..3 (0-based)
+        term.cursor_row = 4; // outside region
+
+        let before: Vec<char> = (0..5).map(|row| row_char(&term, row)).collect();
+        term.process(b"\x1b[1M");
+        let after: Vec<char> = (0..5).map(|row| row_char(&term, row)).collect();
+
+        assert_eq!(after, before);
     }
 }

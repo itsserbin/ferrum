@@ -159,3 +159,9 @@ fn alt_character_is_escaped() {
         .expect("Alt+f should be encoded");
     assert_eq!(bytes, b"\x1bf");
 }
+
+#[test]
+fn legacy_mouse_encoding_clamps_large_coordinates() {
+    let bytes = encode_mouse_event(0, 300, 500, true, false);
+    assert_eq!(bytes, vec![0x1b, b'[', b'M', 32, 255, 255]);
+}

@@ -297,7 +297,11 @@ impl Terminal {
 
 impl Perform for Terminal {
     fn print(&mut self, c: char) {
-        let width = UnicodeWidthChar::width(c).unwrap_or(1);
+        let mut width = UnicodeWidthChar::width(c).unwrap_or(1);
+        if width == 0 {
+            // Keep combining marks visible as standalone glyphs instead of dropping them.
+            width = 1;
+        }
 
         if self.cursor_col + width > self.grid.cols {
             // Mark current row as soft-wrapped before moving to next row
