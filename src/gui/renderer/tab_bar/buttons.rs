@@ -5,7 +5,9 @@ use super::super::CpuRenderer;
 #[cfg(not(target_os = "macos"))]
 use super::super::shared::tab_math;
 #[cfg(not(target_os = "macos"))]
-use super::{INACTIVE_TAB_HOVER, PIN_ACTIVE_COLOR, TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE, WIN_BTN_WIDTH};
+use super::{
+    INACTIVE_TAB_HOVER, PIN_ACTIVE_COLOR, TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE, WIN_BTN_WIDTH,
+};
 
 // Window button colors (non-macOS).
 #[cfg(not(target_os = "macos"))]

@@ -178,13 +178,7 @@ impl FerrumWindow {
         if self.mouse_pos.1 >= self.backend.tab_bar_height_px() as f64 {
             return None;
         }
-        let buf_width = self.window.inner_size().width;
-        match self.backend.hit_test_tab_bar(
-            self.mouse_pos.0,
-            self.mouse_pos.1,
-            self.tabs.len(),
-            buf_width,
-        ) {
+        match self.tab_bar_hit(self.mouse_pos.0, self.mouse_pos.1) {
             crate::gui::renderer::TabBarHit::CloseTab(idx) => Some(idx),
             _ => None,
         }

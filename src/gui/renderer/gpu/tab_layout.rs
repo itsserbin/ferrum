@@ -75,7 +75,7 @@ impl super::GpuRenderer {
         &mut self,
         buf_width: usize,
         tabs: &[TabInfo],
-        _hovered_tab: Option<usize>,
+        hovered_tab: Option<usize>,
         mouse_pos: (f64, f64),
         tab_offsets: Option<&[f32]>,
         _pinned: bool,
@@ -91,15 +91,16 @@ impl super::GpuRenderer {
         for (i, tab) in tabs.iter().enumerate() {
             let anim_offset = tab_offsets.and_then(|o| o.get(i)).copied().unwrap_or(0.0);
             let tab_x = self.tab_origin_x_val(i, tw) as f32 + anim_offset;
+            let is_hovered = hovered_tab == Some(i);
 
             self.tab_background_commands(tab, tab_x, tw);
 
             if tab.is_renaming {
                 self.tab_rename_commands(tab, tab_x, tw, text_y);
             } else if use_numbers {
-                self.tab_number_commands(i, tab, tab_x, tw, text_y);
+                self.tab_number_commands(i, tab, tab_x, tw, text_y, is_hovered);
             } else {
-                self.tab_content_commands(i, tab, tab_x, tw, text_y);
+                self.tab_content_commands(i, tab, tabs.len(), bw, tab_x, tw, text_y, is_hovered);
             }
         }
 

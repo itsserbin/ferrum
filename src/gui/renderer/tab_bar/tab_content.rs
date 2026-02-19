@@ -19,6 +19,7 @@ impl CpuRenderer {
         tab_x: u32,
         tw: u32,
         tab_bar_height: u32,
+        is_hovered: bool,
     ) {
         let m = TabLayoutMetrics {
             cell_width: self.cell_width,
@@ -27,7 +28,6 @@ impl CpuRenderer {
             tab_bar_height,
         };
         let text_y = tab_math::tab_text_y(&m);
-        let hover_t = tab.hover_progress.clamp(0.0, 1.0);
         let fg = if tab.is_active {
             Color::from_pixel(TAB_TEXT_ACTIVE)
         } else {
@@ -35,7 +35,8 @@ impl CpuRenderer {
         };
 
         let number_str = (tab_index + 1).to_string();
-        let show_close = tab.is_active || hover_t > 0.05;
+        let show_close =
+            tab_math::should_show_close_button(tab.is_active, is_hovered, tab.hover_progress);
         let close_reserved = if show_close {
             tab_math::close_button_reserved_width(&m)
         } else {
@@ -75,6 +76,7 @@ impl CpuRenderer {
         tab_x: u32,
         tw: u32,
         tab_bar_height: u32,
+        is_hovered: bool,
     ) {
         let m = TabLayoutMetrics {
             cell_width: self.cell_width,
@@ -84,14 +86,14 @@ impl CpuRenderer {
         };
         let text_y = tab_math::tab_text_y(&m);
         let tab_padding_h = m.scaled_px(tab_math::TAB_PADDING_H);
-        let hover_t = tab.hover_progress.clamp(0.0, 1.0);
         let fg = if tab.is_active {
             Color::from_pixel(TAB_TEXT_ACTIVE)
         } else {
             Color::from_pixel(TAB_TEXT_INACTIVE)
         };
 
-        let show_close = tab.is_active || hover_t > 0.05;
+        let show_close =
+            tab_math::should_show_close_button(tab.is_active, is_hovered, tab.hover_progress);
         let max_chars = tab_math::tab_title_max_chars(&m, tw, show_close, tab.security_count);
 
         self.draw_tab_title(

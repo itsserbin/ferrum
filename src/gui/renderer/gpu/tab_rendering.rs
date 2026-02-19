@@ -1,5 +1,6 @@
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
+use super::super::SECURITY_ACCENT;
 use super::super::TabInfo;
 use super::super::shared::tab_math;
 use super::{
@@ -134,8 +135,8 @@ impl super::GpuRenderer {
         tab_x: f32,
         tw: u32,
         text_y: u32,
+        is_hovered: bool,
     ) {
-        let hover_t = tab.hover_progress.clamp(0.0, 1.0);
         let fg_color = if tab.is_active {
             TAB_TEXT_ACTIVE
         } else {
@@ -144,7 +145,8 @@ impl super::GpuRenderer {
 
         let m = self.tab_layout_metrics();
         let number_str = (tab_index + 1).to_string();
-        let show_close = tab.is_active || hover_t > 0.05;
+        let show_close =
+            tab_math::should_show_close_button(tab.is_active, is_hovered, tab.hover_progress);
         let close_reserved = if show_close {
             tab_math::close_button_reserved_width(&m)
         } else {
@@ -160,19 +162,24 @@ impl super::GpuRenderer {
     }
 
     /// Draws a tab in normal mode: title text + optional close button.
-    /// Delegates to `tab_title_commands` and `tab_close_button_commands`.
+    /// Delegates to title, security badge, and close button helpers.
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn tab_content_commands(
         &mut self,
         tab_index: usize,
         tab: &TabInfo,
+        tab_count: usize,
+        buf_width: u32,
         tab_x: f32,
         tw: u32,
         text_y: u32,
+        is_hovered: bool,
     ) {
-        let hover_t = tab.hover_progress.clamp(0.0, 1.0);
-        let show_close = tab.is_active || hover_t > 0.05;
+        let show_close =
+            tab_math::should_show_close_button(tab.is_active, is_hovered, tab.hover_progress);
 
         self.tab_title_commands(tab, tab_x, tw, text_y, show_close);
+        self.tab_security_badge_commands(tab_index, tab, tab_count, buf_width, text_y);
 
         if show_close {
             self.draw_close_button_commands(tab_index, tw, tab.close_hover_progress);
@@ -200,5 +207,58 @@ impl super::GpuRenderer {
         let title: String = tab.title.chars().take(max_chars).collect();
         let tx = tab_x + tab_padding_h as f32;
         self.push_text(tx, text_y as f32, &title, fg_color, 1.0);
+    }
+
+    /// Draws the security badge icon and optional numeric count.
+    fn tab_security_badge_commands(
+        &mut self,
+        tab_index: usize,
+        tab: &TabInfo,
+        tab_count: usize,
+        buf_width: u32,
+        text_y: u32,
+    ) {
+        let Some((sx, sy, sw, _)) =
+            self.security_badge_rect_val(tab_index, tab_count, buf_width, tab.security_count)
+        else {
+            return;
+        };
+
+        let color = SECURITY_ACCENT.to_pixel();
+        let mid = sw / 2;
+        let top_third = (sw / 3).max(1);
+        let bottom_start = (sw * 2 / 3).max(top_third + 1);
+
+        for dy in 0..sw {
+            let half_span = if dy < top_third {
+                1 + dy / 2
+            } else if dy < bottom_start {
+                mid.saturating_sub(1).max(1)
+            } else {
+                let progress = dy - bottom_start;
+                let denom = (sw - bottom_start).max(1);
+                let shrink = progress * mid.saturating_sub(1) / denom;
+                mid.saturating_sub(shrink).max(1)
+            };
+
+            let left = mid.saturating_sub(half_span);
+            let right = (mid + half_span).min(sw.saturating_sub(1));
+            let row_x = sx + left;
+            let row_w = right.saturating_sub(left) + 1;
+            self.push_rect(
+                row_x as f32,
+                (sy + dy) as f32,
+                row_w as f32,
+                1.0,
+                color,
+                1.0,
+            );
+        }
+
+        if tab.security_count > 1 {
+            let count_text = tab.security_count.min(99).to_string();
+            let count_x = sx + sw + self.metrics.scaled_px(2);
+            self.push_text(count_x as f32, text_y as f32, &count_text, color, 1.0);
+        }
     }
 }

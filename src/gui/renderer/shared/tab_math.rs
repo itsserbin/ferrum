@@ -36,6 +36,7 @@ pub const CLOSE_BUTTON_SIZE: u32 = 20;
 
 /// Close button margin from tab edge.
 pub const CLOSE_BUTTON_MARGIN: u32 = 6;
+const CLOSE_BUTTON_VISIBILITY_THRESHOLD: f32 = 0.05;
 
 /// Plus button size in logical pixels.
 pub const PLUS_BUTTON_SIZE: u32 = 24;
@@ -263,6 +264,11 @@ pub fn security_badge_rect(
 /// Returns the width reserved by the close button when it is visible.
 pub fn close_button_reserved_width(m: &TabLayoutMetrics) -> u32 {
     m.scaled_px(CLOSE_BUTTON_SIZE) + m.scaled_px(CLOSE_BUTTON_MARGIN)
+}
+
+/// Returns `true` when the close button should be visible/interactable for a tab.
+pub fn should_show_close_button(is_active: bool, is_hovered: bool, hover_progress: f32) -> bool {
+    is_active || is_hovered || hover_progress.clamp(0.0, 1.0) > CLOSE_BUTTON_VISIBILITY_THRESHOLD
 }
 
 /// Returns the maximum number of characters that fit in the tab title area.
@@ -558,6 +564,27 @@ mod tests {
             close_button_reserved_width(&m),
             m.scaled_px(CLOSE_BUTTON_SIZE) + m.scaled_px(CLOSE_BUTTON_MARGIN)
         );
+    }
+
+    #[test]
+    fn close_button_visible_for_active_tab() {
+        assert!(should_show_close_button(true, false, 0.0));
+    }
+
+    #[test]
+    fn close_button_visible_for_hovered_tab() {
+        assert!(should_show_close_button(false, true, 0.0));
+    }
+
+    #[test]
+    fn close_button_hidden_when_not_active_not_hovered_and_no_animation() {
+        assert!(!should_show_close_button(false, false, 0.0));
+    }
+
+    #[test]
+    fn close_button_visible_while_hover_animation_decays() {
+        assert!(should_show_close_button(false, false, 0.2));
+        assert!(!should_show_close_button(false, false, 0.01));
     }
 
     // ── tab_title_max_chars ──────────────────────────────────────────

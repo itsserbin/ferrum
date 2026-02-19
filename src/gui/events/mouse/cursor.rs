@@ -134,7 +134,9 @@ impl FerrumWindow {
         let window_padding = self.backend.window_padding_px() as f64;
         let size = self.window.inner_size();
         let buf_height = size.height as usize;
-        let tab = self.active_tab_ref().unwrap();
+        let Some(tab) = self.active_tab_ref() else {
+            return false;
+        };
         let scrollback_len = tab.terminal.scrollback.len();
         let grid_rows = tab.terminal.grid.rows;
         let drag_start_y = tab.scrollbar.drag_start_y;

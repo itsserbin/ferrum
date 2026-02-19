@@ -1,3 +1,4 @@
+use crate::gui::renderer::shared::tab_math;
 use crate::gui::renderer::{TabBarHit, TabInfo};
 use crate::gui::*;
 
@@ -24,10 +25,28 @@ impl FerrumWindow {
             .collect()
     }
 
-    pub(in crate::gui::events::mouse) fn tab_bar_hit(&self, mx: f64, my: f64) -> TabBarHit {
+    pub(in crate::gui::events) fn tab_close_button_visible(&self, tab_index: usize) -> bool {
+        if self.tabs.get(tab_index).is_none() {
+            return false;
+        }
+        let is_active = tab_index == self.active_tab;
+        let is_hovered = self.hovered_tab == Some(tab_index);
+        #[cfg(not(target_os = "macos"))]
+        let hover_progress = self.tab_hover_progress.get(tab_index).copied().unwrap_or(0.0);
+        #[cfg(target_os = "macos")]
+        let hover_progress = 0.0;
+        tab_math::should_show_close_button(is_active, is_hovered, hover_progress)
+    }
+
+    pub(in crate::gui::events) fn tab_bar_hit(&self, mx: f64, my: f64) -> TabBarHit {
         let buf_width = self.window.inner_size().width;
-        self.backend
-            .hit_test_tab_bar(mx, my, self.tabs.len(), buf_width)
+        let hit = self
+            .backend
+            .hit_test_tab_bar(mx, my, self.tabs.len(), buf_width);
+        match hit {
+            TabBarHit::CloseTab(idx) if !self.tab_close_button_visible(idx) => TabBarHit::Tab(idx),
+            _ => hit,
+        }
     }
 
     pub(in crate::gui::events::mouse) fn tab_bar_security_hit(

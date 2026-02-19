@@ -2,8 +2,8 @@
 
 #[cfg(not(target_os = "macos"))]
 use super::super::WindowButton;
-use super::super::shared::tab_math::{self, TabLayoutMetrics};
 use super::super::shared::tab_hit_test;
+use super::super::shared::tab_math::{self, TabLayoutMetrics};
 use super::super::{TabBarHit, TabInfo};
 use super::{ACTIVE_TAB_BG, TAB_BORDER};
 use crate::core::Color;
