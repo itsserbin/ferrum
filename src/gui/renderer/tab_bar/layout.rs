@@ -10,7 +10,7 @@ use crate::core::Color;
 
 impl super::super::CpuRenderer {
     /// Builds a `TabLayoutMetrics` from the current CPU renderer state.
-    fn tab_layout_metrics(&self) -> TabLayoutMetrics {
+    pub(in crate::gui::renderer) fn tab_layout_metrics(&self) -> TabLayoutMetrics {
         TabLayoutMetrics {
             cell_width: self.cell_width,
             cell_height: self.cell_height,
@@ -182,7 +182,7 @@ impl super::super::CpuRenderer {
         let max_chars = ((width - self.scaled_px(2) - padding_x * 2) / self.cell_width) as usize;
         for (ci, ch) in title.chars().take(max_chars).enumerate() {
             let cx = text_x + ci as u32 * self.cell_width;
-            self.draw_char_at(
+            self.draw_char(
                 buffer,
                 buf_width,
                 buf_height,

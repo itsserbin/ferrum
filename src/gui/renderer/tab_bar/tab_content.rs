@@ -2,7 +2,7 @@
 
 use crate::core::Color;
 
-use super::super::shared::tab_math::{self, TabLayoutMetrics};
+use super::super::shared::tab_math;
 use super::super::{CpuRenderer, SECURITY_ACCENT, TabInfo};
 use super::{CLOSE_HOVER_BG_COLOR, TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE};
 
@@ -18,15 +18,10 @@ impl CpuRenderer {
         tab: &TabInfo,
         tab_x: u32,
         tw: u32,
-        tab_bar_height: u32,
+        _tab_bar_height: u32,
         is_hovered: bool,
     ) {
-        let m = TabLayoutMetrics {
-            cell_width: self.cell_width,
-            cell_height: self.cell_height,
-            ui_scale: self.ui_scale(),
-            tab_bar_height,
-        };
+        let m = self.tab_layout_metrics();
         let text_y = tab_math::tab_text_y(&m);
         let fg = if tab.is_active {
             Color::from_pixel(TAB_TEXT_ACTIVE)
@@ -47,7 +42,7 @@ impl CpuRenderer {
 
         for (ci, ch) in number_str.chars().enumerate() {
             let cx = text_x + ci as u32 * self.cell_width;
-            self.draw_char_at(buffer, buf_width, bar_h, cx, text_y, ch, fg);
+            self.draw_char(buffer, buf_width, bar_h, cx, text_y, ch, fg);
         }
 
         if show_close {
@@ -74,15 +69,10 @@ impl CpuRenderer {
         tab_count: usize,
         tab_x: u32,
         tw: u32,
-        tab_bar_height: u32,
+        _tab_bar_height: u32,
         is_hovered: bool,
     ) {
-        let m = TabLayoutMetrics {
-            cell_width: self.cell_width,
-            cell_height: self.cell_height,
-            ui_scale: self.ui_scale(),
-            tab_bar_height,
-        };
+        let m = self.tab_layout_metrics();
         let text_y = tab_math::tab_text_y(&m);
         let tab_padding_h = m.scaled_px(tab_math::TAB_PADDING_H);
         let fg = if tab.is_active {
@@ -140,7 +130,7 @@ impl CpuRenderer {
 
         for (ci, ch) in title.chars().enumerate() {
             let cx = text_x + ci as u32 * self.cell_width;
-            self.draw_char_at(buffer, buf_width, bar_h, cx, text_y, ch, fg);
+            self.draw_char(buffer, buf_width, bar_h, cx, text_y, ch, fg);
         }
     }
 
@@ -165,7 +155,7 @@ impl CpuRenderer {
                 let count_x = sx + sw + self.scaled_px(2);
                 for (ci, ch) in count_text.chars().enumerate() {
                     let cx = count_x + ci as u32 * self.cell_width;
-                    self.draw_char_at(buffer, buf_width, bar_h, cx, text_y, ch, SECURITY_ACCENT);
+                    self.draw_char(buffer, buf_width, bar_h, cx, text_y, ch, SECURITY_ACCENT);
                 }
             }
         }
@@ -201,7 +191,7 @@ impl CpuRenderer {
         }
 
         let active_mix = (hover_t * 175.0).round().clamp(0.0, 255.0) as u8;
-        let close_fg = Color::from_pixel(Self::blend_rgb(
+        let close_fg = Color::from_pixel(Self::blend_pixel(
             TAB_TEXT_INACTIVE,
             TAB_TEXT_ACTIVE,
             active_mix,

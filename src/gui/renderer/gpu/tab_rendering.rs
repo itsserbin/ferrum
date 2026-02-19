@@ -1,11 +1,9 @@
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
-use super::super::SECURITY_ACCENT;
-use super::super::TabInfo;
 use super::super::shared::tab_math;
-use super::{
+use super::super::{
     ACTIVE_TAB_BG, BAR_BG, INACTIVE_TAB_HOVER, RENAME_FIELD_BG, RENAME_FIELD_BORDER,
-    RENAME_SELECTION_BG, TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE,
+    RENAME_SELECTION_BG, SECURITY_ACCENT, TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE, TabInfo,
 };
 
 impl super::GpuRenderer {

@@ -2,14 +2,15 @@
 
 #![cfg(not(target_os = "macos"))]
 
-use super::super::WindowButton;
-use super::WIN_BTN_WIDTH;
-use super::{CLOSE_HOVER_BG_COLOR, INACTIVE_TAB_HOVER, TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE};
+use super::super::shared::tab_math;
+use super::super::{
+    CLOSE_HOVER_BG_COLOR, INACTIVE_TAB_HOVER, TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE, WindowButton,
+};
 
 impl super::GpuRenderer {
     pub(super) fn draw_window_buttons_commands(&mut self, buf_width: u32, mouse_pos: (f64, f64)) {
         let bar_h = self.metrics.tab_bar_height_px() as f32;
-        let btn_w = self.metrics.scaled_px(WIN_BTN_WIDTH);
+        let btn_w = self.metrics.scaled_px(tab_math::WIN_BTN_WIDTH);
         let bw = buf_width;
 
         let buttons: [(u32, WindowButton); 3] = [

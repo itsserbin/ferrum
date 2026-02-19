@@ -11,13 +11,8 @@ use super::GpuRenderer;
 
 impl traits::Renderer for GpuRenderer {
     fn set_scale(&mut self, scale_factor: f64) {
-        let scale = if scale_factor.is_finite() {
-            scale_factor.clamp(0.75, 4.0)
-        } else {
-            1.0
-        };
-        const SCALE_EPSILON: f64 = 1e-6;
-        if (self.metrics.ui_scale - scale).abs() < SCALE_EPSILON {
+        let scale = super::super::sanitize_scale(scale_factor);
+        if !super::super::scale_changed(self.metrics.ui_scale, scale) {
             return;
         }
         self.metrics.ui_scale = scale;
@@ -26,15 +21,7 @@ impl traits::Renderer for GpuRenderer {
     }
 
     fn set_tab_bar_visible(&mut self, visible: bool) {
-        #[cfg(target_os = "macos")]
-        {
-            let _ = visible;
-            self.metrics.tab_bar_visible = false;
-        }
-        #[cfg(not(target_os = "macos"))]
-        {
-            self.metrics.tab_bar_visible = visible;
-        }
+        self.metrics.tab_bar_visible = super::super::resolve_tab_bar_visible(visible);
     }
 
     fn cell_width(&self) -> u32 {

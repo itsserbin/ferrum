@@ -1,11 +1,9 @@
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
 use super::super::shared::tab_math;
-use super::{INACTIVE_TAB_HOVER, TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE};
-
-// Pin button active color (Catppuccin Mocha Lavender).
+use super::super::{INACTIVE_TAB_HOVER, TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE};
 #[cfg(not(target_os = "macos"))]
-const PIN_ACTIVE_COLOR: u32 = 0xB4BEFE;
+use super::super::PIN_ACTIVE_COLOR;
 
 impl super::GpuRenderer {
     /// Draws the new-tab (+) button with hover highlight.

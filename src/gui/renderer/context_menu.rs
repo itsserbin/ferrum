@@ -60,25 +60,7 @@ impl ContextMenu {
 impl CpuRenderer {
     /// Hit-tests context menu and returns hovered item index.
     pub fn hit_test_context_menu(&self, menu: &ContextMenu, x: f64, y: f64) -> Option<usize> {
-        let mw = menu.width(self.cell_width);
-        let ih = menu.item_height(self.cell_height);
-        let mh = menu.height(self.cell_height);
-
-        if x < menu.x as f64
-            || x >= (menu.x + mw) as f64
-            || y < menu.y as f64
-            || y >= (menu.y + mh) as f64
-        {
-            return None;
-        }
-
-        let rel_y = (y - menu.y as f64 - 2.0) as u32;
-        let idx = rel_y / ih;
-        if (idx as usize) < menu.items.len() {
-            Some(idx as usize)
-        } else {
-            None
-        }
+        menu.hit_test(x, y, self.cell_width, self.cell_height)
     }
 
     /// Draws context menu overlay.
@@ -95,7 +77,6 @@ impl CpuRenderer {
         let mx = menu.x;
         let my = menu.y;
 
-        let hover_pixel = 0x3A3F57;
         let radius = self.scaled_px(6);
         let open_t = (menu.opened_at.elapsed().as_secs_f32() / 0.14).clamp(0.0, 1.0);
         let open_ease = 1.0 - (1.0 - open_t) * (1.0 - open_t);
@@ -110,7 +91,7 @@ impl CpuRenderer {
             mw,
             mh,
             radius,
-            0x1E2433,
+            MENU_BG,
             panel_alpha,
         );
         self.draw_rounded_rect(
@@ -142,17 +123,13 @@ impl CpuRenderer {
                     hover_w,
                     hover_h,
                     self.scaled_px(6),
-                    hover_pixel,
+                    MENU_HOVER_BG,
                     alpha,
                 );
             }
 
             let fg = if *action == ContextAction::CloseTab {
-                Color {
-                    r: 243,
-                    g: 139,
-                    b: 168,
-                } // Red for destructive action.
+                DESTRUCTIVE_COLOR // Red for destructive action.
             } else {
                 Color::DEFAULT_FG
             };
@@ -162,7 +139,7 @@ impl CpuRenderer {
             for (ci, ch) in label.chars().enumerate() {
                 let cx = text_x + ci as u32 * self.cell_width;
                 if cx + self.cell_width <= mx + mw {
-                    self.draw_char_at(buffer, buf_width, buf_height, cx, text_y, ch, fg);
+                    self.draw_char(buffer, buf_width, buf_height, cx, text_y, ch, fg);
                 }
             }
         }

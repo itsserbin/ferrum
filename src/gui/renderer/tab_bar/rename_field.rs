@@ -2,7 +2,7 @@
 
 use crate::core::Color;
 
-use super::super::shared::tab_math::{self, TabLayoutMetrics};
+use super::super::shared::tab_math;
 use super::super::{ACTIVE_ACCENT, CpuRenderer, TabInfo};
 use super::{RENAME_FIELD_BG, RENAME_FIELD_BORDER, TAB_TEXT_ACTIVE};
 
@@ -17,14 +17,9 @@ impl CpuRenderer {
         tab: &TabInfo,
         tab_x: u32,
         tw: u32,
-        tab_bar_height: u32,
+        _tab_bar_height: u32,
     ) {
-        let m = TabLayoutMetrics {
-            cell_width: self.cell_width,
-            cell_height: self.cell_height,
-            ui_scale: self.ui_scale(),
-            tab_bar_height,
-        };
+        let m = self.tab_layout_metrics();
         let text_y = tab_math::tab_text_y(&m);
         let tab_padding_h = m.scaled_px(tab_math::TAB_PADDING_H);
         let rename_text = tab.rename_text.unwrap_or("");
@@ -119,9 +114,9 @@ impl CpuRenderer {
             let selected = selection_chars.is_some_and(|(start, end)| ci >= start && ci < end);
             if selected {
                 self.draw_bg(buffer, buf_width, bar_h, cx, text_y, ACTIVE_ACCENT);
-                self.draw_char_at(buffer, buf_width, bar_h, cx, text_y, ch, Color::DEFAULT_BG);
+                self.draw_char(buffer, buf_width, bar_h, cx, text_y, ch, Color::DEFAULT_BG);
             } else {
-                self.draw_char_at(buffer, buf_width, bar_h, cx, text_y, ch, Color::DEFAULT_FG);
+                self.draw_char(buffer, buf_width, bar_h, cx, text_y, ch, Color::DEFAULT_FG);
             }
         }
     }

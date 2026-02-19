@@ -68,13 +68,8 @@ impl CpuRenderer {
     }
 
     pub fn set_scale(&mut self, scale_factor: f64) {
-        let scale = if scale_factor.is_finite() {
-            scale_factor.clamp(0.75, 4.0)
-        } else {
-            1.0
-        };
-        const SCALE_EPSILON: f64 = 1e-6;
-        if (self.ui_scale - scale).abs() < SCALE_EPSILON {
+        let scale = super::sanitize_scale(scale_factor);
+        if !super::scale_changed(self.ui_scale, scale) {
             return;
         }
         self.ui_scale = scale;
@@ -110,15 +105,7 @@ impl CpuRenderer {
 
     #[cfg_attr(target_os = "macos", allow(dead_code))]
     pub(crate) fn set_tab_bar_visible(&mut self, visible: bool) {
-        #[cfg(target_os = "macos")]
-        {
-            let _ = visible;
-            self.tab_bar_visible = false;
-        }
-        #[cfg(not(target_os = "macos"))]
-        {
-            self.tab_bar_visible = visible;
-        }
+        self.tab_bar_visible = super::resolve_tab_bar_visible(visible);
     }
 
     pub(crate) fn window_padding_px(&self) -> u32 {

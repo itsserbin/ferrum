@@ -52,15 +52,7 @@ impl super::GpuRenderer {
                 let mut fg = cell.fg;
                 // Bold: bright variant for base ANSI colors.
                 if cell.bold {
-                    for i in 0..8 {
-                        if fg.r == Color::ANSI[i].r
-                            && fg.g == Color::ANSI[i].g
-                            && fg.b == Color::ANSI[i].b
-                        {
-                            fg = Color::ANSI[i + 8];
-                            break;
-                        }
-                    }
+                    fg = fg.bold_bright();
                 }
 
                 self.grid_cells.push(PackedCell {

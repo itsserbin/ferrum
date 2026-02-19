@@ -1,4 +1,4 @@
-use super::shared::tab_math::{self, TabLayoutMetrics};
+use super::shared::tab_math;
 use super::*;
 
 impl SecurityPopup {
@@ -22,6 +22,23 @@ impl SecurityPopup {
         let title_h = self.line_height(cell_height);
         let lines_h = self.line_height(cell_height) * self.lines.len() as u32;
         title_h + lines_h + 8
+    }
+
+    /// Computes the popup rectangle clamped to fit within the given buffer bounds.
+    ///
+    /// Returns `(x, y, width, height)`.
+    pub(crate) fn clamped_rect(
+        &self,
+        cell_width: u32,
+        cell_height: u32,
+        buf_width: u32,
+        buf_height: u32,
+    ) -> (u32, u32, u32, u32) {
+        let width = self.width(cell_width).min(buf_width);
+        let height = self.height(cell_height).min(buf_height);
+        let x = self.x.min(buf_width.saturating_sub(width));
+        let y = self.y.min(buf_height.saturating_sub(height));
+        (x, y, width, height)
     }
 }
 
@@ -81,12 +98,7 @@ impl CpuRenderer {
         buf_width: u32,
         security_count: usize,
     ) -> Option<(u32, u32, u32, u32)> {
-        let m = TabLayoutMetrics {
-            cell_width: self.cell_width,
-            cell_height: self.cell_height,
-            ui_scale: self.ui_scale(),
-            tab_bar_height: self.tab_bar_height_px(),
-        };
+        let m = self.tab_layout_metrics();
         tab_math::security_badge_rect(&m, tab_index, tab_count, buf_width, security_count)
             .map(|r| r.to_tuple())
     }
@@ -97,11 +109,7 @@ impl CpuRenderer {
         buf_width: usize,
         buf_height: usize,
     ) -> (u32, u32, u32, u32) {
-        let width = popup.width(self.cell_width).min(buf_width as u32);
-        let height = popup.height(self.cell_height).min(buf_height as u32);
-        let x = popup.x.min((buf_width as u32).saturating_sub(width));
-        let y = popup.y.min((buf_height as u32).saturating_sub(height));
-        (x, y, width, height)
+        popup.clamped_rect(self.cell_width, self.cell_height, buf_width as u32, buf_height as u32)
     }
 
     pub fn hit_test_security_popup(
@@ -132,7 +140,7 @@ impl CpuRenderer {
         let header_pixel = SECURITY_ACCENT.to_pixel();
         let radius = self.scaled_px(6);
         self.draw_rounded_rect(
-            buffer, buf_width, buf_height, mx as i32, my as i32, mw, mh, radius, 0x1E2433, 248,
+            buffer, buf_width, buf_height, mx as i32, my as i32, mw, mh, radius, MENU_BG, 248,
         );
         self.draw_rounded_rect(
             buffer, buf_width, buf_height, mx as i32, my as i32, mw, mh, radius, 0xFFFFFF, 20,
@@ -142,7 +150,7 @@ impl CpuRenderer {
         let header_x = mx + self.cell_width / 2;
         for (i, ch) in popup.title.chars().enumerate() {
             let x = header_x + i as u32 * self.cell_width;
-            self.draw_char_at(
+            self.draw_char(
                 buffer,
                 buf_width,
                 buf_height,
@@ -172,7 +180,7 @@ impl CpuRenderer {
             chars.push_str(line);
             for (i, ch) in chars.chars().enumerate() {
                 let x = text_x + i as u32 * self.cell_width;
-                self.draw_char_at(
+                self.draw_char(
                     buffer,
                     buf_width,
                     buf_height,

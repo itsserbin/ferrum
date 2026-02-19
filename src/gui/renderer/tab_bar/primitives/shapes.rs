@@ -1,32 +1,6 @@
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
 impl super::super::super::CpuRenderer {
-    pub(in crate::gui::renderer) fn blend_rgb(dst: u32, src: u32, alpha: u8) -> u32 {
-        if alpha == 255 {
-            return src;
-        }
-        if alpha == 0 {
-            return dst;
-        }
-
-        let a = alpha as u32;
-        let inv = 255 - a;
-
-        let dr = (dst >> 16) & 0xFF;
-        let dg = (dst >> 8) & 0xFF;
-        let db = dst & 0xFF;
-
-        let sr = (src >> 16) & 0xFF;
-        let sg = (src >> 8) & 0xFF;
-        let sb = src & 0xFF;
-
-        let r = (sr * a + dr * inv + 127) / 255;
-        let g = (sg * a + dg * inv + 127) / 255;
-        let b = (sb * a + db * inv + 127) / 255;
-
-        (r << 16) | (g << 8) | b
-    }
-
     /// Draws a filled circle at a given center with a given radius.
     pub(in crate::gui::renderer) fn draw_filled_circle(
         buffer: &mut [u32],
@@ -69,7 +43,7 @@ impl super::super::super::CpuRenderer {
                 }
 
                 let aa_alpha = (coverage * alpha as f32).round().clamp(0.0, 255.0) as u8;
-                buffer[idx] = Self::blend_rgb(buffer[idx], color, aa_alpha);
+                buffer[idx] = Self::blend_pixel(buffer[idx], color, aa_alpha);
             }
         }
     }
@@ -133,7 +107,7 @@ impl super::super::super::CpuRenderer {
                     continue;
                 }
                 let alpha = (coverage * 255.0).round() as u8;
-                buffer[idx] = Self::blend_rgb(buffer[idx], color, alpha);
+                buffer[idx] = Self::blend_pixel(buffer[idx], color, alpha);
             }
         }
     }

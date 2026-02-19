@@ -27,6 +27,32 @@ pub struct ContextMenu {
     pub opened_at: std::time::Instant,
 }
 
+impl ContextMenu {
+    /// Pure hit-test: returns the hovered item index given pointer coordinates
+    /// and the cell dimensions used to compute menu geometry.
+    pub fn hit_test(&self, x: f64, y: f64, cell_width: u32, cell_height: u32) -> Option<usize> {
+        let mw = self.width(cell_width);
+        let ih = self.item_height(cell_height);
+        let mh = self.height(cell_height);
+
+        if x < self.x as f64
+            || x >= (self.x + mw) as f64
+            || y < self.y as f64
+            || y >= (self.y + mh) as f64
+        {
+            return None;
+        }
+
+        let rel_y = (y - self.y as f64 - 2.0) as u32;
+        let idx = rel_y / ih;
+        if (idx as usize) < self.items.len() {
+            Some(idx as usize)
+        } else {
+            None
+        }
+    }
+}
+
 /// Render-time tab metadata.
 pub struct TabInfo<'a> {
     pub title: &'a str,

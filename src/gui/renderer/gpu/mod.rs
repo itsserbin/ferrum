@@ -32,24 +32,9 @@ use super::metrics::FontMetrics;
 use atlas::GlyphAtlas;
 use buffers::*;
 
-// Catppuccin Mocha palette constants (same as CPU renderer).
-const BAR_BG: u32 = 0x181825;
-const ACTIVE_TAB_BG: u32 = 0x1E1E2E;
-const INACTIVE_TAB_HOVER: u32 = 0x313244;
-const TAB_TEXT_ACTIVE: u32 = 0xCDD6F4;
-const TAB_TEXT_INACTIVE: u32 = 0x6C7086;
-const TAB_BORDER: u32 = 0x313244;
-const CLOSE_HOVER_BG_COLOR: u32 = 0x585B70;
-const RENAME_FIELD_BG: u32 = 0x24273A;
-const RENAME_FIELD_BORDER: u32 = 0x6C7086;
-const RENAME_SELECTION_BG: u32 = 0xB4BEFE;
-
-#[cfg(not(target_os = "macos"))]
-const WIN_BTN_WIDTH: u32 = 46;
-
-const SCROLLBAR_MIN_THUMB: u32 = 20;
-
-const INSERTION_COLOR: u32 = 0xCBA6F7;
+// Tab-bar palette, INSERTION_COLOR, RENAME_SELECTION_BG, SCROLLBAR_MIN_THUMB,
+// and WIN_BTN_WIDTH are centralized in the parent `renderer/mod.rs`
+// (or `shared::tab_math` for WIN_BTN_WIDTH).
 
 /// Maximum number of UI draw commands per frame.
 const MAX_UI_COMMANDS: usize = 4096;

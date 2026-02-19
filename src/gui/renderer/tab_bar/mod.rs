@@ -12,33 +12,15 @@ use super::shared::tab_math;
 
 use super::*;
 
-// Catppuccin Mocha palette — flat Chrome-style tab bar.
-const BAR_BG: u32 = 0x181825; // Mantle — bar background
-const ACTIVE_TAB_BG: u32 = 0x1E1E2E; // Base — merges with terminal
-const INACTIVE_TAB_HOVER: u32 = 0x313244; // Surface0
-const TAB_TEXT_ACTIVE: u32 = 0xCDD6F4; // Text
-const TAB_TEXT_INACTIVE: u32 = 0x6C7086; // Overlay0
-const TAB_BORDER: u32 = 0x313244; // Surface0
-const CLOSE_HOVER_BG_COLOR: u32 = 0x585B70; // Surface2
-const RENAME_FIELD_BG: u32 = 0x24273A; // Distinct editable-field background
-const RENAME_FIELD_BORDER: u32 = 0x6C7086; // Subtle field border
+// Tab-bar palette constants (BAR_BG, TAB_TEXT_ACTIVE, INSERTION_COLOR, etc.)
+// are centralized in the parent `renderer/mod.rs` and imported via `use super::*`.
+// WIN_BTN_WIDTH comes from `shared::tab_math`.
 
-// Window button colors (non-macOS).
+// Window button colors that remain local (non-macOS only).
 #[cfg(not(target_os = "macos"))]
 const WIN_BTN_ICON: u32 = 0x6C7086; // Overlay0
 #[cfg(not(target_os = "macos"))]
 const WIN_BTN_HOVER: u32 = 0x313244; // Surface0
-#[cfg(not(target_os = "macos"))]
-const WIN_BTN_CLOSE_HOVER: u32 = 0xF38BA8; // Red
-#[cfg(not(target_os = "macos"))]
-const WIN_BTN_WIDTH: u32 = 46;
-
-// Insertion indicator color (Catppuccin Mocha Mauve).
-const INSERTION_COLOR: u32 = 0xCBA6F7;
-
-// Pin button active color (Catppuccin Mocha Lavender - same as active accent).
-#[cfg(not(target_os = "macos"))]
-const PIN_ACTIVE_COLOR: u32 = 0xB4BEFE;
 
 impl CpuRenderer {
     /// Draws top tab bar including tabs, controls, and separators.

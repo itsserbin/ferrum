@@ -1,8 +1,7 @@
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
-use super::super::TabInfo;
 use super::super::shared::tab_math;
-use super::{ACTIVE_TAB_BG, INSERTION_COLOR, TAB_BORDER, TAB_TEXT_ACTIVE};
+use super::super::{ACTIVE_TAB_BG, INSERTION_COLOR, TAB_BORDER, TAB_TEXT_ACTIVE, TabInfo};
 
 impl super::GpuRenderer {
     pub(super) fn draw_tab_drag_overlay_impl(

@@ -9,7 +9,7 @@ use crate::core::Color;
 use super::MAX_UI_COMMANDS;
 use super::buffers::*;
 
-use super::{CLOSE_HOVER_BG_COLOR, TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE};
+use super::super::{CLOSE_HOVER_BG_COLOR, TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE};
 
 impl super::GpuRenderer {
     pub(super) fn mix_rgb(c0: u32, c1: u32, t: f32) -> u32 {

@@ -5,9 +5,7 @@ use super::super::CpuRenderer;
 #[cfg(not(target_os = "macos"))]
 use super::super::shared::tab_math;
 #[cfg(not(target_os = "macos"))]
-use super::{
-    INACTIVE_TAB_HOVER, PIN_ACTIVE_COLOR, TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE, WIN_BTN_WIDTH,
-};
+use super::{INACTIVE_TAB_HOVER, PIN_ACTIVE_COLOR, TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE};
 
 // Window button colors (non-macOS).
 #[cfg(not(target_os = "macos"))]
@@ -146,7 +144,7 @@ impl CpuRenderer {
         mouse_pos: (f64, f64),
     ) {
         let bar_h = self.tab_bar_height_px();
-        let btn_w = self.scaled_px(WIN_BTN_WIDTH);
+        let btn_w = self.scaled_px(tab_math::WIN_BTN_WIDTH);
         let bw = buf_width as u32;
 
         // Button positions from right: Close, Maximize, Minimize.

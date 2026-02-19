@@ -41,15 +41,7 @@ impl CpuRenderer {
 
                 // Bold: bright variant
                 if cell.bold {
-                    for i in 0..8 {
-                        if fg.r == Color::ANSI[i].r
-                            && fg.g == Color::ANSI[i].g
-                            && fg.b == Color::ANSI[i].b
-                        {
-                            fg = Color::ANSI[i + 8];
-                            break;
-                        }
-                    }
+                    fg = fg.bold_bright();
                 }
 
                 self.draw_bg(buffer, buf_width, buf_height, x, y, bg);

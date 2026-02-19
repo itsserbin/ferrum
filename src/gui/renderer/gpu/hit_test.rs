@@ -3,7 +3,10 @@
 //! Hit testing and popup drawing for the GPU renderer.
 
 use super::super::shared::tab_hit_test;
-use super::super::{ContextAction, ContextMenu, SecurityPopup, TabBarHit, TabInfo};
+use super::super::{
+    ContextAction, ContextMenu, DESTRUCTIVE_COLOR, MENU_BG, MENU_HOVER_BG, SecurityPopup,
+    TabBarHit, TabInfo,
+};
 use crate::core::Color;
 
 impl super::GpuRenderer {
@@ -55,7 +58,7 @@ impl super::GpuRenderer {
         let open_ease = 1.0 - (1.0 - open_t) * (1.0 - open_t);
 
         // Background.
-        self.push_rounded_rect(mx, my, mw, mh, radius, 0x1E2433, 0.9 + open_ease * 0.08);
+        self.push_rounded_rect(mx, my, mw, mh, radius, MENU_BG, 0.9 + open_ease * 0.08);
         self.push_rounded_rect(mx, my, mw, mh, radius, 0xFFFFFF, 0.1);
 
         for (i, (action, label)) in menu.items.iter().enumerate() {
@@ -77,13 +80,13 @@ impl super::GpuRenderer {
                     hover_w,
                     hover_h,
                     radius,
-                    0x3A3F57,
+                    MENU_HOVER_BG,
                     0.45 + hover_t * 0.45,
                 );
             }
 
             let fg = if *action == ContextAction::CloseTab {
-                0xF38BA8
+                DESTRUCTIVE_COLOR.to_pixel()
             } else {
                 Color::DEFAULT_FG.to_pixel()
             };
@@ -100,25 +103,7 @@ impl super::GpuRenderer {
         x: f64,
         y: f64,
     ) -> Option<usize> {
-        let mw = menu.width(self.metrics.cell_width);
-        let ih = menu.item_height(self.metrics.cell_height);
-        let mh = menu.height(self.metrics.cell_height);
-
-        if x < menu.x as f64
-            || x >= (menu.x + mw) as f64
-            || y < menu.y as f64
-            || y >= (menu.y + mh) as f64
-        {
-            return None;
-        }
-
-        let rel_y = (y - menu.y as f64 - 2.0) as u32;
-        let idx = rel_y / ih;
-        if (idx as usize) < menu.items.len() {
-            Some(idx as usize)
-        } else {
-            None
-        }
+        menu.hit_test(x, y, self.metrics.cell_width, self.metrics.cell_height)
     }
 
     // ── Security ──────────────────────────────────────────────────────
@@ -129,15 +114,19 @@ impl super::GpuRenderer {
         buf_height: usize,
         popup: &SecurityPopup,
     ) {
-        let pw = popup.width(self.metrics.cell_width);
-        let ph = popup.height(self.metrics.cell_height);
-        let width = pw.min(buf_width as u32) as f32;
-        let height = ph.min(buf_height as u32) as f32;
-        let x = popup.x.min((buf_width as u32).saturating_sub(pw)) as f32;
-        let y = popup.y.min((buf_height as u32).saturating_sub(ph)) as f32;
+        let (rx, ry, rw, rh) = popup.clamped_rect(
+            self.metrics.cell_width,
+            self.metrics.cell_height,
+            buf_width as u32,
+            buf_height as u32,
+        );
+        let x = rx as f32;
+        let y = ry as f32;
+        let width = rw as f32;
+        let height = rh as f32;
         let radius = self.metrics.scaled_px(6) as f32;
 
-        self.push_rounded_rect(x, y, width, height, radius, 0x1E2433, 0.97);
+        self.push_rounded_rect(x, y, width, height, radius, MENU_BG, 0.97);
         self.push_rounded_rect(x, y, width, height, radius, 0xFFFFFF, 0.08);
 
         // Title.
@@ -186,13 +175,13 @@ impl super::GpuRenderer {
         buf_width: usize,
         buf_height: usize,
     ) -> bool {
-        let pw = popup.width(self.metrics.cell_width);
-        let ph = popup.height(self.metrics.cell_height);
-        let width = pw.min(buf_width as u32);
-        let height = ph.min(buf_height as u32);
-        let px = popup.x.min((buf_width as u32).saturating_sub(pw));
-        let py = popup.y.min((buf_height as u32).saturating_sub(ph));
-        x >= px as f64 && x < (px + width) as f64 && y >= py as f64 && y < (py + height) as f64
+        let (px, py, pw, ph) = popup.clamped_rect(
+            self.metrics.cell_width,
+            self.metrics.cell_height,
+            buf_width as u32,
+            buf_height as u32,
+        );
+        x >= px as f64 && x < (px + pw) as f64 && y >= py as f64 && y < (py + ph) as f64
     }
 
     pub(super) fn security_badge_rect_impl(

@@ -89,7 +89,7 @@ impl super::super::CpuRenderer {
         for (ci, ch) in label.chars().enumerate() {
             let cx = tx + ci as i32 * self.cell_width as i32;
             if cx >= 0 && (cx as usize) < buf_width {
-                self.draw_char_at(
+                self.draw_char(
                     buffer,
                     buf_width,
                     buf_height,

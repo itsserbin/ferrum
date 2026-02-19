@@ -3,9 +3,7 @@
 //! Tab bar layout math and drawing helpers for the GPU renderer.
 
 use super::super::shared::tab_math::{self, TabLayoutMetrics};
-use super::TAB_BORDER;
-
-use super::super::TabInfo;
+use super::super::{TAB_BORDER, TabInfo};
 
 impl super::GpuRenderer {
     // ── Tab bar math (delegates to shared tab_math) ──────────────────────

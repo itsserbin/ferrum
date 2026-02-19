@@ -3,21 +3,6 @@ use crate::core::Color;
 use super::CpuRenderer;
 
 impl CpuRenderer {
-    /// Draws one glyph at arbitrary pixel coordinates (used by tab bar and overlays).
-    #[allow(clippy::too_many_arguments)]
-    pub(in crate::gui::renderer) fn draw_char_at(
-        &mut self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
-        x: u32,
-        y: u32,
-        character: char,
-        fg: Color,
-    ) {
-        self.draw_char(buffer, buf_width, buf_height, x, y, character, fg);
-    }
-
     pub(in crate::gui::renderer) fn draw_bg(
         &self,
         buffer: &mut [u32],
