@@ -1,0 +1,101 @@
+[package]
+name = "ferrum"
+version = "0.1.0"
+edition = "2024"
+description = "A GPU-accelerated terminal emulator"
+repository = "https://github.com/itsserbin/ferrum"
+homepage = "https://github.com/itsserbin/ferrum"
+license = "GPL-3.0"
+authors = ["itsserbin <itsserbin@users.noreply.github.com>"]
+readme = "README.md"
+
+[features]
+default = ["gpu"]
+gpu = ["wgpu", "pollster", "bytemuck"]
+
+[dependencies]
+winit = "0.30"
+softbuffer = "0.4"
+fontdue = "0.9"
+portable-pty = "0.9.0"
+anyhow = "1"
+vte = "0.15"
+unicode-width = "0.2"
+arboard = "3"
+wgpu = { version = "28", optional = true }
+pollster = { version = "0.4", optional = true }
+bytemuck = { version = "1", features = ["derive"], optional = true }
+libc = "0.2.182"
+semver = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ureq = { version = "2", features = ["json"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = "0.3"
+objc2-foundation = "0.3"
+
+[profile.dist]
+inherits = "release"
+lto = "thin"
+
+# Config for 'dist'
+[workspace.metadata.dist]
+# The preferred dist version to use in CI (Cargo.toml SemVer syntax)
+cargo-dist-version = "0.30.4"
+# CI backends to support
+ci = ["github"]
+# The installers to generate for each app
+installers = ["shell", "powershell", "homebrew", "msi"]
+# Target platforms to build apps for (Rust target-triple syntax)
+targets = ["x86_64-unknown-linux-gnu", "x86_64-apple-darwin", "aarch64-apple-darwin", "x86_64-pc-windows-msvc"]
+# The archive format to use for non-windows builds (defaults .tar.xz)
+unix-archive = ".tar.gz"
+# A GitHub repo to push Homebrew formulas to
+tap = "itsserbin/homebrew-tap"
+# Publish jobs to run in CI
+publish-jobs = ["homebrew"]
+# Path that installers should place binaries in
+install-path = "CARGO_HOME"
+# Whether to install an updater program
+install-updater = false
+
+[workspace.metadata.dist.github-custom-runners]
+x86_64-apple-darwin = "macos-15-intel"
+aarch64-apple-darwin = "macos-14"
+
+[workspace.metadata.dist.dependencies.apt]
+pkg-config = "*"
+libx11-dev = "*"
+libxkbcommon-dev = "*"
+libwayland-dev = "*"
+libxkbcommon-x11-0 = "*"
+libudev-dev = "*"
+libvulkan-dev = { stage = ["build"] }
+
+[package.metadata.deb]
+maintainer = "itsserbin"
+depends = "$auto"
+section = "utils"
+priority = "optional"
+assets = [
+  ["target/release/ferrum", "usr/bin/", "755"],
+  ["README.md", "usr/share/doc/ferrum/README.md", "644"],
+  ["LICENSE", "usr/share/doc/ferrum/LICENSE", "644"],
+]
+
+[package.metadata.generate-rpm]
+summary = "A GPU-accelerated terminal emulator"
+license = "GPL-3.0"
+assets = [
+  { source = "target/release/ferrum", dest = "/usr/bin/ferrum", mode = "755" },
+  { source = "README.md", dest = "/usr/share/doc/ferrum/README.md", mode = "644" },
+  { source = "LICENSE", dest = "/usr/share/licenses/ferrum/LICENSE", mode = "644" },
+]
+
+[package.metadata.wix]
+upgrade-guid = "0DB9556E-D490-4400-991C-DE9B310B579A"
+path-guid = "6FA019E8-2899-4DDD-BDB7-B269F5F1F937"
+license = false
+eula = false

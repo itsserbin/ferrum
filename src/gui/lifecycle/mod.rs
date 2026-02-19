@@ -1,0 +1,213 @@
+use crate::gui::*;
+
+mod pty_events;
+mod window_requests;
+
+impl ApplicationHandler for App {
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        // Only create the initial window once.
+        if !self.windows.is_empty() {
+            return;
+        }
+
+        let context = match Context::new(event_loop.owned_display_handle()) {
+            Ok(ctx) => ctx,
+            Err(err) => {
+                eprintln!("Failed to create rendering context: {err}");
+                event_loop.exit();
+                return;
+            }
+        };
+        self.context = Some(context);
+
+        let Some(win_id) = self.create_window(event_loop, None) else {
+            event_loop.exit();
+            return;
+        };
+
+        // Create initial tab in the first window.
+        if let Some(win) = self.windows.get_mut(&win_id) {
+            // Install newWindowForTab: on the window class (enables native "+" button).
+            #[cfg(target_os = "macos")]
+            platform::macos::install_new_tab_handler(&win.window);
+
+            let size = win.window.inner_size();
+            let (rows, cols) = win.calc_grid_size(size.width, size.height);
+            win.new_tab(rows, cols, &mut self.next_tab_id, &self.tx);
+            #[cfg(target_os = "macos")]
+            if let Some(tab) = win.tabs.first() {
+                win.window.set_title(&tab.title);
+            }
+            win.window.request_redraw();
+        }
+    }
+
+    fn window_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        window_id: WindowId,
+        event: WindowEvent,
+    ) {
+        let Some(win) = self.windows.get_mut(&window_id) else {
+            return;
+        };
+        let mut should_redraw = false;
+
+        match event {
+            WindowEvent::CloseRequested => {
+                win.pending_requests.push(WindowRequest::CloseWindow);
+            }
+            WindowEvent::Focused(focused) => {
+                win.modifiers = ModifiersState::empty();
+                win.is_selecting = false;
+                win.selection_anchor = None;
+                win.keyboard_selection_anchor = None;
+                win.selection_drag_mode = SelectionDragMode::Character;
+                win.click_streak = 0;
+                win.last_tab_click = None;
+                win.last_topbar_empty_click = None;
+                win.resize_direction = None;
+                win.hovered_tab = None;
+                win.security_popup = None;
+                if !focused {
+                    if win.dragging_tab.take().is_some() {
+                        win.window.set_cursor(CursorIcon::Default);
+                    }
+                    win.commit_rename();
+                    win.context_menu = None;
+                } else {
+                    win.suppress_click_to_cursor_once = true;
+                    #[cfg(target_os = "macos")]
+                    {
+                        win.pinned = platform::macos::is_window_pinned(&win.window);
+                        platform::macos::set_pin_button_state(&win.window, win.pinned);
+                    }
+                }
+                should_redraw = true;
+            }
+            WindowEvent::ModifiersChanged(modifiers) => {
+                win.modifiers = modifiers.state();
+            }
+            WindowEvent::KeyboardInput { event, .. } => {
+                win.on_keyboard_input(&event, &mut self.next_tab_id, &self.tx);
+                should_redraw = true;
+            }
+            WindowEvent::MouseWheel { delta, .. } => {
+                win.on_mouse_wheel(delta);
+                should_redraw = true;
+            }
+            WindowEvent::CursorLeft { .. } => {
+                win.hovered_tab = None;
+                win.resize_direction = None;
+                if win.dragging_tab.take().is_some() {
+                    win.window.set_cursor(CursorIcon::Default);
+                }
+                should_redraw = true;
+            }
+            WindowEvent::CursorMoved { position, .. } => {
+                win.on_cursor_moved(position);
+                should_redraw = true;
+            }
+            WindowEvent::MouseInput { state, button, .. } => {
+                win.on_mouse_input(state, button, &mut self.next_tab_id, &self.tx);
+                should_redraw = true;
+            }
+            WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+                win.on_scale_factor_changed(scale_factor);
+                should_redraw = true;
+            }
+            WindowEvent::Resized(size) => {
+                win.on_resized(size);
+            }
+            WindowEvent::RedrawRequested => {
+                win.on_redraw_requested();
+            }
+            _ => (),
+        }
+        if should_redraw {
+            win.window.request_redraw();
+        }
+
+        // Process any pending window requests (detach, close).
+        self.process_window_requests(event_loop, window_id);
+    }
+
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        self.drain_pty_events(event_loop);
+        self.drain_update_events();
+
+        // Handle native macOS "+" button clicks (newWindowForTab: action).
+        #[cfg(target_os = "macos")]
+        {
+            let new_tab_requests = platform::macos::take_new_tab_requests();
+            for _ in 0..new_tab_requests {
+                let focused_id = self
+                    .windows
+                    .iter()
+                    .find(|(_, w)| w.window.has_focus())
+                    .map(|(id, _)| *id);
+                if let Some(win_id) = focused_id {
+                    if let Some(win) = self.windows.get_mut(&win_id) {
+                        win.pending_requests.push(WindowRequest::NewTab);
+                    }
+                    self.process_window_requests(event_loop, win_id);
+                }
+            }
+        }
+
+        // Handle native macOS pin button clicks.
+        #[cfg(target_os = "macos")]
+        {
+            let pin_requests = platform::macos::take_pin_button_requests();
+            for _ in 0..pin_requests {
+                let focused_id = self
+                    .windows
+                    .iter()
+                    .find(|(_, w)| w.window.has_focus())
+                    .map(|(id, _)| *id);
+                if let Some(win_id) = focused_id
+                    && let Some(win) = self.windows.get_mut(&win_id)
+                {
+                    win.toggle_pin();
+                    win.window.request_redraw();
+                }
+            }
+        }
+
+        let now = std::time::Instant::now();
+        let mut next_wakeup: Option<std::time::Instant> = None;
+
+        let update = self.available_release.as_ref();
+        for win in self.windows.values_mut() {
+            win.sync_window_title(update);
+            if let Some((deadline, redraw_now)) = win.animation_schedule(now) {
+                if redraw_now {
+                    win.window.request_redraw();
+                }
+                next_wakeup = Some(next_wakeup.map_or(deadline, |current| current.min(deadline)));
+            }
+        }
+
+        match next_wakeup {
+            Some(deadline) => {
+                event_loop.set_control_flow(winit::event_loop::ControlFlow::WaitUntil(deadline))
+            }
+            None => event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait),
+        }
+    }
+}
+
+impl App {
+    fn drain_update_events(&mut self) {
+        while let Ok(release) = self.update_rx.try_recv() {
+            eprintln!(
+                "Update available: {} ({})",
+                release.tag_name, release.html_url
+            );
+            self.available_release = Some(release);
+            for win in self.windows.values() {
+                win.window.request_redraw();
+            }
+        }
+    }
+}
