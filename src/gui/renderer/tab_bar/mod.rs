@@ -195,20 +195,28 @@ impl CpuRenderer {
             Some((start_chars.min(max_chars), end_chars.min(max_chars)))
         });
 
-        // Field background and border.
         let r = tab_math::rename_field_rect(&m, tab_x, tw);
-        let field_x = r.x;
-        let field_y = r.y;
-        let field_w = r.w;
-        let field_h = r.h;
+        self.draw_rename_background(buffer, buf_width, bar_h, &r);
+        self.draw_rename_text(buffer, buf_width, bar_h, rename_text, text_x, text_y, max_chars, selection_chars);
+        self.draw_rename_cursor(buffer, buf_width, bar_h, rename_text, tab.rename_cursor, text_x, text_y, max_chars);
+    }
+
+    /// Draws the rename field background (fill + border).
+    fn draw_rename_background(
+        &self,
+        buffer: &mut [u32],
+        buf_width: usize,
+        bar_h: usize,
+        r: &tab_math::Rect,
+    ) {
         self.draw_rounded_rect(
             buffer,
             buf_width,
             bar_h,
-            field_x as i32,
-            field_y as i32,
-            field_w,
-            field_h,
+            r.x as i32,
+            r.y as i32,
+            r.w,
+            r.h,
             self.scaled_px(6),
             RENAME_FIELD_BG,
             245,
@@ -217,16 +225,29 @@ impl CpuRenderer {
             buffer,
             buf_width,
             bar_h,
-            field_x as i32,
-            field_y as i32,
-            field_w,
-            field_h,
+            r.x as i32,
+            r.y as i32,
+            r.w,
+            r.h,
             self.scaled_px(6),
             RENAME_FIELD_BORDER,
             90,
         );
+    }
 
-        // Render text characters with optional selection highlight.
+    /// Renders rename text characters with optional selection highlight.
+    #[allow(clippy::too_many_arguments)]
+    fn draw_rename_text(
+        &mut self,
+        buffer: &mut [u32],
+        buf_width: usize,
+        bar_h: usize,
+        rename_text: &str,
+        text_x: u32,
+        text_y: u32,
+        max_chars: usize,
+        selection_chars: Option<(usize, usize)>,
+    ) {
         for (ci, ch) in rename_text.chars().take(max_chars).enumerate() {
             let cx = text_x + ci as u32 * self.cell_width;
             let selected =
@@ -254,10 +275,23 @@ impl CpuRenderer {
                 );
             }
         }
+    }
 
-        // Blinking cursor.
+    /// Draws the blinking cursor bar in the rename field.
+    #[allow(clippy::too_many_arguments)]
+    fn draw_rename_cursor(
+        &self,
+        buffer: &mut [u32],
+        buf_width: usize,
+        bar_h: usize,
+        rename_text: &str,
+        rename_cursor: usize,
+        text_x: u32,
+        text_y: u32,
+        max_chars: usize,
+    ) {
         let cursor_chars = rename_text
-            .get(..tab.rename_cursor)
+            .get(..rename_cursor)
             .map_or(0, |prefix| prefix.chars().count())
             .min(max_chars);
         let cursor_x = text_x + cursor_chars as u32 * self.cell_width;

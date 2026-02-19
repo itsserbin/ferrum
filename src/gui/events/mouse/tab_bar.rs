@@ -102,21 +102,7 @@ impl FerrumWindow {
 
         match hit {
             TabBarHit::Tab(idx) => {
-                self.last_topbar_empty_click = None;
-                // Double-click starts inline rename.
-                let now = std::time::Instant::now();
-                if self.last_tab_click.is_some_and(|(last_idx, last_time)| {
-                    last_idx == idx && now.duration_since(last_time).as_millis() < 400
-                }) {
-                    self.start_rename(idx);
-                    self.last_tab_click = None;
-                    return;
-                }
-                self.last_tab_click = Some((idx, now));
-                self.switch_tab(idx);
-
-                // Arm potential drag if there are at least 2 tabs and no rename was just committed.
-                self.start_drag(idx, mx, my, had_rename);
+                self.handle_tab_click(idx, mx, my, had_rename);
             }
             TabBarHit::CloseTab(idx) => {
                 self.last_topbar_empty_click = None;
@@ -130,35 +116,10 @@ impl FerrumWindow {
             }
             #[cfg(not(target_os = "macos"))]
             TabBarHit::WindowButton(btn) => {
-                self.last_topbar_empty_click = None;
-                self.last_tab_click = None;
-                match btn {
-                    WindowButton::Minimize => {
-                        self.window.set_minimized(true);
-                    }
-                    WindowButton::Maximize => {
-                        let maximized = self.window.is_maximized();
-                        self.window.set_maximized(!maximized);
-                    }
-                    WindowButton::Close => {
-                        self.pending_requests.push(WindowRequest::CloseWindow);
-                    }
-                }
+                self.handle_window_button_click(btn);
             }
             TabBarHit::Empty => {
-                self.last_tab_click = None;
-                let now = std::time::Instant::now();
-                let is_double_click = self.last_topbar_empty_click.is_some_and(|last| {
-                    now.duration_since(last).as_millis() < TOPBAR_DOUBLE_CLICK_MS
-                });
-                if is_double_click {
-                    self.last_topbar_empty_click = None;
-                    let maximized = self.window.is_maximized();
-                    self.window.set_maximized(!maximized);
-                } else {
-                    self.last_topbar_empty_click = Some(now);
-                    let _ = self.window.drag_window();
-                }
+                self.handle_empty_bar_click();
             }
             #[cfg(not(target_os = "macos"))]
             TabBarHit::PinButton => {
@@ -166,6 +127,58 @@ impl FerrumWindow {
                 self.last_tab_click = None;
                 self.toggle_pin();
             }
+        }
+    }
+
+    /// Handles a click on a tab: double-click rename, switch, drag.
+    fn handle_tab_click(&mut self, idx: usize, mx: f64, my: f64, had_rename: bool) {
+        self.last_topbar_empty_click = None;
+        let now = std::time::Instant::now();
+        if self.last_tab_click.is_some_and(|(last_idx, last_time)| {
+            last_idx == idx && now.duration_since(last_time).as_millis() < 400
+        }) {
+            self.start_rename(idx);
+            self.last_tab_click = None;
+            return;
+        }
+        self.last_tab_click = Some((idx, now));
+        self.switch_tab(idx);
+        self.start_drag(idx, mx, my, had_rename);
+    }
+
+    /// Handles a click on a window button (minimize/maximize/close).
+    #[cfg(not(target_os = "macos"))]
+    fn handle_window_button_click(&mut self, btn: WindowButton) {
+        self.last_topbar_empty_click = None;
+        self.last_tab_click = None;
+        match btn {
+            WindowButton::Minimize => {
+                self.window.set_minimized(true);
+            }
+            WindowButton::Maximize => {
+                let maximized = self.window.is_maximized();
+                self.window.set_maximized(!maximized);
+            }
+            WindowButton::Close => {
+                self.pending_requests.push(WindowRequest::CloseWindow);
+            }
+        }
+    }
+
+    /// Handles a click on the empty bar area: double-click maximize, drag.
+    fn handle_empty_bar_click(&mut self) {
+        self.last_tab_click = None;
+        let now = std::time::Instant::now();
+        let is_double_click = self.last_topbar_empty_click.is_some_and(|last| {
+            now.duration_since(last).as_millis() < TOPBAR_DOUBLE_CLICK_MS
+        });
+        if is_double_click {
+            self.last_topbar_empty_click = None;
+            let maximized = self.window.is_maximized();
+            self.window.set_maximized(!maximized);
+        } else {
+            self.last_topbar_empty_click = Some(now);
+            let _ = self.window.drag_window();
         }
     }
 

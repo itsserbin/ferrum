@@ -116,88 +116,96 @@ impl super::GpuRenderer {
 
             match btn_type {
                 WindowButton::Minimize => {
-                    let half_w = self.metrics.scaled_px(5) as f32;
-                    self.push_line(
-                        center_x - half_w,
-                        center_y,
-                        center_x + half_w,
-                        center_y,
-                        thickness,
-                        icon_color,
-                        1.0,
-                    );
+                    self.push_minimize_icon(center_x, center_y, thickness, icon_color)
                 }
                 WindowButton::Maximize => {
-                    let half = self.metrics.scaled_px(5) as f32;
-                    let x0 = center_x - half;
-                    let y0 = center_y - half;
-                    let x1 = center_x + half;
-                    let y1 = center_y + half;
-                    self.push_line(x0, y0, x1, y0, thickness, icon_color, 1.0);
-                    self.push_line(x0, y1, x1, y1, thickness, icon_color, 1.0);
-                    self.push_line(x0, y0, x0, y1, thickness, icon_color, 1.0);
-                    self.push_line(x1, y0, x1, y1, thickness, icon_color, 1.0);
+                    self.push_maximize_icon(center_x, center_y, thickness, icon_color)
                 }
                 WindowButton::Close => {
-                    let half = self.metrics.scaled_px(5) as f32 * 0.7;
-                    self.push_line(
-                        center_x - half,
-                        center_y - half,
-                        center_x + half,
-                        center_y + half,
-                        thickness,
-                        icon_color,
-                        1.0,
-                    );
-                    self.push_line(
-                        center_x + half,
-                        center_y - half,
-                        center_x - half,
-                        center_y + half,
-                        thickness,
-                        icon_color,
-                        1.0,
-                    );
+                    self.push_close_icon(center_x, center_y, thickness, icon_color)
                 }
             }
         }
     }
 
-    /// Encodes all GPU passes and presents the frame.
-    /// Called as the last step in the frame after all draw_* methods.
-    pub fn present_frame(&mut self) {
-        // Upload grid data if dirty.
-        if self.grid_dirty && !self.grid_cells.is_empty() {
-            // Ensure cell buffer is large enough.
-            let needed = self.grid_cells.len() * std::mem::size_of::<PackedCell>();
-            if needed as u64 > self.grid_cell_buffer.size() {
-                self.grid_cell_buffer =
-                    Self::create_storage_buffer(&self.device, needed, "grid_cells");
-            }
-            self.queue.write_buffer(
-                &self.grid_cell_buffer,
-                0,
-                bytemuck::cast_slice(&self.grid_cells),
-            );
-            self.queue.write_buffer(
-                &self.grid_uniform_buffer,
-                0,
-                bytemuck::bytes_of(&self.grid_uniforms),
-            );
+    #[cfg(not(target_os = "macos"))]
+    fn push_minimize_icon(&mut self, cx: f32, cy: f32, thickness: f32, color: u32) {
+        let half_w = self.metrics.scaled_px(5) as f32;
+        self.push_line(cx - half_w, cy, cx + half_w, cy, thickness, color, 1.0);
+    }
 
-            // Rebuild glyph info buffer in case new glyphs were added.
-            let glyph_data = self.atlas.glyph_info_buffer_data();
-            let glyph_bytes = bytemuck::cast_slice(&glyph_data);
-            if glyph_bytes.len() as u64 > self.glyph_info_buffer.size() {
-                self.glyph_info_buffer =
-                    Self::create_storage_buffer_init(&self.device, glyph_bytes, "glyph_info");
-            } else {
-                self.queue
-                    .write_buffer(&self.glyph_info_buffer, 0, glyph_bytes);
-            }
+    #[cfg(not(target_os = "macos"))]
+    fn push_maximize_icon(&mut self, cx: f32, cy: f32, thickness: f32, color: u32) {
+        let half = self.metrics.scaled_px(5) as f32;
+        let x0 = cx - half;
+        let y0 = cy - half;
+        let x1 = cx + half;
+        let y1 = cy + half;
+        self.push_line(x0, y0, x1, y0, thickness, color, 1.0);
+        self.push_line(x0, y1, x1, y1, thickness, color, 1.0);
+        self.push_line(x0, y0, x0, y1, thickness, color, 1.0);
+        self.push_line(x1, y0, x1, y1, thickness, color, 1.0);
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    fn push_close_icon(&mut self, cx: f32, cy: f32, thickness: f32, color: u32) {
+        let half = self.metrics.scaled_px(5) as f32 * 0.7;
+        self.push_line(
+            cx - half,
+            cy - half,
+            cx + half,
+            cy + half,
+            thickness,
+            color,
+            1.0,
+        );
+        self.push_line(
+            cx + half,
+            cy - half,
+            cx - half,
+            cy + half,
+            thickness,
+            color,
+            1.0,
+        );
+    }
+
+    /// Uploads grid cell buffer and glyph info to the GPU.
+    fn upload_grid_data(&mut self) {
+        if !self.grid_dirty || self.grid_cells.is_empty() {
+            return;
         }
+        // Ensure cell buffer is large enough.
+        let needed = self.grid_cells.len() * std::mem::size_of::<PackedCell>();
+        if needed as u64 > self.grid_cell_buffer.size() {
+            self.grid_cell_buffer =
+                Self::create_storage_buffer(&self.device, needed, "grid_cells");
+        }
+        self.queue.write_buffer(
+            &self.grid_cell_buffer,
+            0,
+            bytemuck::cast_slice(&self.grid_cells),
+        );
+        self.queue.write_buffer(
+            &self.grid_uniform_buffer,
+            0,
+            bytemuck::bytes_of(&self.grid_uniforms),
+        );
 
-        // Upload UI commands.
+        // Rebuild glyph info buffer in case new glyphs were added.
+        let glyph_data = self.atlas.glyph_info_buffer_data();
+        let glyph_bytes = bytemuck::cast_slice(&glyph_data);
+        if glyph_bytes.len() as u64 > self.glyph_info_buffer.size() {
+            self.glyph_info_buffer =
+                Self::create_storage_buffer_init(&self.device, glyph_bytes, "glyph_info");
+        } else {
+            self.queue
+                .write_buffer(&self.glyph_info_buffer, 0, glyph_bytes);
+        }
+    }
+
+    /// Uploads UI commands and composite uniforms to the GPU.
+    fn upload_ui_data(&mut self) {
         let command_count = self.commands.len().min(MAX_UI_COMMANDS);
         let ui_uniforms = UiUniforms {
             width: self.width as f32,
@@ -240,8 +248,12 @@ impl super::GpuRenderer {
             0,
             bytemuck::bytes_of(&composite_uniforms),
         );
+    }
 
-        // Get surface texture.
+    /// Acquires the surface texture, reconfiguring once on failure.
+    fn acquire_surface(
+        &mut self,
+    ) -> Option<(wgpu::SurfaceTexture, wgpu::TextureView)> {
         let output = match self.surface.get_current_texture() {
             Ok(t) => t,
             Err(_) => {
@@ -252,7 +264,7 @@ impl super::GpuRenderer {
                     Err(_) => {
                         self.commands.clear();
                         self.grid_dirty = false;
-                        return;
+                        return None;
                     }
                 }
             }
@@ -260,6 +272,161 @@ impl super::GpuRenderer {
         let output_view = output
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
+        Some((output, output_view))
+    }
+
+    /// Encodes the grid compute pass (Pass 1).
+    fn encode_grid_pass(&self, encoder: &mut wgpu::CommandEncoder) {
+        if !self.grid_dirty || self.grid_cells.is_empty() {
+            return;
+        }
+
+        let grid_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("grid_bind_group"),
+            layout: &self.grid_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.grid_uniform_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: self.grid_cell_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: self.glyph_info_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::TextureView(&self.atlas.texture_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: wgpu::BindingResource::TextureView(&self.grid_texture_view),
+                },
+            ],
+        });
+
+        let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("grid_compute_pass"),
+            timestamp_writes: None,
+        });
+        compute_pass.set_pipeline(&self.grid_pipeline);
+        compute_pass.set_bind_group(0, &grid_bind_group, &[]);
+
+        // Dispatch enough workgroups to cover the entire texture so the
+        // compute shader fills out-of-grid pixels with the background color.
+        let wg_x = (self.width + 15) / 16;
+        let wg_y = (self.height + 15) / 16;
+        compute_pass.dispatch_workgroups(wg_x, wg_y, 1);
+    }
+
+    /// Encodes the UI render pass (Pass 2).
+    fn encode_ui_pass(&self, encoder: &mut wgpu::CommandEncoder) {
+        let ui_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("ui_bind_group"),
+            layout: &self.ui_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.ui_uniform_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: self.ui_command_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(&self.atlas.texture_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::Sampler(&self.sampler),
+                },
+            ],
+        });
+
+        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("ui_render_pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &self.ui_texture_view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    store: wgpu::StoreOp::Store,
+                },
+                depth_slice: None,
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        render_pass.set_pipeline(&self.ui_pipeline);
+        render_pass.set_bind_group(0, &ui_bind_group, &[]);
+        render_pass.draw(0..3, 0..1); // Fullscreen triangle.
+    }
+
+    /// Encodes the composite render pass (Pass 3).
+    fn encode_composite_pass(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        output_view: &wgpu::TextureView,
+    ) {
+        let composite_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("composite_bind_group"),
+            layout: &self.composite_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&self.grid_texture_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&self.ui_texture_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(&self.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: self.composite_uniform_buffer.as_entire_binding(),
+                },
+            ],
+        });
+
+        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("composite_render_pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: output_view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                    store: wgpu::StoreOp::Store,
+                },
+                depth_slice: None,
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        render_pass.set_pipeline(&self.composite_pipeline);
+        render_pass.set_bind_group(0, &composite_bind_group, &[]);
+        render_pass.draw(0..3, 0..1);
+    }
+
+    /// Encodes all GPU passes and presents the frame.
+    /// Called as the last step in the frame after all draw_* methods.
+    pub fn present_frame(&mut self) {
+        self.upload_grid_data();
+        self.upload_ui_data();
+
+        let Some((output, output_view)) = self.acquire_surface() else {
+            return;
+        };
 
         let mut encoder = self
             .device
@@ -267,140 +434,9 @@ impl super::GpuRenderer {
                 label: Some("frame_encoder"),
             });
 
-        // Pass 1: Grid compute.
-        if self.grid_dirty && !self.grid_cells.is_empty() {
-            let grid_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("grid_bind_group"),
-                layout: &self.grid_bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: self.grid_uniform_buffer.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: self.grid_cell_buffer.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: self.glyph_info_buffer.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 3,
-                        resource: wgpu::BindingResource::TextureView(&self.atlas.texture_view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 4,
-                        resource: wgpu::BindingResource::TextureView(&self.grid_texture_view),
-                    },
-                ],
-            });
-
-            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("grid_compute_pass"),
-                timestamp_writes: None,
-            });
-            compute_pass.set_pipeline(&self.grid_pipeline);
-            compute_pass.set_bind_group(0, &grid_bind_group, &[]);
-
-            // Dispatch enough workgroups to cover the entire texture so the
-            // compute shader fills out-of-grid pixels with the background color.
-            let wg_x = (self.width + 15) / 16;
-            let wg_y = (self.height + 15) / 16;
-            compute_pass.dispatch_workgroups(wg_x, wg_y, 1);
-        }
-
-        // Pass 2: UI render.
-        {
-            let ui_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("ui_bind_group"),
-                layout: &self.ui_bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: self.ui_uniform_buffer.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: self.ui_command_buffer.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: wgpu::BindingResource::TextureView(&self.atlas.texture_view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 3,
-                        resource: wgpu::BindingResource::Sampler(&self.sampler),
-                    },
-                ],
-            });
-
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("ui_render_pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &self.ui_texture_view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                        store: wgpu::StoreOp::Store,
-                    },
-                    depth_slice: None,
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-            render_pass.set_pipeline(&self.ui_pipeline);
-            render_pass.set_bind_group(0, &ui_bind_group, &[]);
-            render_pass.draw(0..3, 0..1); // Fullscreen triangle.
-        }
-
-        // Pass 3: Composite.
-        {
-            let composite_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("composite_bind_group"),
-                layout: &self.composite_bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&self.grid_texture_view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::TextureView(&self.ui_texture_view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: wgpu::BindingResource::Sampler(&self.sampler),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 3,
-                        resource: self.composite_uniform_buffer.as_entire_binding(),
-                    },
-                ],
-            });
-
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("composite_render_pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &output_view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                        store: wgpu::StoreOp::Store,
-                    },
-                    depth_slice: None,
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-            render_pass.set_pipeline(&self.composite_pipeline);
-            render_pass.set_bind_group(0, &composite_bind_group, &[]);
-            render_pass.draw(0..3, 0..1);
-        }
+        self.encode_grid_pass(&mut encoder);
+        self.encode_ui_pass(&mut encoder);
+        self.encode_composite_pass(&mut encoder, &output_view);
 
         self.queue.submit(std::iter::once(encoder.finish()));
         output.present();
