@@ -1,7 +1,6 @@
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
 use super::super::shared::overlay_layout;
-use super::super::shared::tab_math;
 use super::super::{ACTIVE_TAB_BG, INSERTION_COLOR, TAB_BORDER, TAB_TEXT_ACTIVE, TabInfo};
 
 impl super::GpuRenderer {
@@ -112,23 +111,4 @@ impl super::GpuRenderer {
         );
     }
 
-    pub(super) fn tab_hover_tooltip_impl<'a>(
-        &self,
-        tabs: &'a [TabInfo<'a>],
-        hovered_tab: Option<usize>,
-        buf_width: u32,
-    ) -> Option<&'a str> {
-        let m = self.tab_layout_metrics();
-        super::super::shared::tab_hit_test::tab_hover_tooltip(tabs, hovered_tab, buf_width, &m)
-    }
-
-    pub(super) fn tab_insert_index_from_x_impl(
-        &self,
-        x: f64,
-        tab_count: usize,
-        buf_width: u32,
-    ) -> usize {
-        let m = self.tab_layout_metrics();
-        tab_math::tab_insert_index_from_x(&m, x, tab_count, buf_width)
-    }
 }

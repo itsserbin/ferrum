@@ -4,7 +4,6 @@ mod cpu;
 mod cursor;
 #[cfg(feature = "gpu")]
 pub mod gpu;
-#[cfg(feature = "gpu")]
 pub mod metrics;
 mod scrollbar;
 mod security;

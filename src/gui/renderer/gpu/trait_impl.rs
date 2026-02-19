@@ -1,12 +1,8 @@
 use crate::core::{CursorStyle, Grid, Selection};
 
-#[cfg(not(target_os = "macos"))]
-use super::super::WindowButton;
-#[cfg(not(target_os = "macos"))]
-use super::super::shared::tab_hit_test;
-use super::super::shared::tab_math;
+use super::super::shared::tab_math::TabLayoutMetrics;
 use super::super::traits;
-use super::super::{ContextMenu, SecurityPopup, TabBarHit, TabInfo};
+use super::super::{ContextMenu, SecurityPopup, TabInfo};
 use super::GpuRenderer;
 
 impl traits::Renderer for GpuRenderer {
@@ -50,6 +46,10 @@ impl traits::Renderer for GpuRenderer {
 
     fn scrollbar_hit_zone_px(&self) -> u32 {
         self.metrics.scrollbar_hit_zone_px()
+    }
+
+    fn tab_layout_metrics(&self) -> TabLayoutMetrics {
+        GpuRenderer::tab_layout_metrics(self)
     }
 
     // ── Terminal rendering ────────────────────────────────────────────
@@ -152,65 +152,7 @@ impl traits::Renderer for GpuRenderer {
         self.draw_tab_tooltip_impl(buf_width, buf_height, mouse_pos, title);
     }
 
-    fn tab_hover_tooltip<'a>(
-        &self,
-        tabs: &'a [TabInfo<'a>],
-        hovered_tab: Option<usize>,
-        buf_width: u32,
-    ) -> Option<&'a str> {
-        self.tab_hover_tooltip_impl(tabs, hovered_tab, buf_width)
-    }
-
-    fn tab_insert_index_from_x(&self, x: f64, tab_count: usize, buf_width: u32) -> usize {
-        self.tab_insert_index_from_x_impl(x, tab_count, buf_width)
-    }
-
-    fn tab_width(&self, tab_count: usize, buf_width: u32) -> u32 {
-        self.tab_width_val(tab_count, buf_width)
-    }
-
-    fn tab_strip_start_x(&self) -> u32 {
-        let m = self.tab_layout_metrics();
-        tab_math::tab_strip_start_x(&m)
-    }
-
-    fn tab_origin_x(&self, tab_index: usize, tw: u32) -> u32 {
-        self.tab_origin_x_val(tab_index, tw)
-    }
-
-    // ── Hit testing (delegates to hit_test) ───────────────────────────
-
-    fn hit_test_tab_bar(&self, x: f64, y: f64, tab_count: usize, buf_width: u32) -> TabBarHit {
-        self.hit_test_tab_bar_impl(x, y, tab_count, buf_width)
-    }
-
-    fn hit_test_tab_hover(
-        &self,
-        x: f64,
-        y: f64,
-        tab_count: usize,
-        buf_width: u32,
-    ) -> Option<usize> {
-        self.hit_test_tab_hover_impl(x, y, tab_count, buf_width)
-    }
-
-    fn hit_test_tab_security_badge(
-        &self,
-        x: f64,
-        y: f64,
-        tabs: &[TabInfo],
-        buf_width: u32,
-    ) -> Option<usize> {
-        self.hit_test_tab_security_badge_impl(x, y, tabs, buf_width)
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    fn window_button_at_position(&self, x: f64, y: f64, buf_width: u32) -> Option<WindowButton> {
-        let m = self.tab_layout_metrics();
-        tab_hit_test::window_button_at_position(x, y, buf_width, &m)
-    }
-
-    // ── Context menu (delegates to hit_test) ─────────────────────────
+    // ── Context menu ──────────────────────────────────────────────────
 
     fn draw_context_menu(
         &mut self,
@@ -222,11 +164,7 @@ impl traits::Renderer for GpuRenderer {
         self.draw_context_menu_impl(menu);
     }
 
-    fn hit_test_context_menu(&self, menu: &ContextMenu, x: f64, y: f64) -> Option<usize> {
-        self.hit_test_context_menu_impl(menu, x, y)
-    }
-
-    // ── Security (delegates to hit_test) ─────────────────────────────
+    // ── Security ──────────────────────────────────────────────────────
 
     fn draw_security_popup(
         &mut self,
@@ -238,24 +176,4 @@ impl traits::Renderer for GpuRenderer {
         self.draw_security_popup_impl(buf_width, buf_height, popup);
     }
 
-    fn hit_test_security_popup(
-        &self,
-        popup: &SecurityPopup,
-        x: f64,
-        y: f64,
-        buf_width: usize,
-        buf_height: usize,
-    ) -> bool {
-        self.hit_test_security_popup_impl(popup, x, y, buf_width, buf_height)
-    }
-
-    fn security_badge_rect(
-        &self,
-        tab_index: usize,
-        tab_count: usize,
-        buf_width: u32,
-        security_count: usize,
-    ) -> Option<(u32, u32, u32, u32)> {
-        self.security_badge_rect_impl(tab_index, tab_count, buf_width, security_count)
-    }
 }

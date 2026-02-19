@@ -13,8 +13,8 @@ impl CpuRenderer {
         grid: &Grid,
         style: CursorStyle,
     ) {
-        let x = col as u32 * self.cell_width + self.window_padding_px();
-        let y = row as u32 * self.cell_height + self.tab_bar_height_px() + self.window_padding_px();
+        let x = col as u32 * self.metrics.cell_width + self.window_padding_px();
+        let y = row as u32 * self.metrics.cell_height + self.tab_bar_height_px() + self.window_padding_px();
         let cursor_pixel = Color::DEFAULT_FG.to_pixel();
 
         match style {
@@ -37,13 +37,13 @@ impl CpuRenderer {
             CursorStyle::BlinkingUnderline | CursorStyle::SteadyUnderline => {
                 // 2px underline at the bottom of the cell.
                 let underline_h = 2usize;
-                let base_y = y as usize + self.cell_height as usize - underline_h;
+                let base_y = y as usize + self.metrics.cell_height as usize - underline_h;
                 for dy in 0..underline_h {
                     let py = base_y + dy;
                     if py >= buf_height {
                         break;
                     }
-                    for dx in 0..self.cell_width as usize {
+                    for dx in 0..self.metrics.cell_width as usize {
                         let px = x as usize + dx;
                         if px < buf_width {
                             buffer[py * buf_width + px] = cursor_pixel;
@@ -54,7 +54,7 @@ impl CpuRenderer {
             CursorStyle::BlinkingBar | CursorStyle::SteadyBar => {
                 // 2px vertical bar at the left edge.
                 let bar_width = 2usize;
-                for dy in 0..self.cell_height as usize {
+                for dy in 0..self.metrics.cell_height as usize {
                     let py = y as usize + dy;
                     if py >= buf_height {
                         break;

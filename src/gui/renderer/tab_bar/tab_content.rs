@@ -2,7 +2,8 @@
 
 use crate::core::Color;
 
-use super::super::shared::tab_math;
+use super::super::shared::{tab_math, ui_layout};
+use super::super::traits::Renderer;
 use super::super::{CpuRenderer, SECURITY_ACCENT, TabInfo};
 use super::{CLOSE_HOVER_BG_COLOR, TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE};
 
@@ -172,30 +173,52 @@ impl CpuRenderer {
         tw: u32,
         hover_progress: f32,
     ) {
-        let (cx, cy, cw, ch) = self.close_button_rect(tab_index, tw);
-        let hover_t = hover_progress.clamp(0.0, 1.0);
-        if hover_t > 0.01 {
-            let circle_r = cw.min(ch) / 2;
-            let circle_cx = (cx + cw / 2) as i32;
-            let circle_cy = (cy + ch / 2) as i32;
-            let alpha = (90.0 + hover_t * 125.0).round().clamp(0.0, 255.0) as u8;
+        let rect = self.close_button_rect(tab_index, tw);
+        let layout = ui_layout::compute_close_button_layout(
+            rect,
+            hover_progress,
+            self.ui_scale(),
+            CLOSE_HOVER_BG_COLOR,
+            TAB_TEXT_INACTIVE,
+            TAB_TEXT_ACTIVE,
+        );
+
+        if layout.show_hover_circle {
+            let alpha = (layout.circle_alpha * 255.0).round().clamp(0.0, 255.0) as u8;
             Self::draw_filled_circle(
                 buffer,
                 buf_width,
-                circle_cx,
-                circle_cy,
-                circle_r,
-                CLOSE_HOVER_BG_COLOR,
+                layout.circle_cx as i32,
+                layout.circle_cy as i32,
+                layout.circle_radius as u32,
+                layout.circle_bg_color,
                 alpha,
             );
         }
 
-        let active_mix = (hover_t * 175.0).round().clamp(0.0, 255.0) as u8;
-        let close_fg = Color::from_pixel(Self::blend_pixel(
-            TAB_TEXT_INACTIVE,
-            TAB_TEXT_ACTIVE,
-            active_mix,
-        ));
-        self.draw_tab_close_icon(buffer, buf_width, buf_height, (cx, cy, cw, ch), close_fg);
+        let close_fg = Color::from_pixel(layout.icon_color);
+        let pixel = close_fg.to_pixel();
+        Self::draw_stroked_line(
+            buffer,
+            buf_width,
+            buf_height,
+            layout.line_a.0,
+            layout.line_a.1,
+            layout.line_a.2,
+            layout.line_a.3,
+            layout.icon_thickness,
+            pixel,
+        );
+        Self::draw_stroked_line(
+            buffer,
+            buf_width,
+            buf_height,
+            layout.line_b.0,
+            layout.line_b.1,
+            layout.line_b.2,
+            layout.line_b.3,
+            layout.icon_thickness,
+            pixel,
+        );
     }
 }

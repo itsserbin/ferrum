@@ -50,18 +50,6 @@ impl super::GpuRenderer {
         tab_math::should_show_number(&m, tw)
     }
 
-    pub(super) fn security_badge_rect_val(
-        &self,
-        tab_index: usize,
-        tab_count: usize,
-        buf_width: u32,
-        security_count: usize,
-    ) -> Option<(u32, u32, u32, u32)> {
-        let m = self.tab_layout_metrics();
-        tab_math::security_badge_rect(&m, tab_index, tab_count, buf_width, security_count)
-            .map(|r| r.to_tuple())
-    }
-
     // ── Tab bar rendering: orchestrator ─────────────────────────────────
 
     pub(super) fn draw_tab_bar_impl(

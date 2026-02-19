@@ -14,12 +14,12 @@ impl CpuRenderer {
         color: Color,
     ) {
         let pixel = color.to_pixel();
-        for dy in 0..self.cell_height as usize {
+        for dy in 0..self.metrics.cell_height as usize {
             let py = y as usize + dy;
             if py >= buf_height {
                 break;
             }
-            for dx in 0..self.cell_width as usize {
+            for dx in 0..self.metrics.cell_width as usize {
                 let px = x as usize + dx;
                 if px >= buf_width {
                     break;
@@ -41,7 +41,7 @@ impl CpuRenderer {
         fg: Color,
     ) {
         if !self.glyph_cache.contains_key(&character) {
-            let (metrics, bitmap) = self.font.rasterize(character, self.font_size);
+            let (metrics, bitmap) = self.font.rasterize(character, self.metrics.font_size);
             let cached = super::super::types::GlyphBitmap {
                 data: bitmap,
                 width: metrics.width,
@@ -61,7 +61,7 @@ impl CpuRenderer {
                 }
 
                 let sx = x as i32 + glyph.left + gx as i32;
-                let sy = y as i32 + (self.ascent - glyph.top) + gy as i32;
+                let sy = y as i32 + (self.metrics.ascent - glyph.top) + gy as i32;
 
                 if sx >= 0 && sy >= 0 && (sx as usize) < buf_width && (sy as usize) < buf_height {
                     let idx = sy as usize * buf_width + sx as usize;

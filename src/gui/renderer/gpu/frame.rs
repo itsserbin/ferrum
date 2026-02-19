@@ -9,65 +9,52 @@ use crate::core::Color;
 use super::MAX_UI_COMMANDS;
 use super::buffers::*;
 
+use super::super::shared::ui_layout;
 use super::super::{CLOSE_HOVER_BG_COLOR, TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE};
 
 impl super::GpuRenderer {
-    pub(super) fn mix_rgb(c0: u32, c1: u32, t: f32) -> u32 {
-        let t = t.clamp(0.0, 1.0);
-        let r0 = ((c0 >> 16) & 0xFF) as f32;
-        let g0 = ((c0 >> 8) & 0xFF) as f32;
-        let b0 = (c0 & 0xFF) as f32;
-        let r1 = ((c1 >> 16) & 0xFF) as f32;
-        let g1 = ((c1 >> 8) & 0xFF) as f32;
-        let b1 = (c1 & 0xFF) as f32;
-        let r = (r0 + (r1 - r0) * t).round().clamp(0.0, 255.0) as u32;
-        let g = (g0 + (g1 - g0) * t).round().clamp(0.0, 255.0) as u32;
-        let b = (b0 + (b1 - b0) * t).round().clamp(0.0, 255.0) as u32;
-        (r << 16) | (g << 8) | b
-    }
-
     pub(super) fn draw_close_button_commands(
         &mut self,
         tab_index: usize,
         tw: u32,
         hover_progress: f32,
     ) {
-        let (cx, cy, cw, ch) = self.close_button_rect(tab_index, tw);
-        let hover_t = hover_progress.clamp(0.0, 1.0);
-        if hover_t > 0.01 {
-            let circle_r = cw.min(ch) as f32 / 2.0;
-            let circle_cx = cx as f32 + cw as f32 / 2.0;
-            let circle_cy = cy as f32 + ch as f32 / 2.0;
+        let rect = self.close_button_rect(tab_index, tw);
+        let layout = ui_layout::compute_close_button_layout(
+            rect,
+            hover_progress,
+            self.metrics.ui_scale,
+            CLOSE_HOVER_BG_COLOR,
+            TAB_TEXT_INACTIVE,
+            TAB_TEXT_ACTIVE,
+        );
+
+        if layout.show_hover_circle {
             self.push_circle(
-                circle_cx,
-                circle_cy,
-                circle_r,
-                CLOSE_HOVER_BG_COLOR,
-                0.34 + hover_t * 0.51,
+                layout.circle_cx,
+                layout.circle_cy,
+                layout.circle_radius,
+                layout.circle_bg_color,
+                layout.circle_alpha,
             );
         }
 
-        let center_x = cx as f32 + cw as f32 * 0.5;
-        let center_y = cy as f32 + ch as f32 * 0.5;
-        let half = (cw.min(ch) as f32 * 0.22).clamp(2.5, 4.5);
-        let thickness = (1.25 * self.metrics.ui_scale as f32).clamp(1.15, 2.2);
-        let icon_color = Self::mix_rgb(TAB_TEXT_INACTIVE, TAB_TEXT_ACTIVE, hover_t * 0.75);
         self.push_line(
-            center_x - half,
-            center_y - half,
-            center_x + half,
-            center_y + half,
-            thickness,
-            icon_color,
+            layout.line_a.0,
+            layout.line_a.1,
+            layout.line_a.2,
+            layout.line_a.3,
+            layout.icon_thickness,
+            layout.icon_color,
             1.0,
         );
         self.push_line(
-            center_x + half,
-            center_y - half,
-            center_x - half,
-            center_y + half,
-            thickness,
-            icon_color,
+            layout.line_b.0,
+            layout.line_b.1,
+            layout.line_b.2,
+            layout.line_b.3,
+            layout.icon_thickness,
+            layout.icon_color,
             1.0,
         );
     }

@@ -17,10 +17,13 @@ impl super::GpuRenderer {
             return;
         }
 
-        let track_top =
-            (self.metrics.tab_bar_height_px() + self.metrics.window_padding_px()) as f32;
-        let track_bottom = buf_height as f32 - self.metrics.window_padding_px() as f32;
-        let min_thumb = self.metrics.scaled_px(SCROLLBAR_MIN_THUMB) as f32;
+        let (track_top, track_bottom, min_thumb) = scrollbar_math::scrollbar_track_params(
+            self.metrics.tab_bar_height_px(),
+            self.metrics.window_padding_px(),
+            buf_height,
+            SCROLLBAR_MIN_THUMB,
+            self.metrics.ui_scale,
+        );
 
         let (thumb_y, thumb_height) = match scrollbar_math::scrollbar_thumb_geometry(
             track_top,
@@ -65,10 +68,13 @@ impl super::GpuRenderer {
         scrollback_len: usize,
         grid_rows: usize,
     ) -> Option<(f32, f32)> {
-        let track_top =
-            (self.metrics.tab_bar_height_px() + self.metrics.window_padding_px()) as f32;
-        let track_bottom = buf_height as f32 - self.metrics.window_padding_px() as f32;
-        let min_thumb = self.metrics.scaled_px(SCROLLBAR_MIN_THUMB) as f32;
+        let (track_top, track_bottom, min_thumb) = scrollbar_math::scrollbar_track_params(
+            self.metrics.tab_bar_height_px(),
+            self.metrics.window_padding_px(),
+            buf_height,
+            SCROLLBAR_MIN_THUMB,
+            self.metrics.ui_scale,
+        );
 
         scrollbar_math::scrollbar_thumb_geometry(
             track_top,

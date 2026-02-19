@@ -4,24 +4,19 @@ mod trait_impl;
 use fontdue::{Font, FontSettings};
 use std::collections::HashMap;
 
-use super::{FONT_SIZE, LINE_PADDING};
+use super::metrics::FontMetrics;
 use super::types::GlyphBitmap;
-
-#[cfg(not(target_os = "macos"))]
-use super::{SCROLLBAR_HIT_ZONE, SCROLLBAR_MARGIN, SCROLLBAR_WIDTH, TAB_BAR_HEIGHT, WINDOW_PADDING};
-#[cfg(target_os = "macos")]
-use super::{SCROLLBAR_HIT_ZONE, SCROLLBAR_MARGIN, SCROLLBAR_WIDTH};
 
 /// CPU-based software renderer using softbuffer pixel buffers.
 pub struct CpuRenderer {
     pub(in crate::gui::renderer) font: Font,
-    pub(in crate::gui::renderer) font_size: f32,
-    ui_scale: f64,
-    #[cfg_attr(target_os = "macos", allow(dead_code))]
-    pub(in crate::gui::renderer) tab_bar_visible: bool,
-    pub cell_width: u32,
-    pub cell_height: u32,
-    pub(in crate::gui::renderer) ascent: i32,
+    pub(in crate::gui::renderer) metrics: FontMetrics,
+    /// Convenience mirror of `metrics.cell_width` for code that accesses
+    /// this field directly (e.g. tab_bar modules).
+    pub(in crate::gui::renderer) cell_width: u32,
+    /// Convenience mirror of `metrics.cell_height` for code that accesses
+    /// this field directly (e.g. tab_bar modules).
+    pub(in crate::gui::renderer) cell_height: u32,
     pub(in crate::gui::renderer) glyph_cache: HashMap<char, GlyphBitmap>,
 }
 
@@ -34,100 +29,73 @@ impl CpuRenderer {
         let font = Font::from_bytes(font_data as &[u8], FontSettings::default())
             .expect("font load failed");
 
-        let mut renderer = CpuRenderer {
-            font,
-            font_size: 1.0,
-            ui_scale: 1.0,
-            tab_bar_visible: false,
+        let mut metrics = FontMetrics {
             cell_width: 1,
             cell_height: 1,
+            font_size: 1.0,
+            ui_scale: 1.0,
             ascent: 0,
-            glyph_cache: HashMap::new(),
+            tab_bar_visible: false,
         };
-        renderer.recompute_metrics();
-        renderer
+        metrics.recompute(&font);
+
+        let cell_width = metrics.cell_width;
+        let cell_height = metrics.cell_height;
+        CpuRenderer {
+            font,
+            metrics,
+            cell_width,
+            cell_height,
+            glyph_cache: HashMap::new(),
+        }
     }
 
     pub(in crate::gui::renderer) fn recompute_metrics(&mut self) {
-        let scaled_font_size = (FONT_SIZE as f64 * self.ui_scale).max(1.0) as f32;
-        let line_padding = self.scaled_px(LINE_PADDING);
-        let line_metrics = self
-            .font
-            .horizontal_line_metrics(scaled_font_size)
-            .expect("no horizontal line metrics");
-        let asc = line_metrics.ascent.round() as i32;
-        let desc = line_metrics.descent.round() as i32; // negative
-        self.ascent = asc + line_padding as i32 / 2;
-        self.cell_height = ((asc - desc).max(1) as u32) + line_padding;
-
-        // Measure advance width from 'M'
-        let (m_metrics, _) = self.font.rasterize('M', scaled_font_size);
-        self.cell_width = m_metrics.advance_width.round().max(1.0) as u32;
-        self.font_size = scaled_font_size;
+        self.metrics.recompute(&self.font);
+        self.cell_width = self.metrics.cell_width;
+        self.cell_height = self.metrics.cell_height;
         self.glyph_cache.clear();
     }
 
     pub fn set_scale(&mut self, scale_factor: f64) {
         let scale = super::sanitize_scale(scale_factor);
-        if !super::scale_changed(self.ui_scale, scale) {
+        if !super::scale_changed(self.metrics.ui_scale, scale) {
             return;
         }
-        self.ui_scale = scale;
+        self.metrics.ui_scale = scale;
         self.recompute_metrics();
     }
 
     pub(crate) fn ui_scale(&self) -> f64 {
-        self.ui_scale
+        self.metrics.ui_scale
     }
 
     pub(crate) fn scaled_px(&self, base: u32) -> u32 {
-        if base == 0 {
-            0
-        } else {
-            ((base as f64 * self.ui_scale).round() as u32).max(1)
-        }
+        self.metrics.scaled_px(base)
     }
 
     pub(crate) fn tab_bar_height_px(&self) -> u32 {
-        #[cfg(target_os = "macos")]
-        {
-            0
-        }
-        #[cfg(not(target_os = "macos"))]
-        {
-            if self.tab_bar_visible {
-                self.scaled_px(TAB_BAR_HEIGHT)
-            } else {
-                0
-            }
-        }
+        self.metrics.tab_bar_height_px()
     }
 
     #[cfg_attr(target_os = "macos", allow(dead_code))]
     pub(crate) fn set_tab_bar_visible(&mut self, visible: bool) {
-        self.tab_bar_visible = super::resolve_tab_bar_visible(visible);
+        self.metrics.tab_bar_visible = super::resolve_tab_bar_visible(visible);
     }
 
     pub(crate) fn window_padding_px(&self) -> u32 {
-        #[cfg(target_os = "macos")]
-        {
-            0
-        }
-        #[cfg(not(target_os = "macos"))]
-        {
-            self.scaled_px(WINDOW_PADDING)
-        }
+        self.metrics.window_padding_px()
     }
 
     pub(crate) fn scrollbar_width_px(&self) -> u32 {
-        self.scaled_px(SCROLLBAR_WIDTH)
+        self.metrics.scrollbar_width_px()
     }
 
     pub(crate) fn scrollbar_hit_zone_px(&self) -> u32 {
-        self.scaled_px(SCROLLBAR_HIT_ZONE)
+        self.metrics.scrollbar_hit_zone_px()
     }
 
     pub(crate) fn scrollbar_margin_px(&self) -> u32 {
-        self.scaled_px(SCROLLBAR_MARGIN)
+        self.metrics.scrollbar_margin_px()
     }
 }

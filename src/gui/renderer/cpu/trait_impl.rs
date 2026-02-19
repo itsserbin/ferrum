@@ -1,10 +1,8 @@
 use crate::core::{CursorStyle, Grid, Selection};
 
-use super::super::shared::tab_math;
+use super::super::shared::tab_math::TabLayoutMetrics;
 use super::super::traits;
-#[cfg(not(target_os = "macos"))]
-use super::super::types::WindowButton;
-use super::super::types::{ContextMenu, SecurityPopup, TabBarHit, TabInfo};
+use super::super::types::{ContextMenu, SecurityPopup, TabInfo};
 use super::CpuRenderer;
 
 impl traits::Renderer for CpuRenderer {
@@ -17,11 +15,11 @@ impl traits::Renderer for CpuRenderer {
     }
 
     fn cell_width(&self) -> u32 {
-        self.cell_width
+        self.metrics.cell_width
     }
 
     fn cell_height(&self) -> u32 {
-        self.cell_height
+        self.metrics.cell_height
     }
 
     fn tab_bar_height_px(&self) -> u32 {
@@ -42,6 +40,10 @@ impl traits::Renderer for CpuRenderer {
 
     fn scrollbar_hit_zone_px(&self) -> u32 {
         CpuRenderer::scrollbar_hit_zone_px(self)
+    }
+
+    fn tab_layout_metrics(&self) -> TabLayoutMetrics {
+        CpuRenderer::tab_layout_metrics(self)
     }
 
     fn render(
@@ -174,61 +176,6 @@ impl traits::Renderer for CpuRenderer {
         CpuRenderer::draw_tab_tooltip(self, buffer, buf_width, buf_height, mouse_pos, title);
     }
 
-    fn tab_hover_tooltip<'a>(
-        &self,
-        tabs: &'a [TabInfo<'a>],
-        hovered_tab: Option<usize>,
-        buf_width: u32,
-    ) -> Option<&'a str> {
-        CpuRenderer::tab_hover_tooltip(self, tabs, hovered_tab, buf_width)
-    }
-
-    fn tab_insert_index_from_x(&self, x: f64, tab_count: usize, buf_width: u32) -> usize {
-        CpuRenderer::tab_insert_index_from_x(self, x, tab_count, buf_width)
-    }
-
-    fn tab_width(&self, tab_count: usize, buf_width: u32) -> u32 {
-        CpuRenderer::tab_width(self, tab_count, buf_width)
-    }
-
-    fn tab_strip_start_x(&self) -> u32 {
-        let m = self.tab_layout_metrics();
-        tab_math::tab_strip_start_x(&m)
-    }
-
-    fn tab_origin_x(&self, tab_index: usize, tw: u32) -> u32 {
-        CpuRenderer::tab_origin_x(self, tab_index, tw)
-    }
-
-    fn hit_test_tab_bar(&self, x: f64, y: f64, tab_count: usize, buf_width: u32) -> TabBarHit {
-        CpuRenderer::hit_test_tab_bar(self, x, y, tab_count, buf_width)
-    }
-
-    fn hit_test_tab_hover(
-        &self,
-        x: f64,
-        y: f64,
-        tab_count: usize,
-        buf_width: u32,
-    ) -> Option<usize> {
-        CpuRenderer::hit_test_tab_hover(self, x, y, tab_count, buf_width)
-    }
-
-    fn hit_test_tab_security_badge(
-        &self,
-        x: f64,
-        y: f64,
-        tabs: &[TabInfo],
-        buf_width: u32,
-    ) -> Option<usize> {
-        CpuRenderer::hit_test_tab_security_badge(self, x, y, tabs, buf_width)
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    fn window_button_at_position(&self, x: f64, y: f64, buf_width: u32) -> Option<WindowButton> {
-        CpuRenderer::window_button_at_position(self, x, y, buf_width)
-    }
-
     fn draw_context_menu(
         &mut self,
         buffer: &mut [u32],
@@ -237,10 +184,6 @@ impl traits::Renderer for CpuRenderer {
         menu: &ContextMenu,
     ) {
         CpuRenderer::draw_context_menu(self, buffer, buf_width, buf_height, menu);
-    }
-
-    fn hit_test_context_menu(&self, menu: &ContextMenu, x: f64, y: f64) -> Option<usize> {
-        CpuRenderer::hit_test_context_menu(self, menu, x, y)
     }
 
     fn draw_security_popup(
@@ -253,24 +196,4 @@ impl traits::Renderer for CpuRenderer {
         CpuRenderer::draw_security_popup(self, buffer, buf_width, buf_height, popup);
     }
 
-    fn hit_test_security_popup(
-        &self,
-        popup: &SecurityPopup,
-        x: f64,
-        y: f64,
-        buf_width: usize,
-        buf_height: usize,
-    ) -> bool {
-        CpuRenderer::hit_test_security_popup(self, popup, x, y, buf_width, buf_height)
-    }
-
-    fn security_badge_rect(
-        &self,
-        tab_index: usize,
-        tab_count: usize,
-        buf_width: u32,
-        security_count: usize,
-    ) -> Option<(u32, u32, u32, u32)> {
-        CpuRenderer::security_badge_rect(self, tab_index, tab_count, buf_width, security_count)
-    }
 }

@@ -1,4 +1,4 @@
-use super::{FONT_SIZE, LINE_PADDING, SCROLLBAR_HIT_ZONE};
+use super::{FONT_SIZE, LINE_PADDING, SCROLLBAR_HIT_ZONE, SCROLLBAR_MARGIN, SCROLLBAR_WIDTH};
 #[cfg(not(target_os = "macos"))]
 use super::{TAB_BAR_HEIGHT, WINDOW_PADDING};
 use fontdue::Font;
@@ -73,5 +73,13 @@ impl FontMetrics {
 
     pub fn scrollbar_hit_zone_px(&self) -> u32 {
         self.scaled_px(SCROLLBAR_HIT_ZONE)
+    }
+
+    pub fn scrollbar_width_px(&self) -> u32 {
+        self.scaled_px(SCROLLBAR_WIDTH)
+    }
+
+    pub fn scrollbar_margin_px(&self) -> u32 {
+        self.scaled_px(SCROLLBAR_MARGIN)
     }
 }

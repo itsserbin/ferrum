@@ -28,7 +28,7 @@ use crate::core::{MouseMode, Position, SecurityGuard, Selection};
 #[cfg(not(target_os = "macos"))]
 use crate::gui::renderer::TAB_BAR_HEIGHT;
 use crate::gui::renderer::{
-    ContextMenu, CpuRenderer, RendererBackend, SecurityPopup, WINDOW_PADDING,
+    ContextMenu, CpuRenderer, Renderer as _, RendererBackend, SecurityPopup, WINDOW_PADDING,
 };
 use crate::pty;
 
@@ -158,15 +158,17 @@ impl App {
 
         // Use default metrics for minimum window size calculation.
         let tmp = CpuRenderer::new();
+        let cw = tmp.cell_width();
+        let ch = tmp.cell_height();
         #[cfg(target_os = "macos")]
         let min_size = winit::dpi::LogicalSize::new(
-            (tmp.cell_width * MIN_WINDOW_COLS + WINDOW_PADDING * 2) as f64,
-            (tmp.cell_height * MIN_WINDOW_ROWS + WINDOW_PADDING * 2) as f64,
+            (cw * MIN_WINDOW_COLS + WINDOW_PADDING * 2) as f64,
+            (ch * MIN_WINDOW_ROWS + WINDOW_PADDING * 2) as f64,
         );
         #[cfg(not(target_os = "macos"))]
         let min_size = winit::dpi::LogicalSize::new(
-            (tmp.cell_width * MIN_WINDOW_COLS + WINDOW_PADDING * 2) as f64,
-            (tmp.cell_height * MIN_WINDOW_ROWS + TAB_BAR_HEIGHT + WINDOW_PADDING * 2) as f64,
+            (cw * MIN_WINDOW_COLS + WINDOW_PADDING * 2) as f64,
+            (ch * MIN_WINDOW_ROWS + TAB_BAR_HEIGHT + WINDOW_PADDING * 2) as f64,
         );
         let mut attrs = Window::default_attributes()
             .with_title("Ferrum")

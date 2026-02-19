@@ -1,6 +1,7 @@
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
 use super::super::shared::{tab_math, ui_layout};
+use super::super::traits::Renderer;
 use super::super::{
     ACTIVE_TAB_BG, BAR_BG, INACTIVE_TAB_HOVER, RENAME_FIELD_BG, RENAME_FIELD_BORDER,
     RENAME_SELECTION_BG, SECURITY_ACCENT, TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE, TabInfo,
@@ -207,7 +208,7 @@ impl super::GpuRenderer {
         text_y: u32,
     ) {
         let Some((sx, sy, sw, _)) =
-            self.security_badge_rect_val(tab_index, tab_count, buf_width, tab.security_count)
+            self.security_badge_rect(tab_index, tab_count, buf_width, tab.security_count)
         else {
             return;
         };

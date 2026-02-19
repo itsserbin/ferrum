@@ -573,6 +573,57 @@ mod tests {
         assert!((layout.bg.y + layout.bg.h) <= 600.0);
     }
 
+    // ── SecurityPopup::hit_test tests ─────────────────────────────
+
+    #[test]
+    fn security_popup_hit_test_inside_returns_true() {
+        let popup = make_popup();
+        // Point inside the popup's clamped rectangle.
+        let (px, py, pw, ph) = popup.clamped_rect(8, 16, 800, 600);
+        let cx = px as f64 + pw as f64 / 2.0;
+        let cy = py as f64 + ph as f64 / 2.0;
+        assert!(popup.hit_test(cx, cy, 8, 16, 800, 600));
+    }
+
+    #[test]
+    fn security_popup_hit_test_outside_returns_false() {
+        let popup = make_popup();
+        // Point far outside the popup.
+        assert!(!popup.hit_test(0.0, 0.0, 8, 16, 800, 600));
+        assert!(!popup.hit_test(799.0, 599.0, 8, 16, 800, 600));
+    }
+
+    #[test]
+    fn security_popup_hit_test_top_left_edge_returns_true() {
+        let popup = make_popup();
+        let (px, py, _, _) = popup.clamped_rect(8, 16, 800, 600);
+        assert!(popup.hit_test(px as f64, py as f64, 8, 16, 800, 600));
+    }
+
+    #[test]
+    fn security_popup_hit_test_bottom_right_edge_exclusive() {
+        let popup = make_popup();
+        let (px, py, pw, ph) = popup.clamped_rect(8, 16, 800, 600);
+        // Exclusive end (just past the rect).
+        assert!(!popup.hit_test((px + pw) as f64, (py + ph) as f64, 8, 16, 800, 600));
+    }
+
+    #[test]
+    fn security_popup_hit_test_clamped_near_edge() {
+        // Popup placed near bottom-right corner is clamped.
+        let popup = SecurityPopup {
+            tab_index: 0,
+            x: 790,
+            y: 590,
+            title: "Test Title",
+            lines: vec!["A line".to_string()],
+        };
+        let (px, py, pw, ph) = popup.clamped_rect(8, 16, 800, 600);
+        let cx = px as f64 + pw as f64 / 2.0;
+        let cy = py as f64 + ph as f64 / 2.0;
+        assert!(popup.hit_test(cx, cy, 8, 16, 800, 600));
+    }
+
     // ── scaled_px helper tests ──────────────────────────────────────
 
     #[test]

@@ -19,8 +19,8 @@ impl CpuRenderer {
             for col in 0..grid.cols {
                 // Safe: iterating within grid bounds
                 let cell = grid.get_unchecked(row, col);
-                let x = col as u32 * self.cell_width + x_offset;
-                let y = row as u32 * self.cell_height + y_offset;
+                let x = col as u32 * self.metrics.cell_width + x_offset;
+                let y = row as u32 * self.metrics.cell_height + y_offset;
 
                 if x as usize >= buf_width || y as usize >= buf_height {
                     continue;
@@ -52,10 +52,10 @@ impl CpuRenderer {
 
                 // Underline
                 if cell.underline {
-                    let underline_y = y + self.cell_height - 2;
+                    let underline_y = y + self.metrics.cell_height - 2;
                     if (underline_y as usize) < buf_height {
                         let pixel = fg.to_pixel();
-                        for dx in 0..self.cell_width as usize {
+                        for dx in 0..self.metrics.cell_width as usize {
                             let px = x as usize + dx;
                             if px < buf_width {
                                 let idx = underline_y as usize * buf_width + px;

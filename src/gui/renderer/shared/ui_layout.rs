@@ -213,6 +213,114 @@ pub fn rename_selection_chars(
     })
 }
 
+// ── Close button ─────────────────────────────────────────────────────
+
+/// Pre-computed layout for a tab close button (both the hover-circle and the
+/// "X" icon). All coordinates are physical pixels as `f32` so that both the
+/// CPU renderer (which casts to integer) and the GPU renderer (which uses
+/// `f32` directly) can consume them without recomputing.
+pub struct CloseButtonLayout {
+    /// Whether the hover background circle should be drawn.
+    pub show_hover_circle: bool,
+    /// Center X of the hover circle (physical pixels).
+    pub circle_cx: f32,
+    /// Center Y of the hover circle (physical pixels).
+    pub circle_cy: f32,
+    /// Radius of the hover circle (physical pixels).
+    pub circle_radius: f32,
+    /// Opacity of the hover circle (0.0 .. 1.0).
+    pub circle_alpha: f32,
+    /// The hover-circle background color as 0xRRGGBB.
+    pub circle_bg_color: u32,
+    /// Resolved X-icon color as 0xRRGGBB (blended inactive→active).
+    pub icon_color: u32,
+    /// Stroke thickness of the X icon lines (physical pixels).
+    pub icon_thickness: f32,
+    /// First X-icon line: `(x1, y1, x2, y2)` — top-left to bottom-right.
+    pub line_a: (f32, f32, f32, f32),
+    /// Second X-icon line: `(x1, y1, x2, y2)` — top-right to bottom-left.
+    pub line_b: (f32, f32, f32, f32),
+}
+
+/// Computes the full close-button layout from the button bounding rect and
+/// animation / style parameters.
+///
+/// # Arguments
+/// * `rect` — `(x, y, w, h)` bounding rect from `tab_math::close_button_rect`.
+/// * `hover_progress` — close-button hover animation progress (0.0 .. 1.0).
+/// * `ui_scale` — HiDPI scale factor (e.g. 1.0 or 2.0).
+/// * `hover_bg_color` — background color for the hover circle (0xRRGGBB).
+/// * `inactive_color` — text color when not hovered (0xRRGGBB).
+/// * `active_color` — text color when fully hovered (0xRRGGBB).
+pub fn compute_close_button_layout(
+    rect: (u32, u32, u32, u32),
+    hover_progress: f32,
+    ui_scale: f64,
+    hover_bg_color: u32,
+    inactive_color: u32,
+    active_color: u32,
+) -> CloseButtonLayout {
+    let (rx, ry, rw, rh) = rect;
+    let hover_t = hover_progress.clamp(0.0, 1.0);
+
+    // Hover circle geometry.
+    let circle_cx = rx as f32 + rw as f32 / 2.0;
+    let circle_cy = ry as f32 + rh as f32 / 2.0;
+    let circle_radius = rw.min(rh) as f32 / 2.0;
+    let show_hover_circle = hover_t > 0.01;
+    let circle_alpha = 0.34 + hover_t * 0.51;
+
+    // Icon color: blend from inactive to active proportional to hover.
+    let icon_color = mix_rgb(inactive_color, active_color, hover_t * 0.75);
+
+    // X-icon geometry.
+    let center_x = rx as f32 + rw as f32 * 0.5;
+    let center_y = ry as f32 + rh as f32 * 0.5;
+    let half = (rw.min(rh) as f32 * 0.22).clamp(2.5, 4.5);
+    let icon_thickness = (1.25 * ui_scale as f32).clamp(1.15, 2.2);
+
+    let line_a = (
+        center_x - half,
+        center_y - half,
+        center_x + half,
+        center_y + half,
+    );
+    let line_b = (
+        center_x + half,
+        center_y - half,
+        center_x - half,
+        center_y + half,
+    );
+
+    CloseButtonLayout {
+        show_hover_circle,
+        circle_cx,
+        circle_cy,
+        circle_radius,
+        circle_alpha,
+        circle_bg_color: hover_bg_color,
+        icon_color,
+        icon_thickness,
+        line_a,
+        line_b,
+    }
+}
+
+/// Linearly interpolates between two 0xRRGGBB colors by `t` (0.0 .. 1.0).
+pub fn mix_rgb(c0: u32, c1: u32, t: f32) -> u32 {
+    let t = t.clamp(0.0, 1.0);
+    let r0 = ((c0 >> 16) & 0xFF) as f32;
+    let g0 = ((c0 >> 8) & 0xFF) as f32;
+    let b0 = (c0 & 0xFF) as f32;
+    let r1 = ((c1 >> 16) & 0xFF) as f32;
+    let g1 = ((c1 >> 8) & 0xFF) as f32;
+    let b1 = (c1 & 0xFF) as f32;
+    let r = (r0 + (r1 - r0) * t).round().clamp(0.0, 255.0) as u32;
+    let g = (g0 + (g1 - g0) * t).round().clamp(0.0, 255.0) as u32;
+    let b = (b0 + (b1 - b0) * t).round().clamp(0.0, 255.0) as u32;
+    (r << 16) | (g << 8) | b
+}
+
 // ── Tests ────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -395,5 +503,147 @@ mod tests {
         let text = "aбв";
         let result = rename_selection_chars(text, Some((1, 5)), 10);
         assert_eq!(result, Some((1, 3)));
+    }
+
+    // ── mix_rgb ───────────────────────────────────────────────────────
+
+    #[test]
+    fn mix_rgb_zero_returns_first() {
+        assert_eq!(mix_rgb(0xFF0000, 0x00FF00, 0.0), 0xFF0000);
+    }
+
+    #[test]
+    fn mix_rgb_one_returns_second() {
+        assert_eq!(mix_rgb(0xFF0000, 0x00FF00, 1.0), 0x00FF00);
+    }
+
+    #[test]
+    fn mix_rgb_half() {
+        let result = mix_rgb(0x000000, 0xFEFEFE, 0.5);
+        // Each channel: 0 + (254 - 0) * 0.5 = 127
+        assert_eq!(result, 0x7F7F7F);
+    }
+
+    #[test]
+    fn mix_rgb_clamps_above_one() {
+        // t > 1.0 should clamp to 1.0
+        assert_eq!(mix_rgb(0xFF0000, 0x00FF00, 2.0), 0x00FF00);
+    }
+
+    #[test]
+    fn mix_rgb_clamps_below_zero() {
+        // t < 0.0 should clamp to 0.0
+        assert_eq!(mix_rgb(0xFF0000, 0x00FF00, -1.0), 0xFF0000);
+    }
+
+    // ── compute_close_button_layout ───────────────────────────────────
+
+    #[test]
+    fn close_btn_no_hover_hides_circle() {
+        let layout = compute_close_button_layout(
+            (100, 10, 16, 16),
+            0.0,
+            1.0,
+            0x585B70,
+            0x6C7086,
+            0xCDD6F4,
+        );
+        assert!(!layout.show_hover_circle);
+    }
+
+    #[test]
+    fn close_btn_full_hover_shows_circle() {
+        let layout = compute_close_button_layout(
+            (100, 10, 16, 16),
+            1.0,
+            1.0,
+            0x585B70,
+            0x6C7086,
+            0xCDD6F4,
+        );
+        assert!(layout.show_hover_circle);
+        assert!(layout.circle_alpha > 0.8);
+    }
+
+    #[test]
+    fn close_btn_center_computation() {
+        let layout = compute_close_button_layout(
+            (100, 20, 16, 16),
+            0.5,
+            1.0,
+            0x585B70,
+            0x6C7086,
+            0xCDD6F4,
+        );
+        // Center should be at (100 + 8, 20 + 8) = (108, 28)
+        assert!((layout.circle_cx - 108.0).abs() < 0.01);
+        assert!((layout.circle_cy - 28.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn close_btn_radius_uses_min_dimension() {
+        // Non-square rect: w=16, h=12 -> radius = 12/2 = 6
+        let layout = compute_close_button_layout(
+            (100, 20, 16, 12),
+            0.5,
+            1.0,
+            0x585B70,
+            0x6C7086,
+            0xCDD6F4,
+        );
+        assert!((layout.circle_radius - 6.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn close_btn_icon_thickness_scales() {
+        let layout_1x = compute_close_button_layout(
+            (0, 0, 16, 16),
+            0.5,
+            1.0,
+            0,
+            0,
+            0,
+        );
+        let layout_2x = compute_close_button_layout(
+            (0, 0, 16, 16),
+            0.5,
+            2.0,
+            0,
+            0,
+            0,
+        );
+        assert!(layout_2x.icon_thickness > layout_1x.icon_thickness);
+    }
+
+    #[test]
+    fn close_btn_x_lines_symmetric() {
+        let layout = compute_close_button_layout(
+            (100, 20, 16, 16),
+            0.5,
+            1.0,
+            0,
+            0,
+            0,
+        );
+        // line_a: top-left to bottom-right
+        // line_b: top-right to bottom-left
+        // line_a.x1 should equal line_b.x2 (both are center_x - half)
+        assert!((layout.line_a.0 - layout.line_b.2).abs() < 0.01);
+        // line_a.x2 should equal line_b.x1 (both are center_x + half)
+        assert!((layout.line_a.2 - layout.line_b.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn close_btn_icon_color_at_zero_hover() {
+        let layout = compute_close_button_layout(
+            (0, 0, 16, 16),
+            0.0,
+            1.0,
+            0,
+            0x6C7086, // inactive
+            0xCDD6F4, // active
+        );
+        // At hover_t=0, color blend factor is 0*0.75=0 -> pure inactive
+        assert_eq!(layout.icon_color, 0x6C7086);
     }
 }

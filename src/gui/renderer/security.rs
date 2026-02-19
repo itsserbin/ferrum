@@ -1,4 +1,4 @@
-use super::shared::{tab_math, ui_layout};
+use super::shared::ui_layout;
 use super::*;
 
 impl SecurityPopup {
@@ -40,6 +40,20 @@ impl SecurityPopup {
         let y = self.y.min(buf_height.saturating_sub(height));
         (x, y, width, height)
     }
+
+    /// Returns `true` when the pointer at `(x, y)` falls inside the popup.
+    pub(crate) fn hit_test(
+        &self,
+        x: f64,
+        y: f64,
+        cell_width: u32,
+        cell_height: u32,
+        buf_width: u32,
+        buf_height: u32,
+    ) -> bool {
+        let (px, py, pw, ph) = self.clamped_rect(cell_width, cell_height, buf_width, buf_height);
+        x >= px as f64 && x < (px + pw) as f64 && y >= py as f64 && y < (py + ph) as f64
+    }
 }
 
 impl CpuRenderer {
@@ -76,39 +90,6 @@ impl CpuRenderer {
         }
     }
 
-    pub fn security_badge_rect(
-        &self,
-        tab_index: usize,
-        tab_count: usize,
-        buf_width: u32,
-        security_count: usize,
-    ) -> Option<(u32, u32, u32, u32)> {
-        let m = self.tab_layout_metrics();
-        tab_math::security_badge_rect(&m, tab_index, tab_count, buf_width, security_count)
-            .map(|r| r.to_tuple())
-    }
-
-    fn security_popup_rect(
-        &self,
-        popup: &SecurityPopup,
-        buf_width: usize,
-        buf_height: usize,
-    ) -> (u32, u32, u32, u32) {
-        popup.clamped_rect(self.cell_width, self.cell_height, buf_width as u32, buf_height as u32)
-    }
-
-    pub fn hit_test_security_popup(
-        &self,
-        popup: &SecurityPopup,
-        x: f64,
-        y: f64,
-        buf_width: usize,
-        buf_height: usize,
-    ) -> bool {
-        let (px, py, pw, ph) = self.security_popup_rect(popup, buf_width, buf_height);
-        x >= px as f64 && x < (px + pw) as f64 && y >= py as f64 && y < (py + ph) as f64
-    }
-
     /// Draws security popup overlay using a shared layout.
     pub fn draw_security_popup(
         &mut self,
@@ -118,8 +99,8 @@ impl CpuRenderer {
         popup: &SecurityPopup,
     ) {
         let layout = popup.layout(
-            self.cell_width,
-            self.cell_height,
+            self.metrics.cell_width,
+            self.metrics.cell_height,
             self.ui_scale(),
             buf_width as u32,
             buf_height as u32,
@@ -133,7 +114,7 @@ impl CpuRenderer {
         let title_x = layout.title.x as u32;
         let title_y = layout.title.y as u32;
         for (i, ch) in layout.title.text.chars().enumerate() {
-            let x = title_x + i as u32 * self.cell_width;
+            let x = title_x + i as u32 * self.metrics.cell_width;
             self.draw_char(buffer, buf_width, buf_height, x, title_y, ch, title_fg);
         }
 
@@ -146,7 +127,7 @@ impl CpuRenderer {
             let tx = text_cmd.x as u32;
             let ty = text_cmd.y as u32;
             for (i, ch) in text_cmd.text.chars().enumerate() {
-                let x = tx + i as u32 * self.cell_width;
+                let x = tx + i as u32 * self.metrics.cell_width;
                 self.draw_char(buffer, buf_width, buf_height, x, ty, ch, fg);
             }
         }

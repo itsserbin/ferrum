@@ -58,11 +58,6 @@ impl ContextMenu {
 }
 
 impl CpuRenderer {
-    /// Hit-tests context menu and returns hovered item index.
-    pub fn hit_test_context_menu(&self, menu: &ContextMenu, x: f64, y: f64) -> Option<usize> {
-        menu.hit_test(x, y, self.cell_width, self.cell_height)
-    }
-
     /// Draws context menu overlay using a shared layout.
     pub fn draw_context_menu(
         &mut self,
@@ -71,7 +66,7 @@ impl CpuRenderer {
         buf_height: usize,
         menu: &ContextMenu,
     ) {
-        let layout = menu.layout(self.cell_width, self.cell_height, self.ui_scale());
+        let layout = menu.layout(self.metrics.cell_width, self.metrics.cell_height, self.ui_scale());
         let clip_right = (layout.bg.x + layout.bg.w) as u32;
 
         self.draw_rounded_rect_cmd(buffer, buf_width, buf_height, &layout.bg);
@@ -86,8 +81,8 @@ impl CpuRenderer {
             let text_x = item.text.x as u32;
             let text_y = item.text.y as u32;
             for (ci, ch) in item.text.text.chars().enumerate() {
-                let cx = text_x + ci as u32 * self.cell_width;
-                if cx + self.cell_width <= clip_right {
+                let cx = text_x + ci as u32 * self.metrics.cell_width;
+                if cx + self.metrics.cell_width <= clip_right {
                     self.draw_char(buffer, buf_width, buf_height, cx, text_y, ch, fg);
                 }
             }

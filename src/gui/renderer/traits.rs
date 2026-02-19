@@ -4,6 +4,8 @@ use crate::core::{CursorStyle, Grid, Selection};
 
 #[cfg(not(target_os = "macos"))]
 use super::WindowButton;
+use super::shared::tab_hit_test;
+use super::shared::tab_math::{self, TabLayoutMetrics};
 use super::{ContextMenu, SecurityPopup, TabBarHit, TabInfo};
 
 /// Selects which rendering backend to use.
@@ -34,6 +36,9 @@ pub trait Renderer {
     fn ui_scale(&self) -> f64;
     fn scaled_px(&self, base: u32) -> u32;
     fn scrollbar_hit_zone_px(&self) -> u32;
+
+    /// Builds a [`TabLayoutMetrics`] from the renderer's current state.
+    fn tab_layout_metrics(&self) -> TabLayoutMetrics;
 
     // ── Terminal rendering ──────────────────────────────────────────
 
@@ -119,20 +124,48 @@ pub trait Renderer {
         tabs: &'a [TabInfo<'a>],
         hovered_tab: Option<usize>,
         buf_width: u32,
-    ) -> Option<&'a str>;
+    ) -> Option<&'a str> {
+        let m = self.tab_layout_metrics();
+        tab_hit_test::tab_hover_tooltip(tabs, hovered_tab, buf_width, &m)
+    }
 
-    fn tab_insert_index_from_x(&self, x: f64, tab_count: usize, buf_width: u32) -> usize;
+    fn tab_insert_index_from_x(&self, x: f64, tab_count: usize, buf_width: u32) -> usize {
+        let m = self.tab_layout_metrics();
+        tab_math::tab_insert_index_from_x(&m, x, tab_count, buf_width)
+    }
 
-    fn tab_width(&self, tab_count: usize, buf_width: u32) -> u32;
-    fn tab_strip_start_x(&self) -> u32;
-    fn tab_origin_x(&self, tab_index: usize, tw: u32) -> u32;
+    fn tab_width(&self, tab_count: usize, buf_width: u32) -> u32 {
+        let m = self.tab_layout_metrics();
+        tab_math::calculate_tab_width(&m, tab_count, buf_width)
+    }
+
+    fn tab_strip_start_x(&self) -> u32 {
+        let m = self.tab_layout_metrics();
+        tab_math::tab_strip_start_x(&m)
+    }
+
+    fn tab_origin_x(&self, tab_index: usize, tw: u32) -> u32 {
+        let m = self.tab_layout_metrics();
+        tab_math::tab_origin_x(&m, tab_index, tw)
+    }
 
     // ── Hit testing ─────────────────────────────────────────────────
 
-    fn hit_test_tab_bar(&self, x: f64, y: f64, tab_count: usize, buf_width: u32) -> TabBarHit;
+    fn hit_test_tab_bar(&self, x: f64, y: f64, tab_count: usize, buf_width: u32) -> TabBarHit {
+        let m = self.tab_layout_metrics();
+        tab_hit_test::hit_test_tab_bar(x, y, tab_count, buf_width, &m)
+    }
 
-    fn hit_test_tab_hover(&self, x: f64, y: f64, tab_count: usize, buf_width: u32)
-    -> Option<usize>;
+    fn hit_test_tab_hover(
+        &self,
+        x: f64,
+        y: f64,
+        tab_count: usize,
+        buf_width: u32,
+    ) -> Option<usize> {
+        let m = self.tab_layout_metrics();
+        tab_hit_test::hit_test_tab_hover(x, y, tab_count, buf_width, &m)
+    }
 
     fn hit_test_tab_security_badge(
         &self,
@@ -140,10 +173,16 @@ pub trait Renderer {
         y: f64,
         tabs: &[TabInfo],
         buf_width: u32,
-    ) -> Option<usize>;
+    ) -> Option<usize> {
+        let m = self.tab_layout_metrics();
+        tab_hit_test::hit_test_tab_security_badge(x, y, tabs, buf_width, &m)
+    }
 
     #[cfg(not(target_os = "macos"))]
-    fn window_button_at_position(&self, x: f64, y: f64, buf_width: u32) -> Option<WindowButton>;
+    fn window_button_at_position(&self, x: f64, y: f64, buf_width: u32) -> Option<WindowButton> {
+        let m = self.tab_layout_metrics();
+        tab_hit_test::window_button_at_position(x, y, buf_width, &m)
+    }
 
     // ── Context menu ────────────────────────────────────────────────
 
@@ -155,7 +194,9 @@ pub trait Renderer {
         menu: &ContextMenu,
     );
 
-    fn hit_test_context_menu(&self, menu: &ContextMenu, x: f64, y: f64) -> Option<usize>;
+    fn hit_test_context_menu(&self, menu: &ContextMenu, x: f64, y: f64) -> Option<usize> {
+        menu.hit_test(x, y, self.cell_width(), self.cell_height())
+    }
 
     // ── Security ────────────────────────────────────────────────────
 
@@ -174,7 +215,16 @@ pub trait Renderer {
         y: f64,
         buf_width: usize,
         buf_height: usize,
-    ) -> bool;
+    ) -> bool {
+        popup.hit_test(
+            x,
+            y,
+            self.cell_width(),
+            self.cell_height(),
+            buf_width as u32,
+            buf_height as u32,
+        )
+    }
 
     fn security_badge_rect(
         &self,
@@ -182,5 +232,9 @@ pub trait Renderer {
         tab_count: usize,
         buf_width: u32,
         security_count: usize,
-    ) -> Option<(u32, u32, u32, u32)>;
+    ) -> Option<(u32, u32, u32, u32)> {
+        let m = self.tab_layout_metrics();
+        tab_math::security_badge_rect(&m, tab_index, tab_count, buf_width, security_count)
+            .map(|r| r.to_tuple())
+    }
 }
