@@ -62,7 +62,6 @@ impl CpuRenderer {
             buf_height,
             (pin_x, pin_y, pin_w, pin_h),
             icon_color,
-            pinned,
         );
     }
 
@@ -75,7 +74,6 @@ impl CpuRenderer {
         buf_height: usize,
         rect: (u32, u32, u32, u32),
         color: u32,
-        _pinned: bool,
     ) {
         let (x, y, w, h) = rect;
         let cx = (x as f32 + w as f32 / 2.0) as i32;

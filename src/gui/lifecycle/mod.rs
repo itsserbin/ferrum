@@ -89,7 +89,7 @@ impl ApplicationHandler for App {
                 win.modifiers = modifiers.state();
             }
             WindowEvent::KeyboardInput { event, .. } => {
-                win.on_keyboard_input(event_loop, &event, &mut self.next_tab_id, &self.tx);
+                win.on_keyboard_input(&event, &mut self.next_tab_id, &self.tx);
                 should_redraw = true;
             }
             WindowEvent::MouseWheel { delta, .. } => {
@@ -109,7 +109,7 @@ impl ApplicationHandler for App {
                 should_redraw = true;
             }
             WindowEvent::MouseInput { state, button, .. } => {
-                win.on_mouse_input(event_loop, state, button, &mut self.next_tab_id, &self.tx);
+                win.on_mouse_input(state, button, &mut self.next_tab_id, &self.tx);
                 should_redraw = true;
             }
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {

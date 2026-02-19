@@ -7,9 +7,12 @@ impl FerrumWindow {
         &mut self,
         key: &Key,
         physical: &PhysicalKey,
-        _next_tab_id: &mut u64,
-        _tx: &mpsc::Sender<PtyEvent>,
+        next_tab_id: &mut u64,
+        tx: &mpsc::Sender<PtyEvent>,
     ) -> Option<bool> {
+        #[cfg(target_os = "macos")]
+        let _ = (&next_tab_id, tx);
+
         if Self::physical_key_is(physical, KeyCode::KeyT) {
             #[cfg(target_os = "macos")]
             {
@@ -19,7 +22,7 @@ impl FerrumWindow {
             {
                 let size = self.window.inner_size();
                 let (rows, cols) = self.calc_grid_size(size.width, size.height);
-                self.new_tab(rows, cols, _next_tab_id, _tx);
+                self.new_tab(rows, cols, next_tab_id, tx);
             }
             return Some(true);
         }

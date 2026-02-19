@@ -2,12 +2,9 @@
 
 //! Hit testing and popup drawing for the GPU renderer.
 
-use crate::core::Color;
-
-#[cfg(not(target_os = "macos"))]
-use super::super::WindowButton;
 use super::super::shared::tab_hit_test;
 use super::super::{ContextAction, ContextMenu, SecurityPopup, TabBarHit, TabInfo};
+use crate::core::Color;
 
 impl super::GpuRenderer {
     // ── Hit testing (delegates to shared tab_hit_test) ────────────────
@@ -43,17 +40,6 @@ impl super::GpuRenderer {
     ) -> Option<usize> {
         let m = self.tab_layout_metrics();
         tab_hit_test::hit_test_tab_security_badge(x, y, tabs, buf_width, &m)
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    pub(super) fn window_button_at_position_impl(
-        &self,
-        x: f64,
-        y: f64,
-        buf_width: u32,
-    ) -> Option<WindowButton> {
-        let m = self.tab_layout_metrics();
-        tab_hit_test::window_button_at_position(x, y, buf_width, &m)
     }
 
     // ── Context menu ──────────────────────────────────────────────────

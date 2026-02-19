@@ -4,7 +4,6 @@ use crate::gui::*;
 impl FerrumWindow {
     pub(in crate::gui::events::mouse) fn handle_context_menu_left_click(
         &mut self,
-        _event_loop: &ActiveEventLoop,
         state: ElementState,
         mx: f64,
         my: f64,

@@ -26,11 +26,6 @@ impl super::super::CpuRenderer {
         tab_math::calculate_tab_width(&m, tab_count, buf_width)
     }
 
-    pub(crate) fn tab_strip_start_x(&self) -> u32 {
-        let m = self.tab_layout_metrics();
-        tab_math::tab_strip_start_x(&m)
-    }
-
     pub(crate) fn tab_origin_x(&self, tab_index: usize, tw: u32) -> u32 {
         let m = self.tab_layout_metrics();
         tab_math::tab_origin_x(&m, tab_index, tw)
@@ -119,17 +114,6 @@ impl super::super::CpuRenderer {
     pub(in crate::gui::renderer) fn should_show_number(&self, tw: u32) -> bool {
         let m = self.tab_layout_metrics();
         tab_math::should_show_number(&m, tw)
-    }
-
-    pub(in crate::gui::renderer) fn title_max_chars(
-        &self,
-        tab: &TabInfo,
-        tw: u32,
-        is_hovered: bool,
-    ) -> usize {
-        let m = self.tab_layout_metrics();
-        let show_close = tab.is_active || is_hovered;
-        tab_math::tab_title_max_chars(&m, tw, show_close, tab.security_count)
     }
 
     /// Returns full tab title when hover should show a tooltip (compressed or truncated label).

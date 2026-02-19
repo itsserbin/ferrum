@@ -3,10 +3,11 @@ mod animation;
 #[cfg(feature = "gpu")]
 use crate::gui::renderer::backend::RendererBackend;
 use crate::gui::*;
+#[cfg(target_os = "macos")]
 use std::time::Instant;
 
 #[cfg(target_os = "macos")]
-use animation::{NATIVE_TAB_SYNC_INTERVAL, NATIVE_TAB_SYNC_ATTEMPTS};
+use animation::{NATIVE_TAB_SYNC_ATTEMPTS, NATIVE_TAB_SYNC_INTERVAL};
 
 impl FerrumWindow {
     #[cfg(target_os = "macos")]

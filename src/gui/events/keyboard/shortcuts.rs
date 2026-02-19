@@ -28,11 +28,10 @@ impl FerrumWindow {
 
     pub(in crate::gui::events::keyboard) fn handle_ctrl_shortcuts(
         &mut self,
-        _event_loop: &ActiveEventLoop,
         key: &Key,
         physical: &PhysicalKey,
-        _next_tab_id: &mut u64,
-        _tx: &mpsc::Sender<PtyEvent>,
+        next_tab_id: &mut u64,
+        tx: &mpsc::Sender<PtyEvent>,
     ) -> bool {
         if !self.is_action_modifier() || self.modifiers.shift_key() {
             return false;
@@ -41,8 +40,7 @@ impl FerrumWindow {
         if let Some(result) = self.handle_clipboard_shortcuts(key, physical) {
             return result;
         }
-        if let Some(result) = self.handle_tab_management_shortcuts(key, physical, _next_tab_id, _tx)
-        {
+        if let Some(result) = self.handle_tab_management_shortcuts(key, physical, next_tab_id, tx) {
             return result;
         }
         if self.handle_super_text_shortcuts(physical) {
@@ -58,9 +56,12 @@ impl FerrumWindow {
         &mut self,
         key: &Key,
         physical: &PhysicalKey,
-        _next_tab_id: &mut u64,
-        _tx: &mpsc::Sender<PtyEvent>,
+        next_tab_id: &mut u64,
+        tx: &mpsc::Sender<PtyEvent>,
     ) -> bool {
+        #[cfg(target_os = "macos")]
+        let _ = (&next_tab_id, tx);
+
         if !self.is_action_modifier() || !self.modifiers.shift_key() {
             return false;
         }
@@ -85,7 +86,7 @@ impl FerrumWindow {
             {
                 let size = self.window.inner_size();
                 let (rows, cols) = self.calc_grid_size(size.width, size.height);
-                self.new_tab_with_title(rows, cols, Some(closed.title), _next_tab_id, _tx);
+                self.new_tab_with_title(rows, cols, Some(closed.title), next_tab_id, tx);
             }
             return true;
         }

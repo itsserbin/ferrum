@@ -4,7 +4,7 @@
 
 use super::super::WindowButton;
 use super::WIN_BTN_WIDTH;
-use super::{CLOSE_HOVER_BG_COLOR, TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE};
+use super::{CLOSE_HOVER_BG_COLOR, INACTIVE_TAB_HOVER, TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE};
 
 impl super::GpuRenderer {
     pub(super) fn draw_window_buttons_commands(&mut self, buf_width: u32, mouse_pos: (f64, f64)) {
@@ -26,17 +26,17 @@ impl super::GpuRenderer {
 
             if is_hovered {
                 let hover_bg = if *btn_type == WindowButton::Close {
-                    0xF38BA8
+                    CLOSE_HOVER_BG_COLOR
                 } else {
-                    0x313244
+                    INACTIVE_TAB_HOVER
                 };
                 self.push_rect(btn_x as f32, 0.0, btn_w as f32, bar_h, hover_bg, 1.0);
             }
 
             let icon_color = if is_hovered && *btn_type == WindowButton::Close {
-                0xFFFFFF
+                TAB_TEXT_ACTIVE
             } else {
-                0x6C7086
+                TAB_TEXT_INACTIVE
             };
 
             let center_x = btn_x as f32 + btn_w as f32 / 2.0;

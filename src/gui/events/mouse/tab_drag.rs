@@ -178,8 +178,10 @@ impl FerrumWindow {
             .unwrap_or(0);
         }
 
-        self.pending_requests
-            .push(WindowRequest::DetachTab { tab, cursor_pos });
+        self.pending_requests.push(WindowRequest::DetachTab {
+            tab: Box::new(tab),
+            cursor_pos,
+        });
         self.window.set_cursor(CursorIcon::Default);
         self.window.request_redraw();
     }

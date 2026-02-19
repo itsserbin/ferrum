@@ -32,7 +32,11 @@ impl FerrumWindow {
         let is_active = tab_index == self.active_tab;
         let is_hovered = self.hovered_tab == Some(tab_index);
         #[cfg(not(target_os = "macos"))]
-        let hover_progress = self.tab_hover_progress.get(tab_index).copied().unwrap_or(0.0);
+        let hover_progress = self
+            .tab_hover_progress
+            .get(tab_index)
+            .copied()
+            .unwrap_or(0.0);
         #[cfg(target_os = "macos")]
         let hover_progress = 0.0;
         tab_math::should_show_close_button(is_active, is_hovered, hover_progress)
@@ -65,7 +69,6 @@ impl FerrumWindow {
 
     pub(in crate::gui::events::mouse) fn handle_tab_bar_left_click(
         &mut self,
-        _event_loop: &ActiveEventLoop,
         state: ElementState,
         mx: f64,
         my: f64,

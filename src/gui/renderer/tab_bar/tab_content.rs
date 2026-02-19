@@ -56,7 +56,6 @@ impl CpuRenderer {
                 buf_width,
                 bar_h,
                 tab_index,
-                tab,
                 tw,
                 tab.close_hover_progress,
             );
@@ -116,7 +115,6 @@ impl CpuRenderer {
                 buf_width,
                 bar_h,
                 tab_index,
-                tab,
                 tw,
                 tab.close_hover_progress,
             );
@@ -158,7 +156,7 @@ impl CpuRenderer {
         tab_count: usize,
         text_y: u32,
     ) {
-        if let Some((sx, sy, sw, _sh)) =
+        if let Some((sx, sy, sw, _)) =
             self.security_badge_rect(tab_index, tab_count, buf_width as u32, tab.security_count)
         {
             self.draw_security_shield_icon(buffer, buf_width, bar_h, sx, sy, sw, SECURITY_ACCENT);
@@ -181,7 +179,6 @@ impl CpuRenderer {
         buf_width: usize,
         buf_height: usize,
         tab_index: usize,
-        _tab: &TabInfo,
         tw: u32,
         hover_progress: f32,
     ) {

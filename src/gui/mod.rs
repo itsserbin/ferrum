@@ -219,14 +219,14 @@ impl App {
     fn create_window_with_tab(
         &mut self,
         event_loop: &ActiveEventLoop,
-        tab: TabState,
+        tab: Box<TabState>,
         position: Option<winit::dpi::PhysicalPosition<i32>>,
     ) {
         let Some(win_id) = self.create_window(event_loop, position) else {
             return;
         };
         if let Some(win) = self.windows.get_mut(&win_id) {
-            win.tabs.push(tab);
+            win.tabs.push(*tab);
             win.active_tab = 0;
             win.refresh_tab_bar_visibility();
             // Mouse button is still held — initiate OS drag so the window follows cursor.

@@ -3,7 +3,6 @@ use crate::gui::*;
 impl FerrumWindow {
     pub(crate) fn on_keyboard_input(
         &mut self,
-        event_loop: &ActiveEventLoop,
         event: &winit::event::KeyEvent,
         next_tab_id: &mut u64,
         tx: &mpsc::Sender<PtyEvent>,
@@ -37,7 +36,7 @@ impl FerrumWindow {
             return;
         }
 
-        if self.handle_ctrl_shortcuts(event_loop, &key, &event.physical_key, next_tab_id, tx) {
+        if self.handle_ctrl_shortcuts(&key, &event.physical_key, next_tab_id, tx) {
             return;
         }
         if self.handle_ctrl_shift_shortcuts(&key, &event.physical_key, next_tab_id, tx) {

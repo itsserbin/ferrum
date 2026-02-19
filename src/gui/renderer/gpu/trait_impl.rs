@@ -2,6 +2,9 @@ use crate::core::{CursorStyle, Grid, Selection};
 
 #[cfg(not(target_os = "macos"))]
 use super::super::WindowButton;
+#[cfg(not(target_os = "macos"))]
+use super::super::shared::tab_hit_test;
+use super::super::shared::tab_math;
 use super::super::traits;
 use super::super::{ContextMenu, SecurityPopup, TabBarHit, TabInfo};
 use super::GpuRenderer;
@@ -180,7 +183,8 @@ impl traits::Renderer for GpuRenderer {
     }
 
     fn tab_strip_start_x(&self) -> u32 {
-        self.tab_strip_start_x_val()
+        let m = self.tab_layout_metrics();
+        tab_math::tab_strip_start_x(&m)
     }
 
     fn tab_origin_x(&self, tab_index: usize, tw: u32) -> u32 {
@@ -215,7 +219,8 @@ impl traits::Renderer for GpuRenderer {
 
     #[cfg(not(target_os = "macos"))]
     fn window_button_at_position(&self, x: f64, y: f64, buf_width: u32) -> Option<WindowButton> {
-        self.window_button_at_position_impl(x, y, buf_width)
+        let m = self.tab_layout_metrics();
+        tab_hit_test::window_button_at_position(x, y, buf_width, &m)
     }
 
     // ── Context menu (delegates to hit_test) ─────────────────────────

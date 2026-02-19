@@ -1,9 +1,10 @@
 use crate::core::{CursorStyle, Grid, Selection};
 
+use super::super::shared::tab_math::{self, TabLayoutMetrics};
 use super::super::traits;
-use super::super::types::{ContextMenu, SecurityPopup, TabBarHit, TabInfo};
 #[cfg(not(target_os = "macos"))]
 use super::super::types::WindowButton;
+use super::super::types::{ContextMenu, SecurityPopup, TabBarHit, TabInfo};
 use super::CpuRenderer;
 
 impl traits::Renderer for CpuRenderer {
@@ -191,7 +192,13 @@ impl traits::Renderer for CpuRenderer {
     }
 
     fn tab_strip_start_x(&self) -> u32 {
-        CpuRenderer::tab_strip_start_x(self)
+        let m = TabLayoutMetrics {
+            cell_width: self.cell_width,
+            cell_height: self.cell_height,
+            ui_scale: self.ui_scale(),
+            tab_bar_height: self.tab_bar_height_px(),
+        };
+        tab_math::tab_strip_start_x(&m)
     }
 
     fn tab_origin_x(&self, tab_index: usize, tw: u32) -> u32 {

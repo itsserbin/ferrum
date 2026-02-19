@@ -4,7 +4,6 @@ use crate::gui::*;
 impl FerrumWindow {
     pub(crate) fn on_mouse_input(
         &mut self,
-        event_loop: &ActiveEventLoop,
         state: ElementState,
         button: winit::event::MouseButton,
         next_tab_id: &mut u64,
@@ -13,9 +12,7 @@ impl FerrumWindow {
         self.apply_pending_resize();
 
         match button {
-            winit::event::MouseButton::Left => {
-                self.on_left_mouse_input(event_loop, state, next_tab_id, tx)
-            }
+            winit::event::MouseButton::Left => self.on_left_mouse_input(state, next_tab_id, tx),
             winit::event::MouseButton::Middle => self.on_middle_mouse_input(state),
             winit::event::MouseButton::Right => self.on_right_mouse_input(state),
             _ => {}
@@ -109,7 +106,6 @@ impl FerrumWindow {
 
     fn on_left_mouse_input(
         &mut self,
-        event_loop: &ActiveEventLoop,
         state: ElementState,
         next_tab_id: &mut u64,
         tx: &mpsc::Sender<PtyEvent>,
@@ -119,11 +115,11 @@ impl FerrumWindow {
 
         // On non-macOS, initiate OS-level resize drag when pressing on window edges.
         #[cfg(not(target_os = "macos"))]
-        if state == ElementState::Pressed {
-            if let Some(dir) = self.resize_direction {
-                let _ = self.window.drag_resize_window(dir);
-                return;
-            }
+        if state == ElementState::Pressed
+            && let Some(dir) = self.resize_direction
+        {
+            let _ = self.window.drag_resize_window(dir);
+            return;
         }
 
         // If releasing mouse during an active tab drag, handle drop regardless of position.
@@ -131,7 +127,7 @@ impl FerrumWindow {
         #[cfg(not(target_os = "macos"))]
         if state == ElementState::Released {
             if self.dragging_tab.as_ref().is_some_and(|d| d.is_active) {
-                self.handle_tab_bar_left_click(event_loop, state, mx, my, next_tab_id, tx);
+                self.handle_tab_bar_left_click(state, mx, my, next_tab_id, tx);
                 return;
             }
             // Cancel non-active drag on release outside tab bar.
@@ -144,12 +140,12 @@ impl FerrumWindow {
             return;
         }
 
-        if self.handle_context_menu_left_click(event_loop, state, mx, my, next_tab_id, tx) {
+        if self.handle_context_menu_left_click(state, mx, my, next_tab_id, tx) {
             return;
         }
 
         if my < tab_bar_height {
-            self.handle_tab_bar_left_click(event_loop, state, mx, my, next_tab_id, tx);
+            self.handle_tab_bar_left_click(state, mx, my, next_tab_id, tx);
             return;
         }
 

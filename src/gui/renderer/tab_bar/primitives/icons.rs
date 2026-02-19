@@ -11,9 +11,9 @@ impl super::super::super::CpuRenderer {
         rect: (u32, u32, u32, u32),
         color: Color,
     ) {
-        let (x, _y, w, h) = rect;
+        let (x, y, w, h) = rect;
         let center_x = x as f32 + w as f32 * 0.5;
-        let center_y = rect.1 as f32 + h as f32 * 0.5;
+        let center_y = y as f32 + h as f32 * 0.5;
         let half = (w.min(h) as f32 * 0.25).clamp(2.5, 5.0);
         let thickness = (1.25_f32 * self.ui_scale() as f32).clamp(1.15, 2.2);
         let pixel = color.to_pixel();

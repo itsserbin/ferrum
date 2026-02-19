@@ -20,11 +20,6 @@ impl super::GpuRenderer {
         }
     }
 
-    pub(super) fn tab_strip_start_x_val(&self) -> u32 {
-        let m = self.tab_layout_metrics();
-        tab_math::tab_strip_start_x(&m)
-    }
-
     /// Returns rectangle for pin button (non-macOS only).
     #[cfg(not(target_os = "macos"))]
     pub(super) fn pin_button_rect(&self) -> (u32, u32, u32, u32) {
@@ -78,7 +73,7 @@ impl super::GpuRenderer {
         hovered_tab: Option<usize>,
         mouse_pos: (f64, f64),
         tab_offsets: Option<&[f32]>,
-        _pinned: bool,
+        pinned: bool,
     ) {
         let bw = buf_width as u32;
         let tw = self.tab_width_val(tabs.len(), bw);
@@ -107,7 +102,10 @@ impl super::GpuRenderer {
         self.plus_button_commands(tabs.len(), tw, mouse_pos);
 
         #[cfg(not(target_os = "macos"))]
-        self.draw_pin_button_commands(mouse_pos, _pinned);
+        self.draw_pin_button_commands(mouse_pos, pinned);
+
+        #[cfg(target_os = "macos")]
+        let _ = pinned;
 
         #[cfg(not(target_os = "macos"))]
         self.draw_window_buttons_commands(bw, mouse_pos);

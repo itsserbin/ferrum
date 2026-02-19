@@ -93,7 +93,7 @@ pub(super) enum WindowRequest {
     /// Detach a tab into a new window at the given screen position.
     #[cfg(not(target_os = "macos"))]
     DetachTab {
-        tab: TabState,
+        tab: Box<TabState>,
         cursor_pos: Option<winit::dpi::PhysicalPosition<i32>>,
     },
     /// Close this window (all tabs gone or user closed).

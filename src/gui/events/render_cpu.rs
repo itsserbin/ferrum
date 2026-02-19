@@ -13,6 +13,8 @@ impl FerrumWindow {
         // Build tab bar metadata (not needed on macOS -- native tab bar).
         #[cfg(not(target_os = "macos"))]
         let state = self.build_tab_bar_state(bw);
+        #[cfg(not(target_os = "macos"))]
+        let frame_tab_infos = state.render_tab_infos();
 
         let RendererBackend::Cpu { renderer, surface } = &mut self.backend else {
             return;
@@ -31,7 +33,11 @@ impl FerrumWindow {
 
         // 2) Draw active tab terminal content.
         if let Some(tab) = self.tabs.get(self.active_tab) {
-            let viewport_start = tab.terminal.scrollback.len().saturating_sub(tab.scroll_offset);
+            let viewport_start = tab
+                .terminal
+                .scrollback
+                .len()
+                .saturating_sub(tab.scroll_offset);
             if tab.scroll_offset == 0 {
                 renderer.render(
                     &mut buffer,
@@ -104,7 +110,7 @@ impl FerrumWindow {
                     &mut buffer,
                     bw,
                     bh,
-                    &state.tab_infos,
+                    &frame_tab_infos,
                     self.hovered_tab,
                     self.mouse_pos,
                     state.tab_offsets.as_deref(),
@@ -117,7 +123,7 @@ impl FerrumWindow {
                         &mut buffer,
                         bw,
                         bh,
-                        &state.tab_infos,
+                        &frame_tab_infos,
                         source_index,
                         current_x,
                         indicator_x,
@@ -136,10 +142,11 @@ impl FerrumWindow {
         }
 
         #[cfg(not(target_os = "macos"))]
-        if state.show_tooltip && state.tab_bar_visible {
-            if let Some(ref title) = state.tab_tooltip {
-                renderer.draw_tab_tooltip(&mut buffer, bw, bh, self.mouse_pos, title);
-            }
+        if state.show_tooltip
+            && state.tab_bar_visible
+            && let Some(ref title) = state.tab_tooltip
+        {
+            renderer.draw_tab_tooltip(&mut buffer, bw, bh, self.mouse_pos, title);
         }
 
         let _ = buffer.present();

@@ -14,13 +14,55 @@ use crate::gui::renderer::TabInfo;
 /// Built once per frame via `FerrumWindow::build_tab_bar_state`, then passed
 /// by value to the renderer-specific drawing code.
 #[cfg(not(target_os = "macos"))]
-pub(in crate::gui) struct TabBarFrameState<'a> {
-    pub tab_infos: Vec<TabInfo<'a>>,
+pub(in crate::gui) struct TabBarFrameState {
+    pub tab_infos: Vec<TabBarFrameTabInfo>,
     pub tab_tooltip: Option<String>,
     pub drag_info: Option<(usize, f64, f32)>,
     pub tab_offsets: Option<Vec<f32>>,
     pub show_tooltip: bool,
     pub tab_bar_visible: bool,
+}
+
+/// Owned tab metadata captured for a single rendered frame.
+#[cfg(not(target_os = "macos"))]
+pub(in crate::gui) struct TabBarFrameTabInfo {
+    pub title: String,
+    pub is_active: bool,
+    pub security_count: usize,
+    pub hover_progress: f32,
+    pub close_hover_progress: f32,
+    pub is_renaming: bool,
+    pub rename_text: Option<String>,
+    pub rename_cursor: usize,
+    pub rename_selection: Option<(usize, usize)>,
+}
+
+#[cfg(not(target_os = "macos"))]
+impl TabBarFrameTabInfo {
+    fn as_tab_info(&self) -> TabInfo<'_> {
+        TabInfo {
+            title: &self.title,
+            is_active: self.is_active,
+            security_count: self.security_count,
+            hover_progress: self.hover_progress,
+            close_hover_progress: self.close_hover_progress,
+            is_renaming: self.is_renaming,
+            rename_text: self.rename_text.as_deref(),
+            rename_cursor: self.rename_cursor,
+            rename_selection: self.rename_selection,
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+impl TabBarFrameState {
+    /// Converts owned frame tab metadata into renderer-facing borrowed `TabInfo` views.
+    pub(in crate::gui::events) fn render_tab_infos(&self) -> Vec<TabInfo<'_>> {
+        self.tab_infos
+            .iter()
+            .map(TabBarFrameTabInfo::as_tab_info)
+            .collect()
+    }
 }
 
 impl FerrumWindow {
@@ -29,7 +71,7 @@ impl FerrumWindow {
     /// On macOS this is a no-op (native tab bar), so the return type is
     /// behind `#[cfg(not(target_os = "macos"))]`.
     #[cfg(not(target_os = "macos"))]
-    pub(in crate::gui::events) fn build_tab_bar_state(&mut self, bw: usize) -> TabBarFrameState<'_> {
+    pub(in crate::gui::events) fn build_tab_bar_state(&mut self, bw: usize) -> TabBarFrameState {
         let renaming = self.renaming_tab.as_ref().map(|rename| {
             let selection = rename.selection_anchor.and_then(|anchor| {
                 if anchor == rename.cursor {
@@ -40,12 +82,12 @@ impl FerrumWindow {
             });
             (
                 rename.tab_index,
-                rename.text.as_str(),
+                rename.text.clone(),
                 rename.cursor,
                 selection,
             )
         });
-        let tab_infos: Vec<TabInfo> = self
+        let tab_infos: Vec<TabBarFrameTabInfo> = self
             .tabs
             .iter()
             .enumerate()
@@ -56,19 +98,15 @@ impl FerrumWindow {
                 } else {
                     0
                 };
-                TabInfo {
-                    title: &t.title,
+                TabBarFrameTabInfo {
+                    title: t.title.clone(),
                     is_active: i == self.active_tab,
                     security_count,
                     hover_progress: self.tab_hover_progress.get(i).copied().unwrap_or(0.0),
-                    close_hover_progress: self
-                        .close_hover_progress
-                        .get(i)
-                        .copied()
-                        .unwrap_or(0.0),
+                    close_hover_progress: self.close_hover_progress.get(i).copied().unwrap_or(0.0),
                     is_renaming,
                     rename_text: if is_renaming {
-                        renaming.as_ref().map(|(_, text, _, _)| *text)
+                        renaming.as_ref().map(|(_, text, _, _)| text.clone())
                     } else {
                         None
                     },
@@ -88,9 +126,13 @@ impl FerrumWindow {
             })
             .collect();
 
+        let render_tab_infos: Vec<TabInfo<'_>> = tab_infos
+            .iter()
+            .map(TabBarFrameTabInfo::as_tab_info)
+            .collect();
         let tab_tooltip: Option<String> = self
             .backend
-            .tab_hover_tooltip(&tab_infos, self.hovered_tab, bw as u32)
+            .tab_hover_tooltip(&render_tab_infos, self.hovered_tab, bw as u32)
             .map(|s| s.to_owned());
 
         // Collect drag/overlay state needed during rendering.

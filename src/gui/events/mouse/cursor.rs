@@ -142,7 +142,7 @@ impl FerrumWindow {
         let drag_start_y = tab.scrollbar.drag_start_y;
         let drag_start_offset = tab.scrollbar.drag_start_offset;
 
-        if let Some((_thumb_y, thumb_height)) = self.backend.scrollbar_thumb_bounds(
+        if let Some((_, thumb_height)) = self.backend.scrollbar_thumb_bounds(
             buf_height,
             tab.scroll_offset,
             scrollback_len,
