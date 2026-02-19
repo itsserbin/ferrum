@@ -338,6 +338,13 @@ pub fn tab_insert_index_from_x(
 
 // ── Tests ────────────────────────────────────────────────────────────
 
+/// Point-in-rectangle hit test. Returns true when `(x, y)` falls inside
+/// the rectangle described by `(rx, ry, rw, rh)`.
+pub fn point_in_rect(x: f64, y: f64, rect: (u32, u32, u32, u32)) -> bool {
+    let (rx, ry, rw, rh) = rect;
+    x >= rx as f64 && x < (rx + rw) as f64 && y >= ry as f64 && y < (ry + rh) as f64
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

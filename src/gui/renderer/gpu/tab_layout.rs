@@ -21,7 +21,7 @@ impl super::GpuRenderer {
     // ── Tab bar math (delegates to shared tab_math) ──────────────────────
 
     /// Builds a `TabLayoutMetrics` from the current GPU renderer state.
-    fn tab_layout_metrics(&self) -> TabLayoutMetrics {
+    pub(super) fn tab_layout_metrics(&self) -> TabLayoutMetrics {
         TabLayoutMetrics {
             cell_width: self.metrics.cell_width,
             cell_height: self.metrics.cell_height,
@@ -79,10 +79,6 @@ impl super::GpuRenderer {
             .map(|r| r.to_tuple())
     }
 
-    pub(super) fn point_in_rect(x: f64, y: f64, rect: (u32, u32, u32, u32)) -> bool {
-        let (rx, ry, rw, rh) = rect;
-        x >= rx as f64 && x < (rx + rw) as f64 && y >= ry as f64 && y < (ry + rh) as f64
-    }
 
     // ── Tab bar rendering: orchestrator ─────────────────────────────────
 
@@ -324,7 +320,7 @@ impl super::GpuRenderer {
     /// Draws the new-tab (+) button with hover highlight.
     fn plus_button_commands(&mut self, tab_count: usize, tw: u32, mouse_pos: (f64, f64)) {
         let plus_rect = self.plus_button_rect(tab_count, tw);
-        let plus_hover = Self::point_in_rect(mouse_pos.0, mouse_pos.1, plus_rect);
+        let plus_hover = tab_math::point_in_rect(mouse_pos.0, mouse_pos.1, plus_rect);
         if plus_hover {
             let (px, py, pw, ph) = plus_rect;
             self.push_rounded_rect(
@@ -371,7 +367,7 @@ impl super::GpuRenderer {
     #[cfg(not(target_os = "macos"))]
     fn draw_pin_button_commands(&mut self, mouse_pos: (f64, f64), pinned: bool) {
         let (pin_x, pin_y, pin_w, pin_h) = self.pin_button_rect();
-        let is_hovered = Self::point_in_rect(mouse_pos.0, mouse_pos.1, (pin_x, pin_y, pin_w, pin_h));
+        let is_hovered = tab_math::point_in_rect(mouse_pos.0, mouse_pos.1, (pin_x, pin_y, pin_w, pin_h));
 
         // Draw hover background.
         if is_hovered {
@@ -552,22 +548,8 @@ impl super::GpuRenderer {
         hovered_tab: Option<usize>,
         buf_width: u32,
     ) -> Option<&'a str> {
-        let idx = hovered_tab?;
-        let tab = tabs.get(idx)?;
-        if tab.is_renaming || tab.title.is_empty() {
-            return None;
-        }
-
-        let tw = self.tab_width_val(tabs.len(), buf_width);
-        if self.should_show_number(tw) {
-            return Some(tab.title);
-        }
-
-        let show_close = tab.is_active || hovered_tab == Some(idx);
         let m = self.tab_layout_metrics();
-        let max_chars = tab_math::tab_title_max_chars(&m, tw, show_close, tab.security_count);
-        let title_chars = tab.title.chars().count();
-        (title_chars > max_chars).then_some(tab.title)
+        super::super::shared::tab_hit_test::tab_hover_tooltip(tabs, hovered_tab, buf_width, &m)
     }
 
     pub(super) fn tab_insert_index_from_x_impl(

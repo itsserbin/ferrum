@@ -3,12 +3,10 @@
 #[cfg(not(target_os = "macos"))]
 use super::super::WindowButton;
 use super::super::shared::tab_math::{self, TabLayoutMetrics};
+use super::super::shared::tab_hit_test;
 use super::super::{TabBarHit, TabInfo};
 use super::{ACTIVE_TAB_BG, TAB_BORDER};
 use crate::core::Color;
-
-#[cfg(not(target_os = "macos"))]
-use super::WIN_BTN_WIDTH;
 
 impl super::super::CpuRenderer {
     /// Builds a `TabLayoutMetrics` from the current CPU renderer state.
@@ -77,50 +75,8 @@ impl super::super::CpuRenderer {
 
     /// Hit-tests the tab bar and returns the clicked target.
     pub fn hit_test_tab_bar(&self, x: f64, y: f64, tab_count: usize, buf_width: u32) -> TabBarHit {
-        if y >= self.tab_bar_height_px() as f64 {
-            return TabBarHit::Empty;
-        }
-
-        // Window buttons (non-macOS) have highest priority.
-        #[cfg(not(target_os = "macos"))]
-        if let Some(btn) = self.window_button_at_position(x, y, buf_width) {
-            return TabBarHit::WindowButton(btn);
-        }
-
-        // Pin button (non-macOS).
-        #[cfg(not(target_os = "macos"))]
-        {
-            let (pin_x, pin_y, pin_w, pin_h) = self.pin_button_rect();
-            if x >= pin_x as f64 && x < (pin_x + pin_w) as f64 && y >= pin_y as f64 && y < (pin_y + pin_h) as f64 {
-                return TabBarHit::PinButton;
-            }
-        }
-
-        let tw = self.tab_width(tab_count, buf_width);
-        let tab_strip_start = self.tab_strip_start_x();
-
-        // New-tab button has priority over tab body hit-test.
-        let (px, py, pw, ph) = self.plus_button_rect(tab_count, tw);
-        if x >= px as f64 && x < (px + pw) as f64 && y >= py as f64 && y < (py + ph) as f64 {
-            return TabBarHit::NewTab;
-        }
-
-        if x < tab_strip_start as f64 {
-            return TabBarHit::Empty;
-        }
-
-        let rel_x = x as u32 - tab_strip_start;
-        let tab_index = rel_x / tw;
-        if (tab_index as usize) < tab_count {
-            let idx = tab_index as usize;
-            let (cx, cy, cw, ch) = self.close_button_rect(idx, tw);
-            if x >= cx as f64 && x < (cx + cw) as f64 && y >= cy as f64 && y < (cy + ch) as f64 {
-                return TabBarHit::CloseTab(idx);
-            }
-            return TabBarHit::Tab(idx);
-        }
-
-        TabBarHit::Empty
+        let m = self.tab_layout_metrics();
+        tab_hit_test::hit_test_tab_bar(x, y, tab_count, buf_width, &m)
     }
 
     /// Hit-tests tab hover target (without button checks).
@@ -131,21 +87,8 @@ impl super::super::CpuRenderer {
         tab_count: usize,
         buf_width: u32,
     ) -> Option<usize> {
-        if y >= self.tab_bar_height_px() as f64 || tab_count == 0 {
-            return None;
-        }
-        let tw = self.tab_width(tab_count, buf_width);
-        let tab_strip_start = self.tab_strip_start_x();
-        if x < tab_strip_start as f64 {
-            return None;
-        }
-        let rel_x = x as u32 - tab_strip_start;
-        let idx = rel_x / tw;
-        if (idx as usize) < tab_count {
-            Some(idx as usize)
-        } else {
-            None
-        }
+        let m = self.tab_layout_metrics();
+        tab_hit_test::hit_test_tab_hover(x, y, tab_count, buf_width, &m)
     }
 
     /// Returns tab index when pointer is over a security badge.
@@ -156,20 +99,8 @@ impl super::super::CpuRenderer {
         tabs: &[TabInfo],
         buf_width: u32,
     ) -> Option<usize> {
-        for (idx, tab) in tabs.iter().enumerate() {
-            if tab.security_count == 0 {
-                continue;
-            }
-            let Some((sx, sy, sw, sh)) =
-                self.security_badge_rect(idx, tabs.len(), buf_width, tab.security_count)
-            else {
-                continue;
-            };
-            if x >= sx as f64 && x < (sx + sw) as f64 && y >= sy as f64 && y < (sy + sh) as f64 {
-                return Some(idx);
-            }
-        }
-        None
+        let m = self.tab_layout_metrics();
+        tab_hit_test::hit_test_tab_security_badge(x, y, tabs, buf_width, &m)
     }
 
     /// Hit-test window control buttons (non-macOS only).
@@ -180,24 +111,8 @@ impl super::super::CpuRenderer {
         y: f64,
         buf_width: u32,
     ) -> Option<WindowButton> {
-        let bar_h = self.tab_bar_height_px();
-        if y >= bar_h as f64 {
-            return None;
-        }
-        let btn_w = self.scaled_px(WIN_BTN_WIDTH);
-        let close_x = buf_width.saturating_sub(btn_w);
-        let min_x = buf_width.saturating_sub(btn_w * 2);
-        let minimize_x = buf_width.saturating_sub(btn_w * 3);
-
-        if x >= close_x as f64 && x < buf_width as f64 {
-            Some(WindowButton::Close)
-        } else if x >= min_x as f64 && x < (min_x + btn_w) as f64 {
-            Some(WindowButton::Maximize)
-        } else if x >= minimize_x as f64 && x < (minimize_x + btn_w) as f64 {
-            Some(WindowButton::Minimize)
-        } else {
-            None
-        }
+        let m = self.tab_layout_metrics();
+        tab_hit_test::window_button_at_position(x, y, buf_width, &m)
     }
 
     /// Returns true if the given tab width is too narrow to display the title.
@@ -224,20 +139,8 @@ impl super::super::CpuRenderer {
         hovered_tab: Option<usize>,
         buf_width: u32,
     ) -> Option<&'a str> {
-        let idx = hovered_tab?;
-        let tab = tabs.get(idx)?;
-        if tab.is_renaming || tab.title.is_empty() {
-            return None;
-        }
-
-        let tw = self.tab_width(tabs.len(), buf_width);
-        if self.should_show_number(tw) {
-            return Some(tab.title);
-        }
-
-        let max_chars = self.title_max_chars(tab, tw, true);
-        let title_chars = tab.title.chars().count();
-        (title_chars > max_chars).then_some(tab.title)
+        let m = self.tab_layout_metrics();
+        tab_hit_test::tab_hover_tooltip(tabs, hovered_tab, buf_width, &m)
     }
 
     /// Draws a small tooltip with full tab title near the pointer.

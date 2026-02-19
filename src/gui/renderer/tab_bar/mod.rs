@@ -531,7 +531,7 @@ impl CpuRenderer {
         mouse_pos: (f64, f64),
     ) {
         let plus_rect = self.plus_button_rect(tab_count, tw);
-        let plus_hover = Self::point_in_rect(mouse_pos.0, mouse_pos.1, plus_rect);
+        let plus_hover = tab_math::point_in_rect(mouse_pos.0, mouse_pos.1, plus_rect);
         if plus_hover {
             let (px, py, pw, ph) = plus_rect;
             self.draw_rounded_rect(

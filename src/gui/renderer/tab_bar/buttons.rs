@@ -3,6 +3,8 @@
 use super::super::CpuRenderer;
 
 #[cfg(not(target_os = "macos"))]
+use super::super::shared::tab_math;
+#[cfg(not(target_os = "macos"))]
 use super::{INACTIVE_TAB_HOVER, PIN_ACTIVE_COLOR, TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE, WIN_BTN_WIDTH};
 
 // Window button colors (non-macOS).
@@ -25,7 +27,7 @@ impl CpuRenderer {
     ) {
         let (pin_x, pin_y, pin_w, pin_h) = self.pin_button_rect();
         let is_hovered =
-            Self::point_in_rect(mouse_pos.0, mouse_pos.1, (pin_x, pin_y, pin_w, pin_h));
+            tab_math::point_in_rect(mouse_pos.0, mouse_pos.1, (pin_x, pin_y, pin_w, pin_h));
 
         // Draw hover background.
         if is_hovered {

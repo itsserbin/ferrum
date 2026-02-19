@@ -3,8 +3,11 @@ use std::collections::VecDeque;
 use unicode_width::UnicodeWidthChar;
 use vte::{Params, Parser, Perform};
 
+mod alt_screen;
 mod grid_ops;
 mod handlers;
+mod reflow;
+mod resize;
 
 /// Cursor style reported by DECSCUSR.
 #[derive(Default, Clone, Copy, PartialEq, Debug)]

@@ -6,13 +6,11 @@ use crate::core::Color;
 
 #[cfg(not(target_os = "macos"))]
 use super::super::WindowButton;
+use super::super::shared::tab_hit_test;
 use super::super::{ContextAction, ContextMenu, SecurityPopup, TabBarHit, TabInfo};
 
-#[cfg(not(target_os = "macos"))]
-use super::WIN_BTN_WIDTH;
-
 impl super::GpuRenderer {
-    // ── Hit testing ───────────────────────────────────────────────────
+    // ── Hit testing (delegates to shared tab_hit_test) ────────────────
 
     pub(super) fn hit_test_tab_bar_impl(
         &self,
@@ -21,52 +19,8 @@ impl super::GpuRenderer {
         tab_count: usize,
         buf_width: u32,
     ) -> TabBarHit {
-        if y >= self.metrics.tab_bar_height_px() as f64 {
-            return TabBarHit::Empty;
-        }
-
-        #[cfg(not(target_os = "macos"))]
-        if let Some(btn) = self.window_button_at_position_impl(x, y, buf_width) {
-            return TabBarHit::WindowButton(btn);
-        }
-
-        // Pin button (non-macOS).
-        #[cfg(not(target_os = "macos"))]
-        {
-            let (pin_x, pin_y, pin_w, pin_h) = self.pin_button_rect();
-            if x >= pin_x as f64
-                && x < (pin_x + pin_w) as f64
-                && y >= pin_y as f64
-                && y < (pin_y + pin_h) as f64
-            {
-                return TabBarHit::PinButton;
-            }
-        }
-
-        let tw = self.tab_width_val(tab_count, buf_width);
-        let tab_strip_start = self.tab_strip_start_x_val();
-
-        let (px, py, pw, ph) = self.plus_button_rect(tab_count, tw);
-        if x >= px as f64 && x < (px + pw) as f64 && y >= py as f64 && y < (py + ph) as f64 {
-            return TabBarHit::NewTab;
-        }
-
-        if x < tab_strip_start as f64 {
-            return TabBarHit::Empty;
-        }
-
-        let rel_x = x as u32 - tab_strip_start;
-        let tab_index = rel_x / tw;
-        if (tab_index as usize) < tab_count {
-            let idx = tab_index as usize;
-            let (cx, cy, cw, ch) = self.close_button_rect(idx, tw);
-            if x >= cx as f64 && x < (cx + cw) as f64 && y >= cy as f64 && y < (cy + ch) as f64 {
-                return TabBarHit::CloseTab(idx);
-            }
-            return TabBarHit::Tab(idx);
-        }
-
-        TabBarHit::Empty
+        let m = self.tab_layout_metrics();
+        tab_hit_test::hit_test_tab_bar(x, y, tab_count, buf_width, &m)
     }
 
     pub(super) fn hit_test_tab_hover_impl(
@@ -76,21 +30,8 @@ impl super::GpuRenderer {
         tab_count: usize,
         buf_width: u32,
     ) -> Option<usize> {
-        if y >= self.metrics.tab_bar_height_px() as f64 || tab_count == 0 {
-            return None;
-        }
-        let tw = self.tab_width_val(tab_count, buf_width);
-        let tab_strip_start = self.tab_strip_start_x_val();
-        if x < tab_strip_start as f64 {
-            return None;
-        }
-        let rel_x = x as u32 - tab_strip_start;
-        let idx = rel_x / tw;
-        if (idx as usize) < tab_count {
-            Some(idx as usize)
-        } else {
-            None
-        }
+        let m = self.tab_layout_metrics();
+        tab_hit_test::hit_test_tab_hover(x, y, tab_count, buf_width, &m)
     }
 
     pub(super) fn hit_test_tab_security_badge_impl(
@@ -100,20 +41,8 @@ impl super::GpuRenderer {
         tabs: &[TabInfo],
         buf_width: u32,
     ) -> Option<usize> {
-        for (idx, tab) in tabs.iter().enumerate() {
-            if tab.security_count == 0 {
-                continue;
-            }
-            let Some((sx, sy, sw, sh)) =
-                self.security_badge_rect_val(idx, tabs.len(), buf_width, tab.security_count)
-            else {
-                continue;
-            };
-            if x >= sx as f64 && x < (sx + sw) as f64 && y >= sy as f64 && y < (sy + sh) as f64 {
-                return Some(idx);
-            }
-        }
-        None
+        let m = self.tab_layout_metrics();
+        tab_hit_test::hit_test_tab_security_badge(x, y, tabs, buf_width, &m)
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -123,24 +52,8 @@ impl super::GpuRenderer {
         y: f64,
         buf_width: u32,
     ) -> Option<WindowButton> {
-        let bar_h = self.metrics.tab_bar_height_px();
-        if y >= bar_h as f64 {
-            return None;
-        }
-        let btn_w = self.metrics.scaled_px(WIN_BTN_WIDTH);
-        let close_x = buf_width.saturating_sub(btn_w);
-        let min_x = buf_width.saturating_sub(btn_w * 2);
-        let minimize_x = buf_width.saturating_sub(btn_w * 3);
-
-        if x >= close_x as f64 && x < buf_width as f64 {
-            Some(WindowButton::Close)
-        } else if x >= min_x as f64 && x < (min_x + btn_w) as f64 {
-            Some(WindowButton::Maximize)
-        } else if x >= minimize_x as f64 && x < (minimize_x + btn_w) as f64 {
-            Some(WindowButton::Minimize)
-        } else {
-            None
-        }
+        let m = self.tab_layout_metrics();
+        tab_hit_test::window_button_at_position(x, y, buf_width, &m)
     }
 
     // ── Context menu ──────────────────────────────────────────────────

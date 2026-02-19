@@ -76,15 +76,6 @@ impl super::super::CpuRenderer {
         }
     }
 
-    pub(in crate::gui::renderer) fn point_in_rect(
-        x: f64,
-        y: f64,
-        rect: (u32, u32, u32, u32),
-    ) -> bool {
-        let (rx, ry, rw, rh) = rect;
-        x >= rx as f64 && x < (rx + rw) as f64 && y >= ry as f64 && y < (ry + rh) as f64
-    }
-
     pub(in crate::gui::renderer) fn point_to_segment_distance(
         px: f32,
         py: f32,

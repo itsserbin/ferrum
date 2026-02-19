@@ -7,17 +7,22 @@
 
 pub mod atlas;
 pub mod buffers;
+mod cursors;
 mod frame;
+mod gpu_passes;
+mod grid_packing;
 mod hit_test;
 pub mod pipelines;
+mod scrollbar;
 mod setup;
 mod tab_layout;
 mod ui_commands;
+mod window_buttons;
 
 use fontdue::Font;
 use wgpu;
 
-use crate::core::{Cell, Color, CursorStyle, Grid, Selection};
+use crate::core::{CursorStyle, Grid, Selection};
 
 #[cfg(not(target_os = "macos"))]
 use super::WindowButton;
@@ -174,82 +179,7 @@ impl traits::Renderer for GpuRenderer {
         selection: Option<&Selection>,
         viewport_start: usize,
     ) {
-        // Pack grid cells into the GPU buffer format.
-        let rows = grid.rows;
-        let cols = grid.cols;
-        self.grid_cells.clear();
-        self.grid_cells.reserve(rows * cols);
-
-        for row in 0..rows {
-            let abs_row = viewport_start + row;
-            for col in 0..cols {
-                // Safe: iterating within grid bounds
-                let cell = grid.get_unchecked(row, col);
-                let selected = selection.is_some_and(|s| s.contains(abs_row, col));
-                let codepoint = cell.character as u32;
-
-                // Ensure non-ASCII terminal glyphs exist in the atlas before grid shading.
-                if codepoint >= 128 {
-                    let _ = self.atlas.get_or_insert(
-                        codepoint,
-                        &self.font,
-                        self.metrics.font_size,
-                        &self.queue,
-                    );
-                }
-
-                let mut attrs = 0u32;
-                if cell.bold {
-                    attrs |= 1;
-                }
-                if cell.underline {
-                    attrs |= 4;
-                }
-                if cell.reverse {
-                    attrs |= 8;
-                }
-                if selected {
-                    attrs |= 16;
-                }
-
-                let mut fg = cell.fg;
-                // Bold: bright variant for base ANSI colors.
-                if cell.bold {
-                    for i in 0..8 {
-                        if fg.r == Color::ANSI[i].r
-                            && fg.g == Color::ANSI[i].g
-                            && fg.b == Color::ANSI[i].b
-                        {
-                            fg = Color::ANSI[i + 8];
-                            break;
-                        }
-                    }
-                }
-
-                self.grid_cells.push(PackedCell {
-                    codepoint,
-                    fg: fg.to_pixel(),
-                    bg: cell.bg.to_pixel(),
-                    attrs,
-                });
-            }
-        }
-
-        self.grid_uniforms = GridUniforms {
-            cols: cols as u32,
-            rows: rows as u32,
-            cell_width: self.metrics.cell_width,
-            cell_height: self.metrics.cell_height,
-            atlas_width: self.atlas.atlas_width,
-            atlas_height: self.atlas.atlas_height,
-            baseline: self.metrics.ascent as u32,
-            bg_color: Color::DEFAULT_BG.to_pixel(),
-            tex_width: self.width,
-            tex_height: self.height,
-            _pad1: 0,
-            _pad2: 0,
-        };
-        self.grid_dirty = true;
+        self.pack_grid(grid, selection, viewport_start);
     }
 
     fn draw_cursor(
@@ -262,51 +192,7 @@ impl traits::Renderer for GpuRenderer {
         grid: &Grid,
         style: CursorStyle,
     ) {
-        let x =
-            col as f32 * self.metrics.cell_width as f32 + self.metrics.window_padding_px() as f32;
-        let y = row as f32 * self.metrics.cell_height as f32
-            + self.metrics.tab_bar_height_px() as f32
-            + self.metrics.window_padding_px() as f32;
-        let cw = self.metrics.cell_width as f32;
-        let ch = self.metrics.cell_height as f32;
-        let cursor_color = Color::DEFAULT_FG.to_pixel();
-
-        match style {
-            CursorStyle::BlinkingBlock | CursorStyle::SteadyBlock => {
-                // Filled block — draw bg rect + inverted glyph.
-                self.push_rect(x, y, cw, ch, cursor_color, 1.0);
-                let cell = grid.get(row, col).unwrap_or(&Cell::DEFAULT);
-                if cell.character != ' ' {
-                    let cp = cell.character as u32;
-                    let info = self.atlas.get_or_insert(
-                        cp,
-                        &self.font,
-                        self.metrics.font_size,
-                        &self.queue,
-                    );
-                    if info.w > 0.0 && info.h > 0.0 {
-                        let gx = x + info.offset_x;
-                        let gy = y + info.offset_y;
-                        self.push_glyph(
-                            gx,
-                            gy,
-                            info.x,
-                            info.y,
-                            info.w,
-                            info.h,
-                            Color::DEFAULT_BG.to_pixel(),
-                            1.0,
-                        );
-                    }
-                }
-            }
-            CursorStyle::BlinkingUnderline | CursorStyle::SteadyUnderline => {
-                self.push_rect(x, y + ch - 2.0, cw, 2.0, cursor_color, 1.0);
-            }
-            CursorStyle::BlinkingBar | CursorStyle::SteadyBar => {
-                self.push_rect(x, y, 2.0, ch, cursor_color, 1.0);
-            }
-        }
+        self.draw_cursor_impl(row, col, grid, style);
     }
 
     // ── Scrollbar ─────────────────────────────────────────────────────
@@ -322,46 +208,13 @@ impl traits::Renderer for GpuRenderer {
         opacity: f32,
         hover: bool,
     ) {
-        if scrollback_len == 0 || opacity <= 0.0 {
-            return;
-        }
-
-        let track_top =
-            (self.metrics.tab_bar_height_px() + self.metrics.window_padding_px()) as f32;
-        let track_bottom = buf_height as f32 - self.metrics.window_padding_px() as f32;
-        let track_height = track_bottom - track_top;
-        if track_height <= 0.0 {
-            return;
-        }
-
-        let total_lines = scrollback_len + grid_rows;
-        let viewport_ratio = grid_rows as f32 / total_lines as f32;
-        let min_thumb = self.metrics.scaled_px(SCROLLBAR_MIN_THUMB) as f32;
-        let thumb_height = (viewport_ratio * track_height)
-            .max(min_thumb)
-            .min(track_height);
-
-        let max_offset = scrollback_len as f32;
-        let scroll_ratio = (max_offset - scroll_offset as f32) / max_offset;
-        let thumb_y = track_top + scroll_ratio * (track_height - thumb_height);
-
-        let sb_width = self.metrics.scaled_px(super::SCROLLBAR_WIDTH) as f32;
-        let sb_margin = self.metrics.scaled_px(super::SCROLLBAR_MARGIN) as f32;
-        let thumb_x = self.width as f32 - sb_width - sb_margin;
-        let radius = self.metrics.scaled_px(3) as f32;
-
-        let color = if hover { 0x7F849C } else { 0x6C7086 };
-        let base_alpha = 180.0 / 255.0;
-        let alpha = base_alpha * opacity;
-
-        self.push_rounded_rect(
-            thumb_x,
-            thumb_y,
-            sb_width,
-            thumb_height,
-            radius,
-            color,
-            alpha,
+        self.render_scrollbar_impl(
+            buf_height,
+            scroll_offset,
+            scrollback_len,
+            grid_rows,
+            opacity,
+            hover,
         );
     }
 
@@ -372,30 +225,7 @@ impl traits::Renderer for GpuRenderer {
         scrollback_len: usize,
         grid_rows: usize,
     ) -> Option<(f32, f32)> {
-        if scrollback_len == 0 {
-            return None;
-        }
-
-        let track_top =
-            (self.metrics.tab_bar_height_px() + self.metrics.window_padding_px()) as f32;
-        let track_bottom = buf_height as f32 - self.metrics.window_padding_px() as f32;
-        let track_height = track_bottom - track_top;
-        if track_height <= 0.0 {
-            return None;
-        }
-
-        let total_lines = scrollback_len + grid_rows;
-        let viewport_ratio = grid_rows as f32 / total_lines as f32;
-        let min_thumb = self.metrics.scaled_px(SCROLLBAR_MIN_THUMB) as f32;
-        let thumb_height = (viewport_ratio * track_height)
-            .max(min_thumb)
-            .min(track_height);
-
-        let max_offset = scrollback_len as f32;
-        let scroll_ratio = (max_offset - scroll_offset as f32) / max_offset;
-        let thumb_y = track_top + scroll_ratio * (track_height - thumb_height);
-
-        Some((thumb_y, thumb_height))
+        self.scrollbar_thumb_bounds_impl(buf_height, scroll_offset, scrollback_len, grid_rows)
     }
 
     // ── Tab bar (delegates to tab_layout) ─────────────────────────────

@@ -1,6 +1,6 @@
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
-//! Frame rendering (GPU passes) and window resize logic.
+//! Frame lifecycle: buffer upload, surface management, and presentation.
 
 use wgpu;
 
@@ -9,14 +9,10 @@ use crate::core::Color;
 use super::MAX_UI_COMMANDS;
 use super::buffers::*;
 
-#[cfg(not(target_os = "macos"))]
-use super::super::WindowButton;
-#[cfg(not(target_os = "macos"))]
-use super::WIN_BTN_WIDTH;
 use super::{CLOSE_HOVER_BG_COLOR, TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE};
 
 impl super::GpuRenderer {
-    fn mix_rgb(c0: u32, c1: u32, t: f32) -> u32 {
+    pub(super) fn mix_rgb(c0: u32, c1: u32, t: f32) -> u32 {
         let t = t.clamp(0.0, 1.0);
         let r0 = ((c0 >> 16) & 0xFF) as f32;
         let g0 = ((c0 >> 8) & 0xFF) as f32;
@@ -51,7 +47,6 @@ impl super::GpuRenderer {
             );
         }
 
-        // X icon.
         let center_x = cx as f32 + cw as f32 * 0.5;
         let center_y = cy as f32 + ch as f32 * 0.5;
         let half = (cw.min(ch) as f32 * 0.22).clamp(2.5, 4.5);
@@ -77,105 +72,11 @@ impl super::GpuRenderer {
         );
     }
 
-    #[cfg(not(target_os = "macos"))]
-    pub(super) fn draw_window_buttons_commands(&mut self, buf_width: u32, mouse_pos: (f64, f64)) {
-        let bar_h = self.metrics.tab_bar_height_px() as f32;
-        let btn_w = self.metrics.scaled_px(WIN_BTN_WIDTH);
-        let bw = buf_width;
-
-        let buttons: [(u32, WindowButton); 3] = [
-            (bw.saturating_sub(btn_w * 3), WindowButton::Minimize),
-            (bw.saturating_sub(btn_w * 2), WindowButton::Maximize),
-            (bw.saturating_sub(btn_w), WindowButton::Close),
-        ];
-
-        for &(btn_x, ref btn_type) in &buttons {
-            let is_hovered = mouse_pos.0 >= btn_x as f64
-                && mouse_pos.0 < (btn_x + btn_w) as f64
-                && mouse_pos.1 >= 0.0
-                && mouse_pos.1 < bar_h as f64;
-
-            if is_hovered {
-                let hover_bg = if *btn_type == WindowButton::Close {
-                    0xF38BA8
-                } else {
-                    0x313244
-                };
-                self.push_rect(btn_x as f32, 0.0, btn_w as f32, bar_h, hover_bg, 1.0);
-            }
-
-            let icon_color = if is_hovered && *btn_type == WindowButton::Close {
-                0xFFFFFF
-            } else {
-                0x6C7086
-            };
-
-            let center_x = btn_x as f32 + btn_w as f32 / 2.0;
-            let center_y = bar_h / 2.0;
-            let thickness = (1.25 * self.metrics.ui_scale as f32).clamp(1.15, 2.2);
-
-            match btn_type {
-                WindowButton::Minimize => {
-                    self.push_minimize_icon(center_x, center_y, thickness, icon_color)
-                }
-                WindowButton::Maximize => {
-                    self.push_maximize_icon(center_x, center_y, thickness, icon_color)
-                }
-                WindowButton::Close => {
-                    self.push_close_icon(center_x, center_y, thickness, icon_color)
-                }
-            }
-        }
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    fn push_minimize_icon(&mut self, cx: f32, cy: f32, thickness: f32, color: u32) {
-        let half_w = self.metrics.scaled_px(5) as f32;
-        self.push_line(cx - half_w, cy, cx + half_w, cy, thickness, color, 1.0);
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    fn push_maximize_icon(&mut self, cx: f32, cy: f32, thickness: f32, color: u32) {
-        let half = self.metrics.scaled_px(5) as f32;
-        let x0 = cx - half;
-        let y0 = cy - half;
-        let x1 = cx + half;
-        let y1 = cy + half;
-        self.push_line(x0, y0, x1, y0, thickness, color, 1.0);
-        self.push_line(x0, y1, x1, y1, thickness, color, 1.0);
-        self.push_line(x0, y0, x0, y1, thickness, color, 1.0);
-        self.push_line(x1, y0, x1, y1, thickness, color, 1.0);
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    fn push_close_icon(&mut self, cx: f32, cy: f32, thickness: f32, color: u32) {
-        let half = self.metrics.scaled_px(5) as f32 * 0.7;
-        self.push_line(
-            cx - half,
-            cy - half,
-            cx + half,
-            cy + half,
-            thickness,
-            color,
-            1.0,
-        );
-        self.push_line(
-            cx + half,
-            cy - half,
-            cx - half,
-            cy + half,
-            thickness,
-            color,
-            1.0,
-        );
-    }
-
     /// Uploads grid cell buffer and glyph info to the GPU.
     fn upload_grid_data(&mut self) {
         if !self.grid_dirty || self.grid_cells.is_empty() {
             return;
         }
-        // Ensure cell buffer is large enough.
         let needed = self.grid_cells.len() * std::mem::size_of::<PackedCell>();
         if needed as u64 > self.grid_cell_buffer.size() {
             self.grid_cell_buffer =
@@ -192,7 +93,6 @@ impl super::GpuRenderer {
             bytemuck::bytes_of(&self.grid_uniforms),
         );
 
-        // Rebuild glyph info buffer in case new glyphs were added.
         let glyph_data = self.atlas.glyph_info_buffer_data();
         let glyph_bytes = bytemuck::cast_slice(&glyph_data);
         if glyph_bytes.len() as u64 > self.glyph_info_buffer.size() {
@@ -230,7 +130,6 @@ impl super::GpuRenderer {
                 .write_buffer(&self.ui_command_buffer, 0, cmd_bytes);
         }
 
-        // Composite uniforms.
         let grid_pixel_w = self.grid_uniforms.cols * self.grid_uniforms.cell_width;
         let grid_pixel_h = self.grid_uniforms.rows * self.grid_uniforms.cell_height;
         let composite_uniforms = CompositeUniforms {
@@ -257,7 +156,6 @@ impl super::GpuRenderer {
         let output = match self.surface.get_current_texture() {
             Ok(t) => t,
             Err(_) => {
-                // Reconfigure and retry once.
                 self.surface.configure(&self.device, &self.surface_config);
                 match self.surface.get_current_texture() {
                     Ok(t) => t,
@@ -275,151 +173,7 @@ impl super::GpuRenderer {
         Some((output, output_view))
     }
 
-    /// Encodes the grid compute pass (Pass 1).
-    fn encode_grid_pass(&self, encoder: &mut wgpu::CommandEncoder) {
-        if !self.grid_dirty || self.grid_cells.is_empty() {
-            return;
-        }
-
-        let grid_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("grid_bind_group"),
-            layout: &self.grid_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: self.grid_uniform_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: self.grid_cell_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: self.glyph_info_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: wgpu::BindingResource::TextureView(&self.atlas.texture_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 4,
-                    resource: wgpu::BindingResource::TextureView(&self.grid_texture_view),
-                },
-            ],
-        });
-
-        let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("grid_compute_pass"),
-            timestamp_writes: None,
-        });
-        compute_pass.set_pipeline(&self.grid_pipeline);
-        compute_pass.set_bind_group(0, &grid_bind_group, &[]);
-
-        // Dispatch enough workgroups to cover the entire texture so the
-        // compute shader fills out-of-grid pixels with the background color.
-        let wg_x = (self.width + 15) / 16;
-        let wg_y = (self.height + 15) / 16;
-        compute_pass.dispatch_workgroups(wg_x, wg_y, 1);
-    }
-
-    /// Encodes the UI render pass (Pass 2).
-    fn encode_ui_pass(&self, encoder: &mut wgpu::CommandEncoder) {
-        let ui_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("ui_bind_group"),
-            layout: &self.ui_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: self.ui_uniform_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: self.ui_command_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::TextureView(&self.atlas.texture_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: wgpu::BindingResource::Sampler(&self.sampler),
-                },
-            ],
-        });
-
-        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("ui_render_pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &self.ui_texture_view,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                    store: wgpu::StoreOp::Store,
-                },
-                depth_slice: None,
-            })],
-            depth_stencil_attachment: None,
-            timestamp_writes: None,
-            occlusion_query_set: None,
-            multiview_mask: None,
-        });
-        render_pass.set_pipeline(&self.ui_pipeline);
-        render_pass.set_bind_group(0, &ui_bind_group, &[]);
-        render_pass.draw(0..3, 0..1); // Fullscreen triangle.
-    }
-
-    /// Encodes the composite render pass (Pass 3).
-    fn encode_composite_pass(
-        &self,
-        encoder: &mut wgpu::CommandEncoder,
-        output_view: &wgpu::TextureView,
-    ) {
-        let composite_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("composite_bind_group"),
-            layout: &self.composite_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&self.grid_texture_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&self.ui_texture_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::Sampler(&self.sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: self.composite_uniform_buffer.as_entire_binding(),
-                },
-            ],
-        });
-
-        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("composite_render_pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: output_view,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                    store: wgpu::StoreOp::Store,
-                },
-                depth_slice: None,
-            })],
-            depth_stencil_attachment: None,
-            timestamp_writes: None,
-            occlusion_query_set: None,
-            multiview_mask: None,
-        });
-        render_pass.set_pipeline(&self.composite_pipeline);
-        render_pass.set_bind_group(0, &composite_bind_group, &[]);
-        render_pass.draw(0..3, 0..1);
-    }
-
     /// Encodes all GPU passes and presents the frame.
-    /// Called as the last step in the frame after all draw_* methods.
     pub fn present_frame(&mut self) {
         self.upload_grid_data();
         self.upload_ui_data();
@@ -441,7 +195,6 @@ impl super::GpuRenderer {
         self.queue.submit(std::iter::once(encoder.finish()));
         output.present();
 
-        // Reset per-frame state.
         self.commands.clear();
         self.grid_dirty = false;
     }
