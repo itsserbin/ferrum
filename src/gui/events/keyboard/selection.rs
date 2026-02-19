@@ -119,12 +119,12 @@ impl FerrumWindow {
             }
         };
 
-        if !bytes.is_empty() {
-            if let Some(tab) = self.active_tab_mut() {
-                tab.scroll_offset = 0;
-                let _ = tab.pty_writer.write_all(&bytes);
-                let _ = tab.pty_writer.flush();
-            }
+        if !bytes.is_empty()
+            && let Some(tab) = self.active_tab_mut()
+        {
+            tab.scroll_offset = 0;
+            let _ = tab.pty_writer.write_all(&bytes);
+            let _ = tab.pty_writer.flush();
         }
 
         self.keyboard_selection_anchor = Some(crate::core::SelectionPoint {

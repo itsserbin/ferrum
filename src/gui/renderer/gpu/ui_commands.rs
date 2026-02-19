@@ -24,6 +24,7 @@ impl super::GpuRenderer {
         });
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn push_rounded_rect(
         &mut self,
         x: f32,
@@ -51,6 +52,7 @@ impl super::GpuRenderer {
         });
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn push_line(
         &mut self,
         x1: f32,
@@ -96,6 +98,7 @@ impl super::GpuRenderer {
         });
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn push_glyph(
         &mut self,
         x: f32,

@@ -45,8 +45,8 @@ impl super::GpuRenderer {
 
         // Dispatch enough workgroups to cover the entire texture so the
         // compute shader fills out-of-grid pixels with the background color.
-        let wg_x = (self.width + 15) / 16;
-        let wg_y = (self.height + 15) / 16;
+        let wg_x = self.width.div_ceil(16);
+        let wg_y = self.height.div_ceil(16);
         compute_pass.dispatch_workgroups(wg_x, wg_y, 1);
     }
 

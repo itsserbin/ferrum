@@ -101,13 +101,13 @@ impl FerrumWindow {
 
             // Tabs between source and dest shift by one tab width.
             if source < dest {
-                for i in (source + 1)..=dest {
-                    offsets[i] = tw;
+                for offset in offsets.iter_mut().take(dest + 1).skip(source + 1) {
+                    *offset = tw;
                 }
                 offsets[source] = -((dest - source) as f32 * tw);
             } else {
-                for i in dest..source {
-                    offsets[i] = -tw;
+                for offset in offsets.iter_mut().take(source).skip(dest) {
+                    *offset = -tw;
                 }
                 offsets[source] = (source - dest) as f32 * tw;
             }

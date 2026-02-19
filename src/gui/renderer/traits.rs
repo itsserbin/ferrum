@@ -18,6 +18,7 @@ pub enum BackendKind {
 ///
 /// Both CPU (softbuffer) and GPU (wgpu) renderers implement this trait,
 /// keeping the rest of the codebase backend-agnostic.
+#[allow(clippy::too_many_arguments)]
 pub trait Renderer {
     // ── Lifecycle ────────────────────────────────────────────────────
 

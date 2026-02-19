@@ -351,7 +351,7 @@ impl Perform for Terminal {
 
     fn execute(&mut self, byte: u8) {
         match byte {
-            10 | 11 | 12 => {
+            10..=12 => {
                 // LF/VT/FF: move to next row, keep current column.
                 // Mark current row as NOT wrapped (hard line break).
                 self.grid.set_wrapped(self.cursor_row, false);
@@ -374,8 +374,7 @@ impl Perform for Terminal {
             9 => {
                 // tab
                 const DEFAULT_TAB_WIDTH: usize = 8;
-                self.cursor_col =
-                    (self.cursor_col + DEFAULT_TAB_WIDTH) & !(DEFAULT_TAB_WIDTH - 1);
+                self.cursor_col = (self.cursor_col + DEFAULT_TAB_WIDTH) & !(DEFAULT_TAB_WIDTH - 1);
                 if self.cursor_col >= self.grid.cols {
                     self.cursor_col = self.grid.cols - 1;
                 }

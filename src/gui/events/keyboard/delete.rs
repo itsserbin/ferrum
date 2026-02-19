@@ -66,7 +66,8 @@ impl FerrumWindow {
     }
 
     pub(super) fn cut_selection(&mut self) -> bool {
-        if !self.active_tab_ref().is_some_and(|t| t.selection.is_some()) {
+        let has_selection = self.active_tab_ref().is_some_and(|t| t.selection.is_some());
+        if !has_selection {
             return false;
         }
 
@@ -134,10 +135,12 @@ impl FerrumWindow {
             return false;
         }
 
-        if self.active_tab_ref().is_some_and(|tab| tab.selection.is_some()) {
-            if self.delete_terminal_selection(use_backspace) {
-                return true;
-            }
+        if self
+            .active_tab_ref()
+            .is_some_and(|tab| tab.selection.is_some())
+            && self.delete_terminal_selection(use_backspace)
+        {
+            return true;
         }
 
         let (cursor_col, target_col) = {

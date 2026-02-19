@@ -1,14 +1,14 @@
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use objc2::MainThreadMarker;
 use objc2::msg_send;
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, Sel};
 use objc2_app_kit::{
-    NSBezelStyle, NSButton, NSFloatingWindowLevel, NSImage, NSLayoutAttribute,
-    NSNormalWindowLevel, NSTitlebarAccessoryViewController, NSWindow,
+    NSBezelStyle, NSButton, NSFloatingWindowLevel, NSImage, NSLayoutAttribute, NSNormalWindowLevel,
+    NSTitlebarAccessoryViewController, NSWindow,
 };
 use objc2_foundation::ns_string;
 use winit::window::Window;
@@ -177,10 +177,8 @@ pub fn setup_toolbar(window: &Window) {
         let types = c"v@:@".as_ptr();
 
         let win_cls = object_getClass(Retained::as_ptr(&ns_window).cast());
-        if !win_cls.is_null() {
-            if !class_addMethod(win_cls, sel_pin_action_ptr, imp, types) {
-                class_replaceMethod(win_cls, sel_pin_action_ptr, imp, types);
-            }
+        if !win_cls.is_null() && !class_addMethod(win_cls, sel_pin_action_ptr, imp, types) {
+            class_replaceMethod(win_cls, sel_pin_action_ptr, imp, types);
         }
 
         let Some(image) = NSImage::imageWithSystemSymbolName_accessibilityDescription(

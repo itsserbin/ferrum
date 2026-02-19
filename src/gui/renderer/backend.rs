@@ -16,11 +16,11 @@ use super::traits::Renderer;
 /// GPU renderer owns its own wgpu surface internally.
 pub enum RendererBackend {
     Cpu {
-        renderer: CpuRenderer,
-        surface: Surface<winit::event_loop::OwnedDisplayHandle, Arc<Window>>,
+        renderer: Box<CpuRenderer>,
+        surface: Box<Surface<winit::event_loop::OwnedDisplayHandle, Arc<Window>>>,
     },
     #[cfg(feature = "gpu")]
-    Gpu(GpuRenderer),
+    Gpu(Box<GpuRenderer>),
 }
 
 impl RendererBackend {
@@ -34,7 +34,7 @@ impl RendererBackend {
             match GpuRenderer::new(window.clone()) {
                 Ok(gpu) => {
                     eprintln!("[ferrum] Using GPU renderer (wgpu)");
-                    return RendererBackend::Gpu(gpu);
+                    return RendererBackend::Gpu(Box::new(gpu));
                 }
                 Err(e) => {
                     eprintln!("[ferrum] GPU renderer failed: {e}, falling back to CPU");
@@ -42,8 +42,8 @@ impl RendererBackend {
             }
         }
 
-        let surface = Surface::new(context, window.clone()).expect("softbuffer surface");
-        let renderer = CpuRenderer::new();
+        let surface = Box::new(Surface::new(context, window.clone()).expect("softbuffer surface"));
+        let renderer = Box::new(CpuRenderer::new());
         eprintln!("[ferrum] Using CPU renderer (softbuffer)");
         RendererBackend::Cpu { renderer, surface }
     }
@@ -54,7 +54,7 @@ impl RendererBackend {
         match self {
             RendererBackend::Cpu { renderer, .. } => renderer.set_scale(scale_factor),
             #[cfg(feature = "gpu")]
-            RendererBackend::Gpu(gpu) => Renderer::set_scale(gpu, scale_factor),
+            RendererBackend::Gpu(gpu) => Renderer::set_scale(gpu.as_mut(), scale_factor),
         }
     }
 
@@ -63,7 +63,7 @@ impl RendererBackend {
         match self {
             RendererBackend::Cpu { renderer, .. } => renderer.set_tab_bar_visible(visible),
             #[cfg(feature = "gpu")]
-            RendererBackend::Gpu(gpu) => Renderer::set_tab_bar_visible(gpu, visible),
+            RendererBackend::Gpu(gpu) => Renderer::set_tab_bar_visible(gpu.as_mut(), visible),
         }
     }
 
@@ -73,7 +73,7 @@ impl RendererBackend {
         match self {
             RendererBackend::Cpu { renderer, .. } => renderer.cell_width,
             #[cfg(feature = "gpu")]
-            RendererBackend::Gpu(gpu) => Renderer::cell_width(gpu),
+            RendererBackend::Gpu(gpu) => Renderer::cell_width(gpu.as_ref()),
         }
     }
 
@@ -81,7 +81,7 @@ impl RendererBackend {
         match self {
             RendererBackend::Cpu { renderer, .. } => renderer.cell_height,
             #[cfg(feature = "gpu")]
-            RendererBackend::Gpu(gpu) => Renderer::cell_height(gpu),
+            RendererBackend::Gpu(gpu) => Renderer::cell_height(gpu.as_ref()),
         }
     }
 
@@ -89,7 +89,7 @@ impl RendererBackend {
         match self {
             RendererBackend::Cpu { renderer, .. } => renderer.tab_bar_height_px(),
             #[cfg(feature = "gpu")]
-            RendererBackend::Gpu(gpu) => Renderer::tab_bar_height_px(gpu),
+            RendererBackend::Gpu(gpu) => Renderer::tab_bar_height_px(gpu.as_ref()),
         }
     }
 
@@ -97,7 +97,7 @@ impl RendererBackend {
         match self {
             RendererBackend::Cpu { renderer, .. } => renderer.window_padding_px(),
             #[cfg(feature = "gpu")]
-            RendererBackend::Gpu(gpu) => Renderer::window_padding_px(gpu),
+            RendererBackend::Gpu(gpu) => Renderer::window_padding_px(gpu.as_ref()),
         }
     }
 
@@ -105,7 +105,7 @@ impl RendererBackend {
         match self {
             RendererBackend::Cpu { renderer, .. } => renderer.ui_scale(),
             #[cfg(feature = "gpu")]
-            RendererBackend::Gpu(gpu) => Renderer::ui_scale(gpu),
+            RendererBackend::Gpu(gpu) => Renderer::ui_scale(gpu.as_ref()),
         }
     }
 
@@ -113,7 +113,7 @@ impl RendererBackend {
         match self {
             RendererBackend::Cpu { renderer, .. } => renderer.scaled_px(base),
             #[cfg(feature = "gpu")]
-            RendererBackend::Gpu(gpu) => Renderer::scaled_px(gpu, base),
+            RendererBackend::Gpu(gpu) => Renderer::scaled_px(gpu.as_ref(), base),
         }
     }
 
@@ -121,7 +121,7 @@ impl RendererBackend {
         match self {
             RendererBackend::Cpu { renderer, .. } => renderer.scrollbar_hit_zone_px(),
             #[cfg(feature = "gpu")]
-            RendererBackend::Gpu(gpu) => Renderer::scrollbar_hit_zone_px(gpu),
+            RendererBackend::Gpu(gpu) => Renderer::scrollbar_hit_zone_px(gpu.as_ref()),
         }
     }
 
@@ -143,7 +143,7 @@ impl RendererBackend {
             ),
             #[cfg(feature = "gpu")]
             RendererBackend::Gpu(gpu) => Renderer::scrollbar_thumb_bounds(
-                gpu,
+                gpu.as_ref(),
                 buf_height,
                 scroll_offset,
                 scrollback_len,
@@ -158,7 +158,7 @@ impl RendererBackend {
         match self {
             RendererBackend::Cpu { renderer, .. } => renderer.tab_width(tab_count, buf_width),
             #[cfg(feature = "gpu")]
-            RendererBackend::Gpu(gpu) => Renderer::tab_width(gpu, tab_count, buf_width),
+            RendererBackend::Gpu(gpu) => Renderer::tab_width(gpu.as_ref(), tab_count, buf_width),
         }
     }
 
@@ -166,7 +166,7 @@ impl RendererBackend {
         match self {
             RendererBackend::Cpu { renderer, .. } => renderer.tab_origin_x(tab_index, tw),
             #[cfg(feature = "gpu")]
-            RendererBackend::Gpu(gpu) => Renderer::tab_origin_x(gpu, tab_index, tw),
+            RendererBackend::Gpu(gpu) => Renderer::tab_origin_x(gpu.as_ref(), tab_index, tw),
         }
     }
 
@@ -177,7 +177,7 @@ impl RendererBackend {
             }
             #[cfg(feature = "gpu")]
             RendererBackend::Gpu(gpu) => {
-                Renderer::tab_insert_index_from_x(gpu, x, tab_count, buf_width)
+                Renderer::tab_insert_index_from_x(gpu.as_ref(), x, tab_count, buf_width)
             }
         }
     }
@@ -195,7 +195,7 @@ impl RendererBackend {
             }
             #[cfg(feature = "gpu")]
             RendererBackend::Gpu(gpu) => {
-                Renderer::tab_hover_tooltip(gpu, tabs, hovered_tab, buf_width)
+                Renderer::tab_hover_tooltip(gpu.as_ref(), tabs, hovered_tab, buf_width)
             }
         }
     }
@@ -207,7 +207,7 @@ impl RendererBackend {
             }
             #[cfg(feature = "gpu")]
             RendererBackend::Gpu(gpu) => {
-                Renderer::hit_test_tab_bar(gpu, x, y, tab_count, buf_width)
+                Renderer::hit_test_tab_bar(gpu.as_ref(), x, y, tab_count, buf_width)
             }
         }
     }
@@ -225,7 +225,7 @@ impl RendererBackend {
             }
             #[cfg(feature = "gpu")]
             RendererBackend::Gpu(gpu) => {
-                Renderer::hit_test_tab_hover(gpu, x, y, tab_count, buf_width)
+                Renderer::hit_test_tab_hover(gpu.as_ref(), x, y, tab_count, buf_width)
             }
         }
     }
@@ -243,7 +243,7 @@ impl RendererBackend {
             }
             #[cfg(feature = "gpu")]
             RendererBackend::Gpu(gpu) => {
-                Renderer::hit_test_tab_security_badge(gpu, x, y, tabs, buf_width)
+                Renderer::hit_test_tab_security_badge(gpu.as_ref(), x, y, tabs, buf_width)
             }
         }
     }
@@ -260,9 +260,13 @@ impl RendererBackend {
                 renderer.security_badge_rect(tab_index, tab_count, buf_width, security_count)
             }
             #[cfg(feature = "gpu")]
-            RendererBackend::Gpu(gpu) => {
-                Renderer::security_badge_rect(gpu, tab_index, tab_count, buf_width, security_count)
-            }
+            RendererBackend::Gpu(gpu) => Renderer::security_badge_rect(
+                gpu.as_ref(),
+                tab_index,
+                tab_count,
+                buf_width,
+                security_count,
+            ),
         }
     }
 
@@ -272,7 +276,7 @@ impl RendererBackend {
         match self {
             RendererBackend::Cpu { renderer, .. } => renderer.hit_test_context_menu(menu, x, y),
             #[cfg(feature = "gpu")]
-            RendererBackend::Gpu(gpu) => Renderer::hit_test_context_menu(gpu, menu, x, y),
+            RendererBackend::Gpu(gpu) => Renderer::hit_test_context_menu(gpu.as_ref(), menu, x, y),
         }
     }
 
@@ -292,7 +296,7 @@ impl RendererBackend {
             }
             #[cfg(feature = "gpu")]
             RendererBackend::Gpu(gpu) => {
-                Renderer::hit_test_security_popup(gpu, popup, x, y, buf_width, buf_height)
+                Renderer::hit_test_security_popup(gpu.as_ref(), popup, x, y, buf_width, buf_height)
             }
         }
     }

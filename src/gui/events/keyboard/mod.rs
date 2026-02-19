@@ -1,9 +1,12 @@
+mod clipboard_shortcuts;
 mod delete;
 mod entry;
 mod forward;
+mod navigation_shortcuts;
 mod rename;
 mod selection;
 mod shortcuts;
+mod tab_shortcuts;
 mod word_motion;
 
 use crate::gui::*;

@@ -1,11 +1,11 @@
 use crate::gui::*;
 
 impl FerrumWindow {
-    fn physical_key_is(physical: &PhysicalKey, code: KeyCode) -> bool {
+    pub(super) fn physical_key_is(physical: &PhysicalKey, code: KeyCode) -> bool {
         matches!(physical, PhysicalKey::Code(current) if *current == code)
     }
 
-    fn physical_digit_index(physical: &PhysicalKey) -> Option<usize> {
+    pub(super) fn physical_digit_index(physical: &PhysicalKey) -> Option<usize> {
         let PhysicalKey::Code(code) = physical else {
             return None;
         };
@@ -20,187 +20,6 @@ impl FerrumWindow {
             KeyCode::Digit7 | KeyCode::Numpad7 => Some(6),
             KeyCode::Digit8 | KeyCode::Numpad8 => Some(7),
             KeyCode::Digit9 | KeyCode::Numpad9 => Some(8),
-            _ => None,
-        }
-    }
-
-    // ── Ctrl shortcut sub-handlers ──────────────────────────────────────
-
-    /// Handles clipboard shortcuts: Copy (Ctrl+C), Paste (Ctrl+V), Cut (Ctrl+X).
-    /// Returns `Some(result)` if the key matched a clipboard action, `None` otherwise.
-    fn handle_clipboard_shortcuts(
-        &mut self,
-        key: &Key,
-        physical: &PhysicalKey,
-    ) -> Option<bool> {
-        let is_copy_key = matches!(key, Key::Named(NamedKey::Copy))
-            || Self::physical_key_is(physical, KeyCode::KeyC);
-        if is_copy_key {
-            if self.active_tab_ref().is_some_and(|t| t.selection.is_some()) {
-                self.copy_selection();
-                return Some(true);
-            }
-            return Some(false);
-        }
-
-        let is_paste_key = matches!(key, Key::Named(NamedKey::Paste))
-            || Self::physical_key_is(physical, KeyCode::KeyV);
-        if is_paste_key {
-            self.paste_clipboard();
-            return Some(true);
-        }
-
-        if Self::physical_key_is(physical, KeyCode::KeyX) {
-            return Some(self.cut_selection());
-        }
-
-        None
-    }
-
-    /// Handles tab management shortcuts: new tab (T), close tab (W), new window (N),
-    /// switch tab by digit, and Ctrl+Tab.
-    fn handle_tab_management_shortcuts(
-        &mut self,
-        key: &Key,
-        physical: &PhysicalKey,
-        _next_tab_id: &mut u64,
-        _tx: &mpsc::Sender<PtyEvent>,
-    ) -> Option<bool> {
-        if Self::physical_key_is(physical, KeyCode::KeyT) {
-            #[cfg(target_os = "macos")]
-            {
-                self.pending_requests.push(WindowRequest::NewTab);
-            }
-            #[cfg(not(target_os = "macos"))]
-            {
-                let size = self.window.inner_size();
-                let (rows, cols) = self.calc_grid_size(size.width, size.height);
-                self.new_tab(rows, cols, _next_tab_id, _tx);
-            }
-            return Some(true);
-        }
-
-        if Self::physical_key_is(physical, KeyCode::KeyW) {
-            self.close_tab(self.active_tab);
-            return Some(true);
-        }
-
-        if Self::physical_key_is(physical, KeyCode::KeyN) {
-            self.pending_requests.push(WindowRequest::NewWindow);
-            return Some(true);
-        }
-
-        if let Some(digit_index) = Self::physical_digit_index(physical) {
-            #[cfg(target_os = "macos")]
-            {
-                if digit_index == 8 {
-                    crate::gui::platform::macos::select_tab(&self.window, usize::MAX);
-                } else {
-                    crate::gui::platform::macos::select_tab(&self.window, digit_index);
-                }
-            }
-            #[cfg(not(target_os = "macos"))]
-            {
-                if digit_index == 8 {
-                    if !self.tabs.is_empty() {
-                        self.active_tab = self.tabs.len() - 1;
-                    }
-                } else {
-                    self.switch_tab(digit_index);
-                }
-            }
-            return Some(true);
-        }
-
-        if matches!(key, Key::Named(NamedKey::Tab)) {
-            #[cfg(target_os = "macos")]
-            crate::gui::platform::macos::select_next_tab(&self.window);
-            #[cfg(not(target_os = "macos"))]
-            {
-                if !self.tabs.is_empty() {
-                    self.active_tab = (self.active_tab + 1) % self.tabs.len();
-                }
-            }
-            return Some(true);
-        }
-
-        None
-    }
-
-    /// Handles Super+key text editing shortcuts (macOS emacs-style):
-    /// Super+A/E/B/F/D/K/U mapped to readline control codes.
-    fn handle_super_text_shortcuts(&mut self, physical: &PhysicalKey) -> bool {
-        if !self.modifiers.super_key() {
-            return false;
-        }
-
-        if Self::physical_key_is(physical, KeyCode::KeyA) {
-            self.write_pty_bytes(b"\x01"); // Ctrl+A - beginning of line
-            return true;
-        }
-        if Self::physical_key_is(physical, KeyCode::KeyE) {
-            self.write_pty_bytes(b"\x05"); // Ctrl+E - end of line
-            return true;
-        }
-        if Self::physical_key_is(physical, KeyCode::KeyB) {
-            self.write_pty_bytes(b"\x1bb"); // Alt+B - previous word
-            return true;
-        }
-        if Self::physical_key_is(physical, KeyCode::KeyF) {
-            self.write_pty_bytes(b"\x1bf"); // Alt+F - next word
-            return true;
-        }
-        if Self::physical_key_is(physical, KeyCode::KeyD) {
-            self.write_pty_bytes(b"\x1bd"); // Alt+D - delete next word
-            return true;
-        }
-        if Self::physical_key_is(physical, KeyCode::KeyK) {
-            self.write_pty_bytes(b"\x0b"); // Ctrl+K - delete to end of line
-            return true;
-        }
-        if Self::physical_key_is(physical, KeyCode::KeyU) {
-            self.write_pty_bytes(b"\x15"); // Ctrl+U - delete to beginning of line
-            return true;
-        }
-        false
-    }
-
-    /// Handles Super+arrow/delete navigation shortcuts:
-    /// Super+Arrow (scroll/line nav), Super+Backspace/Delete (line kill).
-    fn handle_super_navigation_shortcuts(&mut self, key: &Key) -> Option<bool> {
-        if !self.modifiers.super_key() {
-            return None;
-        }
-
-        match key {
-            Key::Named(NamedKey::ArrowLeft) => {
-                self.write_pty_bytes(b"\x01"); // Ctrl+A - beginning of line
-                Some(true)
-            }
-            Key::Named(NamedKey::ArrowRight) => {
-                self.write_pty_bytes(b"\x05"); // Ctrl+E - end of line
-                Some(true)
-            }
-            Key::Named(NamedKey::ArrowUp) => {
-                if let Some(tab) = self.active_tab_mut() {
-                    tab.scroll_offset = tab.terminal.scrollback.len();
-                }
-                Some(true)
-            }
-            Key::Named(NamedKey::ArrowDown) => {
-                if let Some(tab) = self.active_tab_mut() {
-                    tab.scroll_offset = 0;
-                }
-                Some(true)
-            }
-            Key::Named(NamedKey::Backspace) => {
-                self.write_pty_bytes(b"\x15"); // Ctrl+U - delete to beginning of line
-                Some(true)
-            }
-            Key::Named(NamedKey::Delete) => {
-                self.write_pty_bytes(b"\x0b"); // Ctrl+K - delete to end of line
-                Some(true)
-            }
             _ => None,
         }
     }
@@ -222,7 +41,8 @@ impl FerrumWindow {
         if let Some(result) = self.handle_clipboard_shortcuts(key, physical) {
             return result;
         }
-        if let Some(result) = self.handle_tab_management_shortcuts(key, physical, _next_tab_id, _tx) {
+        if let Some(result) = self.handle_tab_management_shortcuts(key, physical, _next_tab_id, _tx)
+        {
             return result;
         }
         if self.handle_super_text_shortcuts(physical) {

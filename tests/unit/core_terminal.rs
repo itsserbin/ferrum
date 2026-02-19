@@ -271,7 +271,7 @@ fn scrollback_preserved() {
 
     // We scrolled 17 times (20 lines - 4 visible + 1 for the last \n)
     // Scrollback should have grown
-    assert!(term.scrollback.len() > 0);
+    assert!(!term.scrollback.is_empty());
     // Scrollback should not exceed max (1000)
     assert!(term.scrollback.len() <= 1000);
 }

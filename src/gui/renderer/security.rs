@@ -26,6 +26,7 @@ impl SecurityPopup {
 }
 
 impl CpuRenderer {
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn draw_security_shield_icon(
         &self,
         buffer: &mut [u32],

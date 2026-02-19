@@ -18,13 +18,11 @@ impl FerrumWindow {
         let key = Self::normalize_non_text_key(&event.logical_key, &event.physical_key);
 
         // Escape cancels tab drag.
-        if matches!(key, Key::Named(NamedKey::Escape)) {
-            if self.dragging_tab.is_some() {
-                self.dragging_tab = None;
-                self.window.set_cursor(CursorIcon::Default);
-                self.window.request_redraw();
-                return;
-            }
+        if matches!(key, Key::Named(NamedKey::Escape)) && self.dragging_tab.is_some() {
+            self.dragging_tab = None;
+            self.window.set_cursor(CursorIcon::Default);
+            self.window.request_redraw();
+            return;
         }
 
         // Rename mode consumes all key input before PTY forwarding.

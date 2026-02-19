@@ -1,9 +1,9 @@
-use crate::core::terminal::Terminal;
-use crate::core::{Selection, SelectionPoint};
 #[cfg(test)]
 use crate::core::Grid;
 #[cfg(test)]
 use crate::core::Row;
+use crate::core::terminal::Terminal;
+use crate::core::{Selection, SelectionPoint};
 use crate::gui::*;
 
 const BRACKETED_PASTE_START: &[u8] = b"\x1b[200~";
@@ -84,10 +84,10 @@ impl FerrumWindow {
             Self::selected_text_from_terminal(&tab.terminal, sel)
         };
 
-        if let Some(ref mut clipboard) = self.clipboard {
-            if let Err(e) = clipboard.set_text(&text) {
-                eprintln!("Failed to copy to clipboard: {}", e);
-            }
+        if let Some(ref mut clipboard) = self.clipboard
+            && let Err(e) = clipboard.set_text(&text)
+        {
+            eprintln!("Failed to copy to clipboard: {}", e);
         }
     }
 
@@ -107,7 +107,10 @@ impl FerrumWindow {
             return;
         }
 
-        if self.active_tab_ref().is_some_and(|tab| tab.selection.is_some()) {
+        if self
+            .active_tab_ref()
+            .is_some_and(|tab| tab.selection.is_some())
+        {
             let _ = self.delete_terminal_selection(false);
         }
 
@@ -134,8 +137,10 @@ mod tests {
 
     fn set_row(grid: &mut Grid, row: usize, text: &str) {
         for (col, ch) in text.chars().take(grid.cols).enumerate() {
-            let mut cell = Cell::default();
-            cell.character = ch;
+            let cell = Cell {
+                character: ch,
+                ..Cell::default()
+            };
             grid.set(row, col, cell);
         }
     }
@@ -154,8 +159,12 @@ mod tests {
         set_row(&mut terminal.grid, 0, "LIVE0");
         set_row(&mut terminal.grid, 1, "LIVE1");
         set_row(&mut terminal.grid, 2, "LIVE2");
-        terminal.scrollback.push_back(Row::from_cells(row_cells("SB000", 5), false));
-        terminal.scrollback.push_back(Row::from_cells(row_cells("SB001", 5), false));
+        terminal
+            .scrollback
+            .push_back(Row::from_cells(row_cells("SB000", 5), false));
+        terminal
+            .scrollback
+            .push_back(Row::from_cells(row_cells("SB001", 5), false));
 
         // Scrollback has 2 entries. Live grid row 0 is absolute row 2.
         let selection = Selection {
@@ -171,7 +180,8 @@ mod tests {
             start: SelectionPoint { row: 1, col: 0 },
             end: SelectionPoint { row: 1, col: 4 },
         };
-        let scrollback_text = FerrumWindow::selected_text_from_terminal(&terminal, scrollback_selection);
+        let scrollback_text =
+            FerrumWindow::selected_text_from_terminal(&terminal, scrollback_selection);
         assert_eq!(scrollback_text, "SB001");
     }
 }

@@ -76,7 +76,7 @@ mod tests {
     fn decckm_application_mode() {
         let mut term = Terminal::new(4, 10);
         term.process(b"\x1b[?1h");
-        assert_eq!(term.decckm, true);
+        assert!(term.decckm);
     }
 
     #[test]
@@ -85,15 +85,15 @@ mod tests {
         // First enable, then disable
         term.process(b"\x1b[?1h");
         term.process(b"\x1b[?1l");
-        assert_eq!(term.decckm, false);
+        assert!(!term.decckm);
     }
 
     #[test]
     fn cursor_hide() {
         let mut term = Terminal::new(4, 10);
-        assert_eq!(term.cursor_visible, true);
+        assert!(term.cursor_visible);
         term.process(b"\x1b[?25l");
-        assert_eq!(term.cursor_visible, false);
+        assert!(!term.cursor_visible);
     }
 
     #[test]
@@ -101,7 +101,7 @@ mod tests {
         let mut term = Terminal::new(4, 10);
         term.process(b"\x1b[?25l");
         term.process(b"\x1b[?25h");
-        assert_eq!(term.cursor_visible, true);
+        assert!(term.cursor_visible);
     }
 
     #[test]
@@ -198,9 +198,9 @@ mod tests {
     fn sgr_mouse_on_off() {
         let mut term = Terminal::new(4, 10);
         term.process(b"\x1b[?1006h");
-        assert!(term.sgr_mouse == true);
+        assert!(term.sgr_mouse);
         term.process(b"\x1b[?1006l");
-        assert!(term.sgr_mouse == false);
+        assert!(!term.sgr_mouse);
     }
 
     #[test]

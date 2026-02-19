@@ -201,7 +201,7 @@ impl FerrumWindow {
     pub(in crate::gui) fn advance_ui_animations(&mut self) {
         #[cfg(target_os = "macos")]
         {
-            return;
+            // Native tab/window controls handle hover/transition visuals.
         }
 
         #[cfg(not(target_os = "macos"))]

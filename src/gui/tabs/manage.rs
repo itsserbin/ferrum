@@ -119,10 +119,10 @@ impl FerrumWindow {
 
     /// Cancels the current rename, reverting to the original title.
     pub(in crate::gui) fn cancel_rename(&mut self) {
-        if let Some(rename) = self.renaming_tab.take() {
-            if let Some(tab) = self.tabs.get_mut(rename.tab_index) {
-                tab.title = rename.original_title;
-            }
+        if let Some(rename) = self.renaming_tab.take()
+            && let Some(tab) = self.tabs.get_mut(rename.tab_index)
+        {
+            tab.title = rename.original_title;
         }
     }
 

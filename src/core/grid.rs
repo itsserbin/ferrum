@@ -181,6 +181,7 @@ mod tests {
             for col in 0..5 {
                 assert_eq!(grid.get(row, col), Some(&default));
             }
+            assert!(!grid.get_row(row).wrapped);
         }
     }
 
