@@ -1,6 +1,6 @@
 [package]
 name = "ferrum"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "A GPU-accelerated terminal emulator"
 repository = "https://github.com/itsserbin/ferrum"
@@ -60,6 +60,8 @@ publish-jobs = ["homebrew"]
 install-path = "CARGO_HOME"
 # Whether to install an updater program
 install-updater = false
+# Allow custom unmanaged CI/WiX edits (custom dmg + shortcuts).
+allow-dirty = ["ci", "msi"]
 
 [workspace.metadata.dist.github-custom-runners]
 x86_64-apple-darwin = "macos-15-intel"
