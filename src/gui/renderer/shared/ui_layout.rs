@@ -213,6 +213,171 @@ pub fn rename_selection_chars(
     })
 }
 
+// ── Icon stroke thickness ────────────────────────────────────────────
+
+/// Computes the icon stroke thickness for UI icons (close, plus, window buttons)
+/// based on the current HiDPI scale factor.
+///
+/// Clamped to `[1.15, 2.2]` to remain crisp on both 1x and 2x+ displays.
+pub fn icon_stroke_thickness(ui_scale: f64) -> f32 {
+    (1.25 * ui_scale as f32).clamp(1.15, 2.2)
+}
+
+// ── Plus icon ────────────────────────────────────────────────────────
+
+/// Pre-computed layout for a plus (+) icon centered in a bounding rectangle.
+///
+/// All coordinates are physical pixels as `f32` so that both the CPU renderer
+/// (which casts to integer) and the GPU renderer (which uses `f32` directly)
+/// can consume them.
+pub struct PlusIconLayout {
+    /// Center X of the icon (physical pixels).
+    pub center_x: f32,
+    /// Center Y of the icon (physical pixels).
+    pub center_y: f32,
+    /// Half-length of each arm of the plus sign (physical pixels).
+    pub half: f32,
+    /// Stroke thickness (physical pixels).
+    pub thickness: f32,
+    /// Horizontal line: `(x1, y1, x2, y2)`.
+    pub h_line: (f32, f32, f32, f32),
+    /// Vertical line: `(x1, y1, x2, y2)`.
+    pub v_line: (f32, f32, f32, f32),
+}
+
+/// Computes the plus-icon layout centered in the given bounding rectangle.
+///
+/// # Arguments
+/// * `rect` — `(x, y, w, h)` bounding rectangle (physical pixels).
+/// * `ui_scale` — HiDPI scale factor (e.g. 1.0, 2.0).
+pub fn compute_plus_icon_layout(rect: (u32, u32, u32, u32), ui_scale: f64) -> PlusIconLayout {
+    let (x, y, w, h) = rect;
+    let center_x = x as f32 + w as f32 * 0.5;
+    let center_y = y as f32 + h as f32 * 0.5;
+    let half = (w.min(h) as f32 * 0.25).clamp(2.5, 5.0);
+    let thickness = icon_stroke_thickness(ui_scale);
+
+    let h_line = (center_x - half, center_y, center_x + half, center_y);
+    let v_line = (center_x, center_y - half, center_x, center_y + half);
+
+    PlusIconLayout {
+        center_x,
+        center_y,
+        half,
+        thickness,
+        h_line,
+        v_line,
+    }
+}
+
+// ── Window button icon lines ─────────────────────────────────────────
+
+/// A single line segment described by two endpoints: `(x1, y1, x2, y2)`.
+pub type LineSegment = (f32, f32, f32, f32);
+
+/// Pre-computed icon line endpoints for a window control button.
+///
+/// Contains all the line segments needed to draw the icon for a
+/// Minimize, Maximize, or Close button, plus the shared stroke thickness.
+pub struct WindowButtonIconLines {
+    /// Line segments that make up this button's icon.
+    pub lines: Vec<LineSegment>,
+    /// Stroke thickness for all lines (physical pixels).
+    pub thickness: f32,
+}
+
+/// Computes the icon line segments for a single window control button.
+///
+/// # Arguments
+/// * `btn` — the pre-computed `WindowButtonLayout` for this button.
+/// * `ui_scale` — HiDPI scale factor.
+/// * `half_w_px` — scaled half-width for minimize/maximize icons (from `scaled_px(5)`).
+pub fn compute_window_button_icon_lines(
+    btn: &WindowButtonLayout,
+    ui_scale: f64,
+    half_w_px: u32,
+) -> WindowButtonIconLines {
+    let center_x = btn.x as f32 + btn.w as f32 / 2.0;
+    let center_y = btn.h as f32 / 2.0;
+    let thickness = icon_stroke_thickness(ui_scale);
+
+    let lines = match btn.kind {
+        WindowButtonKind::Minimize => {
+            let half_w = half_w_px as f32;
+            vec![(center_x - half_w, center_y, center_x + half_w, center_y)]
+        }
+        WindowButtonKind::Maximize => {
+            let half = half_w_px as f32;
+            let x0 = center_x - half;
+            let y0 = center_y - half;
+            let x1 = center_x + half;
+            let y1 = center_y + half;
+            vec![
+                (x0, y0, x1, y0), // top
+                (x0, y1, x1, y1), // bottom
+                (x0, y0, x0, y1), // left
+                (x1, y0, x1, y1), // right
+            ]
+        }
+        WindowButtonKind::Close => {
+            let half = half_w_px as f32 * 0.7;
+            vec![
+                (center_x - half, center_y - half, center_x + half, center_y + half),
+                (center_x + half, center_y - half, center_x - half, center_y + half),
+            ]
+        }
+    };
+
+    WindowButtonIconLines { lines, thickness }
+}
+
+/// Resolved colors for a window control button (hover background and icon).
+///
+/// Ensures both CPU and GPU renderers use identical color logic.
+pub struct WindowButtonColors {
+    /// Background color when hovered (0xRRGGBB), or `None` if not hovered.
+    pub hover_bg: Option<u32>,
+    /// Icon color (0xRRGGBB).
+    pub icon_color: u32,
+}
+
+/// Computes the hover background and icon colors for a window control button.
+///
+/// # Arguments
+/// * `kind` — which button (Minimize, Maximize, Close).
+/// * `hovered` — whether the mouse is currently over this button.
+/// * `normal_hover_bg` — hover background for non-close buttons (e.g. Surface0).
+/// * `close_hover_bg` — hover background for the close button (e.g. red).
+/// * `normal_icon_color` — icon color for non-hovered or non-close buttons.
+/// * `close_hover_icon_color` — icon color when the close button is hovered.
+pub fn window_button_colors(
+    kind: WindowButtonKind,
+    hovered: bool,
+    normal_hover_bg: u32,
+    close_hover_bg: u32,
+    normal_icon_color: u32,
+    close_hover_icon_color: u32,
+) -> WindowButtonColors {
+    if !hovered {
+        return WindowButtonColors {
+            hover_bg: None,
+            icon_color: normal_icon_color,
+        };
+    }
+
+    if kind == WindowButtonKind::Close {
+        WindowButtonColors {
+            hover_bg: Some(close_hover_bg),
+            icon_color: close_hover_icon_color,
+        }
+    } else {
+        WindowButtonColors {
+            hover_bg: Some(normal_hover_bg),
+            icon_color: normal_icon_color,
+        }
+    }
+}
+
 // ── Close button ─────────────────────────────────────────────────────
 
 /// Pre-computed layout for a tab close button (both the hover-circle and the
@@ -277,7 +442,7 @@ pub fn compute_close_button_layout(
     let center_x = rx as f32 + rw as f32 * 0.5;
     let center_y = ry as f32 + rh as f32 * 0.5;
     let half = (rw.min(rh) as f32 * 0.22).clamp(2.5, 4.5);
-    let icon_thickness = (1.25 * ui_scale as f32).clamp(1.15, 2.2);
+    let icon_thickness = icon_stroke_thickness(ui_scale);
 
     let line_a = (
         center_x - half,
@@ -645,5 +810,135 @@ mod tests {
         );
         // At hover_t=0, color blend factor is 0*0.75=0 -> pure inactive
         assert_eq!(layout.icon_color, 0x6C7086);
+    }
+
+    // ── icon_stroke_thickness ─────────────────────────────────────────
+
+    #[test]
+    fn icon_stroke_at_1x() {
+        // 1.25 * 1.0 = 1.25, clamped to [1.15, 2.2] => 1.25
+        let t = icon_stroke_thickness(1.0);
+        assert!((t - 1.25).abs() < 0.01);
+    }
+
+    #[test]
+    fn icon_stroke_at_2x() {
+        // 1.25 * 2.0 = 2.5, clamped to 2.2
+        let t = icon_stroke_thickness(2.0);
+        assert!((t - 2.2).abs() < 0.01);
+    }
+
+    #[test]
+    fn icon_stroke_clamps_small_scale() {
+        // 1.25 * 0.5 = 0.625, clamped to 1.15
+        let t = icon_stroke_thickness(0.5);
+        assert!((t - 1.15).abs() < 0.01);
+    }
+
+    // ── compute_plus_icon_layout ──────────────────────────────────────
+
+    #[test]
+    fn plus_icon_centered() {
+        let layout = compute_plus_icon_layout((100, 20, 24, 24), 1.0);
+        // Center should be at (100 + 12, 20 + 12) = (112, 32)
+        assert!((layout.center_x - 112.0).abs() < 0.01);
+        assert!((layout.center_y - 32.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn plus_icon_half_clamped() {
+        // Very small rect: min(4,4) * 0.25 = 1.0, clamped to 2.5
+        let layout = compute_plus_icon_layout((0, 0, 4, 4), 1.0);
+        assert!((layout.half - 2.5).abs() < 0.01);
+        // Large rect: min(100,100) * 0.25 = 25.0, clamped to 5.0
+        let layout = compute_plus_icon_layout((0, 0, 100, 100), 1.0);
+        assert!((layout.half - 5.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn plus_icon_lines_cross_at_center() {
+        let layout = compute_plus_icon_layout((100, 20, 24, 24), 1.0);
+        // Horizontal line y should equal center_y
+        assert!((layout.h_line.1 - layout.center_y).abs() < 0.01);
+        assert!((layout.h_line.3 - layout.center_y).abs() < 0.01);
+        // Vertical line x should equal center_x
+        assert!((layout.v_line.0 - layout.center_x).abs() < 0.01);
+        assert!((layout.v_line.2 - layout.center_x).abs() < 0.01);
+    }
+
+    #[test]
+    fn plus_icon_uses_shared_thickness() {
+        let layout = compute_plus_icon_layout((0, 0, 24, 24), 1.5);
+        assert!((layout.thickness - icon_stroke_thickness(1.5)).abs() < 0.001);
+    }
+
+    // ── compute_window_button_icon_lines ──────────────────────────────
+
+    #[test]
+    fn minimize_icon_has_one_line() {
+        let btn = WindowButtonLayout {
+            x: 100, y: 0, w: 46, h: 36, hovered: false, kind: WindowButtonKind::Minimize,
+        };
+        let icon = compute_window_button_icon_lines(&btn, 1.0, 5);
+        assert_eq!(icon.lines.len(), 1);
+        // Horizontal line: y1 == y2
+        let (_, y1, _, y2) = icon.lines[0];
+        assert!((y1 - y2).abs() < 0.01);
+    }
+
+    #[test]
+    fn maximize_icon_has_four_lines() {
+        let btn = WindowButtonLayout {
+            x: 100, y: 0, w: 46, h: 36, hovered: false, kind: WindowButtonKind::Maximize,
+        };
+        let icon = compute_window_button_icon_lines(&btn, 1.0, 5);
+        assert_eq!(icon.lines.len(), 4);
+    }
+
+    #[test]
+    fn close_icon_has_two_lines() {
+        let btn = WindowButtonLayout {
+            x: 100, y: 0, w: 46, h: 36, hovered: false, kind: WindowButtonKind::Close,
+        };
+        let icon = compute_window_button_icon_lines(&btn, 1.0, 5);
+        assert_eq!(icon.lines.len(), 2);
+    }
+
+    #[test]
+    fn window_button_icon_uses_shared_thickness() {
+        let btn = WindowButtonLayout {
+            x: 0, y: 0, w: 46, h: 36, hovered: false, kind: WindowButtonKind::Minimize,
+        };
+        let icon = compute_window_button_icon_lines(&btn, 1.5, 5);
+        assert!((icon.thickness - icon_stroke_thickness(1.5)).abs() < 0.001);
+    }
+
+    // ── window_button_colors ─────────────────────────────────────────
+
+    #[test]
+    fn window_button_colors_not_hovered() {
+        let colors = window_button_colors(
+            WindowButtonKind::Close, false, 0x111111, 0xF38BA8, 0x6C7086, 0xFFFFFF,
+        );
+        assert!(colors.hover_bg.is_none());
+        assert_eq!(colors.icon_color, 0x6C7086);
+    }
+
+    #[test]
+    fn window_button_colors_close_hovered() {
+        let colors = window_button_colors(
+            WindowButtonKind::Close, true, 0x111111, 0xF38BA8, 0x6C7086, 0xFFFFFF,
+        );
+        assert_eq!(colors.hover_bg, Some(0xF38BA8));
+        assert_eq!(colors.icon_color, 0xFFFFFF);
+    }
+
+    #[test]
+    fn window_button_colors_minimize_hovered() {
+        let colors = window_button_colors(
+            WindowButtonKind::Minimize, true, 0x313244, 0xF38BA8, 0x6C7086, 0xFFFFFF,
+        );
+        assert_eq!(colors.hover_bg, Some(0x313244));
+        assert_eq!(colors.icon_color, 0x6C7086);
     }
 }

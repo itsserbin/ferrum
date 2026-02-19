@@ -115,6 +115,7 @@ impl CpuRenderer {
     ) {
         let bar_h = self.tab_bar_height_px();
         let btn_w = self.scaled_px(tab_math::WIN_BTN_WIDTH);
+        let half_w_px = self.scaled_px(5);
 
         let buttons = ui_layout::window_buttons_layout(
             buf_width as u32,
@@ -124,13 +125,17 @@ impl CpuRenderer {
         );
 
         for btn in &buttons {
+            let colors = ui_layout::window_button_colors(
+                btn.kind,
+                btn.hovered,
+                WIN_BTN_HOVER,
+                WIN_BTN_CLOSE_HOVER,
+                WIN_BTN_ICON,
+                0xFFFFFF,
+            );
+
             // Hover background.
-            if btn.hovered {
-                let hover_bg = if btn.kind == ui_layout::WindowButtonKind::Close {
-                    WIN_BTN_CLOSE_HOVER
-                } else {
-                    WIN_BTN_HOVER
-                };
+            if let Some(hover_bg) = colors.hover_bg {
                 for py in 0..btn.h as usize {
                     for px in btn.x as usize..(btn.x + btn.w) as usize {
                         if px < buf_width && py < buf_height {
@@ -143,76 +148,24 @@ impl CpuRenderer {
                 }
             }
 
-            let icon_color =
-                if btn.hovered && btn.kind == ui_layout::WindowButtonKind::Close {
-                    0xFFFFFF
-                } else {
-                    WIN_BTN_ICON
-                };
+            let icon = ui_layout::compute_window_button_icon_lines(
+                btn,
+                self.ui_scale(),
+                half_w_px,
+            );
 
-            let center_x = btn.x as f32 + btn.w as f32 / 2.0;
-            let center_y = btn.h as f32 / 2.0;
-            let thickness = (1.25_f32 * self.ui_scale() as f32).clamp(1.15, 2.2);
-
-            match btn.kind {
-                ui_layout::WindowButtonKind::Minimize => {
-                    let half_w = self.scaled_px(5) as f32;
-                    Self::draw_stroked_line(
-                        buffer,
-                        buf_width,
-                        buf_height,
-                        center_x - half_w,
-                        center_y,
-                        center_x + half_w,
-                        center_y,
-                        thickness,
-                        icon_color,
-                    );
-                }
-                ui_layout::WindowButtonKind::Maximize => {
-                    let half = self.scaled_px(5) as f32;
-                    let x0 = center_x - half;
-                    let y0 = center_y - half;
-                    let x1 = center_x + half;
-                    let y1 = center_y + half;
-                    Self::draw_stroked_line(
-                        buffer, buf_width, buf_height, x0, y0, x1, y0, thickness, icon_color,
-                    );
-                    Self::draw_stroked_line(
-                        buffer, buf_width, buf_height, x0, y1, x1, y1, thickness, icon_color,
-                    );
-                    Self::draw_stroked_line(
-                        buffer, buf_width, buf_height, x0, y0, x0, y1, thickness, icon_color,
-                    );
-                    Self::draw_stroked_line(
-                        buffer, buf_width, buf_height, x1, y0, x1, y1, thickness, icon_color,
-                    );
-                }
-                ui_layout::WindowButtonKind::Close => {
-                    let half = self.scaled_px(5) as f32 * 0.7;
-                    Self::draw_stroked_line(
-                        buffer,
-                        buf_width,
-                        buf_height,
-                        center_x - half,
-                        center_y - half,
-                        center_x + half,
-                        center_y + half,
-                        thickness,
-                        icon_color,
-                    );
-                    Self::draw_stroked_line(
-                        buffer,
-                        buf_width,
-                        buf_height,
-                        center_x + half,
-                        center_y - half,
-                        center_x - half,
-                        center_y + half,
-                        thickness,
-                        icon_color,
-                    );
-                }
+            for &(x1, y1, x2, y2) in &icon.lines {
+                Self::draw_stroked_line(
+                    buffer,
+                    buf_width,
+                    buf_height,
+                    x1,
+                    y1,
+                    x2,
+                    y2,
+                    icon.thickness,
+                    colors.icon_color,
+                );
             }
         }
     }

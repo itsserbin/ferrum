@@ -264,8 +264,10 @@ impl SecurityPopup {
 
 /// Scales a base pixel value by the given UI scale factor.
 ///
-/// Mirrors `CpuRenderer::scaled_px` / `FontMetrics::scaled_px`.
-fn scaled_px(base: u32, ui_scale: f64) -> u32 {
+/// This is the single source of truth for DPI-aware pixel scaling.
+/// All other `scaled_px` helpers (on `FontMetrics`, `TabLayoutMetrics`, etc.)
+/// delegate to this function.
+pub(in crate::gui::renderer) fn scaled_px(base: u32, ui_scale: f64) -> u32 {
     if base == 0 {
         0
     } else {

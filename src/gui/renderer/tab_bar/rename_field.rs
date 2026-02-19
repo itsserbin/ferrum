@@ -3,6 +3,7 @@
 use crate::core::Color;
 
 use super::super::shared::{tab_math, ui_layout};
+use super::super::traits::Renderer;
 use super::super::{ACTIVE_ACCENT, CpuRenderer, TabInfo};
 use super::{RENAME_FIELD_BG, RENAME_FIELD_BORDER, TAB_TEXT_ACTIVE};
 

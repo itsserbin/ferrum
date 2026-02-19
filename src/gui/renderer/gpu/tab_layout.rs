@@ -2,54 +2,11 @@
 
 //! Tab bar layout math and drawing helpers for the GPU renderer.
 
-use super::super::shared::tab_math::{self, TabLayoutMetrics};
+use super::super::shared::tab_math;
+use super::super::traits::Renderer;
 use super::super::{TAB_BORDER, TabInfo};
 
 impl super::GpuRenderer {
-    // ── Tab bar math (delegates to shared tab_math) ──────────────────────
-
-    /// Builds a `TabLayoutMetrics` from the current GPU renderer state.
-    pub(super) fn tab_layout_metrics(&self) -> TabLayoutMetrics {
-        TabLayoutMetrics {
-            cell_width: self.metrics.cell_width,
-            cell_height: self.metrics.cell_height,
-            ui_scale: self.metrics.ui_scale,
-            tab_bar_height: self.metrics.tab_bar_height_px(),
-        }
-    }
-
-    /// Returns rectangle for pin button (non-macOS only).
-    #[cfg(not(target_os = "macos"))]
-    pub(super) fn pin_button_rect(&self) -> (u32, u32, u32, u32) {
-        let m = self.tab_layout_metrics();
-        tab_math::pin_button_rect(&m).to_tuple()
-    }
-
-    pub(super) fn tab_width_val(&self, tab_count: usize, buf_width: u32) -> u32 {
-        let m = self.tab_layout_metrics();
-        tab_math::calculate_tab_width(&m, tab_count, buf_width)
-    }
-
-    pub(super) fn tab_origin_x_val(&self, tab_index: usize, tw: u32) -> u32 {
-        let m = self.tab_layout_metrics();
-        tab_math::tab_origin_x(&m, tab_index, tw)
-    }
-
-    pub(super) fn close_button_rect(&self, tab_index: usize, tw: u32) -> (u32, u32, u32, u32) {
-        let m = self.tab_layout_metrics();
-        tab_math::close_button_rect(&m, tab_index, tw).to_tuple()
-    }
-
-    pub(super) fn plus_button_rect(&self, tab_count: usize, tw: u32) -> (u32, u32, u32, u32) {
-        let m = self.tab_layout_metrics();
-        tab_math::plus_button_rect(&m, tab_count, tw).to_tuple()
-    }
-
-    pub(super) fn should_show_number(&self, tw: u32) -> bool {
-        let m = self.tab_layout_metrics();
-        tab_math::should_show_number(&m, tw)
-    }
-
     // ── Tab bar rendering: orchestrator ─────────────────────────────────
 
     pub(super) fn draw_tab_bar_impl(
@@ -62,7 +19,7 @@ impl super::GpuRenderer {
         pinned: bool,
     ) {
         let bw = buf_width as u32;
-        let tw = self.tab_width_val(tabs.len(), bw);
+        let tw = self.tab_width(tabs.len(), bw);
         let m = self.tab_layout_metrics();
         let text_y = tab_math::tab_text_y(&m);
         let use_numbers = self.should_show_number(tw);
@@ -71,7 +28,7 @@ impl super::GpuRenderer {
 
         for (i, tab) in tabs.iter().enumerate() {
             let anim_offset = tab_offsets.and_then(|o| o.get(i)).copied().unwrap_or(0.0);
-            let tab_x = self.tab_origin_x_val(i, tw) as f32 + anim_offset;
+            let tab_x = self.tab_origin_x(i, tw) as f32 + anim_offset;
             let is_hovered = hovered_tab == Some(i);
 
             self.tab_background_commands(tab, tab_x, tw);

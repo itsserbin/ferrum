@@ -104,13 +104,10 @@ pub struct TabLayoutMetrics {
 
 impl TabLayoutMetrics {
     /// Scales a base logical pixel value by the UI scale factor.
-    /// Mirrors `CpuRenderer::scaled_px` / `FontMetrics::scaled_px`.
+    ///
+    /// Delegates to [`crate::gui::renderer::types::scaled_px`] — the single source of truth.
     pub fn scaled_px(&self, base: u32) -> u32 {
-        if base == 0 {
-            0
-        } else {
-            ((base as f64 * self.ui_scale).round() as u32).max(1)
-        }
+        crate::gui::renderer::types::scaled_px(base, self.ui_scale)
     }
 }
 

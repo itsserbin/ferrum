@@ -10,6 +10,7 @@ use super::MAX_UI_COMMANDS;
 use super::buffers::*;
 
 use super::super::shared::ui_layout;
+use super::super::traits::Renderer;
 use super::super::{CLOSE_HOVER_BG_COLOR, TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE};
 
 impl super::GpuRenderer {

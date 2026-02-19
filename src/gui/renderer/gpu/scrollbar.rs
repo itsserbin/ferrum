@@ -61,28 +61,4 @@ impl super::GpuRenderer {
         );
     }
 
-    pub(super) fn scrollbar_thumb_bounds_impl(
-        &self,
-        buf_height: usize,
-        scroll_offset: usize,
-        scrollback_len: usize,
-        grid_rows: usize,
-    ) -> Option<(f32, f32)> {
-        let (track_top, track_bottom, min_thumb) = scrollbar_math::scrollbar_track_params(
-            self.metrics.tab_bar_height_px(),
-            self.metrics.window_padding_px(),
-            buf_height,
-            SCROLLBAR_MIN_THUMB,
-            self.metrics.ui_scale,
-        );
-
-        scrollbar_math::scrollbar_thumb_geometry(
-            track_top,
-            track_bottom,
-            scroll_offset,
-            scrollback_len,
-            grid_rows,
-            min_thumb,
-        )
-    }
 }

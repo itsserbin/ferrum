@@ -26,13 +26,11 @@ pub(in crate::gui::renderer) fn scrollbar_track_params(
 }
 
 /// Scales a base pixel value by `ui_scale`, rounding and clamping to at least 1
-/// (or 0 when `base == 0`).  Mirrors the per-renderer `scaled_px()` helpers.
+/// (or 0 when `base == 0`).
+///
+/// Delegates to [`crate::gui::renderer::types::scaled_px`] — the single source of truth.
 fn scaled_px(base: u32, ui_scale: f64) -> u32 {
-    if base == 0 {
-        0
-    } else {
-        ((base as f64 * ui_scale).round() as u32).max(1)
-    }
+    crate::gui::renderer::types::scaled_px(base, ui_scale)
 }
 
 /// Computes the scrollbar thumb position and height given the track dimensions.

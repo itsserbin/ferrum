@@ -37,12 +37,10 @@ impl FontMetrics {
     }
 
     /// Scales a base pixel value by the current UI scale factor.
+    ///
+    /// Delegates to [`super::types::scaled_px`] — the single source of truth.
     pub fn scaled_px(&self, base: u32) -> u32 {
-        if base == 0 {
-            0
-        } else {
-            ((base as f64 * self.ui_scale).round() as u32).max(1)
-        }
+        super::types::scaled_px(base, self.ui_scale)
     }
 
     pub fn tab_bar_height_px(&self) -> u32 {

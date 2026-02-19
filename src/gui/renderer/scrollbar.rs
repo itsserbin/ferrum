@@ -88,30 +88,4 @@ impl CpuRenderer {
         }
     }
 
-    /// Returns (thumb_y, thumb_height) in pixels for scrollbar hit testing.
-    /// Returns `None` if there is no scrollback (scrollbar not visible).
-    pub fn scrollbar_thumb_bounds(
-        &self,
-        buf_height: usize,
-        scroll_offset: usize,
-        scrollback_len: usize,
-        grid_rows: usize,
-    ) -> Option<(f32, f32)> {
-        let (track_top, track_bottom, min_thumb) = scrollbar_math::scrollbar_track_params(
-            self.tab_bar_height_px(),
-            self.window_padding_px(),
-            buf_height,
-            SCROLLBAR_MIN_THUMB,
-            self.ui_scale(),
-        );
-
-        scrollbar_math::scrollbar_thumb_geometry(
-            track_top,
-            track_bottom,
-            scroll_offset,
-            scrollback_len,
-            grid_rows,
-            min_thumb,
-        )
-    }
 }

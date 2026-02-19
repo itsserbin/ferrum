@@ -1,6 +1,5 @@
 use crate::core::{CursorStyle, Grid, Selection};
 
-use super::super::shared::tab_math::TabLayoutMetrics;
 use super::super::traits;
 use super::super::types::{ContextMenu, SecurityPopup, TabInfo};
 use super::CpuRenderer;
@@ -40,10 +39,6 @@ impl traits::Renderer for CpuRenderer {
 
     fn scrollbar_hit_zone_px(&self) -> u32 {
         CpuRenderer::scrollbar_hit_zone_px(self)
-    }
-
-    fn tab_layout_metrics(&self) -> TabLayoutMetrics {
-        CpuRenderer::tab_layout_metrics(self)
     }
 
     fn render(
@@ -101,22 +96,6 @@ impl traits::Renderer for CpuRenderer {
             opacity,
             hover,
         );
-    }
-
-    fn scrollbar_thumb_bounds(
-        &self,
-        buf_height: usize,
-        scroll_offset: usize,
-        scrollback_len: usize,
-        grid_rows: usize,
-    ) -> Option<(f32, f32)> {
-        CpuRenderer::scrollbar_thumb_bounds(
-            self,
-            buf_height,
-            scroll_offset,
-            scrollback_len,
-            grid_rows,
-        )
     }
 
     fn draw_tab_bar(

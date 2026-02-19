@@ -1,8 +1,7 @@
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
-use super::super::shared::tab_math;
-#[cfg(not(target_os = "macos"))]
-use super::super::shared::ui_layout;
+use super::super::shared::{tab_math, ui_layout};
+use super::super::traits::Renderer;
 use super::super::{INACTIVE_TAB_HOVER, TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE};
 #[cfg(not(target_os = "macos"))]
 use super::super::PIN_ACTIVE_COLOR;
@@ -34,29 +33,11 @@ impl super::GpuRenderer {
         } else {
             TAB_TEXT_INACTIVE
         };
-        let (px, py, pw, ph) = plus_rect;
-        let center_x = px as f32 + pw as f32 * 0.5;
-        let center_y = py as f32 + ph as f32 * 0.5;
-        let half = (pw.min(ph) as f32 * 0.25).clamp(2.5, 5.0);
-        let thickness = (1.25 * self.metrics.ui_scale as f32).clamp(1.15, 2.2);
-        self.push_line(
-            center_x - half,
-            center_y,
-            center_x + half,
-            center_y,
-            thickness,
-            plus_fg,
-            1.0,
-        );
-        self.push_line(
-            center_x,
-            center_y - half,
-            center_x,
-            center_y + half,
-            thickness,
-            plus_fg,
-            1.0,
-        );
+        let icon = ui_layout::compute_plus_icon_layout(plus_rect, self.metrics.ui_scale);
+        let (x1, y1, x2, y2) = icon.h_line;
+        self.push_line(x1, y1, x2, y2, icon.thickness, plus_fg, 1.0);
+        let (x1, y1, x2, y2) = icon.v_line;
+        self.push_line(x1, y1, x2, y2, icon.thickness, plus_fg, 1.0);
     }
 
     /// Draws the pin button at the left of the tab bar (non-macOS).

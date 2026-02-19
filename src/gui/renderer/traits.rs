@@ -4,9 +4,10 @@ use crate::core::{CursorStyle, Grid, Selection};
 
 #[cfg(not(target_os = "macos"))]
 use super::WindowButton;
+use super::shared::scrollbar_math;
 use super::shared::tab_hit_test;
 use super::shared::tab_math::{self, TabLayoutMetrics};
-use super::{ContextMenu, SecurityPopup, TabBarHit, TabInfo};
+use super::{ContextMenu, SCROLLBAR_MIN_THUMB, SecurityPopup, TabBarHit, TabInfo};
 
 /// Selects which rendering backend to use.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -38,7 +39,14 @@ pub trait Renderer {
     fn scrollbar_hit_zone_px(&self) -> u32;
 
     /// Builds a [`TabLayoutMetrics`] from the renderer's current state.
-    fn tab_layout_metrics(&self) -> TabLayoutMetrics;
+    fn tab_layout_metrics(&self) -> TabLayoutMetrics {
+        TabLayoutMetrics {
+            cell_width: self.cell_width(),
+            cell_height: self.cell_height(),
+            ui_scale: self.ui_scale(),
+            tab_bar_height: self.tab_bar_height_px(),
+        }
+    }
 
     // ── Terminal rendering ──────────────────────────────────────────
 
@@ -83,7 +91,24 @@ pub trait Renderer {
         scroll_offset: usize,
         scrollback_len: usize,
         grid_rows: usize,
-    ) -> Option<(f32, f32)>;
+    ) -> Option<(f32, f32)> {
+        let (track_top, track_bottom, min_thumb) = scrollbar_math::scrollbar_track_params(
+            self.tab_bar_height_px(),
+            self.window_padding_px(),
+            buf_height,
+            SCROLLBAR_MIN_THUMB,
+            self.ui_scale(),
+        );
+
+        scrollbar_math::scrollbar_thumb_geometry(
+            track_top,
+            track_bottom,
+            scroll_offset,
+            scrollback_len,
+            grid_rows,
+            min_thumb,
+        )
+    }
 
     // ── Tab bar ─────────────────────────────────────────────────────
 
@@ -147,6 +172,31 @@ pub trait Renderer {
     fn tab_origin_x(&self, tab_index: usize, tw: u32) -> u32 {
         let m = self.tab_layout_metrics();
         tab_math::tab_origin_x(&m, tab_index, tw)
+    }
+
+    /// Returns the close-button rectangle for a tab as `(x, y, w, h)`.
+    fn close_button_rect(&self, tab_index: usize, tw: u32) -> (u32, u32, u32, u32) {
+        let m = self.tab_layout_metrics();
+        tab_math::close_button_rect(&m, tab_index, tw).to_tuple()
+    }
+
+    /// Returns the new-tab (+) button rectangle as `(x, y, w, h)`.
+    fn plus_button_rect(&self, tab_count: usize, tw: u32) -> (u32, u32, u32, u32) {
+        let m = self.tab_layout_metrics();
+        tab_math::plus_button_rect(&m, tab_count, tw).to_tuple()
+    }
+
+    /// Returns the pin button rectangle as `(x, y, w, h)` (non-macOS only).
+    #[cfg(not(target_os = "macos"))]
+    fn pin_button_rect(&self) -> (u32, u32, u32, u32) {
+        let m = self.tab_layout_metrics();
+        tab_math::pin_button_rect(&m).to_tuple()
+    }
+
+    /// Returns `true` when the tab width is too narrow to display a title.
+    fn should_show_number(&self, tw: u32) -> bool {
+        let m = self.tab_layout_metrics();
+        tab_math::should_show_number(&m, tw)
     }
 
     // ── Hit testing ─────────────────────────────────────────────────
