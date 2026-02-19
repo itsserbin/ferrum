@@ -31,6 +31,7 @@ use crate::gui::renderer::{
     ContextMenu, CpuRenderer, Renderer as _, RendererBackend, SecurityPopup, WINDOW_PADDING,
 };
 use crate::pty;
+use crate::update;
 
 /// Minimum number of columns for the terminal window.
 const MIN_WINDOW_COLS: u32 = 40;
@@ -50,6 +51,7 @@ impl FerrumWindow {
 
         FerrumWindow {
             window,
+            window_title: "Ferrum".to_string(),
             pending_grid_resize: None,
             backend,
             tabs: Vec::new(),
@@ -113,6 +115,25 @@ impl FerrumWindow {
         self.tabs.get(self.active_tab)
     }
 
+    fn compose_window_title(&self, update: Option<&crate::update::AvailableRelease>) -> String {
+        let base = self
+            .active_tab_ref()
+            .map(|tab| tab.title.as_str())
+            .unwrap_or("Ferrum");
+        match update {
+            Some(release) => format!("{base} - Update {} available", release.tag_name),
+            None => base.to_string(),
+        }
+    }
+
+    pub(super) fn sync_window_title(&mut self, update: Option<&crate::update::AvailableRelease>) {
+        let next_title = self.compose_window_title(update);
+        if self.window_title != next_title {
+            self.window.set_title(&next_title);
+            self.window_title = next_title;
+        }
+    }
+
     /// Toggles the pinned (always-on-top) state of this window.
     pub(super) fn toggle_pin(&mut self) {
         #[cfg(target_os = "macos")]
@@ -139,12 +160,16 @@ impl FerrumWindow {
 impl App {
     fn new() -> Self {
         let (tx, rx) = mpsc::channel::<PtyEvent>();
+        let (update_tx, update_rx) = mpsc::channel::<update::AvailableRelease>();
+        update::spawn_update_checker(update_tx);
         App {
             windows: std::collections::HashMap::new(),
             context: None,
             next_tab_id: 0,
             tx,
             rx,
+            update_rx,
+            available_release: None,
         }
     }
 
@@ -210,7 +235,8 @@ impl App {
         platform::macos::setup_toolbar(&window);
 
         let id = window.id();
-        let ferrum_win = FerrumWindow::new(window, context);
+        let mut ferrum_win = FerrumWindow::new(window, context);
+        ferrum_win.sync_window_title(self.available_release.as_ref());
         self.windows.insert(id, ferrum_win);
         Some(id)
     }

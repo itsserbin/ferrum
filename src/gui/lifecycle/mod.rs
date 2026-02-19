@@ -134,6 +134,7 @@ impl ApplicationHandler for App {
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         self.drain_pty_events(event_loop);
+        self.drain_update_events();
 
         // Handle native macOS "+" button clicks (newWindowForTab: action).
         #[cfg(target_os = "macos")]
@@ -176,7 +177,9 @@ impl ApplicationHandler for App {
         let now = std::time::Instant::now();
         let mut next_wakeup: Option<std::time::Instant> = None;
 
-        for win in self.windows.values() {
+        let update = self.available_release.as_ref();
+        for win in self.windows.values_mut() {
+            win.sync_window_title(update);
             if let Some((deadline, redraw_now)) = win.animation_schedule(now) {
                 if redraw_now {
                     win.window.request_redraw();
@@ -190,6 +193,21 @@ impl ApplicationHandler for App {
                 event_loop.set_control_flow(winit::event_loop::ControlFlow::WaitUntil(deadline))
             }
             None => event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait),
+        }
+    }
+}
+
+impl App {
+    fn drain_update_events(&mut self) {
+        while let Ok(release) = self.update_rx.try_recv() {
+            eprintln!(
+                "Update available: {} ({})",
+                release.tag_name, release.html_url
+            );
+            self.available_release = Some(release);
+            for win in self.windows.values() {
+                win.window.request_redraw();
+            }
         }
     }
 }

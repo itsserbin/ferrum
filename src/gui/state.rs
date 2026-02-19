@@ -111,6 +111,7 @@ pub(super) enum WindowRequest {
 /// Per-window state. Each window is self-contained with its own tabs, renderer, surface.
 pub(super) struct FerrumWindow {
     pub(super) window: Arc<Window>,
+    pub(super) window_title: String,
     pub(super) pending_grid_resize: Option<(usize, usize)>,
     pub(super) backend: renderer::RendererBackend,
     pub(super) tabs: Vec<TabState>,
@@ -162,4 +163,6 @@ pub(super) struct App {
     pub(super) next_tab_id: u64,
     pub(super) tx: mpsc::Sender<PtyEvent>,
     pub(super) rx: mpsc::Receiver<PtyEvent>,
+    pub(super) update_rx: mpsc::Receiver<crate::update::AvailableRelease>,
+    pub(super) available_release: Option<crate::update::AvailableRelease>,
 }
