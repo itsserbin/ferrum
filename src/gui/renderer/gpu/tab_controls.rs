@@ -1,6 +1,8 @@
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
 use super::super::shared::tab_math;
+#[cfg(not(target_os = "macos"))]
+use super::super::shared::ui_layout;
 use super::super::{INACTIVE_TAB_HOVER, TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE};
 #[cfg(not(target_os = "macos"))]
 use super::super::PIN_ACTIVE_COLOR;
@@ -77,59 +79,38 @@ impl super::GpuRenderer {
             );
         }
 
-        // Icon color: active (lavender) when pinned, inactive otherwise.
-        let icon_color = if pinned {
-            PIN_ACTIVE_COLOR
-        } else if is_hovered {
-            TAB_TEXT_ACTIVE
-        } else {
-            TAB_TEXT_INACTIVE
-        };
-
-        // Draw Bootstrap-style vertical pushpin icon.
         let cx = pin_x as f32 + pin_w as f32 / 2.0;
         let cy = pin_y as f32 + pin_h as f32 / 2.0;
-        let s = self.metrics.ui_scale as f32;
-        let t = (1.2 * s).clamp(1.0, 2.0);
-
-        // Dimensions (scaled).
-        let head_w = 6.0 * s;
-        let head_h = 2.0 * s;
-        let body_w = 3.0 * s;
-        let body_h = 4.0 * s;
-        let platform_w = 7.0 * s;
-        let platform_h = 1.5 * s;
-        let needle_h = 4.0 * s;
-
-        let top = cy - 6.0 * s;
-
-        // 1. Top head (wide rectangle).
-        self.push_rect(cx - head_w / 2.0, top, head_w, head_h, icon_color, 1.0);
-
-        // 2. Body (narrower rectangle below head).
-        let body_top = top + head_h;
-        self.push_rect(cx - body_w / 2.0, body_top, body_w, body_h, icon_color, 1.0);
-
-        // 3. Platform/base (wider rectangle where pin enters surface).
-        let platform_top = body_top + body_h;
-        self.push_rect(
-            cx - platform_w / 2.0,
-            platform_top,
-            platform_w,
-            platform_h,
-            icon_color,
-            1.0,
+        let layout = ui_layout::pin_icon_layout(
+            cx,
+            cy,
+            self.metrics.ui_scale as f32,
+            pinned,
+            is_hovered,
+            PIN_ACTIVE_COLOR,
+            TAB_TEXT_ACTIVE,
+            TAB_TEXT_INACTIVE,
         );
 
-        // 4. Needle (thin line pointing down).
-        let needle_top = platform_top + platform_h;
+        // Draw Bootstrap-style vertical pushpin icon from layout.
+        let color = layout.color;
+        self.push_rect(layout.head.0, layout.head.1, layout.head.2, layout.head.3, color, 1.0);
+        self.push_rect(layout.body.0, layout.body.1, layout.body.2, layout.body.3, color, 1.0);
+        self.push_rect(
+            layout.platform.0,
+            layout.platform.1,
+            layout.platform.2,
+            layout.platform.3,
+            color,
+            1.0,
+        );
         self.push_line(
-            cx,
-            needle_top,
-            cx,
-            needle_top + needle_h,
-            t,
-            icon_color,
+            layout.needle.0,
+            layout.needle.1,
+            layout.needle.2,
+            layout.needle.3,
+            layout.needle_thickness,
+            color,
             1.0,
         );
     }

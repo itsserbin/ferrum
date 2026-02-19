@@ -2,56 +2,47 @@
 
 #![cfg(not(target_os = "macos"))]
 
-use super::super::shared::tab_math;
+use super::super::shared::{tab_math, ui_layout};
 use super::super::{
-    CLOSE_HOVER_BG_COLOR, INACTIVE_TAB_HOVER, TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE, WindowButton,
+    CLOSE_HOVER_BG_COLOR, INACTIVE_TAB_HOVER, TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE,
 };
 
 impl super::GpuRenderer {
     pub(super) fn draw_window_buttons_commands(&mut self, buf_width: u32, mouse_pos: (f64, f64)) {
-        let bar_h = self.metrics.tab_bar_height_px() as f32;
+        let bar_h = self.metrics.tab_bar_height_px();
         let btn_w = self.metrics.scaled_px(tab_math::WIN_BTN_WIDTH);
-        let bw = buf_width;
 
-        let buttons: [(u32, WindowButton); 3] = [
-            (bw.saturating_sub(btn_w * 3), WindowButton::Minimize),
-            (bw.saturating_sub(btn_w * 2), WindowButton::Maximize),
-            (bw.saturating_sub(btn_w), WindowButton::Close),
-        ];
+        let buttons = ui_layout::window_buttons_layout(buf_width, bar_h, btn_w, mouse_pos);
 
-        for &(btn_x, ref btn_type) in &buttons {
-            let is_hovered = mouse_pos.0 >= btn_x as f64
-                && mouse_pos.0 < (btn_x + btn_w) as f64
-                && mouse_pos.1 >= 0.0
-                && mouse_pos.1 < bar_h as f64;
-
-            if is_hovered {
-                let hover_bg = if *btn_type == WindowButton::Close {
+        for btn in &buttons {
+            if btn.hovered {
+                let hover_bg = if btn.kind == ui_layout::WindowButtonKind::Close {
                     CLOSE_HOVER_BG_COLOR
                 } else {
                     INACTIVE_TAB_HOVER
                 };
-                self.push_rect(btn_x as f32, 0.0, btn_w as f32, bar_h, hover_bg, 1.0);
+                self.push_rect(btn.x as f32, 0.0, btn.w as f32, btn.h as f32, hover_bg, 1.0);
             }
 
-            let icon_color = if is_hovered && *btn_type == WindowButton::Close {
-                TAB_TEXT_ACTIVE
-            } else {
-                TAB_TEXT_INACTIVE
-            };
+            let icon_color =
+                if btn.hovered && btn.kind == ui_layout::WindowButtonKind::Close {
+                    TAB_TEXT_ACTIVE
+                } else {
+                    TAB_TEXT_INACTIVE
+                };
 
-            let center_x = btn_x as f32 + btn_w as f32 / 2.0;
-            let center_y = bar_h / 2.0;
+            let center_x = btn.x as f32 + btn.w as f32 / 2.0;
+            let center_y = btn.h as f32 / 2.0;
             let thickness = (1.25 * self.metrics.ui_scale as f32).clamp(1.15, 2.2);
 
-            match btn_type {
-                WindowButton::Minimize => {
+            match btn.kind {
+                ui_layout::WindowButtonKind::Minimize => {
                     self.push_minimize_icon(center_x, center_y, thickness, icon_color)
                 }
-                WindowButton::Maximize => {
+                ui_layout::WindowButtonKind::Maximize => {
                     self.push_maximize_icon(center_x, center_y, thickness, icon_color)
                 }
-                WindowButton::Close => {
+                ui_layout::WindowButtonKind::Close => {
                     self.push_close_icon(center_x, center_y, thickness, icon_color)
                 }
             }

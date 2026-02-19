@@ -2,7 +2,7 @@
 
 use crate::core::Color;
 
-use super::super::shared::tab_math;
+use super::super::shared::{tab_math, ui_layout};
 use super::super::{ACTIVE_ACCENT, CpuRenderer, TabInfo};
 use super::{RENAME_FIELD_BG, RENAME_FIELD_BORDER, TAB_TEXT_ACTIVE};
 
@@ -25,18 +25,8 @@ impl CpuRenderer {
         let rename_text = tab.rename_text.unwrap_or("");
         let text_x = tab_x + tab_padding_h;
         let max_chars = tab_math::rename_field_max_chars(&m, tw);
-        let selection_chars = tab.rename_selection.and_then(|(start, end)| {
-            if start >= end {
-                return None;
-            }
-            let start_chars = rename_text
-                .get(..start)
-                .map_or(0, |prefix| prefix.chars().count());
-            let end_chars = rename_text
-                .get(..end)
-                .map_or(start_chars, |prefix| prefix.chars().count());
-            Some((start_chars.min(max_chars), end_chars.min(max_chars)))
-        });
+        let selection_chars =
+            ui_layout::rename_selection_chars(rename_text, tab.rename_selection, max_chars);
 
         let r = tab_math::rename_field_rect(&m, tab_x, tw);
         self.draw_rename_background(buffer, buf_width, bar_h, &r);

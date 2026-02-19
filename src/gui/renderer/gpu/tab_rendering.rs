@@ -1,6 +1,6 @@
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
-use super::super::shared::tab_math;
+use super::super::shared::{tab_math, ui_layout};
 use super::super::{
     ACTIVE_TAB_BG, BAR_BG, INACTIVE_TAB_HOVER, RENAME_FIELD_BG, RENAME_FIELD_BORDER,
     RENAME_SELECTION_BG, SECURITY_ACCENT, TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE, TabInfo,
@@ -49,18 +49,8 @@ impl super::GpuRenderer {
         let m = self.tab_layout_metrics();
         let max_chars = tab_math::rename_field_max_chars(&m, tw);
 
-        let selection_chars = tab.rename_selection.and_then(|(start, end)| {
-            if start >= end {
-                return None;
-            }
-            let start_chars = rename_text
-                .get(..start)
-                .map_or(0, |prefix| prefix.chars().count());
-            let end_chars = rename_text
-                .get(..end)
-                .map_or(start_chars, |prefix| prefix.chars().count());
-            Some((start_chars.min(max_chars), end_chars.min(max_chars)))
-        });
+        let selection_chars =
+            ui_layout::rename_selection_chars(rename_text, tab.rename_selection, max_chars);
 
         // Rename field background and border.
         let r = tab_math::rename_field_rect(&m, tab_x.round() as u32, tw);
@@ -223,29 +213,14 @@ impl super::GpuRenderer {
         };
 
         let color = SECURITY_ACCENT.to_pixel();
-        let mid = sw / 2;
-        let top_third = (sw / 3).max(1);
-        let bottom_start = (sw * 2 / 3).max(top_third + 1);
+        let spans = ui_layout::shield_icon_spans(sw);
 
-        for dy in 0..sw {
-            let half_span = if dy < top_third {
-                1 + dy / 2
-            } else if dy < bottom_start {
-                mid.saturating_sub(1).max(1)
-            } else {
-                let progress = dy - bottom_start;
-                let denom = (sw - bottom_start).max(1);
-                let shrink = progress * mid.saturating_sub(1) / denom;
-                mid.saturating_sub(shrink).max(1)
-            };
-
-            let left = mid.saturating_sub(half_span);
-            let right = (mid + half_span).min(sw.saturating_sub(1));
+        for (dy, &(left, right)) in spans.iter().enumerate() {
             let row_x = sx + left;
             let row_w = right.saturating_sub(left) + 1;
             self.push_rect(
                 row_x as f32,
-                (sy + dy) as f32,
+                (sy + dy as u32) as f32,
                 row_w as f32,
                 1.0,
                 color,

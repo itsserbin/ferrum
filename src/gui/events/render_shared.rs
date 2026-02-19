@@ -4,6 +4,7 @@
 //! verbatim in `render_cpu.rs` and `render_gpu.rs`.
 
 use crate::core::terminal::CursorStyle;
+use crate::gui::renderer::traits::Renderer;
 use crate::gui::*;
 
 #[cfg(not(target_os = "macos"))]
@@ -63,6 +64,24 @@ impl TabBarFrameState {
             .map(TabBarFrameTabInfo::as_tab_info)
             .collect()
     }
+}
+
+/// Read-only snapshot of per-frame state needed by `draw_frame_content`.
+///
+/// Constructed inline in each render path *after* pattern-matching
+/// `self.backend`, enabling split borrows between the renderer and the
+/// remaining `FerrumWindow` fields.
+pub(in crate::gui::events) struct FrameParams<'a> {
+    pub active_tab: Option<&'a TabState>,
+    pub cursor_blink_start: std::time::Instant,
+    #[cfg_attr(target_os = "macos", allow(dead_code))]
+    pub hovered_tab: Option<usize>,
+    #[cfg_attr(target_os = "macos", allow(dead_code))]
+    pub mouse_pos: (f64, f64),
+    #[cfg_attr(target_os = "macos", allow(dead_code))]
+    pub pinned: bool,
+    pub security_popup: Option<&'a SecurityPopup>,
+    pub context_menu: Option<&'a ContextMenu>,
 }
 
 impl FerrumWindow {
@@ -185,6 +204,139 @@ impl FerrumWindow {
             show_tooltip,
             tab_bar_visible,
         }
+    }
+}
+
+/// Draws the complete terminal frame content using the given renderer.
+///
+/// This is the unified render sequence shared by both CPU and GPU paths:
+/// terminal grid, cursor, scrollbar, tab bar, drag overlay, popups, tooltip.
+pub(in crate::gui::events) fn draw_frame_content(
+    renderer: &mut dyn Renderer,
+    buffer: &mut [u32],
+    bw: usize,
+    bh: usize,
+    params: &FrameParams<'_>,
+    #[cfg(not(target_os = "macos"))] tab_bar: &TabBarFrameState,
+    #[cfg(not(target_os = "macos"))] frame_tab_infos: &[TabInfo<'_>],
+) {
+    // 1) Draw active tab terminal content.
+    if let Some(tab) = params.active_tab {
+        let viewport_start = tab
+            .terminal
+            .scrollback
+            .len()
+            .saturating_sub(tab.scroll_offset);
+        if tab.scroll_offset == 0 {
+            renderer.render(
+                buffer,
+                bw,
+                bh,
+                &tab.terminal.grid,
+                tab.selection.as_ref(),
+                viewport_start,
+            );
+        } else {
+            let display = tab.terminal.build_display(tab.scroll_offset);
+            renderer.render(
+                buffer,
+                bw,
+                bh,
+                &display,
+                tab.selection.as_ref(),
+                viewport_start,
+            );
+        }
+
+        // 2) Draw cursor on top of terminal cells.
+        if tab.scroll_offset == 0
+            && tab.terminal.cursor_visible
+            && should_show_cursor(params.cursor_blink_start, tab.terminal.cursor_style)
+        {
+            renderer.draw_cursor(
+                buffer,
+                bw,
+                bh,
+                tab.terminal.cursor_row,
+                tab.terminal.cursor_col,
+                &tab.terminal.grid,
+                tab.terminal.cursor_style,
+            );
+        }
+    }
+
+    // 3) Draw scrollbar overlay.
+    if let Some(tab) = params.active_tab {
+        let scrollback_len = tab.terminal.scrollback.len();
+        if scrollback_len > 0 {
+            let hover = tab.scrollbar.hover || tab.scrollbar.dragging;
+            let opacity = scrollbar_opacity(
+                tab.scrollbar.hover,
+                tab.scrollbar.dragging,
+                tab.scrollbar.last_activity,
+            );
+
+            if opacity > 0.0 {
+                renderer.render_scrollbar(
+                    buffer,
+                    bw,
+                    bh,
+                    tab.scroll_offset,
+                    scrollback_len,
+                    tab.terminal.grid.rows,
+                    opacity,
+                    hover,
+                );
+            }
+        }
+    }
+
+    // 4) Draw tab bar (not on macOS -- native tab bar).
+    #[cfg(not(target_os = "macos"))]
+    {
+        if tab_bar.tab_bar_visible {
+            renderer.draw_tab_bar(
+                buffer,
+                bw,
+                bh,
+                frame_tab_infos,
+                params.hovered_tab,
+                params.mouse_pos,
+                tab_bar.tab_offsets.as_deref(),
+                params.pinned,
+            );
+
+            // 5) Draw drag overlay.
+            if let Some((source_index, current_x, indicator_x)) = tab_bar.drag_info {
+                renderer.draw_tab_drag_overlay(
+                    buffer,
+                    bw,
+                    bh,
+                    frame_tab_infos,
+                    source_index,
+                    current_x,
+                    indicator_x,
+                );
+            }
+        }
+    }
+
+    // 6) Draw popups/menus.
+    if let Some(popup) = params.security_popup {
+        renderer.draw_security_popup(buffer, bw, bh, popup);
+    }
+
+    if let Some(menu) = params.context_menu {
+        renderer.draw_context_menu(buffer, bw, bh, menu);
+    }
+
+    // 7) Draw tooltip.
+    #[cfg(not(target_os = "macos"))]
+    if tab_bar.show_tooltip
+        && tab_bar.tab_bar_visible
+        && let Some(ref title) = tab_bar.tab_tooltip
+    {
+        renderer.draw_tab_tooltip(buffer, bw, bh, params.mouse_pos, title);
     }
 }
 

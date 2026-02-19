@@ -2,6 +2,7 @@
 
 #[cfg(not(target_os = "macos"))]
 use super::super::WindowButton;
+use super::super::shared::overlay_layout;
 use super::super::shared::tab_hit_test;
 use super::super::shared::tab_math::{self, TabLayoutMetrics};
 use super::super::{TabBarHit, TabInfo};
@@ -136,58 +137,53 @@ impl super::super::CpuRenderer {
         mouse_pos: (f64, f64),
         title: &str,
     ) {
-        if title.is_empty() || buf_width == 0 || buf_height == 0 {
-            return;
-        }
+        let m = self.tab_layout_metrics();
+        let layout = match overlay_layout::compute_tooltip_layout(
+            title,
+            mouse_pos,
+            &m,
+            buf_width as u32,
+            buf_height as u32,
+        ) {
+            Some(l) => l,
+            None => return,
+        };
 
-        let padding_x = self.scaled_px(6);
-        let padding_y = self.scaled_px(4);
-        let content_chars = title.chars().count() as u32;
-        let width = (content_chars * self.cell_width + padding_x * 2 + self.scaled_px(2))
-            .min(buf_width.saturating_sub(4) as u32);
-        let height = (self.cell_height + padding_y * 2 + self.scaled_px(2)).min(buf_height as u32);
-        if width <= self.scaled_px(2) || height <= self.scaled_px(2) {
-            return;
-        }
-
-        let mut x = mouse_pos.0.round() as i32 + self.scaled_px(10) as i32;
-        let mut y = self.tab_bar_height_px() as i32 + self.scaled_px(6) as i32;
-        x = x
-            .min(buf_width as i32 - width as i32 - self.scaled_px(2) as i32)
-            .max(self.scaled_px(2) as i32);
-        y = y
-            .min(buf_height as i32 - height as i32 - self.scaled_px(2) as i32)
-            .max(self.scaled_px(2) as i32);
-
-        let radius = self.scaled_px(6);
+        // Background fill.
         self.draw_rounded_rect(
             buffer,
             buf_width,
             buf_height,
-            x,
-            y,
-            width,
-            height,
-            radius,
+            layout.bg_x,
+            layout.bg_y,
+            layout.bg_w,
+            layout.bg_h,
+            layout.radius,
             ACTIVE_TAB_BG,
             245,
         );
         // Subtle border.
         self.draw_rounded_rect(
-            buffer, buf_width, buf_height, x, y, width, height, radius, TAB_BORDER, 80,
+            buffer,
+            buf_width,
+            buf_height,
+            layout.bg_x,
+            layout.bg_y,
+            layout.bg_w,
+            layout.bg_h,
+            layout.radius,
+            TAB_BORDER,
+            80,
         );
 
-        let text_x = x as u32 + self.scaled_px(1) + padding_x;
-        let text_y = y as u32 + self.scaled_px(1) + padding_y;
-        let max_chars = ((width - self.scaled_px(2) - padding_x * 2) / self.cell_width) as usize;
-        for (ci, ch) in title.chars().take(max_chars).enumerate() {
-            let cx = text_x + ci as u32 * self.cell_width;
+        for (ci, ch) in layout.display_text.chars().enumerate() {
+            let cx = layout.text_x + ci as u32 * self.cell_width;
             self.draw_char(
                 buffer,
                 buf_width,
                 buf_height,
                 cx,
-                text_y,
+                layout.text_y,
                 ch,
                 Color::DEFAULT_FG,
             );

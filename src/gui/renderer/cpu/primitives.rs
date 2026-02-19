@@ -1,6 +1,7 @@
 use crate::core::Color;
 
 use super::CpuRenderer;
+use super::super::types::{FlatRectCmd, RoundedRectCmd};
 
 impl CpuRenderer {
     pub(in crate::gui::renderer) fn draw_bg(
@@ -189,5 +190,62 @@ impl CpuRenderer {
         let rr = r as f32;
         let dist = (dx * dx + dy * dy).sqrt();
         (rr + 0.5 - dist).clamp(0.0, 1.0)
+    }
+
+    /// Draws a rounded rectangle from a layout command.
+    pub(in crate::gui::renderer) fn draw_rounded_rect_cmd(
+        &self,
+        buffer: &mut [u32],
+        buf_width: usize,
+        buf_height: usize,
+        cmd: &RoundedRectCmd,
+    ) {
+        let alpha = (cmd.opacity * 255.0).round().clamp(0.0, 255.0) as u8;
+        self.draw_rounded_rect(
+            buffer,
+            buf_width,
+            buf_height,
+            cmd.x as i32,
+            cmd.y as i32,
+            cmd.w as u32,
+            cmd.h as u32,
+            cmd.radius as u32,
+            cmd.color,
+            alpha,
+        );
+    }
+
+    /// Draws a flat (non-rounded) rectangle from a layout command using per-pixel blending.
+    pub(in crate::gui::renderer) fn draw_flat_rect_cmd(
+        &self,
+        buffer: &mut [u32],
+        buf_width: usize,
+        buf_height: usize,
+        cmd: &FlatRectCmd,
+    ) {
+        let alpha = (cmd.opacity * 255.0).round().clamp(0.0, 255.0) as u8;
+        if alpha == 0 {
+            return;
+        }
+        let x = cmd.x as usize;
+        let y = cmd.y as usize;
+        let w = cmd.w as usize;
+        let h = cmd.h as usize;
+        for dy in 0..h {
+            let py = y + dy;
+            if py >= buf_height {
+                break;
+            }
+            for dx in 0..w {
+                let px = x + dx;
+                if px >= buf_width {
+                    break;
+                }
+                let idx = py * buf_width + px;
+                if idx < buffer.len() {
+                    buffer[idx] = Self::blend_pixel(buffer[idx], cmd.color, alpha);
+                }
+            }
+        }
     }
 }

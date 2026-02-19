@@ -1,4 +1,4 @@
-use super::shared::tab_math;
+use super::shared::{tab_math, ui_layout};
 use super::*;
 
 impl SecurityPopup {
@@ -55,29 +55,14 @@ impl CpuRenderer {
         color: Color,
     ) {
         let pixel = color.to_pixel();
-        let mid = size / 2;
-        let top_third = (size / 3).max(1);
-        let bottom_start = (size * 2 / 3).max(top_third + 1);
+        let spans = ui_layout::shield_icon_spans(size);
 
-        for dy in 0..size {
-            let py = y as usize + dy as usize;
+        for (dy, &(left, right)) in spans.iter().enumerate() {
+            let py = y as usize + dy;
             if py >= buf_height {
                 break;
             }
 
-            let half_span = if dy < top_third {
-                1 + dy / 2
-            } else if dy < bottom_start {
-                mid.saturating_sub(1).max(1)
-            } else {
-                let progress = dy - bottom_start;
-                let denom = (size - bottom_start).max(1);
-                let shrink = progress * mid.saturating_sub(1) / denom;
-                mid.saturating_sub(shrink).max(1)
-            };
-
-            let left = mid.saturating_sub(half_span);
-            let right = (mid + half_span).min(size.saturating_sub(1));
             for dx in left..=right {
                 let px = x as usize + dx as usize;
                 if px >= buf_width {
@@ -124,6 +109,7 @@ impl CpuRenderer {
         x >= px as f64 && x < (px + pw) as f64 && y >= py as f64 && y < (py + ph) as f64
     }
 
+    /// Draws security popup overlay using a shared layout.
     pub fn draw_security_popup(
         &mut self,
         buffer: &mut [u32],
@@ -131,64 +117,37 @@ impl CpuRenderer {
         buf_height: usize,
         popup: &SecurityPopup,
     ) {
-        let (mx, my, mw, mh) = self.security_popup_rect(popup, buf_width, buf_height);
-        let mx_usize = mx as usize;
-        let my_usize = my as usize;
-        let mw_usize = mw as usize;
-        let line_h = popup.line_height(self.cell_height) as usize;
-
-        let header_pixel = SECURITY_ACCENT.to_pixel();
-        let radius = self.scaled_px(6);
-        self.draw_rounded_rect(
-            buffer, buf_width, buf_height, mx as i32, my as i32, mw, mh, radius, MENU_BG, 248,
-        );
-        self.draw_rounded_rect(
-            buffer, buf_width, buf_height, mx as i32, my as i32, mw, mh, radius, 0xFFFFFF, 20,
+        let layout = popup.layout(
+            self.cell_width,
+            self.cell_height,
+            self.ui_scale(),
+            buf_width as u32,
+            buf_height as u32,
         );
 
-        let header_y = my + self.scaled_px(2);
-        let header_x = mx + self.cell_width / 2;
-        for (i, ch) in popup.title.chars().enumerate() {
-            let x = header_x + i as u32 * self.cell_width;
-            self.draw_char(
-                buffer,
-                buf_width,
-                buf_height,
-                x,
-                header_y,
-                ch,
-                SECURITY_ACCENT,
-            );
+        self.draw_rounded_rect_cmd(buffer, buf_width, buf_height, &layout.bg);
+        self.draw_rounded_rect_cmd(buffer, buf_width, buf_height, &layout.border);
+
+        // Title text.
+        let title_fg = Color::from_pixel(layout.title.color);
+        let title_x = layout.title.x as u32;
+        let title_y = layout.title.y as u32;
+        for (i, ch) in layout.title.text.chars().enumerate() {
+            let x = title_x + i as u32 * self.cell_width;
+            self.draw_char(buffer, buf_width, buf_height, x, title_y, ch, title_fg);
         }
 
-        let sep_y = my_usize + line_h;
-        if sep_y < buf_height {
-            for px in (mx_usize + self.scaled_px(3) as usize)
-                ..(mx_usize + mw_usize).saturating_sub(self.scaled_px(3) as usize)
-            {
-                let idx = sep_y * buf_width + px;
-                if idx < buffer.len() {
-                    buffer[idx] = Self::blend_pixel(buffer[idx], header_pixel, 120);
-                }
-            }
-        }
+        // Separator line.
+        self.draw_flat_rect_cmd(buffer, buf_width, buf_height, &layout.separator);
 
-        for (line_idx, line) in popup.lines.iter().enumerate() {
-            let text_y = my + line_h as u32 + self.scaled_px(4) + line_idx as u32 * line_h as u32;
-            let text_x = mx + self.cell_width / 2;
-            let mut chars = String::from("• ");
-            chars.push_str(line);
-            for (i, ch) in chars.chars().enumerate() {
-                let x = text_x + i as u32 * self.cell_width;
-                self.draw_char(
-                    buffer,
-                    buf_width,
-                    buf_height,
-                    x,
-                    text_y,
-                    ch,
-                    Color::DEFAULT_FG,
-                );
+        // Content lines.
+        for text_cmd in &layout.lines {
+            let fg = Color::from_pixel(text_cmd.color);
+            let tx = text_cmd.x as u32;
+            let ty = text_cmd.y as u32;
+            for (i, ch) in text_cmd.text.chars().enumerate() {
+                let x = tx + i as u32 * self.cell_width;
+                self.draw_char(buffer, buf_width, buf_height, x, ty, ch, fg);
             }
         }
     }

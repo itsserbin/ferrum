@@ -3,11 +3,7 @@
 //! Hit testing and popup drawing for the GPU renderer.
 
 use super::super::shared::tab_hit_test;
-use super::super::{
-    ContextAction, ContextMenu, DESTRUCTIVE_COLOR, MENU_BG, MENU_HOVER_BG, SecurityPopup,
-    TabBarHit, TabInfo,
-};
-use crate::core::Color;
+use super::super::{ContextMenu, SecurityPopup, TabBarHit, TabInfo};
 
 impl super::GpuRenderer {
     // ── Hit testing (delegates to shared tab_hit_test) ────────────────
@@ -47,53 +43,47 @@ impl super::GpuRenderer {
 
     // ── Context menu ──────────────────────────────────────────────────
 
+    /// Draws context menu overlay using a shared layout.
     pub(super) fn draw_context_menu_impl(&mut self, menu: &ContextMenu) {
-        let mw = menu.width(self.metrics.cell_width) as f32;
-        let ih = menu.item_height(self.metrics.cell_height) as f32;
-        let mh = menu.height(self.metrics.cell_height) as f32;
-        let mx = menu.x as f32;
-        let my = menu.y as f32;
-        let radius = self.metrics.scaled_px(6) as f32;
-        let open_t = (menu.opened_at.elapsed().as_secs_f32() / 0.14).clamp(0.0, 1.0);
-        let open_ease = 1.0 - (1.0 - open_t) * (1.0 - open_t);
+        let layout = menu.layout(
+            self.metrics.cell_width,
+            self.metrics.cell_height,
+            self.metrics.ui_scale,
+        );
 
-        // Background.
-        self.push_rounded_rect(mx, my, mw, mh, radius, MENU_BG, 0.9 + open_ease * 0.08);
-        self.push_rounded_rect(mx, my, mw, mh, radius, 0xFFFFFF, 0.1);
+        self.push_rounded_rect(
+            layout.bg.x,
+            layout.bg.y,
+            layout.bg.w,
+            layout.bg.h,
+            layout.bg.radius,
+            layout.bg.color,
+            layout.bg.opacity,
+        );
+        self.push_rounded_rect(
+            layout.border.x,
+            layout.border.y,
+            layout.border.w,
+            layout.border.h,
+            layout.border.radius,
+            layout.border.color,
+            layout.border.opacity,
+        );
 
-        for (i, (action, label)) in menu.items.iter().enumerate() {
-            let item_y = my + self.metrics.scaled_px(2) as f32 + i as f32 * ih;
-            let hover_t = menu
-                .hover_progress
-                .get(i)
-                .copied()
-                .unwrap_or(0.0)
-                .clamp(0.0, 1.0);
-
-            if hover_t > 0.01 {
-                let hover_x = mx + self.metrics.scaled_px(4) as f32;
-                let hover_w = mw - self.metrics.scaled_px(8) as f32;
-                let hover_h = ih - self.metrics.scaled_px(1) as f32;
+        for item in &layout.items {
+            if let Some(ref hover) = item.hover_rect {
                 self.push_rounded_rect(
-                    hover_x,
-                    item_y,
-                    hover_w,
-                    hover_h,
-                    radius,
-                    MENU_HOVER_BG,
-                    0.45 + hover_t * 0.45,
+                    hover.x, hover.y, hover.w, hover.h, hover.radius, hover.color, hover.opacity,
                 );
             }
 
-            let fg = if *action == ContextAction::CloseTab {
-                DESTRUCTIVE_COLOR.to_pixel()
-            } else {
-                Color::DEFAULT_FG.to_pixel()
-            };
-
-            let text_x = mx + self.metrics.cell_width as f32;
-            let text_y = item_y + self.metrics.scaled_px(2) as f32;
-            self.push_text(text_x, text_y, label, fg, 1.0);
+            self.push_text(
+                item.text.x,
+                item.text.y,
+                &item.text.text,
+                item.text.color,
+                item.text.opacity,
+            );
         }
     }
 
@@ -108,62 +98,62 @@ impl super::GpuRenderer {
 
     // ── Security ──────────────────────────────────────────────────────
 
+    /// Draws security popup overlay using a shared layout.
     pub(super) fn draw_security_popup_impl(
         &mut self,
         buf_width: usize,
         buf_height: usize,
         popup: &SecurityPopup,
     ) {
-        let (rx, ry, rw, rh) = popup.clamped_rect(
+        let layout = popup.layout(
             self.metrics.cell_width,
             self.metrics.cell_height,
+            self.metrics.ui_scale,
             buf_width as u32,
             buf_height as u32,
         );
-        let x = rx as f32;
-        let y = ry as f32;
-        let width = rw as f32;
-        let height = rh as f32;
-        let radius = self.metrics.scaled_px(6) as f32;
 
-        self.push_rounded_rect(x, y, width, height, radius, MENU_BG, 0.97);
-        self.push_rounded_rect(x, y, width, height, radius, 0xFFFFFF, 0.08);
+        self.push_rounded_rect(
+            layout.bg.x,
+            layout.bg.y,
+            layout.bg.w,
+            layout.bg.h,
+            layout.bg.radius,
+            layout.bg.color,
+            layout.bg.opacity,
+        );
+        self.push_rounded_rect(
+            layout.border.x,
+            layout.border.y,
+            layout.border.w,
+            layout.border.h,
+            layout.border.radius,
+            layout.border.color,
+            layout.border.opacity,
+        );
 
         // Title.
-        let header_y = y + self.metrics.scaled_px(2) as f32;
-        let header_x = x + self.metrics.cell_width as f32 / 2.0;
         self.push_text(
-            header_x,
-            header_y,
-            popup.title,
-            super::super::SECURITY_ACCENT.to_pixel(),
-            1.0,
+            layout.title.x,
+            layout.title.y,
+            &layout.title.text,
+            layout.title.color,
+            layout.title.opacity,
         );
 
         // Separator line.
-        let line_h = popup.line_height(self.metrics.cell_height) as f32;
-        let sep_y = y + line_h;
         self.push_rect(
-            x + self.metrics.scaled_px(3) as f32,
-            sep_y,
-            width - self.metrics.scaled_px(6) as f32,
-            1.0,
-            super::super::SECURITY_ACCENT.to_pixel(),
-            0.47,
+            layout.separator.x,
+            layout.separator.y,
+            layout.separator.w,
+            layout.separator.h,
+            layout.separator.color,
+            layout.separator.opacity,
         );
 
         // Content lines.
-        for (line_idx, line) in popup.lines.iter().enumerate() {
-            let text_y = y + line_h + self.metrics.scaled_px(4) as f32 + line_idx as f32 * line_h;
-            let text_x = x + self.metrics.cell_width as f32 / 2.0;
-            let full_line = format!("\u{2022} {}", line);
-            self.push_text(
-                text_x,
-                text_y,
-                &full_line,
-                Color::DEFAULT_FG.to_pixel(),
-                1.0,
-            );
+        for text_cmd in &layout.lines {
+            self.push_text(text_cmd.x, text_cmd.y, &text_cmd.text, text_cmd.color, text_cmd.opacity);
         }
     }
 

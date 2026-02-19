@@ -63,7 +63,7 @@ impl CpuRenderer {
         menu.hit_test(x, y, self.cell_width, self.cell_height)
     }
 
-    /// Draws context menu overlay.
+    /// Draws context menu overlay using a shared layout.
     pub fn draw_context_menu(
         &mut self,
         buffer: &mut [u32],
@@ -71,74 +71,23 @@ impl CpuRenderer {
         buf_height: usize,
         menu: &ContextMenu,
     ) {
-        let mw = menu.width(self.cell_width);
-        let ih = menu.item_height(self.cell_height);
-        let mh = menu.height(self.cell_height);
-        let mx = menu.x;
-        let my = menu.y;
+        let layout = menu.layout(self.cell_width, self.cell_height, self.ui_scale());
+        let clip_right = (layout.bg.x + layout.bg.w) as u32;
 
-        let radius = self.scaled_px(6);
-        let open_t = (menu.opened_at.elapsed().as_secs_f32() / 0.14).clamp(0.0, 1.0);
-        let open_ease = 1.0 - (1.0 - open_t) * (1.0 - open_t);
-        let panel_alpha = (228.0 + open_ease * 20.0).round().clamp(0.0, 255.0) as u8;
+        self.draw_rounded_rect_cmd(buffer, buf_width, buf_height, &layout.bg);
+        self.draw_rounded_rect_cmd(buffer, buf_width, buf_height, &layout.border);
 
-        self.draw_rounded_rect(
-            buffer,
-            buf_width,
-            buf_height,
-            mx as i32,
-            my as i32,
-            mw,
-            mh,
-            radius,
-            MENU_BG,
-            panel_alpha,
-        );
-        self.draw_rounded_rect(
-            buffer, buf_width, buf_height, mx as i32, my as i32, mw, mh, radius, 0xFFFFFF, 30,
-        );
-
-        // Draw menu items.
-        for (i, (action, label)) in menu.items.iter().enumerate() {
-            let item_y = my + self.scaled_px(2) + i as u32 * ih;
-            let hover_t = menu
-                .hover_progress
-                .get(i)
-                .copied()
-                .unwrap_or(0.0)
-                .clamp(0.0, 1.0);
-
-            // Hover highlight for the active row.
-            if hover_t > 0.01 {
-                let hover_x = mx + self.scaled_px(4);
-                let hover_w = mw.saturating_sub(self.scaled_px(8));
-                let hover_h = ih.saturating_sub(self.scaled_px(1));
-                let alpha = (120.0 + hover_t * 100.0).round().clamp(0.0, 255.0) as u8;
-                self.draw_rounded_rect(
-                    buffer,
-                    buf_width,
-                    buf_height,
-                    hover_x as i32,
-                    item_y as i32,
-                    hover_w,
-                    hover_h,
-                    self.scaled_px(6),
-                    MENU_HOVER_BG,
-                    alpha,
-                );
+        for item in &layout.items {
+            if let Some(ref hover) = item.hover_rect {
+                self.draw_rounded_rect_cmd(buffer, buf_width, buf_height, hover);
             }
 
-            let fg = if *action == ContextAction::CloseTab {
-                DESTRUCTIVE_COLOR // Red for destructive action.
-            } else {
-                Color::DEFAULT_FG
-            };
-
-            let text_x = mx + self.cell_width;
-            let text_y = item_y + self.scaled_px(2);
-            for (ci, ch) in label.chars().enumerate() {
+            let fg = Color::from_pixel(item.text.color);
+            let text_x = item.text.x as u32;
+            let text_y = item.text.y as u32;
+            for (ci, ch) in item.text.text.chars().enumerate() {
                 let cx = text_x + ci as u32 * self.cell_width;
-                if cx + self.cell_width <= mx + mw {
+                if cx + self.cell_width <= clip_right {
                     self.draw_char(buffer, buf_width, buf_height, cx, text_y, ch, fg);
                 }
             }
