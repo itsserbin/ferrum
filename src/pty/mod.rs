@@ -244,28 +244,40 @@ fn has_active_child_processes_unix(shell_pid: u32) -> bool {
 
 #[cfg(windows)]
 fn has_active_child_processes_windows(shell_pid: u32) -> bool {
-    use std::process::Command;
-
-    let script = format!(
-        "$p = Get-CimInstance Win32_Process -Filter \"ParentProcessId = {shell_pid}\" -ErrorAction SilentlyContinue; if ($p) {{ '1' }} else {{ '0' }}"
-    );
-
-    let output = match Command::new("powershell")
-        .arg("-NoProfile")
-        .arg("-NonInteractive")
-        .arg("-Command")
-        .arg(script)
-        .output()
-    {
-        Ok(output) => output,
-        Err(_) => return false,
+    use std::mem;
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Process32First, Process32Next, PROCESSENTRY32,
+        TH32CS_SNAPPROCESS,
     };
 
-    if !output.status.success() {
-        return false;
-    }
+    unsafe {
+        let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if snapshot == -1_isize as _ {
+            return false;
+        }
 
-    String::from_utf8_lossy(&output.stdout).trim() == "1"
+        let mut entry: PROCESSENTRY32 = mem::zeroed();
+        entry.dwSize = mem::size_of::<PROCESSENTRY32>() as u32;
+
+        if Process32First(snapshot, &mut entry) == 0 {
+            CloseHandle(snapshot);
+            return false;
+        }
+
+        loop {
+            if entry.th32ParentProcessID == shell_pid {
+                CloseHandle(snapshot);
+                return true;
+            }
+            if Process32Next(snapshot, &mut entry) == 0 {
+                break;
+            }
+        }
+
+        CloseHandle(snapshot);
+        false
+    }
 }
 
 impl Drop for Session {
