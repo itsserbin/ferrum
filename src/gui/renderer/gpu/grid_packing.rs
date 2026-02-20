@@ -61,11 +61,11 @@ impl super::GpuRenderer {
         grid: &Grid,
         selection: Option<&Selection>,
         viewport_start: usize,
+        fg_dim: f32,
     ) -> Vec<PackedCell> {
         let rows = grid.rows;
         let cols = grid.cols;
         let mut cells = Vec::with_capacity(rows * cols);
-
         for row in 0..rows {
             let abs_row = viewport_start + row;
             for col in 0..cols {
@@ -95,9 +95,11 @@ impl super::GpuRenderer {
                 }
 
                 let mut fg = cell.fg;
-                // Bold: bright variant for base ANSI colors.
                 if cell.bold {
                     fg = fg.bold_bright();
+                }
+                if fg_dim > 0.0 {
+                    fg = fg.dimmed(fg_dim);
                 }
                 let mut bg = cell.bg.to_pixel();
                 if selected {
@@ -130,6 +132,7 @@ impl super::GpuRenderer {
         origin_y: u32,
         max_width: u32,
         max_height: u32,
+        fg_dim: f32,
     ) {
         self.ensure_grid_frame_started();
 
@@ -147,7 +150,7 @@ impl super::GpuRenderer {
             return;
         }
 
-        let cells = self.pack_grid_cells(grid, selection, viewport_start);
+        let cells = self.pack_grid_cells(grid, selection, viewport_start, fg_dim);
         self.grid_batches.push(GridBatch {
             cells,
             uniforms: GridUniforms {

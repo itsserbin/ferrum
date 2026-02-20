@@ -1,5 +1,5 @@
 use crate::gui::input::encode_mouse_event;
-use crate::gui::pane::{DIVIDER_WIDTH, PaneId};
+use crate::gui::pane::{DIVIDER_WIDTH, PANE_INNER_PADDING, PaneId};
 use crate::gui::*;
 
 impl FerrumWindow {
@@ -24,14 +24,15 @@ impl FerrumWindow {
         let tab = self.active_tab_ref()?;
         let leaf = tab.pane_tree.find_leaf(pane_id)?;
         let terminal_rect = self.terminal_content_rect();
-        let pane_rect = tab
+        let pane_pad = self.backend.scaled_px(PANE_INNER_PADDING);
+        let content = tab
             .pane_tree
             .layout(terminal_rect, DIVIDER_WIDTH)
             .into_iter()
-            .find_map(|(id, rect)| (id == pane_id).then_some(rect))?;
+            .find_map(|(id, rect)| (id == pane_id).then_some(rect.inset(pane_pad)))?;
 
-        let local_x = (self.mouse_pos.0 as u32).saturating_sub(pane_rect.x);
-        let local_y = (self.mouse_pos.1 as u32).saturating_sub(pane_rect.y);
+        let local_x = (self.mouse_pos.0 as u32).saturating_sub(content.x);
+        let local_y = (self.mouse_pos.1 as u32).saturating_sub(content.y);
         let col = ((local_x + self.backend.cell_width() / 2) as usize
             / self.backend.cell_width() as usize)
             .min(leaf.terminal.grid.cols.saturating_sub(1));

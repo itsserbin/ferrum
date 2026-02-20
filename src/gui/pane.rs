@@ -33,6 +33,15 @@ impl PaneRect {
     pub fn center_y(&self) -> u32 {
         self.y + self.height / 2
     }
+    /// Returns a new rect inset by `padding` on top, left, and right only.
+    pub fn inset(&self, padding: u32) -> PaneRect {
+        PaneRect {
+            x: self.x + padding,
+            y: self.y + padding,
+            width: self.width.saturating_sub(padding * 2),
+            height: self.height.saturating_sub(padding),
+        }
+    }
 }
 
 /// Direction for spatial navigation between panes.
@@ -55,6 +64,9 @@ pub(super) struct DividerHit {
 
 /// Width of the visible divider between panes, in pixels.
 pub(super) const DIVIDER_WIDTH: u32 = 1;
+
+/// Inner padding for each pane (base pixels, scaled by DPI).
+pub(super) const PANE_INNER_PADDING: u32 = 4;
 
 /// Width of the hit zone around a divider for mouse interaction, in pixels.
 pub(super) const DIVIDER_HIT_ZONE: u32 = 6;

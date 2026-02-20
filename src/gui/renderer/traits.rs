@@ -86,6 +86,7 @@ pub trait Renderer {
         _selection: Option<&Selection>,
         _viewport_start: usize,
         _rect: PaneRect,
+        _fg_dim: f32,
     ) {
     }
 
@@ -123,11 +124,6 @@ pub trait Renderer {
         _rect: PaneRect,
     ) {
     }
-
-    /// Draws a translucent overlay over one pane rectangle (GPU path).
-    ///
-    /// CPU renderer can keep using direct buffer blending in the shared path.
-    fn draw_pane_dim_overlay(&mut self, _rect: PaneRect, _alpha: f32) {}
 
     /// Draws a split divider rectangle (GPU path).
     ///

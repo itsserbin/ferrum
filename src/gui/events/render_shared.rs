@@ -243,11 +243,21 @@ pub(in crate::gui::events) fn draw_frame_content(
                 height: (bh as u32).saturating_sub(tab_bar_h + padding * 2),
             };
             let divider_px = DIVIDER_WIDTH;
+            let pane_pad = renderer.scaled_px(crate::gui::pane::PANE_INNER_PADDING);
             let pane_layout = tab.pane_tree.layout(terminal_rect, divider_px);
 
             for &(pane_id, rect) in &pane_layout {
                 if let Some(leaf) = tab.pane_tree.find_leaf(pane_id) {
-                    // Render terminal grid into pane area.
+                    let is_focused = pane_id == tab.focused_pane;
+                    let fg_dim = if is_focused {
+                        0.0
+                    } else {
+                        INACTIVE_PANE_DIM_ALPHA
+                    };
+
+                    let content = rect.inset(pane_pad);
+
+                    // Render terminal grid into pane content area.
                     let viewport_start = leaf
                         .terminal
                         .scrollback
@@ -261,7 +271,8 @@ pub(in crate::gui::events) fn draw_frame_content(
                             &leaf.terminal.grid,
                             leaf.selection.as_ref(),
                             viewport_start,
-                            rect,
+                            content,
+                            fg_dim,
                         );
                     } else {
                         let display = leaf.terminal.build_display(leaf.scroll_offset);
@@ -272,12 +283,12 @@ pub(in crate::gui::events) fn draw_frame_content(
                             &display,
                             leaf.selection.as_ref(),
                             viewport_start,
-                            rect,
+                            content,
+                            fg_dim,
                         );
                     }
 
                     // Cursor.
-                    let is_focused = pane_id == tab.focused_pane;
                     if leaf.scroll_offset == 0
                         && leaf.terminal.cursor_visible
                         && is_focused
@@ -291,11 +302,11 @@ pub(in crate::gui::events) fn draw_frame_content(
                             leaf.terminal.cursor_col,
                             &leaf.terminal.grid,
                             leaf.terminal.cursor_style,
-                            rect,
+                            content,
                         );
                     }
 
-                    // Scrollbar within the pane rect.
+                    // Scrollbar within the full pane rect (not inset).
                     let scrollback_len = leaf.terminal.scrollback.len();
                     if scrollback_len > 0 {
                         let hover = leaf.scrollbar.hover || leaf.scrollbar.dragging;
@@ -316,15 +327,6 @@ pub(in crate::gui::events) fn draw_frame_content(
                                 hover,
                                 rect,
                             );
-                        }
-                    }
-
-                    // Dim inactive panes.
-                    if !is_focused {
-                        if !buffer.is_empty() {
-                            draw_dim_overlay(buffer, bw, bh, rect, INACTIVE_PANE_DIM_ALPHA);
-                        } else {
-                            renderer.draw_pane_dim_overlay(rect, INACTIVE_PANE_DIM_ALPHA);
                         }
                     }
                 }
@@ -449,27 +451,6 @@ pub(in crate::gui::events) fn draw_frame_content(
         && let Some(ref title) = tab_bar.tab_tooltip
     {
         renderer.draw_tab_tooltip(buffer, bw, bh, params.mouse_pos, title);
-    }
-}
-
-/// Applies a semi-transparent dark overlay to dim inactive panes.
-///
-/// `alpha` controls the dimming strength (0.0 = no dim, 1.0 = fully black).
-fn draw_dim_overlay(buffer: &mut [u32], bw: usize, bh: usize, rect: PaneRect, alpha: f32) {
-    let alpha_factor = 1.0 - alpha;
-    let rect_bottom = (rect.y + rect.height).min(bh as u32);
-    let rect_right = (rect.x + rect.width).min(bw as u32);
-    for py in rect.y..rect_bottom {
-        for px in rect.x..rect_right {
-            let idx = py as usize * bw + px as usize;
-            if idx < buffer.len() {
-                let pixel = buffer[idx];
-                let r = ((pixel >> 16) & 0xFF) as f32 * alpha_factor;
-                let g = ((pixel >> 8) & 0xFF) as f32 * alpha_factor;
-                let b = (pixel & 0xFF) as f32 * alpha_factor;
-                buffer[idx] = 0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32);
-            }
-        }
     }
 }
 

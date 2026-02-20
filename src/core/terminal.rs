@@ -232,7 +232,7 @@ impl Terminal {
         matches!(self.param(params, 0), 20 | 21)
     }
 
-    fn full_reset(&mut self) {
+    pub fn full_reset(&mut self) {
         let rows = self.grid.rows;
         let cols = self.grid.cols;
 

@@ -84,6 +84,7 @@ impl traits::Renderer for CpuRenderer {
         selection: Option<&Selection>,
         viewport_start: usize,
         rect: PaneRect,
+        fg_dim: f32,
     ) {
         CpuRenderer::render_in_rect(
             self,
@@ -94,6 +95,7 @@ impl traits::Renderer for CpuRenderer {
             selection,
             viewport_start,
             rect,
+            fg_dim,
         );
     }
 

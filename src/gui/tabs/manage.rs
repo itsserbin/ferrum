@@ -389,15 +389,22 @@ impl FerrumWindow {
         };
 
         let divider_px = DIVIDER_WIDTH;
+        let scaled_pane_pad = self.backend.scaled_px(crate::gui::pane::PANE_INNER_PADDING);
         let Some(tab) = self.active_tab_mut() else {
             return;
+        };
+        let pane_pad = if tab.has_multiple_panes() {
+            scaled_pane_pad
+        } else {
+            0
         };
         let layout = tab.pane_tree.layout(terminal_rect, divider_px);
 
         for (pane_id, rect) in layout {
             if let Some(leaf) = tab.pane_tree.find_leaf_mut(pane_id) {
-                let cols = (rect.width / cw).max(1) as usize;
-                let rows = (rect.height / ch).max(1) as usize;
+                let content = rect.inset(pane_pad);
+                let cols = (content.width / cw).max(1) as usize;
+                let rows = (content.height / ch).max(1) as usize;
                 leaf.terminal.resize(rows, cols);
                 leaf.scroll_offset = leaf.scroll_offset.min(leaf.terminal.scrollback.len());
                 if let Some(ref session) = leaf.session {

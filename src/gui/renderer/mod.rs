@@ -54,10 +54,6 @@ pub(super) const SCROLLBAR_HOVER_COLOR: Color = Color {
 pub const TAB_BAR_HEIGHT: u32 = 36;
 
 /// Outer terminal padding inside the window.
-#[cfg(target_os = "windows")]
-pub const WINDOW_PADDING: u32 = 12;
-/// Outer terminal padding inside the window.
-#[cfg(not(target_os = "windows"))]
 pub const WINDOW_PADDING: u32 = 8;
 
 /// Active-tab accent (Catppuccin Mocha Lavender #B4BEFE) — used by rename selection.

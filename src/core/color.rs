@@ -127,6 +127,18 @@ impl Color {
         self
     }
 
+    /// Returns a dimmed version of this color by reducing brightness.
+    ///
+    /// `factor` is the dimming amount (0.0 = no change, 1.0 = fully black).
+    pub fn dimmed(self, factor: f32) -> Color {
+        let brightness = 1.0 - factor.clamp(0.0, 1.0);
+        Color {
+            r: (self.r as f32 * brightness) as u8,
+            g: (self.g as f32 * brightness) as u8,
+            b: (self.b as f32 * brightness) as u8,
+        }
+    }
+
     /// 256-color palette: 0-15 = ANSI, 16-231 = 6x6x6 color cube, 232-255 = grayscale
     pub fn from_256(n: u16) -> Color {
         match n {

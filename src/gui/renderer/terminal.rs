@@ -87,10 +87,10 @@ impl CpuRenderer {
         selection: Option<&Selection>,
         viewport_start: usize,
         rect: PaneRect,
+        fg_dim: f32,
     ) {
         let rect_right = (rect.x + rect.width) as usize;
         let rect_bottom = (rect.y + rect.height) as usize;
-
         for row in 0..grid.rows {
             let abs_row = viewport_start + row;
             for col in 0..grid.cols {
@@ -116,6 +116,10 @@ impl CpuRenderer {
 
                 if cell.bold {
                     fg = fg.bold_bright();
+                }
+
+                if fg_dim > 0.0 {
+                    fg = fg.dimmed(fg_dim);
                 }
 
                 if selected {

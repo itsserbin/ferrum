@@ -64,7 +64,7 @@ impl traits::Renderer for GpuRenderer {
         let max_height = self
             .height
             .saturating_sub(self.metrics.tab_bar_height_px() + padding.saturating_mul(2));
-        self.queue_grid_batch(grid, selection, viewport_start, 0, 0, max_width, max_height);
+        self.queue_grid_batch(grid, selection, viewport_start, 0, 0, max_width, max_height, 0.0);
     }
 
     fn draw_cursor(
@@ -89,6 +89,7 @@ impl traits::Renderer for GpuRenderer {
         selection: Option<&Selection>,
         viewport_start: usize,
         rect: PaneRect,
+        fg_dim: f32,
     ) {
         let padding = self.metrics.window_padding_px();
         let top = self.metrics.tab_bar_height_px().saturating_add(padding);
@@ -102,6 +103,7 @@ impl traits::Renderer for GpuRenderer {
             origin_y,
             rect.width,
             rect.height,
+            fg_dim,
         );
     }
 
@@ -138,17 +140,6 @@ impl traits::Renderer for GpuRenderer {
             opacity,
             hover,
             rect,
-        );
-    }
-
-    fn draw_pane_dim_overlay(&mut self, rect: PaneRect, alpha: f32) {
-        self.push_rect(
-            rect.x as f32,
-            rect.y as f32,
-            rect.width as f32,
-            rect.height as f32,
-            0x000000,
-            alpha,
         );
     }
 

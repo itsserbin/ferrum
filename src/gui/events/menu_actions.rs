@@ -1,3 +1,6 @@
+use std::io::Write;
+
+use crate::core::{Grid, Selection, SelectionPoint};
 use crate::gui::menus::MenuAction;
 use crate::gui::pane::SplitDirection;
 use crate::gui::*;
@@ -28,7 +31,18 @@ impl FerrumWindow {
             MenuAction::Copy => self.copy_selection(),
             MenuAction::Paste => self.paste_clipboard(),
             MenuAction::SelectAll => {
-                // TODO: implement select all
+                if let Some(leaf) = self.active_leaf_mut() {
+                    let last_row = leaf.terminal.scrollback.len()
+                        + leaf.terminal.grid.rows.saturating_sub(1);
+                    let last_col = leaf.terminal.grid.cols.saturating_sub(1);
+                    leaf.selection = Some(Selection {
+                        start: SelectionPoint { row: 0, col: 0 },
+                        end: SelectionPoint {
+                            row: last_row,
+                            col: last_col,
+                        },
+                    });
+                }
             }
             MenuAction::ClearSelection => {
                 if let Some(leaf) = self.active_leaf_mut() {
@@ -53,13 +67,29 @@ impl FerrumWindow {
                 self.close_focused_pane();
             }
             MenuAction::ClearTerminal => {
-                // Send "clear screen + move cursor home" escape sequence to the PTY.
-                // ESC[2J = erase entire display, ESC[H = move cursor to home.
-                self.write_pty_bytes(b"\x1b[2J\x1b[H");
+                if let Some(leaf) = self.active_leaf_mut() {
+                    let rows = leaf.terminal.grid.rows;
+                    let cols = leaf.terminal.grid.cols;
+                    leaf.terminal.grid = Grid::new(rows, cols);
+                    leaf.terminal.scrollback.clear();
+                    leaf.terminal.cursor_row = 0;
+                    leaf.terminal.cursor_col = 0;
+                    leaf.scroll_offset = 0;
+                    leaf.selection = None;
+                    let _ = leaf.pty_writer.write_all(b"\x0c");
+                    let _ = leaf.pty_writer.flush();
+                }
+                self.keyboard_selection_anchor = None;
             }
             MenuAction::ResetTerminal => {
-                // Send soft terminal reset (CSI ! p = DECSTR).
-                self.write_pty_bytes(b"\x1b[!p");
+                if let Some(leaf) = self.active_leaf_mut() {
+                    leaf.terminal.full_reset();
+                    leaf.scroll_offset = 0;
+                    leaf.selection = None;
+                    let _ = leaf.pty_writer.write_all(b"\x0c");
+                    let _ = leaf.pty_writer.flush();
+                }
+                self.keyboard_selection_anchor = None;
             }
             MenuAction::RenameTab => {
                 if let Some(idx) = tab_index {
