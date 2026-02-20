@@ -188,6 +188,7 @@ mod tests {
     fn tab(title: &'static str, security_count: usize) -> TabInfo<'static> {
         TabInfo {
             title,
+            index: 0,
             is_active: false,
             security_count,
             hover_progress: 0.0,

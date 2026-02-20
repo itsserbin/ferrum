@@ -105,7 +105,9 @@ impl CpuRenderer {
         fg: Color,
         max_chars: usize,
     ) {
-        let title: String = tab.title.chars().take(max_chars).collect();
+        use crate::gui::renderer::shared::path_display::format_tab_path;
+        let fallback = format!("#{}", tab.index + 1);
+        let title = format_tab_path(tab.title, max_chars, &fallback);
 
         for (ci, ch) in title.chars().enumerate() {
             let cx = text_x + ci as u32 * self.metrics.cell_width;

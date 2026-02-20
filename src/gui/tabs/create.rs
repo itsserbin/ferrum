@@ -119,8 +119,14 @@ impl FerrumWindow {
             scrollbar: ScrollbarState::new(),
         };
 
+        let shell_name = std::path::Path::new(&shell)
+            .file_stem()
+            .and_then(|n| n.to_str())
+            .unwrap_or("shell")
+            .to_string();
+
         let is_renamed = title.is_some();
-        let tab_title = title.unwrap_or_else(|| format!("bash #{}", id + 1));
+        let tab_title = title.unwrap_or(shell_name);
 
         Ok(TabState {
             id,

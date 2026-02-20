@@ -9,6 +9,7 @@ impl FerrumWindow {
             .enumerate()
             .map(|(idx, tab)| TabInfo {
                 title: &tab.title,
+                index: idx,
                 is_active: idx == self.active_tab,
                 security_count: tab.focused_leaf().map_or(0, |leaf| {
                     if leaf.security.has_events() {

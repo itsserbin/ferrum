@@ -3,6 +3,7 @@ use crate::core::Color;
 /// Render-time tab metadata.
 pub struct TabInfo<'a> {
     pub title: &'a str,
+    pub index: usize,
     pub is_active: bool,
     pub security_count: usize,
     pub hover_progress: f32,

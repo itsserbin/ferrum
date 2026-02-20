@@ -35,6 +35,7 @@ pub(in crate::gui) struct TabBarFrameState {
 #[cfg(not(target_os = "macos"))]
 pub(in crate::gui) struct TabBarFrameTabInfo {
     pub title: String,
+    pub index: usize,
     pub is_active: bool,
     pub security_count: usize,
     pub hover_progress: f32,
@@ -50,6 +51,7 @@ impl TabBarFrameTabInfo {
     fn as_tab_info(&self) -> TabInfo<'_> {
         TabInfo {
             title: &self.title,
+            index: self.index,
             is_active: self.is_active,
             security_count: self.security_count,
             hover_progress: self.hover_progress,
@@ -125,8 +127,16 @@ impl FerrumWindow {
                         0
                     }
                 });
+                let display_title = if t.is_renamed {
+                    t.title.clone()
+                } else {
+                    t.focused_leaf()
+                        .and_then(|leaf| leaf.cwd())
+                        .unwrap_or_else(|| t.title.clone())
+                };
                 TabBarFrameTabInfo {
-                    title: t.title.clone(),
+                    title: display_title,
+                    index: i,
                     is_active: i == self.active_tab,
                     security_count,
                     hover_progress: self.tab_hover_progress.get(i).copied().unwrap_or(0.0),

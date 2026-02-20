@@ -176,6 +176,7 @@ impl super::GpuRenderer {
         text_y: u32,
         show_close: bool,
     ) {
+        use crate::gui::renderer::shared::path_display::format_tab_path;
         let fg_color = if tab.is_active {
             TAB_TEXT_ACTIVE
         } else {
@@ -185,7 +186,8 @@ impl super::GpuRenderer {
         let m = self.tab_layout_metrics();
         let max_chars = tab_math::tab_title_max_chars(&m, tw, show_close, tab.security_count);
         let tab_padding_h = self.metrics.scaled_px(tab_math::TAB_PADDING_H);
-        let title: String = tab.title.chars().take(max_chars).collect();
+        let fallback = format!("#{}", tab.index + 1);
+        let title = format_tab_path(tab.title, max_chars, &fallback);
         let tx = tab_x + tab_padding_h as f32;
         self.push_text(tx, text_y as f32, &title, fg_color, 1.0);
     }
