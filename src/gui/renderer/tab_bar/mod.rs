@@ -11,7 +11,7 @@ use super::shared::tab_math;
 
 use super::*;
 use super::RenderTarget;
-use super::cpu::primitives::RoundedShape;
+use super::RoundedShape;
 use super::types::TabSlot;
 
 // Tab-bar palette constants (BAR_BG, TAB_TEXT_ACTIVE, INSERTION_COLOR, etc.)

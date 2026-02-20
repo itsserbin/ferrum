@@ -1,7 +1,7 @@
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
 use super::super::RenderTarget;
-use super::super::cpu::primitives::RoundedShape;
+use super::super::RoundedShape;
 use super::super::shared::overlay_layout;
 use super::super::traits::Renderer;
 use super::{ACTIVE_TAB_BG, TAB_BORDER};

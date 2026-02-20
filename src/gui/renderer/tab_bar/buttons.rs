@@ -5,7 +5,7 @@ use super::super::CpuRenderer;
 use super::super::traits::Renderer;
 
 #[cfg(not(target_os = "macos"))]
-use super::super::cpu::primitives::RoundedShape;
+use super::super::RoundedShape;
 #[cfg(not(target_os = "macos"))]
 use super::super::shared::{tab_math, ui_layout};
 #[cfg(not(target_os = "macos"))]

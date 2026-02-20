@@ -2,7 +2,7 @@
 
 use crate::core::Color;
 
-use super::super::cpu::primitives::RoundedShape;
+use super::super::RoundedShape;
 use super::super::shared::{tab_math, ui_layout};
 use super::super::traits::Renderer;
 use super::super::types::{RenderTarget, TabSlot};

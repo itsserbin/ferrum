@@ -6,28 +6,26 @@ use crate::gui::renderer::types::RenderTarget;
 impl CpuRenderer {
     /// Draws a filled circle at a given center with a given radius.
     pub(in crate::gui::renderer) fn draw_filled_circle(
-        buffer: &mut [u32],
-        buf_w: usize,
+        target: &mut RenderTarget<'_>,
         cx: i32,
         cy: i32,
         radius: u32,
         color: u32,
         alpha: u8,
     ) {
-        if buf_w == 0 || buffer.is_empty() || radius == 0 || alpha == 0 {
+        if target.width == 0 || target.buffer.is_empty() || radius == 0 || alpha == 0 {
             return;
         }
 
-        let buf_h = buffer.len() / buf_w;
-        if buf_h == 0 {
+        if target.height == 0 {
             return;
         }
 
         let r = radius as f32;
         let min_x = (cx - radius as i32 - 1).max(0);
-        let max_x = (cx + radius as i32 + 1).min(buf_w as i32 - 1);
+        let max_x = (cx + radius as i32 + 1).min(target.width as i32 - 1);
         let min_y = (cy - radius as i32 - 1).max(0);
-        let max_y = (cy + radius as i32 + 1).min(buf_h as i32 - 1);
+        let max_y = (cy + radius as i32 + 1).min(target.height as i32 - 1);
 
         for py in min_y..=max_y {
             for px in min_x..=max_x {
@@ -40,13 +38,13 @@ impl CpuRenderer {
                     continue;
                 }
 
-                let idx = py as usize * buf_w + px as usize;
-                if idx >= buffer.len() {
+                let idx = py as usize * target.width + px as usize;
+                if idx >= target.buffer.len() {
                     continue;
                 }
 
                 let aa_alpha = (coverage * alpha as f32).round().clamp(0.0, 255.0) as u8;
-                buffer[idx] = Self::blend_pixel(buffer[idx], color, aa_alpha);
+                target.buffer[idx] = Self::blend_pixel(target.buffer[idx], color, aa_alpha);
             }
         }
     }

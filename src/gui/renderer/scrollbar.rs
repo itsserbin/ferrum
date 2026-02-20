@@ -15,16 +15,14 @@ impl CpuRenderer {
         target: &mut RenderTarget<'_>,
         state: &ScrollbarState,
     ) {
-        let (buffer, buf_width, buf_height) = (&mut *target.buffer, target.width, target.height);
-        let ScrollbarState { scroll_offset, scrollback_len, grid_rows, opacity, hover } = *state;
-        if scrollback_len == 0 || opacity <= 0.0 {
+        if state.scrollback_len == 0 || state.opacity <= 0.0 {
             return;
         }
 
         let (track_top, track_bottom, min_thumb) = scrollbar_math::scrollbar_track_params(
             self.tab_bar_height_px(),
             self.window_padding_px(),
-            buf_height,
+            target.height,
             SCROLLBAR_MIN_THUMB,
             self.ui_scale(),
         );
@@ -32,9 +30,9 @@ impl CpuRenderer {
         let (thumb_y, thumb_height) = match scrollbar_math::scrollbar_thumb_geometry(
             track_top,
             track_bottom,
-            scroll_offset,
-            scrollback_len,
-            grid_rows,
+            state.scroll_offset,
+            state.scrollback_len,
+            state.grid_rows,
             min_thumb,
         ) {
             Some(v) => v,
@@ -44,17 +42,20 @@ impl CpuRenderer {
         // Pixel bounds.
         let thumb_top = thumb_y.round() as usize;
         let thumb_bot = (thumb_y + thumb_height).round() as usize;
-        let thumb_left = buf_width
+        let thumb_left = target
+            .width
             .saturating_sub((self.scrollbar_width_px() + self.scrollbar_margin_px()) as usize);
-        let thumb_right = buf_width.saturating_sub(self.scrollbar_margin_px() as usize);
+        let thumb_right = target
+            .width
+            .saturating_sub(self.scrollbar_margin_px() as usize);
 
         // Color and alpha.
-        let color = if hover {
+        let color = if state.hover {
             SCROLLBAR_HOVER_COLOR
         } else {
             SCROLLBAR_COLOR
         };
-        let alpha = ((SCROLLBAR_BASE_ALPHA as f32 * opacity) as u32).min(255);
+        let alpha = ((SCROLLBAR_BASE_ALPHA as f32 * state.opacity) as u32).min(255);
         if alpha == 0 {
             return;
         }
@@ -62,22 +63,22 @@ impl CpuRenderer {
 
         // Draw with alpha blending over existing buffer content.
         for py in thumb_top..thumb_bot {
-            if py >= buf_height {
+            if py >= target.height {
                 break;
             }
             for px in thumb_left..thumb_right {
-                if px >= buf_width {
+                if px >= target.width {
                     break;
                 }
-                let idx = py * buf_width + px;
-                let bg_pixel = buffer[idx];
+                let idx = py * target.width + px;
+                let bg_pixel = target.buffer[idx];
                 let bg_r = (bg_pixel >> 16) & 0xFF;
                 let bg_g = (bg_pixel >> 8) & 0xFF;
                 let bg_b = bg_pixel & 0xFF;
                 let r = (color.r as u32 * alpha + bg_r * inv_alpha) / 255;
                 let g = (color.g as u32 * alpha + bg_g * inv_alpha) / 255;
                 let b = (color.b as u32 * alpha + bg_b * inv_alpha) / 255;
-                buffer[idx] = (r << 16) | (g << 8) | b;
+                target.buffer[idx] = (r << 16) | (g << 8) | b;
             }
         }
     }
@@ -89,9 +90,7 @@ impl CpuRenderer {
         state: &ScrollbarState,
         rect: PaneRect,
     ) {
-        let (buffer, buf_width, buf_height) = (&mut *target.buffer, target.width, target.height);
-        let ScrollbarState { scroll_offset, scrollback_len, grid_rows, opacity, hover } = *state;
-        if scrollback_len == 0 || opacity <= 0.0 {
+        if state.scrollback_len == 0 || state.opacity <= 0.0 {
             return;
         }
 
@@ -103,9 +102,9 @@ impl CpuRenderer {
         let (thumb_y, thumb_height) = match scrollbar_math::scrollbar_thumb_geometry(
             track_top,
             track_bottom,
-            scroll_offset,
-            scrollback_len,
-            grid_rows,
+            state.scroll_offset,
+            state.scrollback_len,
+            state.grid_rows,
             min_thumb,
         ) {
             Some(v) => v,
@@ -119,35 +118,35 @@ impl CpuRenderer {
             .saturating_sub((self.scrollbar_width_px() + self.scrollbar_margin_px()) as usize);
         let thumb_right = rect_right.saturating_sub(self.scrollbar_margin_px() as usize);
 
-        let color = if hover {
+        let color = if state.hover {
             SCROLLBAR_HOVER_COLOR
         } else {
             SCROLLBAR_COLOR
         };
-        let alpha = ((SCROLLBAR_BASE_ALPHA as f32 * opacity) as u32).min(255);
+        let alpha = ((SCROLLBAR_BASE_ALPHA as f32 * state.opacity) as u32).min(255);
         if alpha == 0 {
             return;
         }
         let inv_alpha = 255 - alpha;
 
         for py in thumb_top..thumb_bot {
-            if py >= buf_height {
+            if py >= target.height {
                 break;
             }
             for px in thumb_left..thumb_right {
-                if px >= buf_width {
+                if px >= target.width {
                     break;
                 }
-                let idx = py * buf_width + px;
-                if idx < buffer.len() {
-                    let bg_pixel = buffer[idx];
+                let idx = py * target.width + px;
+                if idx < target.buffer.len() {
+                    let bg_pixel = target.buffer[idx];
                     let bg_r = (bg_pixel >> 16) & 0xFF;
                     let bg_g = (bg_pixel >> 8) & 0xFF;
                     let bg_b = bg_pixel & 0xFF;
                     let r = (color.r as u32 * alpha + bg_r * inv_alpha) / 255;
                     let g = (color.g as u32 * alpha + bg_g * inv_alpha) / 255;
                     let b = (color.b as u32 * alpha + bg_b * inv_alpha) / 255;
-                    buffer[idx] = (r << 16) | (g << 8) | b;
+                    target.buffer[idx] = (r << 16) | (g << 8) | b;
                 }
             }
         }

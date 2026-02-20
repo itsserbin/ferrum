@@ -235,6 +235,20 @@ pub struct PinColors {
     pub inactive: u32,
 }
 
+/// Internal rounded-rectangle parameters used by `draw_rounded_impl`.
+///
+/// Groups position, size, radius, color, and alpha into a single struct
+/// so that the shared pixel-iteration code stays under the clippy argument limit.
+pub(in crate::gui::renderer) struct RoundedShape {
+    pub x: i32,
+    pub y: i32,
+    pub w: u32,
+    pub h: u32,
+    pub radius: u32,
+    pub color: u32,
+    pub alpha: u8,
+}
+
 /// Scrollbar rendering parameters.
 ///
 /// Groups scroll state, opacity, and hover flag that are always passed
@@ -245,6 +259,15 @@ pub struct ScrollbarState {
     pub grid_rows: usize,
     pub opacity: f32,
     pub hover: bool,
+}
+
+/// Tab drag position data passed to overlay layout computation.
+///
+/// Replaces the raw `(f64, f32)` tuple, giving names to the cursor
+/// position and the smoothed insertion indicator position.
+pub struct DragPosition {
+    pub current_x: f64,
+    pub indicator_x: f32,
 }
 
 #[cfg(test)]

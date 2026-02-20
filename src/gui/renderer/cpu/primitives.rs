@@ -1,21 +1,7 @@
 use crate::core::Color;
 
-use super::super::types::{FlatRectCmd, RenderTarget, RoundedRectCmd};
+use super::super::types::{FlatRectCmd, RenderTarget, RoundedRectCmd, RoundedShape};
 use super::CpuRenderer;
-
-/// Internal rounded-rectangle parameters used by `draw_rounded_impl`.
-///
-/// Groups position, size, radius, color, and alpha into a single struct
-/// so that the shared pixel-iteration code stays under the clippy argument limit.
-pub(in crate::gui::renderer) struct RoundedShape {
-    pub x: i32,
-    pub y: i32,
-    pub w: u32,
-    pub h: u32,
-    pub radius: u32,
-    pub color: u32,
-    pub alpha: u8,
-}
 
 impl CpuRenderer {
     pub(in crate::gui::renderer) fn draw_bg(

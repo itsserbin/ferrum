@@ -158,8 +158,7 @@ impl CpuRenderer {
         if layout.show_hover_circle {
             let alpha = (layout.circle_alpha * 255.0).round().clamp(0.0, 255.0) as u8;
             Self::draw_filled_circle(
-                target.buffer,
-                target.width,
+                target,
                 layout.circle_cx as i32,
                 layout.circle_cy as i32,
                 layout.circle_radius as u32,

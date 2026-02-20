@@ -56,9 +56,6 @@ pub(super) enum NavigateDirection {
 /// Result of a divider hit-test, describing which divider was hit.
 pub(super) struct DividerHit {
     pub direction: SplitDirection,
-    pub ratio: f32,
-    pub position: u32,
-    pub available_size: u32,
 }
 
 /// Width of the visible divider between panes, in pixels.
@@ -415,7 +412,6 @@ impl PaneNode {
         match split.direction {
             SplitDirection::Horizontal => {
                 let divider_x = first_rect.x + first_rect.width;
-                let available = rect.width.saturating_sub(divider_px);
                 // Check if click is within hit_zone of divider center and within rect bounds.
                 let divider_center = divider_x + divider_px / 2;
                 let in_zone_x =
@@ -424,15 +420,11 @@ impl PaneNode {
                 if in_zone_x && in_bounds_y {
                     return Some(DividerHit {
                         direction: split.direction,
-                        ratio: split.ratio,
-                        position: divider_x,
-                        available_size: available,
                     });
                 }
             }
             SplitDirection::Vertical => {
                 let divider_y = first_rect.y + first_rect.height;
-                let available = rect.height.saturating_sub(divider_px);
                 let divider_center = divider_y + divider_px / 2;
                 let in_zone_y =
                     (py as i64 - divider_center as i64).unsigned_abs() <= hit_zone as u64;
@@ -440,9 +432,6 @@ impl PaneNode {
                 if in_zone_y && in_bounds_x {
                     return Some(DividerHit {
                         direction: split.direction,
-                        ratio: split.ratio,
-                        position: divider_y,
-                        available_size: available,
                     });
                 }
             }

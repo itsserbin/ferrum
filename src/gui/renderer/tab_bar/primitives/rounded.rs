@@ -1,7 +1,7 @@
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
 use crate::gui::renderer::CpuRenderer;
-use crate::gui::renderer::cpu::primitives::RoundedShape;
+use crate::gui::renderer::RoundedShape;
 use crate::gui::renderer::types::RenderTarget;
 
 impl CpuRenderer {

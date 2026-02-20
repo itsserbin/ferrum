@@ -2,7 +2,7 @@
 
 use super::super::shared::overlay_layout;
 use super::super::traits::Renderer;
-use super::super::types::RoundedRectCmd;
+use super::super::types::{DragPosition, RoundedRectCmd};
 use super::super::{ACTIVE_TAB_BG, INSERTION_COLOR, TAB_BORDER, TAB_TEXT_ACTIVE, TabInfo};
 
 impl super::GpuRenderer {
@@ -15,12 +15,13 @@ impl super::GpuRenderer {
         indicator_x: f32,
     ) {
         let m = self.tab_layout_metrics();
+        let drag_pos = DragPosition { current_x, indicator_x };
         let layout = match overlay_layout::compute_drag_overlay_layout(
             &m,
             tabs.len(),
             source_index,
             tabs[source_index].title,
-            (current_x, indicator_x),
+            &drag_pos,
             buf_width as u32,
         ) {
             Some(l) => l,
