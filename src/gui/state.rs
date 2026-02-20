@@ -56,6 +56,9 @@ pub(super) struct TabState {
     pub(super) pane_tree: crate::gui::pane::PaneNode,
     pub(super) focused_pane: crate::gui::pane::PaneId,
     pub(super) next_pane_id: crate::gui::pane::PaneId,
+    /// `true` when the user has explicitly renamed this tab.
+    /// When `false`, the title auto-updates from the focused pane's CWD.
+    pub(super) is_renamed: bool,
 }
 
 impl TabState {

@@ -119,12 +119,16 @@ impl FerrumWindow {
             scrollbar: ScrollbarState::new(),
         };
 
+        let is_renamed = title.is_some();
+        let tab_title = title.unwrap_or_else(|| format!("bash #{}", id + 1));
+
         Ok(TabState {
             id,
-            title: title.unwrap_or_else(|| format!("bash #{}", id + 1)),
+            title: tab_title,
             pane_tree: PaneNode::Leaf(Box::new(leaf)),
             focused_pane: pane_id,
             next_pane_id: 1,
+            is_renamed,
         })
     }
 }
