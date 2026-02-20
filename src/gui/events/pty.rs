@@ -57,12 +57,7 @@ impl FerrumWindow {
                         tab.pane_tree.close(*pane_id);
                         // If the focused pane was the one that exited, pick a new one.
                         if tab.focused_pane == *pane_id {
-                            let ids = tab.pane_tree.leaf_ids();
-                            debug_assert!(
-                                !ids.is_empty(),
-                                "pane tree should have at least one leaf after close"
-                            );
-                            tab.focused_pane = ids.into_iter().next().unwrap_or(0);
+                            tab.focused_pane = tab.focus_after_closing_pane(*pane_id).unwrap_or(0);
                         }
                         self.window.request_redraw();
                         return;

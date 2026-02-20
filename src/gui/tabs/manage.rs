@@ -334,9 +334,9 @@ impl FerrumWindow {
         }
         let closing_id = tab.focused_pane;
         tab.pane_tree.close(closing_id);
-        // Move focus to first remaining pane
-        if let Some(first_id) = tab.pane_tree.leaf_ids().first().copied() {
-            tab.focused_pane = first_id;
+        // Keep focus in reverse pane-creation order.
+        if let Some(next_focus) = tab.focus_after_closing_pane(closing_id) {
+            tab.focused_pane = next_focus;
         }
         self.resize_all_panes();
     }

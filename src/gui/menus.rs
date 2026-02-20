@@ -1,4 +1,6 @@
-use muda::{ContextMenu, Menu, MenuId, MenuItem, PredefinedMenuItem};
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+use muda::ContextMenu;
+use muda::{Menu, MenuId, MenuItem, PredefinedMenuItem};
 
 /// Identifiers for context menu actions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -110,10 +112,9 @@ pub(super) fn show_context_menu(
     menu: &Menu,
     position: Option<muda::dpi::Position>,
 ) {
-    use winit::raw_window_handle::*;
-
     #[cfg(target_os = "windows")]
     {
+        use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
         if let Ok(handle) = window.window_handle() {
             if let RawWindowHandle::Win32(win32) = handle.as_raw() {
                 unsafe {
@@ -125,6 +126,7 @@ pub(super) fn show_context_menu(
 
     #[cfg(target_os = "macos")]
     {
+        use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
         if let Ok(handle) = window.window_handle() {
             if let RawWindowHandle::AppKit(appkit) = handle.as_raw() {
                 unsafe {

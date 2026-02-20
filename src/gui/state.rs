@@ -85,6 +85,28 @@ impl TabState {
     pub(super) fn has_multiple_panes(&self) -> bool {
         !self.pane_tree.is_leaf()
     }
+
+    /// Picks the pane that should receive focus after `closing_id` is removed.
+    ///
+    /// Preference order:
+    /// 1) Most recently created pane with id `< closing_id` (reverse create order)
+    /// 2) Otherwise, the most recently created remaining pane.
+    pub(super) fn focus_after_closing_pane(
+        &self,
+        closing_id: crate::gui::pane::PaneId,
+    ) -> Option<crate::gui::pane::PaneId> {
+        let mut previous_created: Option<crate::gui::pane::PaneId> = None;
+        let mut newest_remaining: Option<crate::gui::pane::PaneId> = None;
+
+        for pane_id in self.pane_tree.leaf_ids() {
+            newest_remaining = Some(newest_remaining.map_or(pane_id, |v| v.max(pane_id)));
+            if pane_id < closing_id {
+                previous_created = Some(previous_created.map_or(pane_id, |v| v.max(pane_id)));
+            }
+        }
+
+        previous_created.or(newest_remaining)
+    }
 }
 
 /// Drag state for divider resize between panes.
