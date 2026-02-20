@@ -36,6 +36,8 @@ const SHELL_INTEGRATION_ZSH: &str = include_str!("shell-integration/zsh/ferrum-i
 const SHELL_INTEGRATION_BASH: &str = include_str!("shell-integration/bash/ferrum.bash");
 const SHELL_INTEGRATION_FISH: &str =
     include_str!("shell-integration/fish/vendor_conf.d/ferrum-shell-integration.fish");
+const SHELL_INTEGRATION_POWERSHELL: &str =
+    include_str!("shell-integration/powershell/ferrum.ps1");
 
 /// Create Unix-style command wrapper scripts in temp directory
 #[cfg(windows)]
@@ -110,6 +112,9 @@ fn setup_shell_integration() -> Option<std::path::PathBuf> {
         SHELL_INTEGRATION_FISH,
     )
     .ok()?;
+    let ps_dir = temp_dir.join("powershell");
+    std::fs::create_dir_all(&ps_dir).ok()?;
+    std::fs::write(ps_dir.join("ferrum.ps1"), SHELL_INTEGRATION_POWERSHELL).ok()?;
     Some(temp_dir)
 }
 
@@ -231,6 +236,16 @@ impl Session {
                         .unwrap_or_else(|_| "/usr/local/share:/usr/share".to_string());
                     let new_xdg = format!("{}:{}", fish_dir.display(), existing);
                     cmd.env("XDG_DATA_DIRS", &new_xdg);
+                }
+                name if name == "powershell"
+                    || name == "pwsh"
+                    || name == "powershell.exe"
+                    || name == "pwsh.exe" =>
+                {
+                    let ps_script = integration_dir.join("powershell").join("ferrum.ps1");
+                    cmd.arg("-NoExit");
+                    cmd.arg("-File");
+                    cmd.arg(ps_script.to_string_lossy().as_ref());
                 }
                 _ => {}
             }
