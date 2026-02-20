@@ -26,6 +26,22 @@ pub trait Renderer {
     fn ui_scale(&self) -> f64;
     fn scaled_px(&self, base: u32) -> u32;
     fn scrollbar_hit_zone_px(&self) -> u32;
+    fn pane_inner_padding_px(&self) -> u32;
+
+    /// Returns the split divider color as a pixel value (0x00RRGGBB).
+    ///
+    /// Used by the CPU path for direct buffer writes. The default returns
+    /// Catppuccin Mocha Surface2 as a fallback.
+    fn split_divider_color_pixel(&self) -> u32 {
+        0x585B70
+    }
+
+    /// Returns the default background color as a pixel value (0x00RRGGBB).
+    ///
+    /// Used by the CPU path to clear the frame buffer before rendering.
+    fn default_bg_pixel(&self) -> u32 {
+        0x282C34
+    }
 
     /// Builds a [`TabLayoutMetrics`] from the renderer's current state.
     fn tab_layout_metrics(&self) -> TabLayoutMetrics {
@@ -211,6 +227,13 @@ pub trait Renderer {
         tab_math::pin_button_rect(&m).to_tuple()
     }
 
+    /// Returns the gear (settings) button rectangle as `(x, y, w, h)` (non-macOS only).
+    #[cfg(not(target_os = "macos"))]
+    fn gear_button_rect(&self) -> (u32, u32, u32, u32) {
+        let m = self.tab_layout_metrics();
+        tab_math::gear_button_rect(&m).to_tuple()
+    }
+
     /// Returns `true` when the tab width is too narrow to display a title.
     fn should_show_number(&self, tw: u32) -> bool {
         let m = self.tab_layout_metrics();
@@ -283,4 +306,12 @@ pub trait Renderer {
         tab_math::security_badge_rect(&m, tab_index, tab_count, buf_width, security_count)
             .map(|r| r.to_tuple())
     }
+
+    // ── Settings overlay ────────────────────────────────────────────
+
+    fn draw_settings_overlay(
+        &mut self,
+        target: &mut RenderTarget<'_>,
+        overlay: &crate::gui::settings::SettingsOverlay,
+    );
 }

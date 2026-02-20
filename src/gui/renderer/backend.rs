@@ -3,6 +3,7 @@ use std::sync::Arc;
 use softbuffer::Surface;
 use winit::window::Window;
 
+use crate::config::AppConfig;
 use super::traits::Renderer;
 use super::{CpuRenderer, SecurityPopup, TabBarHit, TabInfo};
 
@@ -27,10 +28,11 @@ impl RendererBackend {
     pub fn new(
         window: Arc<Window>,
         context: &softbuffer::Context<winit::event_loop::OwnedDisplayHandle>,
+        config: &AppConfig,
     ) -> Self {
         #[cfg(feature = "gpu")]
         {
-            match GpuRenderer::new(window.clone()) {
+            match GpuRenderer::new(window.clone(), config) {
                 Ok(gpu) => {
                     eprintln!("[ferrum] Using GPU renderer (wgpu)");
                     return RendererBackend::Gpu(Box::new(gpu));
@@ -42,7 +44,7 @@ impl RendererBackend {
         }
 
         let surface = Box::new(Surface::new(context, window.clone()).expect("softbuffer surface"));
-        let renderer = Box::new(CpuRenderer::new());
+        let renderer = Box::new(CpuRenderer::new(config));
         eprintln!("[ferrum] Using CPU renderer (softbuffer)");
         RendererBackend::Cpu { renderer, surface }
     }
@@ -68,6 +70,15 @@ impl RendererBackend {
     }
 
     // ── Lifecycle ────────────────────────────────────────────────────
+
+    /// Applies a full config change (font, metrics, palette).
+    pub fn apply_config(&mut self, config: &AppConfig) {
+        match self {
+            Self::Cpu { renderer, .. } => renderer.apply_config(config),
+            #[cfg(feature = "gpu")]
+            Self::Gpu(gpu) => gpu.apply_config(config),
+        }
+    }
 
     pub fn set_scale(&mut self, scale_factor: f64) {
         self.as_renderer_mut().set_scale(scale_factor);
@@ -106,6 +117,10 @@ impl RendererBackend {
 
     pub fn scrollbar_hit_zone_px(&self) -> u32 {
         self.as_renderer().scrollbar_hit_zone_px()
+    }
+
+    pub fn pane_inner_padding_px(&self) -> u32 {
+        self.as_renderer().pane_inner_padding_px()
     }
 
     // ── Scrollbar ─────────────────────────────────────────────────────
@@ -178,6 +193,11 @@ impl RendererBackend {
             .hit_test_tab_security_badge(x, y, tabs, buf_width)
     }
 
+    #[cfg(not(target_os = "macos"))]
+    pub fn gear_button_rect(&self) -> (u32, u32, u32, u32) {
+        self.as_renderer().gear_button_rect()
+    }
+
     pub fn security_badge_rect(
         &self,
         tab_index: usize,
@@ -201,5 +221,57 @@ impl RendererBackend {
     ) -> bool {
         self.as_renderer()
             .hit_test_security_popup(popup, x, y, buf_width, buf_height)
+    }
+}
+
+// ── Palette accessors (used by settings overlay mouse handling) ────
+
+impl RendererBackend {
+    pub(in crate::gui) fn palette_menu_bg(&self) -> u32 {
+        match self {
+            Self::Cpu { renderer, .. } => renderer.palette.menu_bg.to_pixel(),
+            #[cfg(feature = "gpu")]
+            Self::Gpu(gpu) => gpu.palette.menu_bg.to_pixel(),
+        }
+    }
+
+    pub(in crate::gui) fn palette_active_accent(&self) -> u32 {
+        match self {
+            Self::Cpu { renderer, .. } => renderer.palette.active_accent.to_pixel(),
+            #[cfg(feature = "gpu")]
+            Self::Gpu(gpu) => gpu.palette.active_accent.to_pixel(),
+        }
+    }
+
+    pub(in crate::gui) fn palette_text_active(&self) -> u32 {
+        match self {
+            Self::Cpu { renderer, .. } => renderer.palette.tab_text_active.to_pixel(),
+            #[cfg(feature = "gpu")]
+            Self::Gpu(gpu) => gpu.palette.tab_text_active.to_pixel(),
+        }
+    }
+
+    pub(in crate::gui) fn palette_text_inactive(&self) -> u32 {
+        match self {
+            Self::Cpu { renderer, .. } => renderer.palette.tab_text_inactive.to_pixel(),
+            #[cfg(feature = "gpu")]
+            Self::Gpu(gpu) => gpu.palette.tab_text_inactive.to_pixel(),
+        }
+    }
+
+    pub(in crate::gui) fn palette_bar_bg(&self) -> u32 {
+        match self {
+            Self::Cpu { renderer, .. } => renderer.palette.bar_bg.to_pixel(),
+            #[cfg(feature = "gpu")]
+            Self::Gpu(gpu) => gpu.palette.bar_bg.to_pixel(),
+        }
+    }
+
+    pub(in crate::gui) fn palette(&self) -> &crate::config::ThemePalette {
+        match self {
+            Self::Cpu { renderer, .. } => &renderer.palette,
+            #[cfg(feature = "gpu")]
+            Self::Gpu(gpu) => &gpu.palette,
+        }
     }
 }
