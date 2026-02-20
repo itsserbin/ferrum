@@ -1,3 +1,4 @@
+#[cfg(test)]
 use crate::core::Color;
 
 /// Render-time tab metadata.
@@ -22,6 +23,13 @@ pub struct SecurityPopup {
     pub lines: Vec<String>,
 }
 
+/// Color parameters for security popup layout rendering.
+pub struct PopupColors {
+    pub accent: u32,
+    pub menu_bg: u32,
+    pub default_fg: u32,
+}
+
 impl SecurityPopup {
     /// Computes the full visual layout for this security popup.
     ///
@@ -35,6 +43,7 @@ impl SecurityPopup {
         ui_scale: f64,
         buf_width: u32,
         buf_height: u32,
+        colors: &PopupColors,
     ) -> SecurityPopupLayout {
         let (rx, ry, rw, rh) = self.clamped_rect(cell_width, cell_height, buf_width, buf_height);
         let x = rx as f32;
@@ -43,7 +52,6 @@ impl SecurityPopup {
         let h = rh as f32;
         let radius = scaled_px(6, ui_scale) as f32;
         let line_h = self.line_height(cell_height) as f32;
-        let accent_pixel = super::SECURITY_ACCENT.to_pixel();
 
         let bg = RoundedRectCmd {
             x,
@@ -51,7 +59,7 @@ impl SecurityPopup {
             w,
             h,
             radius,
-            color: super::MENU_BG,
+            color: colors.menu_bg,
             opacity: 0.973,
         };
         let border = RoundedRectCmd {
@@ -73,7 +81,7 @@ impl SecurityPopup {
             x: x + half_cw,
             y: y + pad2,
             text: self.title.to_string(),
-            color: accent_pixel,
+            color: colors.accent,
             opacity: 1.0,
         };
 
@@ -83,7 +91,7 @@ impl SecurityPopup {
             y: sep_y,
             w: w - pad3 * 2.0,
             h: 1.0,
-            color: accent_pixel,
+            color: colors.accent,
             opacity: 0.47,
         };
 
@@ -95,7 +103,7 @@ impl SecurityPopup {
                 x: x + half_cw,
                 y: y + line_h + pad4 + i as f32 * line_h,
                 text: format!("\u{2022} {}", line),
-                color: Color::DEFAULT_FG.to_pixel(),
+                color: colors.default_fg,
                 opacity: 1.0,
             })
             .collect();
@@ -117,7 +125,7 @@ impl SecurityPopup {
 /// This is the single source of truth for DPI-aware pixel scaling.
 /// All other `scaled_px` helpers (on `FontMetrics`, `TabLayoutMetrics`, etc.)
 /// delegate to this function.
-pub(in crate::gui::renderer) fn scaled_px(base: u32, ui_scale: f64) -> u32 {
+pub(in crate::gui) fn scaled_px(base: u32, ui_scale: f64) -> u32 {
     if base == 0 {
         0
     } else {
@@ -183,6 +191,9 @@ pub enum TabBarHit {
     /// Clicked on the pin button (non-macOS).
     #[cfg(not(target_os = "macos"))]
     PinButton,
+    /// Clicked on the settings gear button (non-macOS).
+    #[cfg(not(target_os = "macos"))]
+    SettingsButton,
     /// Clicked on a window control button (non-macOS).
     #[cfg(not(target_os = "macos"))]
     WindowButton(WindowButton),
@@ -277,6 +288,14 @@ mod tests {
 
     // ── SecurityPopup layout tests ──────────────────────────────────
 
+    fn test_colors() -> PopupColors {
+        PopupColors {
+            accent: 0xF9E2AF,
+            menu_bg: 0x1E2433,
+            default_fg: Color::DEFAULT_FG.to_pixel(),
+        }
+    }
+
     fn make_popup() -> SecurityPopup {
         SecurityPopup {
             tab_index: 0,
@@ -290,7 +309,7 @@ mod tests {
     #[test]
     fn security_popup_layout_bg_position_clamped() {
         let popup = make_popup();
-        let layout = popup.layout(8, 16, 1.0, 800, 600);
+        let layout = popup.layout(8, 16, 1.0, 800, 600, &test_colors());
         assert!(layout.bg.x >= 0.0);
         assert!(layout.bg.y >= 0.0);
         assert!(layout.bg.w > 0.0);
@@ -300,7 +319,7 @@ mod tests {
     #[test]
     fn security_popup_layout_border_matches_bg() {
         let popup = make_popup();
-        let layout = popup.layout(8, 16, 1.0, 800, 600);
+        let layout = popup.layout(8, 16, 1.0, 800, 600, &test_colors());
         assert_eq!(layout.border.x, layout.bg.x);
         assert_eq!(layout.border.y, layout.bg.y);
         assert_eq!(layout.border.w, layout.bg.w);
@@ -310,15 +329,16 @@ mod tests {
     #[test]
     fn security_popup_layout_title_uses_accent_color() {
         let popup = make_popup();
-        let layout = popup.layout(8, 16, 1.0, 800, 600);
-        assert_eq!(layout.title.color, super::super::SECURITY_ACCENT.to_pixel());
+        let colors = test_colors();
+        let layout = popup.layout(8, 16, 1.0, 800, 600, &colors);
+        assert_eq!(layout.title.color, colors.accent);
         assert_eq!(layout.title.text, "Security Warning");
     }
 
     #[test]
     fn security_popup_layout_lines_match_content() {
         let popup = make_popup();
-        let layout = popup.layout(8, 16, 1.0, 800, 600);
+        let layout = popup.layout(8, 16, 1.0, 800, 600, &test_colors());
         assert_eq!(layout.lines.len(), 2);
         assert!(layout.lines[0].text.starts_with('\u{2022}'));
         assert!(layout.lines[0].text.contains("Line one"));
@@ -328,17 +348,17 @@ mod tests {
     #[test]
     fn security_popup_layout_lines_use_default_fg() {
         let popup = make_popup();
-        let layout = popup.layout(8, 16, 1.0, 800, 600);
-        let default_fg = Color::DEFAULT_FG.to_pixel();
+        let colors = test_colors();
+        let layout = popup.layout(8, 16, 1.0, 800, 600, &colors);
         for line in &layout.lines {
-            assert_eq!(line.color, default_fg);
+            assert_eq!(line.color, colors.default_fg);
         }
     }
 
     #[test]
     fn security_popup_layout_separator_between_title_and_lines() {
         let popup = make_popup();
-        let layout = popup.layout(8, 16, 1.0, 800, 600);
+        let layout = popup.layout(8, 16, 1.0, 800, 600, &test_colors());
         // Separator y should be below title y and above first line y.
         assert!(layout.separator.y > layout.title.y);
         if !layout.lines.is_empty() {
@@ -349,8 +369,9 @@ mod tests {
     #[test]
     fn security_popup_layout_hidpi_scales_radius() {
         let popup = make_popup();
-        let layout_1x = popup.layout(8, 16, 1.0, 800, 600);
-        let layout_2x = popup.layout(16, 32, 2.0, 800, 600);
+        let colors = test_colors();
+        let layout_1x = popup.layout(8, 16, 1.0, 800, 600, &colors);
+        let layout_2x = popup.layout(16, 32, 2.0, 800, 600, &colors);
         assert!(layout_2x.bg.radius > layout_1x.bg.radius);
     }
 
@@ -364,7 +385,7 @@ mod tests {
             title: "Test Title",
             lines: vec!["A line".to_string()],
         };
-        let layout = popup.layout(8, 16, 1.0, 800, 600);
+        let layout = popup.layout(8, 16, 1.0, 800, 600, &test_colors());
         // The popup should be fully within bounds.
         assert!((layout.bg.x + layout.bg.w) <= 800.0);
         assert!((layout.bg.y + layout.bg.h) <= 600.0);
