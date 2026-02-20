@@ -11,6 +11,8 @@ use super::shared::tab_math;
 
 use super::*;
 use super::RenderTarget;
+use super::cpu::primitives::RoundedShape;
+use super::types::TabSlot;
 
 // Tab-bar palette constants (BAR_BG, TAB_TEXT_ACTIVE, INSERTION_COLOR, etc.)
 // are centralized in the parent `renderer/mod.rs` and imported via `use super::*`.
@@ -27,123 +29,126 @@ impl CpuRenderer {
         tab_offsets: Option<&[f32]>,
         pinned: bool,
     ) {
-        let (buffer, buf_width, buf_height) = (&mut *target.buffer, target.width, target.height);
         let tab_bar_height = self.tab_bar_height_px();
         let bar_h = tab_bar_height as usize;
+        let buf_width = target.width;
         let tw = self.tab_width(tabs.len(), buf_width as u32);
         let use_numbers = self.should_show_number(tw);
 
-        self.draw_tab_bar_background(buffer, buf_width, buf_height, tab_bar_height);
+        // Tab bar background.
+        {
+            let bar_radius = self.scaled_px(10);
+            self.draw_top_rounded_rect(
+                target,
+                &RoundedShape {
+                    x: 0,
+                    y: 0,
+                    w: buf_width as u32,
+                    h: tab_bar_height,
+                    radius: bar_radius,
+                    color: BAR_BG,
+                    alpha: 255,
+                },
+            );
+        }
 
         for (i, tab) in tabs.iter().enumerate() {
             let anim_offset = tab_offsets.and_then(|o| o.get(i)).copied().unwrap_or(0.0);
             let tab_x = (self.tab_origin_x(i, tw) as f32 + anim_offset).round() as u32;
             let is_hovered = hovered_tab == Some(i);
 
-            self.draw_tab_background(buffer, buf_width, bar_h, tab, tab_x, tw, tab_bar_height);
+            let slot = TabSlot {
+                index: i,
+                tab,
+                x: tab_x,
+                width: tw,
+                is_hovered,
+            };
+
+            self.draw_tab_background(target, &slot, tab_bar_height);
 
             if tab.is_renaming {
-                self.draw_tab_rename_field(
-                    buffer,
-                    buf_width,
-                    bar_h,
-                    tab,
-                    tab_x,
-                    tw,
-                    tab_bar_height,
-                );
+                self.draw_tab_rename_field(target, &slot);
             } else if use_numbers {
-                self.draw_tab_number(
-                    buffer,
-                    buf_width,
-                    bar_h,
-                    i,
-                    tab,
-                    tab_x,
-                    tw,
-                    tab_bar_height,
-                    is_hovered,
-                );
+                self.draw_tab_number(target, &slot);
             } else {
-                self.draw_tab_content(
-                    buffer,
-                    buf_width,
-                    bar_h,
-                    i,
-                    tab,
-                    tabs.len(),
-                    tab_x,
-                    tw,
-                    tab_bar_height,
-                    is_hovered,
-                );
+                self.draw_tab_content(target, &slot, tabs.len());
             }
         }
 
-        self.draw_plus_button(buffer, buf_width, bar_h, tabs.len(), tw, mouse_pos);
+        // Plus button.
+        {
+            let plus_rect = self.plus_button_rect(tabs.len(), tw);
+            let plus_hover = tab_math::point_in_rect(mouse_pos.0, mouse_pos.1, plus_rect);
+            if plus_hover {
+                let (px, py, pw, ph) = plus_rect;
+                self.draw_rounded_rect(
+                    target,
+                    &RoundedShape {
+                        x: px as i32,
+                        y: py as i32,
+                        w: pw,
+                        h: ph,
+                        radius: self.scaled_px(5),
+                        color: INACTIVE_TAB_HOVER,
+                        alpha: 255,
+                    },
+                );
+            }
+            let plus_fg = if plus_hover {
+                Color::from_pixel(TAB_TEXT_ACTIVE)
+            } else {
+                Color::from_pixel(TAB_TEXT_INACTIVE)
+            };
+            self.draw_tab_plus_icon(target, plus_rect, plus_fg);
+        }
 
         #[cfg(not(target_os = "macos"))]
-        self.draw_pin_button(buffer, buf_width, bar_h, mouse_pos, pinned);
+        self.draw_pin_button(target, mouse_pos, pinned);
 
         #[cfg(target_os = "macos")]
         let _ = pinned;
 
         #[cfg(not(target_os = "macos"))]
-        self.draw_window_buttons(buffer, buf_width, bar_h, mouse_pos);
+        self.draw_window_buttons(target, mouse_pos);
 
-        self.draw_bottom_separator(buffer, buf_width, bar_h);
-    }
-
-    /// Fills the bar background with rounded top corners.
-    fn draw_tab_bar_background(
-        &self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
-        tab_bar_height: u32,
-    ) {
-        let bar_radius = self.scaled_px(10);
-        self.draw_top_rounded_rect(
-            buffer,
-            buf_width,
-            buf_height,
-            0,
-            0,
-            buf_width as u32,
-            tab_bar_height,
-            bar_radius,
-            BAR_BG,
-            255,
-        );
+        // Bottom separator.
+        if bar_h > 0 {
+            let py = bar_h - 1;
+            for px in 0..target.width {
+                let idx = py * target.width + px;
+                if idx < target.buffer.len() {
+                    target.buffer[idx] =
+                        Self::blend_pixel(target.buffer[idx], TAB_BORDER, 180);
+                }
+            }
+        }
     }
 
     /// Draws active/inactive/hover tab background fill.
-    #[allow(clippy::too_many_arguments)]
     fn draw_tab_background(
         &self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        bar_h: usize,
-        tab: &TabInfo,
-        tab_x: u32,
-        tw: u32,
+        target: &mut RenderTarget<'_>,
+        slot: &TabSlot,
         tab_bar_height: u32,
     ) {
-        let hover_t = tab.hover_progress.clamp(0.0, 1.0);
+        let hover_t = slot.tab.hover_progress.clamp(0.0, 1.0);
+        let bar_h = target.height;
+        let buf_width = target.width;
 
-        if tab.is_active {
+        if slot.tab.is_active {
             // Active tab: flat fill that merges with terminal.
             let fill_bg = ACTIVE_TAB_BG;
             for py in 0..tab_bar_height as usize {
                 if py >= bar_h {
                     break;
                 }
-                for dx in 0..tw as usize {
-                    let px = tab_x as usize + dx;
+                for dx in 0..slot.width as usize {
+                    let px = slot.x as usize + dx;
                     if px < buf_width {
                         let idx = py * buf_width + px;
-                        if idx < buffer.len() {
-                            buffer[idx] = fill_bg;
+                        if idx < target.buffer.len() {
+                            target.buffer[idx] = fill_bg;
                         }
                     }
                 }
@@ -156,65 +161,17 @@ impl CpuRenderer {
                 if py >= bar_h {
                     break;
                 }
-                for dx in 0..tw as usize {
-                    let px = tab_x as usize + dx;
+                for dx in 0..slot.width as usize {
+                    let px = slot.x as usize + dx;
                     if px < buf_width {
                         let idx = py * buf_width + px;
-                        if idx < buffer.len() {
-                            buffer[idx] = Self::blend_pixel(buffer[idx], fill_bg, alpha);
+                        if idx < target.buffer.len() {
+                            target.buffer[idx] = Self::blend_pixel(target.buffer[idx], fill_bg, alpha);
                         }
                     }
                 }
             }
         }
         // Inactive non-hovered: no background (BAR_BG shows through).
-    }
-
-    /// Draws the new-tab (+) button after the last tab.
-    fn draw_plus_button(
-        &mut self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        bar_h: usize,
-        tab_count: usize,
-        tw: u32,
-        mouse_pos: (f64, f64),
-    ) {
-        let plus_rect = self.plus_button_rect(tab_count, tw);
-        let plus_hover = tab_math::point_in_rect(mouse_pos.0, mouse_pos.1, plus_rect);
-        if plus_hover {
-            let (px, py, pw, ph) = plus_rect;
-            self.draw_rounded_rect(
-                buffer,
-                buf_width,
-                bar_h,
-                px as i32,
-                py as i32,
-                pw,
-                ph,
-                self.scaled_px(5),
-                INACTIVE_TAB_HOVER,
-                255,
-            );
-        }
-        let plus_fg = if plus_hover {
-            Color::from_pixel(TAB_TEXT_ACTIVE)
-        } else {
-            Color::from_pixel(TAB_TEXT_INACTIVE)
-        };
-        self.draw_tab_plus_icon(buffer, buf_width, bar_h, plus_rect, plus_fg);
-    }
-
-    /// Draws the 1px bottom separator between the bar and the terminal area.
-    fn draw_bottom_separator(&self, buffer: &mut [u32], buf_width: usize, bar_h: usize) {
-        if bar_h > 0 {
-            let py = bar_h - 1;
-            for px in 0..buf_width {
-                let idx = py * buf_width + px;
-                if idx < buffer.len() {
-                    buffer[idx] = Self::blend_pixel(buffer[idx], TAB_BORDER, 180);
-                }
-            }
-        }
     }
 }

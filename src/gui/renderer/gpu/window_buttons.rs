@@ -31,7 +31,7 @@ impl super::GpuRenderer {
                 ui_layout::compute_window_button_icon_lines(btn, self.metrics.ui_scale, half_w_px);
 
             for &(x1, y1, x2, y2) in &icon.lines {
-                self.push_line(x1, y1, x2, y2, icon.thickness, colors.icon_color, 1.0);
+                self.push_line((x1, y1), (x2, y2), icon.thickness, colors.icon_color, 1.0);
             }
         }
     }

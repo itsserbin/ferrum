@@ -110,17 +110,18 @@ pub struct DragOverlayLayout {
 
 /// Computes the drag overlay layout from raw parameters.
 ///
+/// `drag_pos` is `(current_x, indicator_x)`.
+///
 /// Returns `None` when `source_index` is out of range.
-#[allow(clippy::too_many_arguments)]
 pub fn compute_drag_overlay_layout(
     m: &TabLayoutMetrics,
     tab_count: usize,
     source_index: usize,
     source_title: &str,
-    current_x: f64,
-    indicator_x: f32,
+    drag_pos: (f64, f32),
     buf_width: u32,
 ) -> Option<DragOverlayLayout> {
+    let (current_x, indicator_x) = drag_pos;
     if source_index >= tab_count {
         return None;
     }
@@ -276,13 +277,13 @@ mod tests {
     #[test]
     fn drag_overlay_invalid_index_returns_none() {
         let m = default_metrics();
-        assert!(compute_drag_overlay_layout(&m, 3, 5, "tab", 100.0, 50.0, 800).is_none());
+        assert!(compute_drag_overlay_layout(&m, 3, 5, "tab", (100.0, 50.0), 800).is_none());
     }
 
     #[test]
     fn drag_overlay_basic_layout_has_valid_geometry() {
         let m = default_metrics();
-        let layout = compute_drag_overlay_layout(&m, 3, 1, "My Tab", 200.0, 50.0, 800)
+        let layout = compute_drag_overlay_layout(&m, 3, 1, "My Tab", (200.0, 50.0), 800)
             .expect("layout should exist");
         assert!(layout.rect_w > 0);
         assert!(layout.rect_h > 0);
@@ -293,7 +294,7 @@ mod tests {
     #[test]
     fn drag_overlay_shadow_offset_from_body() {
         let m = default_metrics();
-        let layout = compute_drag_overlay_layout(&m, 3, 0, "Tab", 200.0, 50.0, 800)
+        let layout = compute_drag_overlay_layout(&m, 3, 0, "Tab", (200.0, 50.0), 800)
             .expect("layout should exist");
         assert_eq!(layout.shadow_x, layout.body_x + 2);
         assert_eq!(layout.shadow_y, layout.body_y + 2);
@@ -303,7 +304,7 @@ mod tests {
     fn drag_overlay_title_uses_number_for_narrow_tabs() {
         let m = default_metrics();
         // With many tabs the width compresses below MIN_TAB_WIDTH_FOR_TITLE.
-        let layout = compute_drag_overlay_layout(&m, 50, 2, "Long Title", 200.0, 50.0, 800)
+        let layout = compute_drag_overlay_layout(&m, 50, 2, "Long Title", (200.0, 50.0), 800)
             .expect("layout should exist");
         // When numbers are used, label is the 1-based index.
         assert_eq!(layout.title_text, "3");
@@ -312,7 +313,7 @@ mod tests {
     #[test]
     fn drag_overlay_indicator_dimensions() {
         let m = default_metrics();
-        let layout = compute_drag_overlay_layout(&m, 3, 0, "Tab", 200.0, 100.0, 800)
+        let layout = compute_drag_overlay_layout(&m, 3, 0, "Tab", (200.0, 100.0), 800)
             .expect("layout should exist");
         assert_eq!(layout.indicator_x, 100);
         assert_eq!(layout.indicator_w, m.scaled_px(2));
@@ -324,9 +325,9 @@ mod tests {
         let m1 = default_metrics();
         let m2 = hidpi_metrics();
         let l1 =
-            compute_drag_overlay_layout(&m1, 3, 0, "Tab", 200.0, 50.0, 800).expect("layout 1x");
+            compute_drag_overlay_layout(&m1, 3, 0, "Tab", (200.0, 50.0), 800).expect("layout 1x");
         let l2 =
-            compute_drag_overlay_layout(&m2, 3, 0, "Tab", 200.0, 50.0, 1600).expect("layout 2x");
+            compute_drag_overlay_layout(&m2, 3, 0, "Tab", (200.0, 50.0), 1600).expect("layout 2x");
         assert_eq!(l2.radius, l1.radius * 2);
     }
 }

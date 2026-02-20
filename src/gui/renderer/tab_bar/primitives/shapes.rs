@@ -1,6 +1,7 @@
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
 use crate::gui::renderer::CpuRenderer;
+use crate::gui::renderer::types::RenderTarget;
 
 impl CpuRenderer {
     /// Draws a filled circle at a given center with a given radius.
@@ -71,27 +72,25 @@ impl CpuRenderer {
         ((px - proj_x) * (px - proj_x) + (py - proj_y) * (py - proj_y)).sqrt()
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(in crate::gui::renderer) fn draw_stroked_line(
-        buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
-        x0: f32,
-        y0: f32,
-        x1: f32,
-        y1: f32,
+        target: &mut RenderTarget<'_>,
+        p0: (f32, f32),
+        p1: (f32, f32),
         thickness: f32,
         color: u32,
     ) {
-        if thickness <= 0.0 || buf_width == 0 || buf_height == 0 {
+        if thickness <= 0.0 || target.width == 0 || target.height == 0 {
             return;
         }
 
+        let (x0, y0) = p0;
+        let (x1, y1) = p1;
+
         let half = thickness * 0.5;
         let min_x = ((x0.min(x1) - half - 1.0).floor() as i32).max(0);
-        let max_x = ((x0.max(x1) + half + 1.0).ceil() as i32).min(buf_width as i32 - 1);
+        let max_x = ((x0.max(x1) + half + 1.0).ceil() as i32).min(target.width as i32 - 1);
         let min_y = ((y0.min(y1) - half - 1.0).floor() as i32).max(0);
-        let max_y = ((y0.max(y1) + half + 1.0).ceil() as i32).min(buf_height as i32 - 1);
+        let max_y = ((y0.max(y1) + half + 1.0).ceil() as i32).min(target.height as i32 - 1);
 
         for py in min_y..=max_y {
             for px in min_x..=max_x {
@@ -104,12 +103,12 @@ impl CpuRenderer {
                     continue;
                 }
 
-                let idx = py as usize * buf_width + px as usize;
-                if idx >= buffer.len() {
+                let idx = py as usize * target.width + px as usize;
+                if idx >= target.buffer.len() {
                     continue;
                 }
                 let alpha = (coverage * 255.0).round() as u8;
-                buffer[idx] = Self::blend_pixel(buffer[idx], color, alpha);
+                target.buffer[idx] = Self::blend_pixel(target.buffer[idx], color, alpha);
             }
         }
     }

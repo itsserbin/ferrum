@@ -1,6 +1,7 @@
 //! Scrollbar rendering and hit-testing for the GPU renderer.
 
 use super::super::shared::scrollbar_math;
+use super::super::types::{RoundedRectCmd, ScrollbarState};
 use super::super::{SCROLLBAR_COLOR, SCROLLBAR_HOVER_COLOR, SCROLLBAR_MIN_THUMB};
 use crate::gui::pane::PaneRect;
 
@@ -8,13 +9,9 @@ impl super::GpuRenderer {
     pub(super) fn render_scrollbar_impl(
         &mut self,
         buf_height: usize,
-        scroll_offset: usize,
-        scrollback_len: usize,
-        grid_rows: usize,
-        opacity: f32,
-        hover: bool,
+        state: &ScrollbarState,
     ) {
-        if scrollback_len == 0 || opacity <= 0.0 {
+        if state.scrollback_len == 0 || state.opacity <= 0.0 {
             return;
         }
 
@@ -29,9 +26,9 @@ impl super::GpuRenderer {
         let (thumb_y, thumb_height) = match scrollbar_math::scrollbar_thumb_geometry(
             track_top,
             track_bottom,
-            scroll_offset,
-            scrollback_len,
-            grid_rows,
+            state.scroll_offset,
+            state.scrollback_len,
+            state.grid_rows,
             min_thumb,
         ) {
             Some(v) => v,
@@ -43,36 +40,26 @@ impl super::GpuRenderer {
         let thumb_x = self.width as f32 - sb_width - sb_margin;
         let radius = self.metrics.scaled_px(3) as f32;
 
-        let color = if hover {
+        let color = if state.hover {
             SCROLLBAR_HOVER_COLOR.to_pixel()
         } else {
             SCROLLBAR_COLOR.to_pixel()
         };
         let base_alpha = super::super::SCROLLBAR_BASE_ALPHA as f32 / 255.0;
-        let alpha = base_alpha * opacity;
+        let alpha = base_alpha * state.opacity;
 
-        self.push_rounded_rect(
-            thumb_x,
-            thumb_y,
-            sb_width,
-            thumb_height,
-            radius,
-            color,
-            alpha,
-        );
+        self.push_rounded_rect_cmd(&RoundedRectCmd {
+            x: thumb_x, y: thumb_y, w: sb_width, h: thumb_height, radius,
+            color, opacity: alpha,
+        });
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(super) fn render_scrollbar_in_rect_impl(
         &mut self,
-        scroll_offset: usize,
-        scrollback_len: usize,
-        grid_rows: usize,
-        opacity: f32,
-        hover: bool,
+        state: &ScrollbarState,
         rect: PaneRect,
     ) {
-        if scrollback_len == 0 || opacity <= 0.0 {
+        if state.scrollback_len == 0 || state.opacity <= 0.0 {
             return;
         }
 
@@ -83,9 +70,9 @@ impl super::GpuRenderer {
         let (thumb_y, thumb_height) = match scrollbar_math::scrollbar_thumb_geometry(
             track_top,
             track_bottom,
-            scroll_offset,
-            scrollback_len,
-            grid_rows,
+            state.scroll_offset,
+            state.scrollback_len,
+            state.grid_rows,
             min_thumb,
         ) {
             Some(v) => v,
@@ -98,22 +85,17 @@ impl super::GpuRenderer {
         let thumb_x = rect_right - sb_width - sb_margin;
         let radius = self.metrics.scaled_px(3) as f32;
 
-        let color = if hover {
+        let color = if state.hover {
             SCROLLBAR_HOVER_COLOR.to_pixel()
         } else {
             SCROLLBAR_COLOR.to_pixel()
         };
         let base_alpha = super::super::SCROLLBAR_BASE_ALPHA as f32 / 255.0;
-        let alpha = base_alpha * opacity;
+        let alpha = base_alpha * state.opacity;
 
-        self.push_rounded_rect(
-            thumb_x,
-            thumb_y,
-            sb_width,
-            thumb_height,
-            radius,
-            color,
-            alpha,
-        );
+        self.push_rounded_rect_cmd(&RoundedRectCmd {
+            x: thumb_x, y: thumb_y, w: sb_width, h: thumb_height, radius,
+            color, opacity: alpha,
+        });
     }
 }

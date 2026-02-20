@@ -62,7 +62,8 @@ impl traits::Renderer for GpuRenderer {
         let max_height = self
             .height
             .saturating_sub(self.metrics.tab_bar_height_px() + padding.saturating_mul(2));
-        self.queue_grid_batch(grid, selection, viewport_start, 0, 0, max_width, max_height, 0.0);
+        let region = PaneRect { x: 0, y: 0, width: max_width, height: max_height };
+        self.queue_grid_batch(grid, selection, viewport_start, region, 0.0);
     }
 
     fn draw_cursor(
@@ -89,16 +90,8 @@ impl traits::Renderer for GpuRenderer {
         let top = self.metrics.tab_bar_height_px().saturating_add(padding);
         let origin_x = rect.x.saturating_sub(padding);
         let origin_y = rect.y.saturating_sub(top);
-        self.queue_grid_batch(
-            grid,
-            selection,
-            viewport_start,
-            origin_x,
-            origin_y,
-            rect.width,
-            rect.height,
-            fg_dim,
-        );
+        let region = PaneRect { x: origin_x, y: origin_y, width: rect.width, height: rect.height };
+        self.queue_grid_batch(grid, selection, viewport_start, region, fg_dim);
     }
 
     fn draw_cursor_in_rect(
@@ -119,15 +112,7 @@ impl traits::Renderer for GpuRenderer {
         state: &ScrollbarState,
         rect: PaneRect,
     ) {
-        let ScrollbarState { scroll_offset, scrollback_len, grid_rows, opacity, hover } = *state;
-        self.render_scrollbar_in_rect_impl(
-            scroll_offset,
-            scrollback_len,
-            grid_rows,
-            opacity,
-            hover,
-            rect,
-        );
+        self.render_scrollbar_in_rect_impl(state, rect);
     }
 
     fn draw_pane_divider(&mut self, rect: PaneRect) {
@@ -149,15 +134,7 @@ impl traits::Renderer for GpuRenderer {
         target: &mut RenderTarget<'_>,
         state: &ScrollbarState,
     ) {
-        let ScrollbarState { scroll_offset, scrollback_len, grid_rows, opacity, hover } = *state;
-        self.render_scrollbar_impl(
-            target.height,
-            scroll_offset,
-            scrollback_len,
-            grid_rows,
-            opacity,
-            hover,
-        );
+        self.render_scrollbar_impl(target.height, state);
     }
 
     // ── Tab bar (delegates to tab_layout) ─────────────────────────────

@@ -12,7 +12,8 @@ impl CpuRenderer {
         grid: &Grid,
         style: CursorStyle,
     ) {
-        let (buffer, buf_width, buf_height) = (&mut *target.buffer, target.width, target.height);
+        let buf_width = target.width;
+        let buf_height = target.height;
         let x = col as u32 * self.metrics.cell_width + self.window_padding_px();
         let y = row as u32 * self.metrics.cell_height
             + self.tab_bar_height_px()
@@ -23,17 +24,9 @@ impl CpuRenderer {
             CursorStyle::BlinkingBlock | CursorStyle::SteadyBlock => {
                 // Filled block with inverted foreground/background.
                 let cell = grid.get(row, col).unwrap_or(&Cell::DEFAULT);
-                self.draw_bg(buffer, buf_width, buf_height, x, y, Color::DEFAULT_FG);
+                self.draw_bg(target, x, y, Color::DEFAULT_FG);
                 if cell.character != ' ' {
-                    self.draw_char(
-                        buffer,
-                        buf_width,
-                        buf_height,
-                        x,
-                        y,
-                        cell.character,
-                        Color::DEFAULT_BG,
-                    );
+                    self.draw_char(target, x, y, cell.character, Color::DEFAULT_BG);
                 }
             }
             CursorStyle::BlinkingUnderline | CursorStyle::SteadyUnderline => {
@@ -48,7 +41,7 @@ impl CpuRenderer {
                     for dx in 0..self.metrics.cell_width as usize {
                         let px = x as usize + dx;
                         if px < buf_width {
-                            buffer[py * buf_width + px] = cursor_pixel;
+                            target.buffer[py * buf_width + px] = cursor_pixel;
                         }
                     }
                 }
@@ -64,7 +57,7 @@ impl CpuRenderer {
                     for dx in 0..bar_width {
                         let px = x as usize + dx;
                         if px < buf_width {
-                            buffer[py * buf_width + px] = cursor_pixel;
+                            target.buffer[py * buf_width + px] = cursor_pixel;
                         }
                     }
                 }
@@ -82,7 +75,8 @@ impl CpuRenderer {
         style: CursorStyle,
         rect: PaneRect,
     ) {
-        let (buffer, buf_width, buf_height) = (&mut *target.buffer, target.width, target.height);
+        let buf_width = target.width;
+        let buf_height = target.height;
         let x = col as u32 * self.metrics.cell_width + rect.x;
         let y = row as u32 * self.metrics.cell_height + rect.y;
         let cursor_pixel = Color::DEFAULT_FG.to_pixel();
@@ -93,17 +87,9 @@ impl CpuRenderer {
         match style {
             CursorStyle::BlinkingBlock | CursorStyle::SteadyBlock => {
                 let cell = grid.get(row, col).unwrap_or(&Cell::DEFAULT);
-                self.draw_bg(buffer, buf_width, buf_height, x, y, Color::DEFAULT_FG);
+                self.draw_bg(target, x, y, Color::DEFAULT_FG);
                 if cell.character != ' ' {
-                    self.draw_char(
-                        buffer,
-                        buf_width,
-                        buf_height,
-                        x,
-                        y,
-                        cell.character,
-                        Color::DEFAULT_BG,
-                    );
+                    self.draw_char(target, x, y, cell.character, Color::DEFAULT_BG);
                 }
             }
             CursorStyle::BlinkingUnderline | CursorStyle::SteadyUnderline => {
@@ -117,7 +103,7 @@ impl CpuRenderer {
                     for dx in 0..self.metrics.cell_width as usize {
                         let px = x as usize + dx;
                         if px < buf_width && px < rect_right {
-                            buffer[py * buf_width + px] = cursor_pixel;
+                            target.buffer[py * buf_width + px] = cursor_pixel;
                         }
                     }
                 }
@@ -132,7 +118,7 @@ impl CpuRenderer {
                     for dx in 0..bar_width {
                         let px = x as usize + dx;
                         if px < buf_width && px < rect_right {
-                            buffer[py * buf_width + px] = cursor_pixel;
+                            target.buffer[py * buf_width + px] = cursor_pixel;
                         }
                     }
                 }

@@ -216,6 +216,25 @@ pub struct RenderTarget<'a> {
     pub height: usize,
 }
 
+/// Per-tab layout slot used during tab bar rendering.
+///
+/// Groups the index, metadata reference, position, width, and hover state
+/// that are always passed together to tab drawing methods.
+pub struct TabSlot<'a> {
+    pub index: usize,
+    pub tab: &'a TabInfo<'a>,
+    pub x: u32,
+    pub width: u32,
+    pub is_hovered: bool,
+}
+
+/// Pin-button color triple for the three visual states.
+pub struct PinColors {
+    pub active: u32,
+    pub hover: u32,
+    pub inactive: u32,
+}
+
 /// Scrollbar rendering parameters.
 ///
 /// Groups scroll state, opacity, and hover flag that are always passed

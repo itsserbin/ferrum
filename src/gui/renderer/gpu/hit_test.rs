@@ -22,24 +22,8 @@ impl super::GpuRenderer {
             buf_height as u32,
         );
 
-        self.push_rounded_rect(
-            layout.bg.x,
-            layout.bg.y,
-            layout.bg.w,
-            layout.bg.h,
-            layout.bg.radius,
-            layout.bg.color,
-            layout.bg.opacity,
-        );
-        self.push_rounded_rect(
-            layout.border.x,
-            layout.border.y,
-            layout.border.w,
-            layout.border.h,
-            layout.border.radius,
-            layout.border.color,
-            layout.border.opacity,
-        );
+        self.push_rounded_rect_cmd(&layout.bg);
+        self.push_rounded_rect_cmd(&layout.border);
 
         // Title.
         self.push_text(

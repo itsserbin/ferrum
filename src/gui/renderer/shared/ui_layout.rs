@@ -71,20 +71,18 @@ pub struct PinIconLayout {
 /// * `scale` — UI scale factor (e.g. 1.0, 2.0).
 /// * `pinned` — whether the window is currently pinned (always-on-top).
 /// * `hovered` — whether the mouse is over the pin button.
-/// * `pin_active_color` — color when pinned.
-/// * `hover_color` — color when hovered but not pinned.
-/// * `inactive_color` — color when neither pinned nor hovered.
-#[allow(clippy::too_many_arguments)]
+/// * `colors` — pin button color triple (active, hover, inactive).
 pub fn pin_icon_layout(
     cx: f32,
     cy: f32,
     scale: f32,
     pinned: bool,
     hovered: bool,
-    pin_active_color: u32,
-    hover_color: u32,
-    inactive_color: u32,
+    colors: &crate::gui::renderer::types::PinColors,
 ) -> PinIconLayout {
+    let pin_active_color = colors.active;
+    let hover_color = colors.hover;
+    let inactive_color = colors.inactive;
     let head_w = 6.0 * scale;
     let head_h = 2.0 * scale;
     let body_w = 3.0 * scale;
@@ -547,27 +545,35 @@ mod tests {
 
     // ── pin_icon_layout ──────────────────────────────────────────────
 
+    fn test_pin_colors(active: u32, hover: u32, inactive: u32) -> crate::gui::renderer::types::PinColors {
+        crate::gui::renderer::types::PinColors { active, hover, inactive }
+    }
+
     #[test]
     fn pin_layout_pinned_color() {
-        let layout = pin_icon_layout(50.0, 50.0, 1.0, true, false, 0xAA, 0xBB, 0xCC);
+        let colors = test_pin_colors(0xAA, 0xBB, 0xCC);
+        let layout = pin_icon_layout(50.0, 50.0, 1.0, true, false, &colors);
         assert_eq!(layout.color, 0xAA);
     }
 
     #[test]
     fn pin_layout_hovered_color() {
-        let layout = pin_icon_layout(50.0, 50.0, 1.0, false, true, 0xAA, 0xBB, 0xCC);
+        let colors = test_pin_colors(0xAA, 0xBB, 0xCC);
+        let layout = pin_icon_layout(50.0, 50.0, 1.0, false, true, &colors);
         assert_eq!(layout.color, 0xBB);
     }
 
     #[test]
     fn pin_layout_inactive_color() {
-        let layout = pin_icon_layout(50.0, 50.0, 1.0, false, false, 0xAA, 0xBB, 0xCC);
+        let colors = test_pin_colors(0xAA, 0xBB, 0xCC);
+        let layout = pin_icon_layout(50.0, 50.0, 1.0, false, false, &colors);
         assert_eq!(layout.color, 0xCC);
     }
 
     #[test]
     fn pin_layout_head_above_body() {
-        let layout = pin_icon_layout(100.0, 100.0, 2.0, false, false, 0, 0, 0);
+        let colors = test_pin_colors(0, 0, 0);
+        let layout = pin_icon_layout(100.0, 100.0, 2.0, false, false, &colors);
         // Head y should be above body y.
         assert!(layout.head.1 < layout.body.1);
         // Body y should be above platform y.
@@ -576,7 +582,8 @@ mod tests {
 
     #[test]
     fn pin_layout_needle_below_platform() {
-        let layout = pin_icon_layout(100.0, 100.0, 1.0, false, false, 0, 0, 0);
+        let colors = test_pin_colors(0, 0, 0);
+        let layout = pin_icon_layout(100.0, 100.0, 1.0, false, false, &colors);
         // Needle y_start should be at platform bottom.
         let platform_bottom = layout.platform.1 + layout.platform.3;
         assert!((layout.needle.1 - platform_bottom).abs() < 0.01);
@@ -584,11 +591,12 @@ mod tests {
 
     #[test]
     fn pin_layout_thickness_clamped() {
+        let colors = test_pin_colors(0, 0, 0);
         // Very small scale — thickness should clamp to 1.0.
-        let layout = pin_icon_layout(50.0, 50.0, 0.5, false, false, 0, 0, 0);
+        let layout = pin_icon_layout(50.0, 50.0, 0.5, false, false, &colors);
         assert!((layout.needle_thickness - 1.0).abs() < 0.01);
         // Very large scale — thickness should clamp to 2.0.
-        let layout = pin_icon_layout(50.0, 50.0, 4.0, false, false, 0, 0, 0);
+        let layout = pin_icon_layout(50.0, 50.0, 4.0, false, false, &colors);
         assert!((layout.needle_thickness - 2.0).abs() < 0.01);
     }
 

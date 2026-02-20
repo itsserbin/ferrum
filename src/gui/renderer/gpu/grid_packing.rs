@@ -1,6 +1,7 @@
 //! Packs terminal grid cells into GPU buffer format.
 
 use crate::core::{Color, Grid, Selection};
+use crate::gui::pane::PaneRect;
 
 use super::GridBatch;
 use super::buffers::{GridUniforms, PackedCell};
@@ -122,30 +123,26 @@ impl super::GpuRenderer {
     }
 
     /// Queues one grid compute batch for this frame.
-    #[allow(clippy::too_many_arguments)]
     pub(super) fn queue_grid_batch(
         &mut self,
         grid: &Grid,
         selection: Option<&Selection>,
         viewport_start: usize,
-        origin_x: u32,
-        origin_y: u32,
-        max_width: u32,
-        max_height: u32,
+        region: PaneRect,
         fg_dim: f32,
     ) {
         self.ensure_grid_frame_started();
 
-        if max_width == 0 || max_height == 0 {
+        if region.width == 0 || region.height == 0 {
             return;
         }
 
         let dispatch_width = (grid.cols as u32)
             .saturating_mul(self.metrics.cell_width)
-            .min(max_width);
+            .min(region.width);
         let dispatch_height = (grid.rows as u32)
             .saturating_mul(self.metrics.cell_height)
-            .min(max_height);
+            .min(region.height);
         if dispatch_width == 0 || dispatch_height == 0 {
             return;
         }
@@ -158,8 +155,8 @@ impl super::GpuRenderer {
                 rows: grid.rows as u32,
                 cell_width: self.metrics.cell_width,
                 cell_height: self.metrics.cell_height,
-                origin_x,
-                origin_y,
+                origin_x: region.x,
+                origin_y: region.y,
                 bg_color: Color::DEFAULT_BG.to_pixel(),
                 _pad0: 0,
                 tex_width: self.width,

@@ -4,6 +4,7 @@
 
 use super::MAX_UI_COMMANDS;
 use super::buffers::*;
+use super::super::types::RoundedRectCmd;
 
 impl super::GpuRenderer {
     pub(super) fn push_rect(&mut self, x: f32, y: f32, w: f32, h: f32, color: u32, alpha: f32) {
@@ -24,41 +25,29 @@ impl super::GpuRenderer {
         });
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub(super) fn push_rounded_rect(
-        &mut self,
-        x: f32,
-        y: f32,
-        w: f32,
-        h: f32,
-        r: f32,
-        color: u32,
-        alpha: f32,
-    ) {
+    /// Pushes a rounded rectangle draw command from a layout struct.
+    pub(super) fn push_rounded_rect_cmd(&mut self, cmd: &RoundedRectCmd) {
         if self.commands.len() >= MAX_UI_COMMANDS {
             return;
         }
         self.commands.push(GpuDrawCommand {
             cmd_type: CMD_ROUNDED_RECT,
-            param1: x,
-            param2: y,
-            param3: w,
-            param4: h,
-            param5: r,
+            param1: cmd.x,
+            param2: cmd.y,
+            param3: cmd.w,
+            param4: cmd.h,
+            param5: cmd.radius,
             param6: 0.0,
-            color,
-            alpha,
+            color: cmd.color,
+            alpha: cmd.opacity,
             _pad: 0.0,
         });
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(super) fn push_line(
         &mut self,
-        x1: f32,
-        y1: f32,
-        x2: f32,
-        y2: f32,
+        p0: (f32, f32),
+        p1: (f32, f32),
         width: f32,
         color: u32,
         alpha: f32,
@@ -68,10 +57,10 @@ impl super::GpuRenderer {
         }
         self.commands.push(GpuDrawCommand {
             cmd_type: CMD_LINE,
-            param1: x1,
-            param2: y1,
-            param3: x2,
-            param4: y2,
+            param1: p0.0,
+            param2: p0.1,
+            param3: p1.0,
+            param4: p1.1,
             param5: width,
             param6: 0.0,
             color,
@@ -98,15 +87,11 @@ impl super::GpuRenderer {
         });
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(super) fn push_glyph(
         &mut self,
         x: f32,
         y: f32,
-        atlas_x: f32,
-        atlas_y: f32,
-        atlas_w: f32,
-        atlas_h: f32,
+        atlas: (f32, f32, f32, f32),
         color: u32,
         alpha: f32,
     ) {
@@ -117,10 +102,10 @@ impl super::GpuRenderer {
             cmd_type: CMD_GLYPH,
             param1: x,
             param2: y,
-            param3: atlas_x,
-            param4: atlas_y,
-            param5: atlas_w,
-            param6: atlas_h,
+            param3: atlas.0,
+            param4: atlas.1,
+            param5: atlas.2,
+            param6: atlas.3,
             color,
             alpha,
             _pad: 0.0,
@@ -138,7 +123,7 @@ impl super::GpuRenderer {
             if info.w > 0.0 && info.h > 0.0 {
                 let gx = x + i as f32 * cw + info.offset_x;
                 let gy = y + info.offset_y;
-                self.push_glyph(gx, gy, info.x, info.y, info.w, info.h, color, alpha);
+                self.push_glyph(gx, gy, (info.x, info.y, info.w, info.h), color, alpha);
             }
         }
     }

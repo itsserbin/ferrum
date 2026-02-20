@@ -11,7 +11,8 @@ impl CpuRenderer {
         selection: Option<&Selection>,
         viewport_start: usize,
     ) {
-        let (buffer, buf_width, buf_height) = (&mut *target.buffer, target.width, target.height);
+        let buf_width = target.width;
+        let buf_height = target.height;
         let y_offset = self.tab_bar_height_px() + self.window_padding_px();
         let x_offset = self.window_padding_px();
 
@@ -48,10 +49,10 @@ impl CpuRenderer {
                     ));
                 }
 
-                self.draw_bg(buffer, buf_width, buf_height, x, y, bg);
+                self.draw_bg(target, x, y, bg);
 
                 if cell.character != ' ' {
-                    self.draw_char(buffer, buf_width, buf_height, x, y, cell.character, fg);
+                    self.draw_char(target, x, y, cell.character, fg);
                 }
 
                 // Underline
@@ -63,8 +64,8 @@ impl CpuRenderer {
                             let px = x as usize + dx;
                             if px < buf_width {
                                 let idx = underline_y as usize * buf_width + px;
-                                if idx < buffer.len() {
-                                    buffer[idx] = pixel;
+                                if idx < target.buffer.len() {
+                                    target.buffer[idx] = pixel;
                                 }
                             }
                         }
@@ -86,7 +87,8 @@ impl CpuRenderer {
         rect: PaneRect,
         fg_dim: f32,
     ) {
-        let (buffer, buf_width, buf_height) = (&mut *target.buffer, target.width, target.height);
+        let buf_width = target.width;
+        let buf_height = target.height;
         let rect_right = (rect.x + rect.width) as usize;
         let rect_bottom = (rect.y + rect.height) as usize;
         for row in 0..grid.rows {
@@ -132,10 +134,10 @@ impl CpuRenderer {
                     ));
                 }
 
-                self.draw_bg(buffer, buf_width, buf_height, x, y, bg);
+                self.draw_bg(target, x, y, bg);
 
                 if cell.character != ' ' {
-                    self.draw_char(buffer, buf_width, buf_height, x, y, cell.character, fg);
+                    self.draw_char(target, x, y, cell.character, fg);
                 }
 
                 if cell.underline {
@@ -146,8 +148,8 @@ impl CpuRenderer {
                             let px = x as usize + dx;
                             if px < buf_width && px < rect_right {
                                 let idx = underline_y as usize * buf_width + px;
-                                if idx < buffer.len() {
-                                    buffer[idx] = pixel;
+                                if idx < target.buffer.len() {
+                                    target.buffer[idx] = pixel;
                                 }
                             }
                         }

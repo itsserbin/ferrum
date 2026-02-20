@@ -41,19 +41,15 @@ impl super::GpuRenderer {
         }
 
         self.push_line(
-            layout.line_a.0,
-            layout.line_a.1,
-            layout.line_a.2,
-            layout.line_a.3,
+            (layout.line_a.0, layout.line_a.1),
+            (layout.line_a.2, layout.line_a.3),
             layout.icon_thickness,
             layout.icon_color,
             1.0,
         );
         self.push_line(
-            layout.line_b.0,
-            layout.line_b.1,
-            layout.line_b.2,
-            layout.line_b.3,
+            (layout.line_b.0, layout.line_b.1),
+            (layout.line_b.2, layout.line_b.3),
             layout.icon_thickness,
             layout.icon_color,
             1.0,

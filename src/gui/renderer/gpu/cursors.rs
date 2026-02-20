@@ -37,10 +37,7 @@ impl super::GpuRenderer {
                         self.push_glyph(
                             gx,
                             gy,
-                            info.x,
-                            info.y,
-                            info.w,
-                            info.h,
+                            (info.x, info.y, info.w, info.h),
                             Color::DEFAULT_BG.to_pixel(),
                             1.0,
                         );

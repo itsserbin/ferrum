@@ -1,4 +1,4 @@
-mod primitives;
+pub(in crate::gui::renderer) mod primitives;
 mod trait_impl;
 
 use fontdue::{Font, FontSettings};
