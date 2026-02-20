@@ -86,43 +86,46 @@ pub(super) const SCROLLBAR_MIN_THUMB: u32 = 20;
 /// CPU uses as `u32`, GPU uses as `f32 / 255.0`.
 pub(super) const SCROLLBAR_BASE_ALPHA: u32 = 180;
 
-// -- Tab bar palette (Catppuccin Mocha, flat Chrome-style) --
+// -- Tab bar palette (derived from terminal background #282C34) --
+//
+// All colors maintain the neutral gray tone of the terminal palette,
+// avoiding the blue/purple tint of Catppuccin Mocha.
 
-/// Mantle — bar background.
+/// Bar background — darkened terminal bg, neutral gray.
 #[cfg_attr(target_os = "macos", allow(dead_code))]
-pub(super) const BAR_BG: u32 = 0x181825;
+pub(super) const BAR_BG: u32 = 0x1E2127;
 
-/// Base — active-tab fill that merges with the terminal area.
+/// Active-tab fill — matches terminal background exactly.
 #[cfg_attr(target_os = "macos", allow(dead_code))]
 pub(super) const ACTIVE_TAB_BG: u32 = 0x282C34;
 
-/// Surface0 — inactive-tab hover highlight.
+/// Inactive-tab hover highlight — between bar bg and active tab.
 #[cfg_attr(target_os = "macos", allow(dead_code))]
-pub(super) const INACTIVE_TAB_HOVER: u32 = 0x313244;
+pub(super) const INACTIVE_TAB_HOVER: u32 = 0x2E333C;
 
-/// Text — active-tab text color.
+/// Active-tab text — matches terminal default fg.
 #[cfg_attr(target_os = "macos", allow(dead_code))]
-pub(super) const TAB_TEXT_ACTIVE: u32 = 0xCDD6F4;
+pub(super) const TAB_TEXT_ACTIVE: u32 = 0xD2DBEB;
 
-/// Overlay0 — inactive-tab text color.
+/// Inactive-tab text — muted neutral gray.
 #[cfg_attr(target_os = "macos", allow(dead_code))]
-pub(super) const TAB_TEXT_INACTIVE: u32 = 0x6C7086;
+pub(super) const TAB_TEXT_INACTIVE: u32 = 0x6C7480;
 
-/// Surface0 — tab bottom separator / border.
+/// Tab bottom separator / border.
 #[cfg_attr(target_os = "macos", allow(dead_code))]
-pub(super) const TAB_BORDER: u32 = 0x313244;
+pub(super) const TAB_BORDER: u32 = 0x2E333C;
 
-/// Surface2 — close-button hover background.
+/// Close-button hover background — terminal ANSI black.
 #[cfg_attr(target_os = "macos", allow(dead_code))]
-pub(super) const CLOSE_HOVER_BG_COLOR: u32 = 0x585B70;
+pub(super) const CLOSE_HOVER_BG_COLOR: u32 = 0x454B59;
 
-/// Distinct editable-field background for rename input.
+/// Editable-field background for rename input.
 #[cfg_attr(target_os = "macos", allow(dead_code))]
-pub(super) const RENAME_FIELD_BG: u32 = 0x24273A;
+pub(super) const RENAME_FIELD_BG: u32 = 0x1E2127;
 
-/// Subtle field border for rename input.
+/// Field border for rename input.
 #[cfg_attr(target_os = "macos", allow(dead_code))]
-pub(super) const RENAME_FIELD_BORDER: u32 = 0x6C7086;
+pub(super) const RENAME_FIELD_BORDER: u32 = 0x6C7480;
 
 /// Rename selection highlight (Catppuccin Mocha Lavender #B4BEFE).
 #[cfg_attr(not(feature = "gpu"), allow(dead_code))]
