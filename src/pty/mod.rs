@@ -179,9 +179,54 @@ impl Session {
     }
 
     /// Performs a full graceful shutdown: kill the child process and wait
-    /// for it to exit. Meant to be called from a background thread to
-    /// avoid blocking the UI.
+    /// for it to exit. Meant to be called from a background thread.
     pub fn shutdown(mut self) {
+        #[cfg(windows)]
+        self.shutdown_windows();
+
+        #[cfg(not(windows))]
+        self.shutdown_unix();
+    }
+
+    #[cfg(not(windows))]
+    fn shutdown_unix(&mut self) {
+        if let Err(e) = self.child.kill() {
+            if e.kind() != std::io::ErrorKind::InvalidInput {
+                eprintln!("Failed to kill PTY child process: {}", e);
+            }
+        }
+        if let Err(e) = self.child.wait() {
+            if e.kind() != std::io::ErrorKind::InvalidInput {
+                eprintln!("Failed to wait on PTY child process: {}", e);
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    fn shutdown_windows(&mut self) {
+        use windows_sys::Win32::Foundation::CloseHandle;
+        use windows_sys::Win32::System::Console::{GenerateConsoleCtrlEvent, CTRL_BREAK_EVENT};
+        use windows_sys::Win32::System::Threading::{
+            OpenProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE,
+        };
+
+        // Try graceful shutdown first: send CTRL_BREAK to the process group.
+        // This lets cmd.exe exit cleanly without flashing its console window.
+        if let Some(pid) = self.child.process_id() {
+            unsafe {
+                // Send CTRL_BREAK to the process group.
+                let _ = GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, pid);
+
+                // Wait up to 150ms for the process to exit gracefully.
+                let handle = OpenProcess(PROCESS_SYNCHRONIZE, 0, pid);
+                if handle != 0 {
+                    WaitForSingleObject(handle, 150);
+                    CloseHandle(handle);
+                }
+            }
+        }
+
+        // Hard kill if still alive (kill() handles the "already dead" case).
         if let Err(e) = self.child.kill() {
             if e.kind() != std::io::ErrorKind::InvalidInput {
                 eprintln!("Failed to kill PTY child process: {}", e);
