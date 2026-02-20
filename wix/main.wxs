@@ -131,43 +131,6 @@
                     </Directory>
                 </Directory>
             </Directory>
-            <Directory Id='ProgramMenuFolder'>
-                <Directory Id='ApplicationProgramsFolder' Name='ferrum'>
-                    <Component Id='StartMenuShortcut' Guid='*'>
-                        <Shortcut
-                            Id='StartMenuShortcutEntry'
-                            Name='ferrum'
-                            Description='A GPU-accelerated terminal emulator'
-                            Target='[Bin]ferrum.exe'
-                            WorkingDirectory='Bin'/>
-                        <RemoveFolder Id='RemoveApplicationProgramsFolder' On='uninstall'/>
-                        <RegistryValue
-                            Root='HKLM'
-                            Key='Software\itsserbin\ferrum'
-                            Name='start-menu-shortcut'
-                            Type='integer'
-                            Value='1'
-                            KeyPath='yes'/>
-                    </Component>
-                </Directory>
-            </Directory>
-            <Directory Id='DesktopFolder' Name='Desktop'>
-                <Component Id='DesktopShortcut' Guid='*'>
-                    <Shortcut
-                        Id='DesktopShortcutEntry'
-                        Name='ferrum'
-                        Description='A GPU-accelerated terminal emulator'
-                        Target='[Bin]ferrum.exe'
-                        WorkingDirectory='Bin'/>
-                    <RegistryValue
-                        Root='HKLM'
-                        Key='Software\itsserbin\ferrum'
-                        Name='desktop-shortcut'
-                        Type='integer'
-                        Value='1'
-                        KeyPath='yes'/>
-                </Component>
-            </Directory>
         </Directory>
 
         <Feature
@@ -187,8 +150,6 @@
             <!--<ComponentRef Id='License'/>-->
 
             <ComponentRef Id='binary0'/>
-            <ComponentRef Id='StartMenuShortcut'/>
-            <ComponentRef Id='DesktopShortcut'/>
 
             <Feature
                 Id='Environment'

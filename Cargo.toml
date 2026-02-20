@@ -1,6 +1,6 @@
 [package]
-name = "ferrum"
-version = "0.1.1"
+name = "Ferrum"
+version = "0.1.2"
 edition = "2024"
 description = "A GPU-accelerated terminal emulator"
 repository = "https://github.com/itsserbin/ferrum"
@@ -56,12 +56,12 @@ unix-archive = ".tar.gz"
 tap = "itsserbin/homebrew-tap"
 # Publish jobs to run in CI
 publish-jobs = ["homebrew"]
+# PR behavior for dist CI: build/upload artifacts for validation without publishing a release
+pr-run-mode = "upload"
 # Path that installers should place binaries in
 install-path = "CARGO_HOME"
 # Whether to install an updater program
 install-updater = false
-# Allow custom unmanaged WiX edits (shortcuts, branding, etc.)
-allow-dirty = ["msi"]
 
 [workspace.metadata.dist.github-custom-runners]
 x86_64-apple-darwin = "macos-15-intel"
