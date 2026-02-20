@@ -81,6 +81,14 @@ impl TabState {
     }
 }
 
+/// Drag state for divider resize between panes.
+pub(super) struct DividerDragState {
+    /// Mouse position when the drag started (used to identify which divider).
+    pub(super) initial_mouse_pos: (u32, u32),
+    /// Direction of the divider being dragged.
+    pub(super) direction: crate::gui::pane::SplitDirection,
+}
+
 /// Drag-and-drop state for tab reordering.
 #[cfg_attr(target_os = "macos", allow(dead_code))]
 pub(super) struct DragState {
@@ -196,6 +204,8 @@ pub(super) struct FerrumWindow {
     pub(super) pending_requests: Vec<WindowRequest>,
     /// Whether this window is pinned (always-on-top).
     pub(super) pinned: bool,
+    /// Active divider drag state (pane resize).
+    pub(super) divider_drag: Option<DividerDragState>,
 }
 
 /// App is now a window manager holding multiple FerrumWindows.

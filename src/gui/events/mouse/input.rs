@@ -1,3 +1,4 @@
+use crate::gui::pane::{DIVIDER_HIT_ZONE, DIVIDER_WIDTH};
 use crate::gui::renderer::TabBarHit;
 use crate::gui::state::MenuContext;
 use crate::gui::*;
@@ -139,6 +140,13 @@ impl FerrumWindow {
             }
         }
 
+        // End divider drag on mouse release.
+        if state == ElementState::Released && self.divider_drag.take().is_some() {
+            self.resize_all_panes();
+            self.window.request_redraw();
+            return;
+        }
+
         if self.handle_security_popup_left_click(state, mx, my) {
             return;
         }
@@ -156,6 +164,41 @@ impl FerrumWindow {
 
         if self.handle_scrollbar_left_click(state, mx, my) {
             return;
+        }
+
+        // Check if clicking on a pane divider (start drag resize).
+        if state == ElementState::Pressed {
+            let terminal_rect = self.terminal_content_rect();
+            let divider_px = DIVIDER_WIDTH;
+
+            if let Some(tab) = self.active_tab_ref() {
+                if let Some(hit) = tab.pane_tree.hit_test_divider(
+                    mx as u32,
+                    my as u32,
+                    terminal_rect,
+                    divider_px,
+                    DIVIDER_HIT_ZONE,
+                ) {
+                    self.divider_drag = Some(DividerDragState {
+                        initial_mouse_pos: (mx as u32, my as u32),
+                        direction: hit.direction,
+                    });
+                    return; // Don't forward click to terminal
+                }
+            }
+
+            // Check which pane was clicked and set focus.
+            let clicked_pane = self.active_tab_ref().and_then(|tab| {
+                tab.pane_tree
+                    .pane_at_pixel(mx as u32, my as u32, terminal_rect, divider_px)
+            });
+            if let Some(pane_id) = clicked_pane {
+                if let Some(tab) = self.active_tab_mut() {
+                    if pane_id != tab.focused_pane {
+                        tab.focused_pane = pane_id;
+                    }
+                }
+            }
         }
 
         self.handle_terminal_left_click(state, mx, my);

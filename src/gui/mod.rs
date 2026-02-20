@@ -41,8 +41,8 @@ const MIN_WINDOW_COLS: u32 = 40;
 const MIN_WINDOW_ROWS: u32 = 10;
 
 use self::state::{
-    App, ClosedTabInfo, DragState, FerrumWindow, MenuContext, PtyEvent, RenameState,
-    ScrollbarState, SelectionDragMode, TabReorderAnimation, TabState, WindowRequest,
+    App, ClosedTabInfo, DividerDragState, DragState, FerrumWindow, MenuContext, PtyEvent,
+    RenameState, ScrollbarState, SelectionDragMode, TabReorderAnimation, TabState, WindowRequest,
 };
 
 impl FerrumWindow {
@@ -93,6 +93,7 @@ impl FerrumWindow {
             scroll_accumulator: 0.0,
             pending_requests: Vec::new(),
             pinned: false,
+            divider_drag: None,
         }
     }
 
@@ -125,6 +126,19 @@ impl FerrumWindow {
     /// Returns the focused pane leaf of the active tab (mutable).
     fn active_leaf_mut(&mut self) -> Option<&mut pane::PaneLeaf> {
         self.active_tab_mut().and_then(|t| t.focused_leaf_mut())
+    }
+
+    /// Returns the terminal content rectangle (area below tab bar, inside padding).
+    fn terminal_content_rect(&self) -> pane::PaneRect {
+        let size = self.window.inner_size();
+        let tab_bar_h = self.backend.tab_bar_height_px();
+        let padding = self.backend.window_padding_px();
+        pane::PaneRect {
+            x: padding,
+            y: tab_bar_h + padding,
+            width: size.width.saturating_sub(padding * 2),
+            height: size.height.saturating_sub(tab_bar_h + padding * 2),
+        }
     }
 
     fn compose_window_title(&self, update: Option<&crate::update::AvailableRelease>) -> String {

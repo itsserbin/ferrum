@@ -1,3 +1,4 @@
+use crate::gui::pane::{SplitDirection, DIVIDER_HIT_ZONE, DIVIDER_WIDTH};
 use crate::gui::renderer::TabBarHit;
 use crate::gui::*;
 
@@ -61,6 +62,12 @@ impl FerrumWindow {
             self.resize_direction = None;
         }
 
+        // Handle active divider drag (pane resize).
+        if self.divider_drag.is_some() {
+            self.handle_divider_drag(mx, my);
+            return;
+        }
+
         // Update drag state tracking (custom tab bar only -- not on macOS).
         #[cfg(not(target_os = "macos"))]
         if self.update_drag(mx, my) {
@@ -97,6 +104,11 @@ impl FerrumWindow {
             return;
         }
 
+        // Check if hovering over a pane divider — show resize cursor.
+        if self.handle_divider_hover(mx, my) {
+            return;
+        }
+
         // Scrollbar drag / hover / terminal area.
         if self.handle_scrollbar_drag(my, tab_bar_height) {
             return;
@@ -113,6 +125,75 @@ impl FerrumWindow {
         if self.is_selecting {
             self.update_drag_selection(row, col);
         }
+    }
+
+    /// Handles divider drag during mouse movement — updates the split ratio.
+    fn handle_divider_drag(&mut self, mx: f64, my: f64) {
+        let terminal_rect = self.terminal_content_rect();
+        let divider_px = DIVIDER_WIDTH;
+
+        let (initial_pos, direction) = {
+            let drag = self.divider_drag.as_ref().unwrap();
+            (drag.initial_mouse_pos, drag.direction)
+        };
+
+        // Set appropriate resize cursor during drag.
+        let cursor = match direction {
+            SplitDirection::Horizontal => CursorIcon::ColResize,
+            SplitDirection::Vertical => CursorIcon::RowResize,
+        };
+        self.window.set_cursor(cursor);
+
+        // Compute the new pixel position based on drag direction.
+        let new_pixel_pos = match direction {
+            SplitDirection::Horizontal => mx as u32,
+            SplitDirection::Vertical => my as u32,
+        };
+
+        if let Some(tab) = self.active_tab_mut() {
+            tab.pane_tree.resize_divider_at(
+                initial_pos.0,
+                initial_pos.1,
+                terminal_rect,
+                divider_px,
+                DIVIDER_HIT_ZONE,
+                new_pixel_pos,
+            );
+        }
+
+        self.window.request_redraw();
+    }
+
+    /// Checks if hovering over a pane divider. Returns `true` if cursor was
+    /// set to a resize cursor (event consumed).
+    fn handle_divider_hover(&mut self, mx: f64, my: f64) -> bool {
+        let terminal_rect = self.terminal_content_rect();
+        let has_multiple_panes = self
+            .active_tab_ref()
+            .is_some_and(|t| t.has_multiple_panes());
+
+        if !has_multiple_panes {
+            return false;
+        }
+
+        if let Some(tab) = self.active_tab_ref() {
+            if let Some(hit) = tab.pane_tree.hit_test_divider(
+                mx as u32,
+                my as u32,
+                terminal_rect,
+                DIVIDER_WIDTH,
+                DIVIDER_HIT_ZONE,
+            ) {
+                let cursor = match hit.direction {
+                    SplitDirection::Horizontal => CursorIcon::ColResize,
+                    SplitDirection::Vertical => CursorIcon::RowResize,
+                };
+                self.window.set_cursor(cursor);
+                return true;
+            }
+        }
+
+        false
     }
 
     /// Handles scrollbar thumb dragging. Returns `true` when drag is active
