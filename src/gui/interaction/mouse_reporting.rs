@@ -10,19 +10,19 @@ impl FerrumWindow {
         row: usize,
         pressed: bool,
     ) {
-        let sgr = self.active_tab_ref().is_some_and(|t| t.terminal.sgr_mouse);
+        let sgr = self.active_leaf_ref().is_some_and(|l| l.terminal.sgr_mouse);
         let bytes = encode_mouse_event(button, col, row, pressed, sgr);
-        if let Some(tab) = self.active_tab_mut() {
-            let _ = tab.pty_writer.write_all(&bytes);
-            let _ = tab.pty_writer.flush();
+        if let Some(leaf) = self.active_leaf_mut() {
+            let _ = leaf.pty_writer.write_all(&bytes);
+            let _ = leaf.pty_writer.flush();
         }
     }
 
     /// Returns whether terminal mouse tracking is active (Shift forces local selection mode).
     pub(in crate::gui) fn is_mouse_reporting(&self) -> bool {
         let mode = self
-            .active_tab_ref()
-            .map_or(MouseMode::Off, |t| t.terminal.mouse_mode);
+            .active_leaf_ref()
+            .map_or(MouseMode::Off, |l| l.terminal.mouse_mode);
         mode != MouseMode::Off && !self.modifiers.shift_key()
     }
 }

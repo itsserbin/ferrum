@@ -70,17 +70,25 @@ impl FerrumWindow {
     /// Resizes all tab terminals and their PTY sessions.
     pub(in crate::gui) fn resize_all_tabs(&mut self, rows: usize, cols: usize) {
         for tab in &mut self.tabs {
-            if tab.terminal.grid.rows == rows && tab.terminal.grid.cols == cols {
-                continue;
-            }
+            // Iterate over all leaves in the pane tree.
+            let leaf_ids = tab.pane_tree.leaf_ids();
+            for leaf_id in leaf_ids {
+                if let Some(leaf) = tab.pane_tree.find_leaf_mut(leaf_id) {
+                    if leaf.terminal.grid.rows == rows && leaf.terminal.grid.cols == cols {
+                        continue;
+                    }
 
-            tab.terminal.resize(rows, cols);
+                    leaf.terminal.resize(rows, cols);
 
-            // Clamp scroll_offset to valid range after resize (scrollback may have changed)
-            tab.scroll_offset = tab.scroll_offset.min(tab.terminal.scrollback.len());
+                    // Clamp scroll_offset to valid range after resize (scrollback may have changed)
+                    leaf.scroll_offset = leaf.scroll_offset.min(leaf.terminal.scrollback.len());
 
-            if let Err(err) = tab.session.resize(rows as u16, cols as u16) {
-                eprintln!("Failed to resize PTY for tab {}: {err}", tab.id);
+                    if let Some(ref session) = leaf.session {
+                        if let Err(err) = session.resize(rows as u16, cols as u16) {
+                            eprintln!("Failed to resize PTY for tab {}, pane {}: {err}", tab.id, leaf_id);
+                        }
+                    }
+                }
             }
         }
     }

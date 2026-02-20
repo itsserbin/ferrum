@@ -5,34 +5,62 @@ impl FerrumWindow {
     /// Processes one PTY event.
     pub(in crate::gui) fn on_pty_event(&mut self, event: &PtyEvent) {
         match event {
-            PtyEvent::Data { tab_id, bytes } => {
+            PtyEvent::Data { tab_id, pane_id, bytes } => {
                 if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == *tab_id) {
-                    tab.terminal.process(bytes);
-                    tab.scroll_offset = 0;
+                    if let Some(leaf) = tab.pane_tree.find_leaf_mut(*pane_id) {
+                        leaf.terminal.process(bytes);
+                        leaf.scroll_offset = 0;
 
-                    let popped = tab.terminal.drain_scrollback_popped();
-                    if popped > 0 {
-                        tab.selection = tab
-                            .selection
-                            .and_then(|sel| sel.adjust_for_scrollback_pop(popped));
-                    }
+                        let popped = leaf.terminal.drain_scrollback_popped();
+                        if popped > 0 {
+                            leaf.selection = leaf
+                                .selection
+                                .and_then(|sel| sel.adjust_for_scrollback_pop(popped));
+                        }
 
-                    for event in tab.terminal.drain_security_events() {
-                        tab.security.record(event);
-                    }
+                        for event in leaf.terminal.drain_security_events() {
+                            leaf.security.record(event);
+                        }
 
-                    let responses = tab.terminal.drain_responses();
-                    if !responses.is_empty() {
-                        let _ = tab.pty_writer.write_all(&responses);
-                        let _ = tab.pty_writer.flush();
+                        let responses = leaf.terminal.drain_responses();
+                        if !responses.is_empty() {
+                            let _ = leaf.pty_writer.write_all(&responses);
+                            let _ = leaf.pty_writer.flush();
+                        }
                     }
                 }
             }
-            PtyEvent::Exited { tab_id } => {
+            PtyEvent::Exited { tab_id, pane_id } => {
                 if let Some(idx) = self.tabs.iter().position(|t| t.id == *tab_id) {
-                    self.tabs[idx].terminal.cleanup_after_process_exit();
-                    for event in self.tabs[idx].terminal.drain_security_events() {
-                        self.tabs[idx].security.record(event);
+                    let tab = &mut self.tabs[idx];
+
+                    // If the tab has multiple panes, close just the exited pane.
+                    if tab.has_multiple_panes() {
+                        // Run cleanup on the exiting pane's terminal.
+                        if let Some(leaf) = tab.pane_tree.find_leaf_mut(*pane_id) {
+                            leaf.terminal.cleanup_after_process_exit();
+                            for event in leaf.terminal.drain_security_events() {
+                                leaf.security.record(event);
+                            }
+                        }
+                        // Close the pane in the tree.
+                        tab.pane_tree.close(*pane_id);
+                        // If the focused pane was the one that exited, pick a new one.
+                        if tab.focused_pane == *pane_id {
+                            let ids = tab.pane_tree.leaf_ids();
+                            debug_assert!(!ids.is_empty(), "pane tree should have at least one leaf after close");
+                            tab.focused_pane = ids.into_iter().next().unwrap_or(0);
+                        }
+                        self.window.request_redraw();
+                        return;
+                    }
+
+                    // Single pane: close the whole tab (existing behavior).
+                    if let Some(leaf) = tab.pane_tree.find_leaf_mut(*pane_id) {
+                        leaf.terminal.cleanup_after_process_exit();
+                        for event in leaf.terminal.drain_security_events() {
+                            leaf.security.record(event);
+                        }
                     }
 
                     let len_before = self.tabs.len();

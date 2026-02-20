@@ -3,10 +3,10 @@ use std::time::Instant;
 
 use crate::gui::*;
 
-/// PTY event tagged with the source tab id.
+/// PTY event tagged with the source tab id and pane id.
 pub(super) enum PtyEvent {
-    Data { tab_id: u64, bytes: Vec<u8> },
-    Exited { tab_id: u64 },
+    Data { tab_id: u64, pane_id: u64, bytes: Vec<u8> },
+    Exited { tab_id: u64, pane_id: u64 },
 }
 
 /// Metadata for recently closed tabs (Ctrl+Shift+T restore).
@@ -38,16 +38,45 @@ impl ScrollbarState {
 }
 
 /// Runtime state for a single terminal tab.
+///
+/// Each tab holds a pane tree (binary tree of terminal panes).
+/// For single-pane tabs, the tree is a single `PaneNode::Leaf`.
 pub(super) struct TabState {
     pub(super) id: u64,
-    pub(super) terminal: Terminal,
-    pub(super) session: pty::Session,
-    pub(super) pty_writer: Box<dyn Write + Send>,
     pub(super) title: String,
-    pub(super) scroll_offset: usize,
-    pub(super) selection: Option<Selection>,
-    pub(super) security: SecurityGuard,
-    pub(super) scrollbar: ScrollbarState,
+    pub(super) pane_tree: crate::gui::pane::PaneNode,
+    pub(super) focused_pane: crate::gui::pane::PaneId,
+    #[allow(dead_code)] // Used in later tasks (pane splitting)
+    pub(super) next_pane_id: crate::gui::pane::PaneId,
+}
+
+impl TabState {
+    /// Returns the focused pane leaf (immutable).
+    pub(super) fn focused_leaf(&self) -> Option<&crate::gui::pane::PaneLeaf> {
+        self.pane_tree.find_leaf(self.focused_pane)
+    }
+
+    /// Returns the focused pane leaf (mutable).
+    pub(super) fn focused_leaf_mut(&mut self) -> Option<&mut crate::gui::pane::PaneLeaf> {
+        self.pane_tree.find_leaf_mut(self.focused_pane)
+    }
+
+    /// Convenience: immutable reference to the focused pane's terminal.
+    #[allow(dead_code)] // Used in later tasks
+    pub(super) fn terminal(&self) -> Option<&Terminal> {
+        self.focused_leaf().map(|l| &l.terminal)
+    }
+
+    /// Convenience: mutable reference to the focused pane's terminal.
+    #[allow(dead_code)] // Used in later tasks
+    pub(super) fn terminal_mut(&mut self) -> Option<&mut Terminal> {
+        self.focused_leaf_mut().map(|l| &mut l.terminal)
+    }
+
+    /// Returns `true` if this tab contains more than one pane.
+    pub(super) fn has_multiple_panes(&self) -> bool {
+        !self.pane_tree.is_leaf()
+    }
 }
 
 /// Drag-and-drop state for tab reordering.

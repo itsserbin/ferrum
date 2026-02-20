@@ -31,19 +31,19 @@ impl FerrumWindow {
 
     pub(in crate::gui) fn delete_terminal_selection(&mut self, use_backspace: bool) -> bool {
         let (cursor_col, selection_start_col, selection_end_col) = {
-            let Some(tab) = self.active_tab_ref() else {
+            let Some(leaf) = self.active_leaf_ref() else {
                 return false;
             };
-            let Some(selection) = tab.selection else {
+            let Some(selection) = leaf.selection else {
                 return false;
             };
             let (start, end) = selection.normalized();
-            let cursor_abs_row = tab.terminal.scrollback.len() + tab.terminal.cursor_row;
+            let cursor_abs_row = leaf.terminal.scrollback.len() + leaf.terminal.cursor_row;
             if start.row != end.row || start.row != cursor_abs_row {
                 return false;
             }
 
-            (tab.terminal.cursor_col, start.col, end.col)
+            (leaf.terminal.cursor_col, start.col, end.col)
         };
 
         let target_col = if use_backspace {
@@ -66,15 +66,15 @@ impl FerrumWindow {
     }
 
     pub(super) fn cut_selection(&mut self) -> bool {
-        let has_selection = self.active_tab_ref().is_some_and(|t| t.selection.is_some());
+        let has_selection = self.active_leaf_ref().is_some_and(|l| l.selection.is_some());
         if !has_selection {
             return false;
         }
 
         self.copy_selection();
         if !self.delete_terminal_selection(false) {
-            if let Some(tab) = self.active_tab_mut() {
-                tab.selection = None;
+            if let Some(leaf) = self.active_leaf_mut() {
+                leaf.selection = None;
             }
             self.keyboard_selection_anchor = None;
         }
@@ -136,31 +136,31 @@ impl FerrumWindow {
         }
 
         if self
-            .active_tab_ref()
-            .is_some_and(|tab| tab.selection.is_some())
+            .active_leaf_ref()
+            .is_some_and(|leaf| leaf.selection.is_some())
             && self.delete_terminal_selection(use_backspace)
         {
             return true;
         }
 
         let (cursor_col, target_col) = {
-            let Some(tab) = self.active_tab_ref() else {
+            let Some(leaf) = self.active_leaf_ref() else {
                 return false;
             };
-            if tab.terminal.is_alt_screen() {
+            if leaf.terminal.is_alt_screen() {
                 return false;
             }
 
-            let grid_cols = tab.terminal.grid.cols;
+            let grid_cols = leaf.terminal.grid.cols;
             if grid_cols == 0 {
                 return false;
             }
 
-            let cursor_col = tab.terminal.cursor_col.min(grid_cols);
+            let cursor_col = leaf.terminal.cursor_col.min(grid_cols);
             let target_col = if use_backspace {
-                Self::word_motion_target_col(tab, cursor_col, HorizontalMotion::Left)
+                Self::word_motion_target_col_from_leaf(leaf, cursor_col, HorizontalMotion::Left)
             } else {
-                Self::word_motion_target_col(tab, cursor_col, HorizontalMotion::Right)
+                Self::word_motion_target_col_from_leaf(leaf, cursor_col, HorizontalMotion::Right)
             };
             (cursor_col, target_col)
         };

@@ -116,6 +116,16 @@ impl FerrumWindow {
         self.tabs.get(self.active_tab)
     }
 
+    /// Returns the focused pane leaf of the active tab (immutable).
+    fn active_leaf_ref(&self) -> Option<&pane::PaneLeaf> {
+        self.active_tab_ref().and_then(|t| t.focused_leaf())
+    }
+
+    /// Returns the focused pane leaf of the active tab (mutable).
+    fn active_leaf_mut(&mut self) -> Option<&mut pane::PaneLeaf> {
+        self.active_tab_mut().and_then(|t| t.focused_leaf_mut())
+    }
+
     fn compose_window_title(&self, update: Option<&crate::update::AvailableRelease>) -> String {
         let base = self
             .active_tab_ref()

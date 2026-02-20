@@ -76,21 +76,21 @@ impl FerrumWindow {
         }
 
         let (abs_row, anchor_col, cursor_col, target_col, grid_cols) = {
-            let Some(tab) = self.active_tab_ref() else {
+            let Some(leaf) = self.active_leaf_ref() else {
                 return false;
             };
-            if tab.terminal.is_alt_screen() {
+            if leaf.terminal.is_alt_screen() {
                 return false;
             }
 
-            let grid_cols = tab.terminal.grid.cols;
+            let grid_cols = leaf.terminal.grid.cols;
             if grid_cols == 0 {
                 return false;
             }
 
-            let cursor_col = tab.terminal.cursor_col.min(grid_cols);
+            let cursor_col = leaf.terminal.cursor_col.min(grid_cols);
             let target_col = if word_motion {
-                Self::word_motion_target_col(tab, cursor_col, motion)
+                Self::word_motion_target_col_from_leaf(leaf, cursor_col, motion)
             } else {
                 match motion {
                     HorizontalMotion::Left => cursor_col.saturating_sub(1),
@@ -98,7 +98,7 @@ impl FerrumWindow {
                 }
             };
 
-            let abs_row = tab.terminal.scrollback.len() + tab.terminal.cursor_row;
+            let abs_row = leaf.terminal.scrollback.len() + leaf.terminal.cursor_row;
             let anchor_col = self
                 .keyboard_selection_anchor
                 .filter(|anchor| anchor.row == abs_row)
@@ -120,11 +120,11 @@ impl FerrumWindow {
         };
 
         if !bytes.is_empty()
-            && let Some(tab) = self.active_tab_mut()
+            && let Some(leaf) = self.active_leaf_mut()
         {
-            tab.scroll_offset = 0;
-            let _ = tab.pty_writer.write_all(&bytes);
-            let _ = tab.pty_writer.flush();
+            leaf.scroll_offset = 0;
+            let _ = leaf.pty_writer.write_all(&bytes);
+            let _ = leaf.pty_writer.flush();
         }
 
         self.keyboard_selection_anchor = Some(crate::core::SelectionPoint {
@@ -132,8 +132,8 @@ impl FerrumWindow {
             col: anchor_col,
         });
 
-        if let Some(tab) = self.active_tab_mut() {
-            tab.selection =
+        if let Some(leaf) = self.active_leaf_mut() {
+            leaf.selection =
                 Self::selection_from_cursor_bounds(abs_row, anchor_col, target_col, grid_cols);
         }
 

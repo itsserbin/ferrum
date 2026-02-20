@@ -9,6 +9,7 @@ use crate::pty;
 pub(super) type PaneId = u64;
 
 /// Direction in which a pane is split.
+#[allow(dead_code)] // Used in later tasks (pane splitting)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum SplitDirection {
     /// Left | Right
@@ -27,9 +28,11 @@ pub(super) struct PaneRect {
 }
 
 impl PaneRect {
+    #[allow(dead_code)] // Used in later tasks (pane navigation)
     pub fn center_x(&self) -> u32 {
         self.x + self.width / 2
     }
+    #[allow(dead_code)] // Used in later tasks (pane navigation)
     pub fn center_y(&self) -> u32 {
         self.y + self.height / 2
     }
@@ -163,6 +166,7 @@ impl PaneNode {
     }
 
     /// Recursively counts the number of leaf nodes in this tree.
+    #[allow(dead_code)] // Used in later tasks and tests
     pub(super) fn leaf_count(&self) -> usize {
         match self {
             PaneNode::Leaf(_) => 1,
@@ -211,6 +215,7 @@ impl PaneNode {
     /// Returns a list of `(PaneId, PaneRect)` pairs, one for each leaf, describing
     /// where each pane should be rendered.  `divider_px` is the pixel width of the
     /// divider bar between split panes.
+    #[allow(dead_code)] // Used in later tasks (multi-pane rendering)
     pub(super) fn layout(&self, rect: PaneRect, divider_px: u32) -> Vec<(PaneId, PaneRect)> {
         match self {
             PaneNode::Leaf(leaf) => vec![(leaf.id, rect)],
@@ -231,6 +236,7 @@ impl PaneNode {
     /// relative to the source pane's center.  Returns `None` if no neighbor
     /// exists in that direction.  When multiple panes are equidistant, returns
     /// the first one encountered in layout order (left-to-right depth-first).
+    #[allow(dead_code)] // Used in later tasks (pane navigation shortcuts)
     pub(super) fn navigate_spatial(
         layout: &[(PaneId, PaneRect)],
         from_id: PaneId,

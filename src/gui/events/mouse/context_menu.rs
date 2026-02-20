@@ -38,8 +38,8 @@ impl FerrumWindow {
                 ContextAction::CopySelection => self.copy_selection(),
                 ContextAction::Paste => self.paste_clipboard(),
                 ContextAction::ClearSelection => {
-                    if let Some(tab) = self.active_tab_mut() {
-                        tab.selection = None;
+                    if let Some(leaf) = self.active_leaf_mut() {
+                        leaf.selection = None;
                     }
                     self.selection_anchor = None;
                     self.keyboard_selection_anchor = None;

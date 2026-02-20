@@ -61,8 +61,8 @@ impl FerrumWindow {
                 let (row, col) = self.pixel_to_grid(mx, my);
                 let abs_row = self.screen_to_abs(row);
                 let clicked_selection = self
-                    .active_tab_ref()
-                    .and_then(|tab| tab.selection)
+                    .active_leaf_ref()
+                    .and_then(|leaf| leaf.selection)
                     .is_some_and(|selection| selection.contains(abs_row, col));
 
                 if clicked_selection {
@@ -117,7 +117,7 @@ impl FerrumWindow {
         }
 
         // If releasing mouse during an active tab drag, handle drop regardless of position.
-        // (Custom tab bar drag — not used on macOS.)
+        // (Custom tab bar drag -- not used on macOS.)
         #[cfg(not(target_os = "macos"))]
         if state == ElementState::Released {
             if self.dragging_tab.as_ref().is_some_and(|d| d.is_active) {
@@ -161,10 +161,10 @@ impl FerrumWindow {
     fn handle_scrollbar_left_click(&mut self, state: ElementState, mx: f64, my: f64) -> bool {
         // On release: end scrollbar drag if active.
         if state == ElementState::Released {
-            if self.active_tab_ref().is_some_and(|t| t.scrollbar.dragging) {
-                if let Some(tab) = self.active_tab_mut() {
-                    tab.scrollbar.dragging = false;
-                    tab.scrollbar.last_activity = std::time::Instant::now();
+            if self.active_leaf_ref().is_some_and(|l| l.scrollbar.dragging) {
+                if let Some(leaf) = self.active_leaf_mut() {
+                    leaf.scrollbar.dragging = false;
+                    leaf.scrollbar.last_activity = std::time::Instant::now();
                 }
                 return true;
             }
@@ -177,18 +177,18 @@ impl FerrumWindow {
             return false;
         }
 
-        let tab = match self.active_tab_ref() {
-            Some(t) => t,
+        let leaf = match self.active_leaf_ref() {
+            Some(l) => l,
             None => return false,
         };
-        let scrollback_len = tab.terminal.scrollback.len();
+        let scrollback_len = leaf.terminal.scrollback.len();
         if scrollback_len == 0 {
             return false;
         }
 
         let buf_height = size.height as usize;
-        let grid_rows = tab.terminal.grid.rows;
-        let scroll_offset = tab.scroll_offset;
+        let grid_rows = leaf.terminal.grid.rows;
+        let scroll_offset = leaf.scroll_offset;
         let tab_bar_height = self.backend.tab_bar_height_px() as f64;
         let window_padding = self.backend.window_padding_px() as f64;
 
@@ -218,11 +218,11 @@ impl FerrumWindow {
 
             if on_thumb {
                 // Start thumb drag.
-                if let Some(tab) = self.active_tab_mut() {
-                    tab.scrollbar.dragging = true;
-                    tab.scrollbar.drag_start_y = my;
-                    tab.scrollbar.drag_start_offset = tab.scroll_offset;
-                    tab.scrollbar.last_activity = std::time::Instant::now();
+                if let Some(leaf) = self.active_leaf_mut() {
+                    leaf.scrollbar.dragging = true;
+                    leaf.scrollbar.drag_start_y = my;
+                    leaf.scrollbar.drag_start_offset = leaf.scroll_offset;
+                    leaf.scrollbar.last_activity = std::time::Instant::now();
                 }
             } else {
                 // Click on track: jump to proportional position.
@@ -231,9 +231,9 @@ impl FerrumWindow {
                 let new_offset =
                     (max_offset as f64 - click_ratio * max_offset as f64).round() as isize;
                 let clamped = new_offset.max(0) as usize;
-                if let Some(tab) = self.active_tab_mut() {
-                    tab.scroll_offset = clamped.min(tab.terminal.scrollback.len());
-                    tab.scrollbar.last_activity = std::time::Instant::now();
+                if let Some(leaf) = self.active_leaf_mut() {
+                    leaf.scroll_offset = clamped.min(leaf.terminal.scrollback.len());
+                    leaf.scrollbar.last_activity = std::time::Instant::now();
                 }
             }
         }

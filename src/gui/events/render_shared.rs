@@ -72,7 +72,7 @@ impl TabBarFrameState {
 /// `self.backend`, enabling split borrows between the renderer and the
 /// remaining `FerrumWindow` fields.
 pub(in crate::gui::events) struct FrameParams<'a> {
-    pub active_tab: Option<&'a TabState>,
+    pub active_leaf: Option<&'a crate::gui::pane::PaneLeaf>,
     pub cursor_blink_start: std::time::Instant,
     #[cfg_attr(target_os = "macos", allow(dead_code))]
     pub hovered_tab: Option<usize>,
@@ -112,11 +112,13 @@ impl FerrumWindow {
             .enumerate()
             .map(|(i, t)| {
                 let is_renaming = renaming.as_ref().is_some_and(|(ri, _, _, _)| *ri == i);
-                let security_count = if t.security.has_events() {
-                    t.security.active_event_count()
-                } else {
-                    0
-                };
+                let security_count = t.focused_leaf().map_or(0, |leaf| {
+                    if leaf.security.has_events() {
+                        leaf.security.active_event_count()
+                    } else {
+                        0
+                    }
+                });
                 TabBarFrameTabInfo {
                     title: t.title.clone(),
                     is_active: i == self.active_tab,
@@ -221,59 +223,59 @@ pub(in crate::gui::events) fn draw_frame_content(
     #[cfg(not(target_os = "macos"))] frame_tab_infos: &[TabInfo<'_>],
 ) {
     // 1) Draw active tab terminal content.
-    if let Some(tab) = params.active_tab {
-        let viewport_start = tab
+    if let Some(leaf) = params.active_leaf {
+        let viewport_start = leaf
             .terminal
             .scrollback
             .len()
-            .saturating_sub(tab.scroll_offset);
-        if tab.scroll_offset == 0 {
+            .saturating_sub(leaf.scroll_offset);
+        if leaf.scroll_offset == 0 {
             renderer.render(
                 buffer,
                 bw,
                 bh,
-                &tab.terminal.grid,
-                tab.selection.as_ref(),
+                &leaf.terminal.grid,
+                leaf.selection.as_ref(),
                 viewport_start,
             );
         } else {
-            let display = tab.terminal.build_display(tab.scroll_offset);
+            let display = leaf.terminal.build_display(leaf.scroll_offset);
             renderer.render(
                 buffer,
                 bw,
                 bh,
                 &display,
-                tab.selection.as_ref(),
+                leaf.selection.as_ref(),
                 viewport_start,
             );
         }
 
         // 2) Draw cursor on top of terminal cells.
-        if tab.scroll_offset == 0
-            && tab.terminal.cursor_visible
-            && should_show_cursor(params.cursor_blink_start, tab.terminal.cursor_style)
+        if leaf.scroll_offset == 0
+            && leaf.terminal.cursor_visible
+            && should_show_cursor(params.cursor_blink_start, leaf.terminal.cursor_style)
         {
             renderer.draw_cursor(
                 buffer,
                 bw,
                 bh,
-                tab.terminal.cursor_row,
-                tab.terminal.cursor_col,
-                &tab.terminal.grid,
-                tab.terminal.cursor_style,
+                leaf.terminal.cursor_row,
+                leaf.terminal.cursor_col,
+                &leaf.terminal.grid,
+                leaf.terminal.cursor_style,
             );
         }
     }
 
     // 3) Draw scrollbar overlay.
-    if let Some(tab) = params.active_tab {
-        let scrollback_len = tab.terminal.scrollback.len();
+    if let Some(leaf) = params.active_leaf {
+        let scrollback_len = leaf.terminal.scrollback.len();
         if scrollback_len > 0 {
-            let hover = tab.scrollbar.hover || tab.scrollbar.dragging;
+            let hover = leaf.scrollbar.hover || leaf.scrollbar.dragging;
             let opacity = scrollbar_opacity(
-                tab.scrollbar.hover,
-                tab.scrollbar.dragging,
-                tab.scrollbar.last_activity,
+                leaf.scrollbar.hover,
+                leaf.scrollbar.dragging,
+                leaf.scrollbar.last_activity,
             );
 
             if opacity > 0.0 {
@@ -281,9 +283,9 @@ pub(in crate::gui::events) fn draw_frame_content(
                     buffer,
                     bw,
                     bh,
-                    tab.scroll_offset,
+                    leaf.scroll_offset,
                     scrollback_len,
-                    tab.terminal.grid.rows,
+                    leaf.terminal.grid.rows,
                     opacity,
                     hover,
                 );

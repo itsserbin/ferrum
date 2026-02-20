@@ -11,7 +11,7 @@ impl FerrumWindow {
         let is_copy_key = matches!(key, Key::Named(NamedKey::Copy))
             || Self::physical_key_is(physical, KeyCode::KeyC);
         if is_copy_key {
-            if self.active_tab_ref().is_some_and(|t| t.selection.is_some()) {
+            if self.active_leaf_ref().is_some_and(|l| l.selection.is_some()) {
                 self.copy_selection();
                 return Some(true);
             }

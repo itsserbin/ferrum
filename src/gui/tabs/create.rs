@@ -1,3 +1,4 @@
+use crate::gui::pane::{PaneLeaf, PaneNode};
 use crate::gui::*;
 use anyhow::Context;
 
@@ -44,35 +45,39 @@ impl FerrumWindow {
         let id = *next_tab_id;
         *next_tab_id += 1;
 
+        let pane_id: u64 = 0;
+
         let shell = pty::default_shell();
         let session = pty::Session::spawn(&shell, rows as u16, cols as u16)
             .context("failed to spawn PTY session")?;
         let pty_writer = session.writer().context("failed to acquire PTY writer")?;
 
-        // Spawn a dedicated PTY reader thread for this tab.
+        // Spawn a dedicated PTY reader thread for this tab/pane.
         let tx = tx.clone();
         let mut reader = session.reader().context("failed to clone PTY reader")?;
         let tab_id = id;
+        let reader_pane_id = pane_id;
         std::thread::Builder::new()
-            .name(format!("pty-reader-{}", tab_id))
+            .name(format!("pty-reader-{}-{}", tab_id, reader_pane_id))
             .spawn(move || {
                 use std::io::Read;
                 let mut buf = [0u8; 4096];
                 loop {
                     match reader.read(&mut buf) {
                         Ok(0) => {
-                            let _ = tx.send(PtyEvent::Exited { tab_id });
+                            let _ = tx.send(PtyEvent::Exited { tab_id, pane_id: reader_pane_id });
                             break;
                         }
                         Err(err) => {
                             eprintln!("PTY read error for tab {tab_id}: {err}");
-                            let _ = tx.send(PtyEvent::Exited { tab_id });
+                            let _ = tx.send(PtyEvent::Exited { tab_id, pane_id: reader_pane_id });
                             break;
                         }
                         Ok(n) => {
                             if tx
                                 .send(PtyEvent::Data {
                                     tab_id,
+                                    pane_id: reader_pane_id,
                                     bytes: buf[..n].to_vec(),
                                 })
                                 .is_err()
@@ -94,16 +99,23 @@ impl FerrumWindow {
             terminal.process(msg.as_bytes());
         }
 
-        Ok(TabState {
-            id,
+        let leaf = PaneLeaf {
+            id: pane_id,
             terminal,
-            session,
+            session: Some(session),
             pty_writer,
-            title: title.unwrap_or_else(|| format!("bash #{}", id + 1)),
-            scroll_offset: 0,
             selection: None,
+            scroll_offset: 0,
             security: SecurityGuard::new(),
             scrollbar: ScrollbarState::new(),
+        };
+
+        Ok(TabState {
+            id,
+            title: title.unwrap_or_else(|| format!("bash #{}", id + 1)),
+            pane_tree: PaneNode::Leaf(leaf),
+            focused_pane: pane_id,
+            next_pane_id: 1,
         })
     }
 }

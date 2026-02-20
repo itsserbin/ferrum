@@ -15,8 +15,8 @@ impl FerrumWindow {
     }
 
     fn word_bounds_at(&self, row: usize, col: usize) -> Option<(Position, Position)> {
-        let tab = self.active_tab_ref()?;
-        let grid = &tab.terminal.grid;
+        let leaf = self.active_leaf_ref()?;
+        let grid = &leaf.terminal.grid;
         if row >= grid.rows || col >= grid.cols {
             return None;
         }
@@ -50,8 +50,8 @@ impl FerrumWindow {
     }
 
     fn line_bounds_at(&self, row: usize) -> Option<(Position, Position)> {
-        let tab = self.active_tab_ref()?;
-        let grid = &tab.terminal.grid;
+        let leaf = self.active_leaf_ref()?;
+        let grid = &leaf.terminal.grid;
         if row >= grid.rows || grid.cols == 0 {
             return None;
         }
@@ -65,8 +65,8 @@ impl FerrumWindow {
     }
 
     fn viewport_start(&self) -> usize {
-        match self.active_tab_ref() {
-            Some(tab) => tab.terminal.scrollback.len().saturating_sub(tab.scroll_offset),
+        match self.active_leaf_ref() {
+            Some(leaf) => leaf.terminal.scrollback.len().saturating_sub(leaf.scroll_offset),
             None => 0,
         }
     }
@@ -88,8 +88,8 @@ impl FerrumWindow {
         };
         let abs_start = self.pos_to_abs(start);
         let abs_end = self.pos_to_abs(end);
-        if let Some(tab) = self.active_tab_mut() {
-            tab.selection = Some(Selection {
+        if let Some(leaf) = self.active_leaf_mut() {
+            leaf.selection = Some(Selection {
                 start: abs_start,
                 end: abs_end,
             });
@@ -102,8 +102,8 @@ impl FerrumWindow {
         };
         let abs_start = self.pos_to_abs(start);
         let abs_end = self.pos_to_abs(end);
-        if let Some(tab) = self.active_tab_mut() {
-            tab.selection = Some(Selection {
+        if let Some(leaf) = self.active_leaf_mut() {
+            leaf.selection = Some(Selection {
                 start: abs_start,
                 end: abs_end,
             });
@@ -111,11 +111,11 @@ impl FerrumWindow {
     }
 
     pub(in crate::gui) fn update_drag_selection(&mut self, row: usize, col: usize) {
-        let (max_row, max_col, existing_selection) = match self.active_tab_ref() {
-            Some(tab) => (
-                tab.terminal.grid.rows.saturating_sub(1),
-                tab.terminal.grid.cols.saturating_sub(1),
-                tab.selection,
+        let (max_row, max_col, existing_selection) = match self.active_leaf_ref() {
+            Some(leaf) => (
+                leaf.terminal.grid.rows.saturating_sub(1),
+                leaf.terminal.grid.cols.saturating_sub(1),
+                leaf.selection,
             ),
             None => return,
         };
@@ -205,8 +205,8 @@ impl FerrumWindow {
             }
         };
 
-        if let Some(tab) = self.active_tab_mut() {
-            tab.selection = Some(selection);
+        if let Some(leaf) = self.active_leaf_mut() {
+            leaf.selection = Some(selection);
         }
     }
 }

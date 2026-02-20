@@ -10,11 +10,13 @@ impl FerrumWindow {
             .map(|(idx, tab)| TabInfo {
                 title: &tab.title,
                 is_active: idx == self.active_tab,
-                security_count: if tab.security.has_events() {
-                    tab.security.active_event_count()
-                } else {
-                    0
-                },
+                security_count: tab.focused_leaf().map_or(0, |leaf| {
+                    if leaf.security.has_events() {
+                        leaf.security.active_event_count()
+                    } else {
+                        0
+                    }
+                }),
                 hover_progress: 0.0,
                 close_hover_progress: 0.0,
                 is_renaming: false,

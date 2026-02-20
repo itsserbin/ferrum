@@ -73,10 +73,10 @@ impl FerrumWindow {
     }
 
     fn cursor_animation_schedule(&self, now: Instant) -> Option<(Instant, bool)> {
-        let tab = self.active_tab_ref()?;
-        if tab.scroll_offset != 0
-            || !tab.terminal.cursor_visible
-            || !tab.terminal.cursor_style.is_blinking()
+        let leaf = self.active_leaf_ref()?;
+        if leaf.scroll_offset != 0
+            || !leaf.terminal.cursor_visible
+            || !leaf.terminal.cursor_style.is_blinking()
         {
             return None;
         }
@@ -102,14 +102,14 @@ impl FerrumWindow {
     }
 
     fn scrollbar_animation_schedule(&self, now: Instant) -> Option<(Instant, bool)> {
-        let tab = self.active_tab_ref()?;
-        if tab.terminal.scrollback.is_empty() || tab.scrollbar.hover || tab.scrollbar.dragging {
+        let leaf = self.active_leaf_ref()?;
+        if leaf.terminal.scrollback.is_empty() || leaf.scrollbar.hover || leaf.scrollbar.dragging {
             return None;
         }
 
-        let elapsed = now.saturating_duration_since(tab.scrollbar.last_activity);
+        let elapsed = now.saturating_duration_since(leaf.scrollbar.last_activity);
         if elapsed < SCROLLBAR_FADE_START {
-            return Some((tab.scrollbar.last_activity + SCROLLBAR_FADE_START, false));
+            return Some((leaf.scrollbar.last_activity + SCROLLBAR_FADE_START, false));
         }
         if elapsed < SCROLLBAR_FADE_END {
             return Some((now + ANIMATION_FRAME_INTERVAL, true));

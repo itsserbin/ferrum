@@ -6,7 +6,7 @@ impl App {
         while let Ok(event) = self.rx.try_recv() {
             let tab_id = match &event {
                 PtyEvent::Data { tab_id, .. } => *tab_id,
-                PtyEvent::Exited { tab_id } => *tab_id,
+                PtyEvent::Exited { tab_id, .. } => *tab_id,
             };
 
             // Find which window owns this tab.

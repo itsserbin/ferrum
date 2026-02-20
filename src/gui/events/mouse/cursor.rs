@@ -131,24 +131,24 @@ impl FerrumWindow {
     /// Handles scrollbar thumb dragging. Returns `true` when drag is active
     /// and the event should not propagate further.
     fn handle_scrollbar_drag(&mut self, my: f64, tab_bar_height: f64) -> bool {
-        if !self.active_tab_ref().is_some_and(|t| t.scrollbar.dragging) {
+        if !self.active_leaf_ref().is_some_and(|l| l.scrollbar.dragging) {
             return false;
         }
 
         let window_padding = self.backend.window_padding_px() as f64;
         let size = self.window.inner_size();
         let buf_height = size.height as usize;
-        let Some(tab) = self.active_tab_ref() else {
+        let Some(leaf) = self.active_leaf_ref() else {
             return false;
         };
-        let scrollback_len = tab.terminal.scrollback.len();
-        let grid_rows = tab.terminal.grid.rows;
-        let drag_start_y = tab.scrollbar.drag_start_y;
-        let drag_start_offset = tab.scrollbar.drag_start_offset;
+        let scrollback_len = leaf.terminal.scrollback.len();
+        let grid_rows = leaf.terminal.grid.rows;
+        let drag_start_y = leaf.scrollbar.drag_start_y;
+        let drag_start_offset = leaf.scrollbar.drag_start_offset;
 
         if let Some((_, thumb_height)) = self.backend.scrollbar_thumb_bounds(
             buf_height,
-            tab.scroll_offset,
+            leaf.scroll_offset,
             scrollback_len,
             grid_rows,
         ) {
@@ -163,9 +163,9 @@ impl FerrumWindow {
                 let new_offset = drag_start_offset as f64 - delta_y * lines_per_pixel;
                 let new_offset = new_offset.round() as isize;
                 let clamped = new_offset.max(0) as usize;
-                if let Some(tab) = self.active_tab_mut() {
-                    tab.scroll_offset = clamped.min(tab.terminal.scrollback.len());
-                    tab.scrollbar.last_activity = std::time::Instant::now();
+                if let Some(leaf) = self.active_leaf_mut() {
+                    leaf.scroll_offset = clamped.min(leaf.terminal.scrollback.len());
+                    leaf.scrollbar.last_activity = std::time::Instant::now();
                 }
             }
         }
@@ -179,18 +179,18 @@ impl FerrumWindow {
         let size = self.window.inner_size();
         let in_zone = self.is_in_scrollbar_zone(mx, size.width);
         let has_scrollback = self
-            .active_tab_ref()
-            .is_some_and(|t| !t.terminal.scrollback.is_empty());
+            .active_leaf_ref()
+            .is_some_and(|l| !l.terminal.scrollback.is_empty());
         let track_top = tab_bar_height + window_padding;
         let track_bottom = size.height as f64 - window_padding;
         let in_track = my >= track_top && my <= track_bottom;
         let new_hover = in_zone && has_scrollback && in_track;
 
-        if let Some(tab) = self.active_tab_mut() {
-            let was_hover = tab.scrollbar.hover;
-            tab.scrollbar.hover = new_hover;
+        if let Some(leaf) = self.active_leaf_mut() {
+            let was_hover = leaf.scrollbar.hover;
+            leaf.scrollbar.hover = new_hover;
             if new_hover != was_hover {
-                tab.scrollbar.last_activity = std::time::Instant::now();
+                leaf.scrollbar.last_activity = std::time::Instant::now();
             }
         }
 
@@ -203,8 +203,8 @@ impl FerrumWindow {
     /// Returns `true` when the event was consumed by mouse reporting.
     fn handle_mouse_motion_reporting(&mut self, row: usize, col: usize) -> bool {
         let mouse_mode = self
-            .active_tab_ref()
-            .map_or(MouseMode::Off, |t| t.terminal.mouse_mode);
+            .active_leaf_ref()
+            .map_or(MouseMode::Off, |l| l.terminal.mouse_mode);
 
         if self.modifiers.shift_key() {
             return false;
