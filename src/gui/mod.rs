@@ -2,6 +2,7 @@ mod events;
 mod input;
 mod interaction;
 mod lifecycle;
+mod menus;
 mod pane;
 mod platform;
 mod renderer;
