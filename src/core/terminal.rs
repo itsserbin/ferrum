@@ -478,24 +478,24 @@ fn parse_osc7_uri(uri: &str) -> Option<String> {
 }
 
 fn percent_decode(input: &str) -> String {
-    let mut result = String::with_capacity(input.len());
-    let mut chars = input.bytes();
-    while let Some(b) = chars.next() {
+    let mut bytes = Vec::with_capacity(input.len());
+    let mut iter = input.bytes();
+    while let Some(b) = iter.next() {
         if b == b'%' {
-            let hi = chars.next();
-            let lo = chars.next();
-            if let (Some(h), Some(l)) = (hi, lo) {
+            if let (Some(h), Some(l)) = (iter.next(), iter.next()) {
                 if let (Some(hv), Some(lv)) = (hex_val(h), hex_val(l)) {
-                    result.push((hv << 4 | lv) as char);
+                    bytes.push(hv << 4 | lv);
                     continue;
                 }
+                bytes.extend_from_slice(&[b'%', h, l]);
+            } else {
+                bytes.push(b'%');
             }
-            result.push('%');
         } else {
-            result.push(b as char);
+            bytes.push(b);
         }
     }
-    result
+    String::from_utf8_lossy(&bytes).into_owned()
 }
 
 fn hex_val(b: u8) -> Option<u8> {
