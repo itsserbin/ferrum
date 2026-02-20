@@ -9,7 +9,6 @@ use crate::pty;
 pub(super) type PaneId = u64;
 
 /// Direction in which a pane is split.
-#[allow(dead_code)] // Used in later tasks (pane splitting)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum SplitDirection {
     /// Left | Right
@@ -28,18 +27,15 @@ pub(super) struct PaneRect {
 }
 
 impl PaneRect {
-    #[allow(dead_code)] // Used in later tasks (pane navigation)
     pub fn center_x(&self) -> u32 {
         self.x + self.width / 2
     }
-    #[allow(dead_code)] // Used in later tasks (pane navigation)
     pub fn center_y(&self) -> u32 {
         self.y + self.height / 2
     }
 }
 
 /// Direction for spatial navigation between panes.
-#[allow(dead_code)] // Up/Down used in later tasks
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum NavigateDirection {
     Up,
@@ -49,7 +45,7 @@ pub(super) enum NavigateDirection {
 }
 
 /// Result of a divider hit-test, describing which divider was hit.
-#[allow(dead_code)] // Fields used in later tasks for resize dragging
+#[allow(dead_code)]
 pub(super) struct DividerHit {
     pub direction: SplitDirection,
     pub ratio: f32,
@@ -61,7 +57,6 @@ pub(super) struct DividerHit {
 pub(super) const DIVIDER_WIDTH: u32 = 1;
 
 /// Width of the hit zone around a divider for mouse interaction, in pixels.
-#[allow(dead_code)] // Used in later tasks for resize dragging
 pub(super) const DIVIDER_HIT_ZONE: u32 = 6;
 
 /// Splits a rectangle into two sub-rectangles along the given direction.
@@ -117,7 +112,6 @@ pub(super) fn split_rect(
 }
 
 /// A leaf node in the pane tree — a single terminal pane.
-#[allow(dead_code)] // Fields used in later tasks (Task 4+)
 pub(super) struct PaneLeaf {
     pub(super) id: PaneId,
     pub(super) terminal: Terminal,
@@ -175,7 +169,7 @@ impl PaneNode {
     }
 
     /// Recursively counts the number of leaf nodes in this tree.
-    #[allow(dead_code)] // Used in later tasks and tests
+    #[cfg(test)]
     pub(super) fn leaf_count(&self) -> usize {
         match self {
             PaneNode::Leaf(_) => 1,
@@ -207,7 +201,6 @@ impl PaneNode {
     }
 
     /// Recursively searches for a leaf by ID, returning a mutable reference.
-    #[allow(dead_code)] // Used in later tasks (Task 4+)
     pub(super) fn find_leaf_mut(&mut self, id: PaneId) -> Option<&mut PaneLeaf> {
         match self {
             PaneNode::Leaf(leaf) if leaf.id == id => Some(leaf),
@@ -244,7 +237,6 @@ impl PaneNode {
     /// relative to the source pane's center.  Returns `None` if no neighbor
     /// exists in that direction.  When multiple panes are equidistant, returns
     /// the first one encountered in layout order (left-to-right depth-first).
-    #[allow(dead_code)] // Used in later tasks (pane navigation shortcuts)
     pub(super) fn navigate_spatial(
         layout: &[(PaneId, PaneRect)],
         from_id: PaneId,
@@ -375,7 +367,6 @@ impl PaneNode {
     ///
     /// Returns `Some(DividerHit)` if `(px, py)` is within `hit_zone` pixels of
     /// a divider, `None` otherwise.  For leaf nodes, always returns `None`.
-    #[allow(dead_code)] // Used in later tasks for resize dragging
     pub(super) fn hit_test_divider(
         &self,
         px: u32,
@@ -441,7 +432,6 @@ impl PaneNode {
     ///
     /// Returns `Some(PaneId)` if the pixel is inside a leaf's bounding rect,
     /// `None` otherwise.
-    #[allow(dead_code)] // Used in later tasks for focus-follows-mouse
     pub(super) fn pane_at_pixel(
         &self,
         px: u32,
@@ -476,7 +466,6 @@ impl PaneNode {
     /// moves to `new_pixel_pos`.  Clamps the ratio so that each child pane
     /// is at least 20 px in the split dimension.  Returns `true` if a divider
     /// was found and updated.
-    #[allow(dead_code)] // Used in later tasks for resize dragging
     pub(super) fn resize_divider_at(
         &mut self,
         px: u32,

@@ -67,6 +67,10 @@ impl FerrumWindow {
         if index < self.tabs.len() {
             self.active_tab = index;
             self.security_popup = None;
+            // Recalculate pane layout for the newly active tab so each pane
+            // gets correct dimensions (they may have been stale since the last
+            // window resize happened while a different tab was active).
+            self.resize_all_panes();
         }
     }
 

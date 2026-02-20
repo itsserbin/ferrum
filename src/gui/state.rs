@@ -48,7 +48,6 @@ pub(super) struct TabState {
     pub(super) title: String,
     pub(super) pane_tree: crate::gui::pane::PaneNode,
     pub(super) focused_pane: crate::gui::pane::PaneId,
-    #[allow(dead_code)] // Used in later tasks (pane splitting)
     pub(super) next_pane_id: crate::gui::pane::PaneId,
 }
 

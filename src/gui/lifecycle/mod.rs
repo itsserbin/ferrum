@@ -73,6 +73,7 @@ impl ApplicationHandler for App {
                     if win.dragging_tab.take().is_some() {
                         win.window.set_cursor(CursorIcon::Default);
                     }
+                    win.divider_drag = None;
                     win.commit_rename();
                     win.pending_menu_context = None;
                 } else {
