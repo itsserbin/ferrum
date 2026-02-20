@@ -169,6 +169,22 @@ impl Session {
     pub fn process_id(&self) -> Option<u32> {
         self.child.process_id()
     }
+
+    /// Performs a full graceful shutdown: kill the child process and wait
+    /// for it to exit. Meant to be called from a background thread to
+    /// avoid blocking the UI.
+    pub fn shutdown(mut self) {
+        if let Err(e) = self.child.kill() {
+            if e.kind() != std::io::ErrorKind::InvalidInput {
+                eprintln!("Failed to kill PTY child process: {}", e);
+            }
+        }
+        if let Err(e) = self.child.wait() {
+            if e.kind() != std::io::ErrorKind::InvalidInput {
+                eprintln!("Failed to wait on PTY child process: {}", e);
+            }
+        }
+    }
 }
 
 /// Returns `true` when the shell process has at least one child process.
@@ -254,14 +270,13 @@ fn has_active_child_processes_windows(shell_pid: u32) -> bool {
 
 impl Drop for Session {
     fn drop(&mut self) {
+        // Kill only — no wait(). This is a safety net for sessions that
+        // weren't extracted for background cleanup (e.g. during a panic).
+        // Blocking wait() was removed to prevent UI thread hangs.
         if let Err(e) = self.child.kill() {
-            // Don't log InvalidInput error - process may have already exited
             if e.kind() != std::io::ErrorKind::InvalidInput {
                 eprintln!("Failed to kill PTY child process: {}", e);
             }
-        }
-        if let Err(e) = self.child.wait() {
-            eprintln!("Failed to wait on PTY child process: {}", e);
         }
     }
 }
