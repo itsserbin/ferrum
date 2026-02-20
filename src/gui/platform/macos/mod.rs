@@ -10,7 +10,7 @@ use winit::window::Window;
 // Re-export all public functions from submodules.
 pub use pin::{
     is_window_pinned, remove_toolbar_item, set_native_tab_group_pin_state, set_pin_button_state,
-    setup_toolbar, take_pin_button_requests,
+    setup_toolbar, take_gear_button_requests, take_pin_button_requests,
 };
 pub use tabs::{
     add_as_tab, configure_native_tabs, install_new_tab_handler, select_next_tab,

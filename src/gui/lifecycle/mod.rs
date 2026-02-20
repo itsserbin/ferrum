@@ -33,7 +33,7 @@ impl ApplicationHandler for App {
 
             let size = win.window.inner_size();
             let (rows, cols) = win.calc_grid_size(size.width, size.height);
-            win.new_tab(rows, cols, &mut self.next_tab_id, &self.tx, None);
+            win.new_tab(rows, cols, &mut self.next_tab_id, &self.tx, None, &self.config);
             #[cfg(target_os = "macos")]
             if let Some(tab) = win.tabs.first() {
                 win.window.set_title(&tab.title);
@@ -91,7 +91,7 @@ impl ApplicationHandler for App {
                 win.modifiers = modifiers.state();
             }
             WindowEvent::KeyboardInput { event, .. } => {
-                win.on_keyboard_input(&event, &mut self.next_tab_id, &self.tx);
+                win.on_keyboard_input(&event, &mut self.next_tab_id, &self.tx, &self.config);
                 should_redraw = true;
             }
             WindowEvent::MouseWheel { delta, .. } => {
@@ -111,7 +111,7 @@ impl ApplicationHandler for App {
                 should_redraw = true;
             }
             WindowEvent::MouseInput { state, button, .. } => {
-                win.on_mouse_input(state, button, &mut self.next_tab_id, &self.tx);
+                win.on_mouse_input(state, button, &mut self.next_tab_id, &self.tx, &self.config);
                 should_redraw = true;
             }
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
@@ -128,6 +128,13 @@ impl ApplicationHandler for App {
         }
         if should_redraw {
             win.window.request_redraw();
+        }
+
+        // Pick up config updates from settings overlay.
+        if let Some(win) = self.windows.get_mut(&window_id)
+            && let Some(new_config) = win.pending_config.take()
+        {
+            self.config = new_config;
         }
 
         // Process any pending window requests (detach, close).
@@ -173,6 +180,21 @@ impl ApplicationHandler for App {
                     && let Some(win) = self.windows.get_mut(&win_id)
                 {
                     win.toggle_pin();
+                    win.window.request_redraw();
+                }
+            }
+
+            let gear_requests = platform::macos::take_gear_button_requests();
+            for _ in 0..gear_requests {
+                let focused_id = self
+                    .windows
+                    .iter()
+                    .find(|(_, w)| w.window.has_focus())
+                    .map(|(id, _)| *id);
+                if let Some(win_id) = focused_id
+                    && let Some(win) = self.windows.get_mut(&win_id)
+                {
+                    win.toggle_settings_overlay(&self.config);
                     win.window.request_redraw();
                 }
             }
@@ -239,6 +261,7 @@ impl App {
                             pane_id,
                             &mut self.next_tab_id,
                             &self.tx,
+                            &self.config,
                         );
                     }
                     win.window.request_redraw();
