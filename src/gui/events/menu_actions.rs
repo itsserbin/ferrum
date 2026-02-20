@@ -9,12 +9,12 @@ impl FerrumWindow {
     /// Byte sequence sent to the PTY after a programmatic clear/reset.
     ///
     /// On Unix, `\x0c` (form feed) tells bash/zsh to redraw the prompt.
-    /// On Windows, cmd.exe does not understand form feed — sending `\r\n`
-    /// triggers a fresh prompt instead.
+    /// On Windows, `cls\r\n` clears the conpty virtual screen and resets
+    /// its internal cursor to (0,0), so the fresh prompt appears at top.
     #[cfg(unix)]
     const CLEAR_PTY_SEQUENCE: &[u8] = b"\x0c";
     #[cfg(windows)]
-    const CLEAR_PTY_SEQUENCE: &[u8] = b"\r\n";
+    const CLEAR_PTY_SEQUENCE: &[u8] = b"cls\r\n";
 
     fn focus_menu_target_pane(&mut self, pane_id: Option<crate::gui::pane::PaneId>) {
         let Some(pane_id) = pane_id else {
