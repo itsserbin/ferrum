@@ -1,3 +1,4 @@
+use crate::gui::pane::{NavigateDirection, SplitDirection};
 use crate::gui::*;
 
 impl FerrumWindow {
@@ -59,9 +60,6 @@ impl FerrumWindow {
         next_tab_id: &mut u64,
         tx: &mpsc::Sender<PtyEvent>,
     ) -> bool {
-        #[cfg(target_os = "macos")]
-        let _ = (&next_tab_id, tx);
-
         if !self.is_action_modifier() || !self.modifiers.shift_key() {
             return false;
         }
@@ -105,6 +103,36 @@ impl FerrumWindow {
             return true;
         }
 
+        // ── Pane splitting ────────────────────────────────────────────────
+        if Self::physical_key_is(physical, KeyCode::KeyR) {
+            self.split_pane(SplitDirection::Horizontal, false, next_tab_id, tx);
+            return true;
+        }
+        if Self::physical_key_is(physical, KeyCode::KeyD) {
+            self.split_pane(SplitDirection::Vertical, false, next_tab_id, tx);
+            return true;
+        }
+        if Self::physical_key_is(physical, KeyCode::KeyL) {
+            self.split_pane(SplitDirection::Horizontal, true, next_tab_id, tx);
+            return true;
+        }
+        if Self::physical_key_is(physical, KeyCode::KeyU) {
+            self.split_pane(SplitDirection::Vertical, true, next_tab_id, tx);
+            return true;
+        }
+
+        // ── Close pane / tab ──────────────────────────────────────────────
+        // When the active tab has multiple panes, close the focused pane.
+        // Otherwise fall through to close the entire tab.
+        if Self::physical_key_is(physical, KeyCode::KeyW) {
+            if self.active_tab_ref().is_some_and(|t| t.has_multiple_panes()) {
+                self.close_focused_pane();
+            } else {
+                self.close_tab(self.active_tab);
+            }
+            return true;
+        }
+
         match key {
             Key::Named(NamedKey::Tab) => {
                 #[cfg(target_os = "macos")]
@@ -121,6 +149,24 @@ impl FerrumWindow {
                 }
                 true
             }
+            // ── Pane navigation (arrow keys) ──────────────────────────────
+            Key::Named(NamedKey::ArrowUp) if !self.modifiers.super_key() => {
+                self.navigate_pane(NavigateDirection::Up);
+                true
+            }
+            Key::Named(NamedKey::ArrowDown) if !self.modifiers.super_key() => {
+                self.navigate_pane(NavigateDirection::Down);
+                true
+            }
+            Key::Named(NamedKey::ArrowLeft) if !self.modifiers.super_key() => {
+                self.navigate_pane(NavigateDirection::Left);
+                true
+            }
+            Key::Named(NamedKey::ArrowRight) if !self.modifiers.super_key() => {
+                self.navigate_pane(NavigateDirection::Right);
+                true
+            }
+            // ── macOS line navigation (Cmd+Shift+Arrow) ───────────────────
             Key::Named(NamedKey::ArrowLeft) if self.modifiers.super_key() => {
                 self.write_pty_bytes(b"\x01"); // Ctrl+A - beginning of line
                 true

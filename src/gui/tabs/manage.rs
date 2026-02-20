@@ -1,6 +1,6 @@
 use anyhow::Context;
 
-use crate::gui::pane::{PaneLeaf, PaneNode, PaneRect, SplitDirection, DIVIDER_WIDTH};
+use crate::gui::pane::{NavigateDirection, PaneLeaf, PaneNode, PaneRect, SplitDirection, DIVIDER_WIDTH};
 use crate::gui::tabs::normalized_active_index_after_remove;
 use crate::gui::*;
 
@@ -310,6 +310,28 @@ impl FerrumWindow {
             tab.focused_pane = first_id;
         }
         self.resize_all_panes();
+    }
+
+    /// Navigates focus to the nearest pane in the given direction from the currently
+    /// focused pane, using spatial proximity of pane centers.
+    pub(in crate::gui) fn navigate_pane(&mut self, direction: NavigateDirection) {
+        let size = self.window.inner_size();
+        let tab_bar_h = self.backend.tab_bar_height_px();
+        let padding = self.backend.window_padding_px();
+        let terminal_rect = PaneRect {
+            x: padding,
+            y: tab_bar_h + padding,
+            width: size.width.saturating_sub(padding * 2),
+            height: size.height.saturating_sub(tab_bar_h + padding * 2),
+        };
+        let divider_px = DIVIDER_WIDTH;
+        let Some(tab) = self.active_tab_mut() else {
+            return;
+        };
+        let layout = tab.pane_tree.layout(terminal_rect, divider_px);
+        if let Some(target) = PaneNode::navigate_spatial(&layout, tab.focused_pane, direction) {
+            tab.focused_pane = target;
+        }
     }
 
     /// Recalculates pane dimensions for the active tab based on current window size,
