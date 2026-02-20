@@ -60,6 +60,32 @@ impl App {
                     }
                 }
                 WindowRequest::CloseWindow => {
+                    // Extract all PTY sessions before dropping the window
+                    // so that Session::drop() doesn't block the UI thread.
+                    let sessions: Vec<crate::pty::Session> = if let Some(win) = self.windows.get_mut(&window_id) {
+                        win.tabs
+                            .iter_mut()
+                            .flat_map(|tab| tab.pane_tree.drain_sessions())
+                            .flatten()
+                            .collect()
+                    } else {
+                        Vec::new()
+                    };
+
+                    // Spawn background thread for cleanup (kill + wait).
+                    if !sessions.is_empty() {
+                        std::thread::Builder::new()
+                            .name("pty-cleanup".into())
+                            .spawn(move || {
+                                for session in sessions {
+                                    session.shutdown();
+                                }
+                            })
+                            .ok();
+                    }
+
+                    // Now drop the window — sessions are already extracted,
+                    // so Drop won't block.
                     #[cfg(target_os = "macos")]
                     {
                         if let Some(win) = self.windows.remove(&window_id) {
