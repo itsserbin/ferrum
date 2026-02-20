@@ -63,6 +63,9 @@ jobs:
 
           sed "s/\${VERSION}/$VERSION/g" installer/macos/Info.plist.template > "$APP_ROOT/Info.plist"
 
+      - name: Ad-hoc code sign
+        run: codesign --force --deep -s - dist-macos/Ferrum.app
+
       - name: Create DMG
         shell: bash
         run: |
@@ -92,6 +95,7 @@ jobs:
             exit 1
           fi
 
+          xattr -cr "$DMG_NAME"
           echo "DMG_NAME=$DMG_NAME" >> "$GITHUB_ENV"
 
       - name: Upload DMG to GitHub Release
