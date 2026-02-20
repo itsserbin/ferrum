@@ -79,7 +79,7 @@ impl FerrumWindow {
         let title = format!("{} (copy)", self.tabs[index].title);
         let cwd = self.tabs[index]
             .focused_leaf()
-            .and_then(|l| l.terminal.cwd.clone());
+            .and_then(|l| l.cwd());
         let size = self.window.inner_size();
         let (rows, cols) = self.calc_grid_size(size.width, size.height);
         self.new_tab_with_title(rows, cols, Some(title), next_tab_id, tx, cwd);
@@ -226,7 +226,7 @@ impl FerrumWindow {
         let cwd = tab
             .pane_tree
             .find_leaf(focused_pane)
-            .and_then(|leaf| leaf.terminal.cwd.clone());
+            .and_then(|leaf| leaf.cwd());
 
         // Spawn a new PTY session.
         let shell = pty::default_shell();

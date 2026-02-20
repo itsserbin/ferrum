@@ -151,7 +151,7 @@ impl ApplicationHandler for App {
                     .map(|(id, _)| *id);
                 if let Some(win_id) = focused_id {
                     if let Some(win) = self.windows.get_mut(&win_id) {
-                        let cwd = win.active_leaf_ref().and_then(|l| l.terminal.cwd.clone());
+                        let cwd = win.active_leaf_ref().and_then(|l| l.cwd());
                         win.pending_requests.push(WindowRequest::NewTab { cwd });
                     }
                     self.process_window_requests(event_loop, win_id);

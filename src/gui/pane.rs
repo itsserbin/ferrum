@@ -131,6 +131,21 @@ pub(super) struct PaneLeaf {
     pub(super) scrollbar: ScrollbarState,
 }
 
+impl PaneLeaf {
+    /// Returns the pane's current working directory.
+    ///
+    /// Prefers the value reported by the shell via OSC 7. Falls back to
+    /// querying the OS for the shell process's CWD when OSC 7 is unavailable.
+    pub(in crate::gui) fn cwd(&self) -> Option<String> {
+        self.terminal.cwd.clone().or_else(|| {
+            self.session
+                .as_ref()
+                .and_then(|s| s.process_id())
+                .and_then(crate::pty::cwd::get_process_cwd)
+        })
+    }
+}
+
 /// An internal split node holding two children.
 pub(super) struct PaneSplit {
     pub(super) direction: SplitDirection,
