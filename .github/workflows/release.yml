@@ -112,6 +112,12 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       BUILD_MANIFEST_NAME: target/distrib/${{ join(matrix.targets, '-') }}-dist-manifest.json
+      CODESIGN_CERTIFICATE: ${{ secrets.CODESIGN_CERTIFICATE }}
+      CODESIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODESIGN_CERTIFICATE_PASSWORD }}
+      CODESIGN_IDENTITY: ${{ secrets.CODESIGN_IDENTITY }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
     steps:
       - name: enable windows longpaths
         run: |
@@ -148,6 +154,41 @@ jobs:
           # Actually do builds and make zips and whatnot
           dist build ${{ needs.plan.outputs.tag-flag }} --print=linkage --output-format=json ${{ matrix.dist_args }} > dist-manifest.json
           echo "dist ran successfully"
+      - name: Notarize macOS archives
+        if: ${{ startsWith(matrix.runner, 'macos') && needs.plan.outputs.publishing == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          required_vars=(
+            CODESIGN_CERTIFICATE
+            CODESIGN_CERTIFICATE_PASSWORD
+            CODESIGN_IDENTITY
+            APPLE_ID
+            APPLE_TEAM_ID
+            APPLE_APP_SPECIFIC_PASSWORD
+          )
+          for var in "${required_vars[@]}"; do
+            if [[ -z "${!var:-}" ]]; then
+              echo "::error::Missing required secret: ${var}"
+              exit 1
+            fi
+          done
+
+          mapfile -t mac_archives < <(jq -r '.upload_files[] | select(test("apple-darwin\\.zip$"))' dist-manifest.json)
+          if [[ ${#mac_archives[@]} -eq 0 ]]; then
+            echo "::error::No macOS zip artifacts found in dist-manifest.json"
+            exit 1
+          fi
+
+          for archive in "${mac_archives[@]}"; do
+            echo "Submitting ${archive} for notarization"
+            xcrun notarytool submit "${archive}" \
+              --apple-id "${APPLE_ID}" \
+              --password "${APPLE_APP_SPECIFIC_PASSWORD}" \
+              --team-id "${APPLE_TEAM_ID}" \
+              --wait
+          done
       - id: cargo-dist
         name: Post-build
         # We force bash here just because github makes it really hard to get values up
