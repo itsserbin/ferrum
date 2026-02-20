@@ -6,29 +6,29 @@ use std::path::{Path, PathBuf};
 
 // Embed script files at compile time
 #[cfg(windows)]
-const SCRIPT_LS: &str = include_str!("scripts/ls.cmd");
+const SCRIPT_LS: &str = include_str!("windows-aliases/ls.cmd");
 #[cfg(windows)]
-const SCRIPT_LL: &str = include_str!("scripts/ll.cmd");
+const SCRIPT_LL: &str = include_str!("windows-aliases/ll.cmd");
 #[cfg(windows)]
-const SCRIPT_CAT: &str = include_str!("scripts/cat.cmd");
+const SCRIPT_CAT: &str = include_str!("windows-aliases/cat.cmd");
 #[cfg(windows)]
-const SCRIPT_RM: &str = include_str!("scripts/rm.cmd");
+const SCRIPT_RM: &str = include_str!("windows-aliases/rm.cmd");
 #[cfg(windows)]
-const SCRIPT_GREP: &str = include_str!("scripts/grep.cmd");
+const SCRIPT_GREP: &str = include_str!("windows-aliases/grep.cmd");
 #[cfg(windows)]
-const SCRIPT_HEAD: &str = include_str!("scripts/head.cmd");
+const SCRIPT_HEAD: &str = include_str!("windows-aliases/head.cmd");
 #[cfg(windows)]
-const SCRIPT_TAIL: &str = include_str!("scripts/tail.cmd");
+const SCRIPT_TAIL: &str = include_str!("windows-aliases/tail.cmd");
 #[cfg(windows)]
-const SCRIPT_WC: &str = include_str!("scripts/wc.cmd");
+const SCRIPT_WC: &str = include_str!("windows-aliases/wc.cmd");
 #[cfg(windows)]
-const SCRIPT_FIND: &str = include_str!("scripts/find.cmd");
+const SCRIPT_FIND: &str = include_str!("windows-aliases/find.cmd");
 #[cfg(windows)]
-const SCRIPT_DU: &str = include_str!("scripts/du.cmd");
+const SCRIPT_DU: &str = include_str!("windows-aliases/du.cmd");
 #[cfg(windows)]
-const SCRIPT_PS: &str = include_str!("scripts/ps.cmd");
+const SCRIPT_PS: &str = include_str!("windows-aliases/ps.cmd");
 #[cfg(windows)]
-const SCRIPT_INIT: &str = include_str!("scripts/init.cmd");
+const SCRIPT_INIT: &str = include_str!("windows-aliases/init.cmd");
 
 // Shell integration scripts (all platforms)
 const SHELL_INTEGRATION_ZSH: &str = include_str!("shell-integration/zsh/ferrum-integration");
