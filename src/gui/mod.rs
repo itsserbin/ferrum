@@ -145,11 +145,20 @@ impl FerrumWindow {
     fn compose_window_title(&self, update: Option<&crate::update::AvailableRelease>) -> String {
         let base = self
             .active_tab_ref()
-            .map(|tab| tab.title.as_str())
-            .unwrap_or("Ferrum");
+            .map(|tab| {
+                if tab.is_renamed {
+                    tab.title.clone()
+                } else {
+                    tab.focused_leaf()
+                        .and_then(|leaf| leaf.cwd())
+                        .map(|cwd| renderer::shared::path_display::replace_home_prefix(&cwd))
+                        .unwrap_or_else(|| tab.title.clone())
+                }
+            })
+            .unwrap_or_else(|| "Ferrum".to_string());
         match update {
             Some(release) => format!("{base} - Update {} available", release.tag_name),
-            None => base.to_string(),
+            None => base,
         }
     }
 

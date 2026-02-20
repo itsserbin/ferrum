@@ -66,7 +66,7 @@ pub fn format_tab_path(path: &str, max_chars: usize, fallback: &str) -> String {
 }
 
 /// Replaces the user's home directory prefix with `~`.
-fn replace_home_prefix(path: &str) -> String {
+pub fn replace_home_prefix(path: &str) -> String {
     let home = home_dir();
     if home.is_empty() {
         return path.to_string();

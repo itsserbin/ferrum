@@ -481,6 +481,13 @@ fn parse_osc7_uri(uri: &str) -> Option<String> {
     if decoded.is_empty() {
         return None;
     }
+    // On Windows, URI path is "/C:\Users\..." — strip leading slash before drive letter
+    #[cfg(target_os = "windows")]
+    {
+        if decoded.len() >= 3 && decoded.as_bytes()[0] == b'/' && decoded.as_bytes()[2] == b':' {
+            return Some(decoded[1..].replace('/', "\\"));
+        }
+    }
     Some(decoded)
 }
 
