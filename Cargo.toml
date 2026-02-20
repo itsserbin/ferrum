@@ -99,9 +99,3 @@ assets = [
   { source = "README.md", dest = "/usr/share/doc/ferrum/README.md", mode = "644" },
   { source = "LICENSE", dest = "/usr/share/licenses/ferrum/LICENSE", mode = "644" },
 ]
-
-[package.metadata.wix]
-upgrade-guid = "0DB9556E-D490-4400-991C-DE9B310B579A"
-path-guid = "6FA019E8-2899-4DDD-BDB7-B269F5F1F937"
-license = false
-eula = false
