@@ -13,9 +13,13 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release-notes-${{ github.event.workflow_run.head_branch || github.event.inputs.tag }}
+  cancel-in-progress: true
+
 jobs:
   update-release-notes:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
