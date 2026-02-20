@@ -50,6 +50,18 @@ impl traits::Renderer for GpuRenderer {
         self.metrics.scrollbar_hit_zone_px()
     }
 
+    fn pane_inner_padding_px(&self) -> u32 {
+        self.metrics.pane_inner_padding_px()
+    }
+
+    fn split_divider_color_pixel(&self) -> u32 {
+        self.palette.split_divider_color.to_pixel()
+    }
+
+    fn default_bg_pixel(&self) -> u32 {
+        self.palette.default_bg.to_pixel()
+    }
+
     // ── Terminal rendering ────────────────────────────────────────────
 
     fn render(
@@ -118,13 +130,12 @@ impl traits::Renderer for GpuRenderer {
     }
 
     fn draw_pane_divider(&mut self, rect: PaneRect) {
-        // Catppuccin Mocha Surface2 (same as CPU divider path).
         self.push_rect(
             rect.x as f32,
             rect.y as f32,
             rect.width as f32,
             rect.height as f32,
-            0x585B70,
+            self.palette.split_divider_color.to_pixel(),
             1.0,
         );
     }
@@ -150,8 +161,9 @@ impl traits::Renderer for GpuRenderer {
         mouse_pos: (f64, f64),
         tab_offsets: Option<&[f32]>,
         pinned: bool,
+        settings_open: bool,
     ) {
-        self.draw_tab_bar_impl(target.width, tabs, hovered_tab, mouse_pos, tab_offsets, pinned);
+        self.draw_tab_bar_impl(target.width, tabs, hovered_tab, mouse_pos, tab_offsets, pinned, settings_open);
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -184,5 +196,13 @@ impl traits::Renderer for GpuRenderer {
         popup: &SecurityPopup,
     ) {
         self.draw_security_popup_impl(target.width, target.height, popup);
+    }
+
+    fn draw_settings_overlay(
+        &mut self,
+        target: &mut RenderTarget<'_>,
+        overlay: &crate::gui::settings::SettingsOverlay,
+    ) {
+        self.draw_settings_overlay_impl(target.width, target.height, overlay);
     }
 }

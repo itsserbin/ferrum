@@ -10,11 +10,6 @@ use super::super::RoundedShape;
 use super::super::shared::{tab_math, ui_layout};
 #[cfg(not(target_os = "macos"))]
 use super::super::types::{PinColors, RenderTarget};
-#[cfg(not(target_os = "macos"))]
-use super::{INACTIVE_TAB_HOVER, PIN_ACTIVE_COLOR, TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE};
-
-#[cfg(not(target_os = "macos"))]
-use super::WIN_BTN_CLOSE_HOVER;
 
 impl CpuRenderer {
     /// Draws the pin button at the left of the tab bar (non-macOS).
@@ -39,7 +34,7 @@ impl CpuRenderer {
                     w: pin_w,
                     h: pin_h,
                     radius: self.scaled_px(5),
-                    color: INACTIVE_TAB_HOVER,
+                    color: self.palette.inactive_tab_hover.to_pixel(),
                     alpha: 255,
                 },
             );
@@ -48,9 +43,9 @@ impl CpuRenderer {
         let cx = pin_x as f32 + pin_w as f32 / 2.0;
         let cy = pin_y as f32 + pin_h as f32 / 2.0;
         let colors = PinColors {
-            active: PIN_ACTIVE_COLOR,
-            hover: TAB_TEXT_ACTIVE,
-            inactive: TAB_TEXT_INACTIVE,
+            active: self.palette.pin_active_color.to_pixel(),
+            hover: self.palette.tab_text_active.to_pixel(),
+            inactive: self.palette.tab_text_inactive.to_pixel(),
         };
         let layout = ui_layout::pin_icon_layout(
             cx,
@@ -100,6 +95,128 @@ impl CpuRenderer {
         Self::draw_stroked_line(target, (x0, y0), (x1, y1), layout.needle_thickness, color);
     }
 
+    /// Draws the settings gear button in the tab bar (non-macOS).
+    #[cfg(not(target_os = "macos"))]
+    pub(super) fn draw_gear_button(
+        &self,
+        target: &mut RenderTarget<'_>,
+        mouse_pos: (f64, f64),
+        settings_open: bool,
+    ) {
+        let (gx, gy, gw, gh) = self.gear_button_rect();
+        let is_hovered = tab_math::point_in_rect(mouse_pos.0, mouse_pos.1, (gx, gy, gw, gh));
+
+        // Hover/active background.
+        if is_hovered || settings_open {
+            let (bg, alpha) = if settings_open {
+                (self.palette.active_accent.to_pixel(), 60)
+            } else {
+                (self.palette.inactive_tab_hover.to_pixel(), 255)
+            };
+            self.draw_rounded_rect(
+                target,
+                &RoundedShape {
+                    x: gx as i32,
+                    y: gy as i32,
+                    w: gw,
+                    h: gh,
+                    radius: self.scaled_px(5),
+                    color: bg,
+                    alpha,
+                },
+            );
+        }
+
+        let icon_color = if is_hovered || settings_open {
+            self.palette.tab_text_active.to_pixel()
+        } else {
+            self.palette.tab_text_inactive.to_pixel()
+        };
+
+        let icon_size = gw as f32;
+        let cx = gx as f32 + gw as f32 / 2.0;
+        let cy = gy as f32 + gh as f32 / 2.0;
+        let layout = ui_layout::gear_icon_layout(cx, cy, icon_size, icon_color);
+        self.draw_gear_icon(target, &layout);
+    }
+
+    /// Draws a gear icon from pre-computed layout: ring (annulus), teeth, and center hole.
+    #[cfg(not(target_os = "macos"))]
+    fn draw_gear_icon(&self, target: &mut RenderTarget<'_>, layout: &ui_layout::GearIconLayout) {
+        let color = layout.color;
+        let bw = target.width;
+        let bh = target.height;
+        let outer_r = layout.ring_outer_radius;
+        let inner_r = layout.ring_inner_radius;
+        let cx = layout.ring_cx;
+        let cy = layout.ring_cy;
+
+        // Draw ring (filled annulus) with anti-aliased edges.
+        let min_x = (cx - outer_r - 1.0).max(0.0) as usize;
+        let max_x = ((cx + outer_r + 1.0) as usize).min(bw);
+        let min_y = (cy - outer_r - 1.0).max(0.0) as usize;
+        let max_y = ((cy + outer_r + 1.0) as usize).min(bh);
+        for py in min_y..max_y {
+            for px in min_x..max_x {
+                let dx = px as f32 + 0.5 - cx;
+                let dy = py as f32 + 0.5 - cy;
+                let dist = (dx * dx + dy * dy).sqrt();
+                // Pixel is inside the ring if dist is between inner_r and outer_r.
+                let outer_cov = (outer_r + 0.5 - dist).clamp(0.0, 1.0);
+                let inner_cov = (dist - inner_r + 0.5).clamp(0.0, 1.0);
+                let coverage = outer_cov * inner_cov;
+                if coverage <= 0.0 {
+                    continue;
+                }
+                let idx = py * bw + px;
+                if idx < target.buffer.len() {
+                    let alpha = (coverage * 255.0).round() as u8;
+                    target.buffer[idx] = Self::blend_pixel(target.buffer[idx], color, alpha);
+                }
+            }
+        }
+
+        // Draw teeth (filled rects).
+        for &(tx, ty, tw, th) in &layout.teeth {
+            let rx = tx as i32;
+            let ry = ty as i32;
+            let rw = tw as i32;
+            let rh = th as i32;
+            for py in ry.max(0)..(ry + rh).min(bh as i32) {
+                for px in rx.max(0)..(rx + rw).min(bw as i32) {
+                    let idx = py as usize * bw + px as usize;
+                    if idx < target.buffer.len() {
+                        target.buffer[idx] = color;
+                    }
+                }
+            }
+        }
+
+        // Cut out center hole with anti-aliased edge.
+        let hole_r = layout.hole_radius;
+        let hole_color = self.palette.bar_bg.to_pixel();
+        let h_min_x = (layout.hole_cx - hole_r - 1.0).max(0.0) as usize;
+        let h_max_x = ((layout.hole_cx + hole_r + 1.0) as usize).min(bw);
+        let h_min_y = (layout.hole_cy - hole_r - 1.0).max(0.0) as usize;
+        let h_max_y = ((layout.hole_cy + hole_r + 1.0) as usize).min(bh);
+        for py in h_min_y..h_max_y {
+            for px in h_min_x..h_max_x {
+                let dx = px as f32 + 0.5 - layout.hole_cx;
+                let dy = py as f32 + 0.5 - layout.hole_cy;
+                let dist = (dx * dx + dy * dy).sqrt();
+                let coverage = (hole_r + 0.5 - dist).clamp(0.0, 1.0);
+                if coverage <= 0.0 {
+                    continue;
+                }
+                let idx = py * bw + px;
+                if idx < target.buffer.len() {
+                    let alpha = (coverage * 255.0).round() as u8;
+                    target.buffer[idx] = Self::blend_pixel(target.buffer[idx], hole_color, alpha);
+                }
+            }
+        }
+    }
+
     /// Draws the 3 window control buttons at the right edge (non-macOS).
     #[cfg(not(target_os = "macos"))]
     pub(super) fn draw_window_buttons(
@@ -118,9 +235,9 @@ impl CpuRenderer {
             let colors = ui_layout::window_button_colors(
                 btn.kind,
                 btn.hovered,
-                INACTIVE_TAB_HOVER,
-                WIN_BTN_CLOSE_HOVER,
-                TAB_TEXT_INACTIVE,
+                self.palette.inactive_tab_hover.to_pixel(),
+                self.palette.win_btn_close_hover.to_pixel(),
+                self.palette.tab_text_inactive.to_pixel(),
                 0xFFFFFF,
             );
 

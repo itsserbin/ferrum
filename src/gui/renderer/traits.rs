@@ -162,6 +162,7 @@ pub trait Renderer {
         mouse_pos: (f64, f64),
         tab_offsets: Option<&[f32]>,
         pinned: bool,
+        settings_open: bool,
     );
 
     #[cfg(not(target_os = "macos"))]

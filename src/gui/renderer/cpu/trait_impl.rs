@@ -45,6 +45,18 @@ impl traits::Renderer for CpuRenderer {
         CpuRenderer::scrollbar_hit_zone_px(self)
     }
 
+    fn pane_inner_padding_px(&self) -> u32 {
+        self.metrics.pane_inner_padding_px()
+    }
+
+    fn split_divider_color_pixel(&self) -> u32 {
+        self.palette.split_divider_color.to_pixel()
+    }
+
+    fn default_bg_pixel(&self) -> u32 {
+        self.palette.default_bg.to_pixel()
+    }
+
     fn render(
         &mut self,
         target: &mut RenderTarget<'_>,
@@ -116,8 +128,9 @@ impl traits::Renderer for CpuRenderer {
         mouse_pos: (f64, f64),
         tab_offsets: Option<&[f32]>,
         pinned: bool,
+        settings_open: bool,
     ) {
-        CpuRenderer::draw_tab_bar(self, target, tabs, hovered_tab, mouse_pos, tab_offsets, pinned);
+        CpuRenderer::draw_tab_bar(self, target, tabs, hovered_tab, mouse_pos, tab_offsets, pinned, settings_open);
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -148,5 +161,13 @@ impl traits::Renderer for CpuRenderer {
         popup: &SecurityPopup,
     ) {
         CpuRenderer::draw_security_popup(self, target, popup);
+    }
+
+    fn draw_settings_overlay(
+        &mut self,
+        target: &mut RenderTarget<'_>,
+        overlay: &crate::gui::settings::SettingsOverlay,
+    ) {
+        self.draw_settings_overlay(target, overlay);
     }
 }
