@@ -5,8 +5,7 @@ use crate::core::Color;
 use super::super::shared::{tab_math, ui_layout};
 use super::super::traits::Renderer;
 use super::super::types::{RenderTarget, TabSlot};
-use super::super::{CpuRenderer, SECURITY_ACCENT};
-use super::{CLOSE_HOVER_BG_COLOR, TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE};
+use super::super::CpuRenderer;
 
 impl CpuRenderer {
     /// Renders a tab number (1-based) in overflow/compressed mode.
@@ -18,9 +17,9 @@ impl CpuRenderer {
         let m = self.tab_layout_metrics();
         let text_y = tab_math::tab_text_y(&m);
         let fg = if slot.tab.is_active {
-            Color::from_pixel(TAB_TEXT_ACTIVE)
+            self.palette.tab_text_active
         } else {
-            Color::from_pixel(TAB_TEXT_INACTIVE)
+            self.palette.tab_text_inactive
         };
 
         let number_str = (slot.index + 1).to_string();
@@ -63,9 +62,9 @@ impl CpuRenderer {
         let text_y = tab_math::tab_text_y(&m);
         let tab_padding_h = m.scaled_px(tab_math::TAB_PADDING_H);
         let fg = if slot.tab.is_active {
-            Color::from_pixel(TAB_TEXT_ACTIVE)
+            self.palette.tab_text_active
         } else {
-            Color::from_pixel(TAB_TEXT_INACTIVE)
+            self.palette.tab_text_inactive
         };
 
         let show_close = tab_math::should_show_close_button(
@@ -127,13 +126,13 @@ impl CpuRenderer {
         if let Some((sx, sy, sw, _)) =
             self.security_badge_rect(tab_index, tab_count, target.width as u32, tab.security_count)
         {
-            self.draw_security_shield_icon(target, sx, sy, sw, SECURITY_ACCENT);
+            self.draw_security_shield_icon(target, sx, sy, sw, self.palette.security_accent);
             if tab.security_count > 1 {
                 let count_text = tab.security_count.min(99).to_string();
                 let count_x = sx + sw + self.scaled_px(2);
                 for (ci, ch) in count_text.chars().enumerate() {
                     let cx = count_x + ci as u32 * self.metrics.cell_width;
-                    self.draw_char(target, cx, text_y, ch, SECURITY_ACCENT);
+                    self.draw_char(target, cx, text_y, ch, self.palette.security_accent);
                 }
             }
         }
@@ -152,9 +151,9 @@ impl CpuRenderer {
             rect,
             hover_progress,
             self.ui_scale(),
-            CLOSE_HOVER_BG_COLOR,
-            TAB_TEXT_INACTIVE,
-            TAB_TEXT_ACTIVE,
+            self.palette.close_hover_bg.to_pixel(),
+            self.palette.tab_text_inactive.to_pixel(),
+            self.palette.tab_text_active.to_pixel(),
         );
 
         if layout.show_hover_circle {

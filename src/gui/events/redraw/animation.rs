@@ -1,7 +1,6 @@
 use crate::gui::*;
 use std::time::{Duration, Instant};
 
-pub(super) const CURSOR_BLINK_INTERVAL: Duration = Duration::from_millis(500);
 const BLINK_WAKE_TOLERANCE: Duration = Duration::from_millis(20);
 const SCROLLBAR_FADE_START: Duration = Duration::from_millis(1500);
 const SCROLLBAR_FADE_END: Duration = Duration::from_millis(1800);
@@ -78,7 +77,7 @@ impl FerrumWindow {
             return None;
         }
 
-        let interval_ms = CURSOR_BLINK_INTERVAL.as_millis();
+        let interval_ms = self.cursor_blink_interval_ms as u128;
         let elapsed_ms = now
             .saturating_duration_since(self.cursor_blink_start)
             .as_millis();

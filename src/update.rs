@@ -130,24 +130,8 @@ fn write_cache(cache: &UpdateCache) {
 }
 
 fn cache_path() -> Option<PathBuf> {
-    let base = config_base_dir()?;
+    let base = crate::config::config_base_dir()?;
     Some(base.join("ferrum").join("update-check.json"))
-}
-
-/// Returns the platform-specific base config directory.
-///
-/// Resolution order:
-/// 1. `XDG_CONFIG_HOME`
-/// 2. `$HOME/.config`
-/// 3. `%USERPROFILE%/.config`
-fn config_base_dir() -> Option<PathBuf> {
-    if let Some(xdg_config_home) = std::env::var_os("XDG_CONFIG_HOME") {
-        return Some(PathBuf::from(xdg_config_home));
-    }
-    if let Some(home) = std::env::var_os("HOME") {
-        return Some(PathBuf::from(home).join(".config"));
-    }
-    std::env::var_os("USERPROFILE").map(|home| PathBuf::from(home).join(".config"))
 }
 
 fn unix_now_secs() -> Option<u64> {

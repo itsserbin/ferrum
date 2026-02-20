@@ -15,6 +15,7 @@ mod hit_test;
 mod overlays;
 pub mod pipelines;
 mod scrollbar;
+mod settings;
 mod setup;
 mod tab_controls;
 mod tab_layout;
@@ -26,15 +27,14 @@ mod window_buttons;
 use fontdue::Font;
 use wgpu;
 
-use super::FONT_SIZE;
+use crate::config::ThemePalette;
 use super::metrics::FontMetrics;
 
 use atlas::GlyphAtlas;
 use buffers::*;
 
-// Tab-bar palette, INSERTION_COLOR, RENAME_SELECTION_BG, SCROLLBAR_MIN_THUMB,
-// and WIN_BTN_WIDTH are centralized in the parent `renderer/mod.rs`
-// (or `shared::tab_math` for WIN_BTN_WIDTH).
+// Tab-bar palette constants and SCROLLBAR_MIN_THUMB are centralized in
+// the parent `renderer/mod.rs`.
 
 /// Maximum number of UI draw commands per frame.
 const MAX_UI_COMMANDS: usize = 4096;
@@ -88,6 +88,7 @@ pub struct GpuRenderer {
     // Font & metrics
     font: Font,
     metrics: FontMetrics,
+    pub(in crate::gui::renderer) palette: ThemePalette,
 
     // UI command accumulator (filled during draw_* calls, flushed in present).
     commands: Vec<GpuDrawCommand>,

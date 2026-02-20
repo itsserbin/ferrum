@@ -14,12 +14,18 @@ impl super::GpuRenderer {
         buf_height: usize,
         popup: &SecurityPopup,
     ) {
+        let colors = super::super::types::PopupColors {
+            accent: self.palette.security_accent.to_pixel(),
+            menu_bg: self.palette.menu_bg.to_pixel(),
+            default_fg: self.palette.default_fg.to_pixel(),
+        };
         let layout = popup.layout(
             self.metrics.cell_width,
             self.metrics.cell_height,
             self.metrics.ui_scale,
             buf_width as u32,
             buf_height as u32,
+            &colors,
         );
 
         self.push_rounded_rect_cmd(&layout.bg);

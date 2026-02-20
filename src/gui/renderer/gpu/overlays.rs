@@ -3,7 +3,7 @@
 use super::super::shared::overlay_layout;
 use super::super::traits::Renderer;
 use super::super::types::{DragPosition, RoundedRectCmd};
-use super::super::{ACTIVE_TAB_BG, INSERTION_COLOR, TAB_BORDER, TAB_TEXT_ACTIVE, TabInfo};
+use super::super::TabInfo;
 
 impl super::GpuRenderer {
     pub(super) fn draw_tab_drag_overlay_impl(
@@ -45,7 +45,7 @@ impl super::GpuRenderer {
             w: layout.rect_w as f32,
             h: layout.rect_h as f32,
             radius: layout.radius as f32,
-            color: ACTIVE_TAB_BG,
+            color: self.palette.active_tab_bg.to_pixel(),
             opacity: 0.86,
         });
         // Border.
@@ -55,7 +55,7 @@ impl super::GpuRenderer {
             w: layout.rect_w as f32,
             h: layout.rect_h as f32,
             radius: layout.radius as f32,
-            color: TAB_BORDER,
+            color: self.palette.tab_border.to_pixel(),
             opacity: 0.39,
         });
 
@@ -64,7 +64,7 @@ impl super::GpuRenderer {
             layout.title_x as f32,
             layout.title_y as f32,
             &layout.title_text,
-            TAB_TEXT_ACTIVE,
+            self.palette.tab_text_active.to_pixel(),
             1.0,
         );
 
@@ -74,7 +74,7 @@ impl super::GpuRenderer {
             layout.indicator_y as f32,
             layout.indicator_w as f32,
             layout.indicator_h as f32,
-            INSERTION_COLOR,
+            self.palette.insertion_color.to_pixel(),
             1.0,
         );
     }
@@ -102,17 +102,17 @@ impl super::GpuRenderer {
         let (w, h) = (layout.bg_w as f32, layout.bg_h as f32);
         let r = layout.radius as f32;
         self.push_rounded_rect_cmd(&RoundedRectCmd {
-            x, y, w, h, radius: r, color: ACTIVE_TAB_BG, opacity: 0.96,
+            x, y, w, h, radius: r, color: self.palette.active_tab_bg.to_pixel(), opacity: 0.96,
         });
         self.push_rounded_rect_cmd(&RoundedRectCmd {
-            x, y, w, h, radius: r, color: TAB_BORDER, opacity: 0.31,
+            x, y, w, h, radius: r, color: self.palette.tab_border.to_pixel(), opacity: 0.31,
         });
 
         self.push_text(
             layout.text_x as f32,
             layout.text_y as f32,
             &layout.display_text,
-            TAB_TEXT_ACTIVE,
+            self.palette.tab_text_active.to_pixel(),
             1.0,
         );
     }

@@ -1,3 +1,4 @@
+use crate::config::AppConfig;
 use crate::gui::pane::{NavigateDirection, SplitDirection};
 use crate::gui::*;
 
@@ -33,6 +34,7 @@ impl FerrumWindow {
         physical: &PhysicalKey,
         next_tab_id: &mut u64,
         tx: &mpsc::Sender<PtyEvent>,
+        config: &AppConfig,
     ) -> bool {
         if !self.is_action_modifier() || self.modifiers.shift_key() {
             return false;
@@ -41,7 +43,7 @@ impl FerrumWindow {
         if let Some(result) = self.handle_clipboard_shortcuts(key, physical) {
             return result;
         }
-        if let Some(result) = self.handle_tab_management_shortcuts(key, physical, next_tab_id, tx) {
+        if let Some(result) = self.handle_tab_management_shortcuts(key, physical, next_tab_id, tx, config) {
             return result;
         }
         if self.handle_super_text_shortcuts(physical) {
@@ -49,6 +51,10 @@ impl FerrumWindow {
         }
         if let Some(result) = self.handle_super_navigation_shortcuts(key) {
             return result;
+        }
+        if Self::physical_key_is(physical, KeyCode::Comma) {
+            self.toggle_settings_overlay(config);
+            return true;
         }
         false
     }
@@ -59,6 +65,7 @@ impl FerrumWindow {
         physical: &PhysicalKey,
         next_tab_id: &mut u64,
         tx: &mpsc::Sender<PtyEvent>,
+        config: &AppConfig,
     ) -> bool {
         if !self.is_action_modifier() || !self.modifiers.shift_key() {
             return false;
@@ -84,7 +91,7 @@ impl FerrumWindow {
             {
                 let size = self.window.inner_size();
                 let (rows, cols) = self.calc_grid_size(size.width, size.height);
-                self.new_tab_with_title(rows, cols, Some(closed.title), next_tab_id, tx, None);
+                self.new_tab_with_title(rows, cols, Some(closed.title), next_tab_id, tx, None, config);
             }
             return true;
         }
@@ -105,19 +112,19 @@ impl FerrumWindow {
 
         // ── Pane splitting ────────────────────────────────────────────────
         if Self::physical_key_is(physical, KeyCode::KeyR) {
-            self.split_pane(SplitDirection::Horizontal, false, next_tab_id, tx);
+            self.split_pane(SplitDirection::Horizontal, false, next_tab_id, tx, config);
             return true;
         }
         if Self::physical_key_is(physical, KeyCode::KeyD) {
-            self.split_pane(SplitDirection::Vertical, false, next_tab_id, tx);
+            self.split_pane(SplitDirection::Vertical, false, next_tab_id, tx, config);
             return true;
         }
         if Self::physical_key_is(physical, KeyCode::KeyL) {
-            self.split_pane(SplitDirection::Horizontal, true, next_tab_id, tx);
+            self.split_pane(SplitDirection::Horizontal, true, next_tab_id, tx, config);
             return true;
         }
         if Self::physical_key_is(physical, KeyCode::KeyU) {
-            self.split_pane(SplitDirection::Vertical, true, next_tab_id, tx);
+            self.split_pane(SplitDirection::Vertical, true, next_tab_id, tx, config);
             return true;
         }
 

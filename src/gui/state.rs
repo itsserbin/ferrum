@@ -228,6 +228,12 @@ pub(super) struct FerrumWindow {
     pub(super) divider_drag: Option<DividerDragState>,
     /// Last time CWD was polled via OS API for tabs without OSC 7.
     pub(super) last_cwd_poll: std::time::Instant,
+    /// Cursor blink interval from config.
+    pub(super) cursor_blink_interval_ms: u64,
+    /// Settings overlay state (open when Some).
+    pub(super) settings_overlay: Option<crate::gui::settings::SettingsOverlay>,
+    /// Pending config update from settings overlay (picked up by App).
+    pub(super) pending_config: Option<crate::config::AppConfig>,
 }
 
 /// App is now a window manager holding multiple FerrumWindows.
@@ -239,4 +245,5 @@ pub(super) struct App {
     pub(super) rx: mpsc::Receiver<PtyEvent>,
     pub(super) update_rx: mpsc::Receiver<crate::update::AvailableRelease>,
     pub(super) available_release: Option<crate::update::AvailableRelease>,
+    pub(super) config: crate::config::AppConfig,
 }

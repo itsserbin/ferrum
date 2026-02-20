@@ -1,3 +1,4 @@
+use crate::config::AppConfig;
 use crate::gui::pane::{PaneLeaf, PaneNode};
 use crate::gui::*;
 use anyhow::Context;
@@ -11,11 +12,13 @@ impl FerrumWindow {
         next_tab_id: &mut u64,
         tx: &mpsc::Sender<PtyEvent>,
         cwd: Option<String>,
+        config: &AppConfig,
     ) {
-        self.new_tab_with_title(rows, cols, None, next_tab_id, tx, cwd);
+        self.new_tab_with_title(rows, cols, None, next_tab_id, tx, cwd, config);
     }
 
     /// Creates a new tab with an optional custom title.
+    #[allow(clippy::too_many_arguments)]
     pub(in crate::gui) fn new_tab_with_title(
         &mut self,
         rows: usize,
@@ -24,8 +27,9 @@ impl FerrumWindow {
         next_tab_id: &mut u64,
         tx: &mpsc::Sender<PtyEvent>,
         cwd: Option<String>,
+        config: &AppConfig,
     ) {
-        match Self::build_tab_state(rows, cols, title, next_tab_id, tx, cwd) {
+        match Self::build_tab_state(rows, cols, title, next_tab_id, tx, cwd, config) {
             Ok(tab) => {
                 self.tabs.push(tab);
                 self.active_tab = self.tabs.len() - 1;
@@ -44,6 +48,7 @@ impl FerrumWindow {
         next_tab_id: &mut u64,
         tx: &mpsc::Sender<PtyEvent>,
         cwd: Option<String>,
+        config: &AppConfig,
     ) -> anyhow::Result<TabState> {
         let id = *next_tab_id;
         *next_tab_id += 1;
@@ -100,7 +105,14 @@ impl FerrumWindow {
             })
             .context("failed to spawn PTY reader thread")?;
 
-        let mut terminal = Terminal::new(rows, cols);
+        let palette = config.theme.resolve();
+        let mut terminal = Terminal::with_config(
+            rows,
+            cols,
+            config.terminal.max_scrollback,
+            palette.default_fg,
+            palette.default_bg,
+        );
 
         // Show "Last login" greeting with local time.
         {

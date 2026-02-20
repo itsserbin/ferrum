@@ -1,5 +1,6 @@
 use anyhow::Context;
 
+use crate::config::AppConfig;
 use crate::gui::pane::{
     DIVIDER_WIDTH, NavigateDirection, PaneLeaf, PaneNode, PaneRect, SplitDirection,
 };
@@ -72,6 +73,7 @@ impl FerrumWindow {
         index: usize,
         next_tab_id: &mut u64,
         tx: &mpsc::Sender<PtyEvent>,
+        config: &AppConfig,
     ) {
         if index >= self.tabs.len() {
             return;
@@ -82,7 +84,7 @@ impl FerrumWindow {
             .and_then(|l| l.cwd());
         let size = self.window.inner_size();
         let (rows, cols) = self.calc_grid_size(size.width, size.height);
-        self.new_tab_with_title(rows, cols, Some(title), next_tab_id, tx, cwd);
+        self.new_tab_with_title(rows, cols, Some(title), next_tab_id, tx, cwd, config);
     }
 
     /// Switches active tab.
@@ -200,6 +202,7 @@ impl FerrumWindow {
         reverse: bool,
         _next_tab_id: &mut u64,
         tx: &mpsc::Sender<PtyEvent>,
+        config: &AppConfig,
     ) {
         let Some(tab) = self.tabs.get_mut(self.active_tab) else {
             return;
@@ -311,7 +314,14 @@ impl FerrumWindow {
                 .ok();
         }
 
-        let terminal = Terminal::new(rows, cols);
+        let palette = config.theme.resolve();
+        let terminal = Terminal::with_config(
+            rows,
+            cols,
+            config.terminal.max_scrollback,
+            palette.default_fg,
+            palette.default_bg,
+        );
 
         let new_leaf = PaneNode::Leaf(Box::new(PaneLeaf {
             id: pane_id,
@@ -390,7 +400,7 @@ impl FerrumWindow {
         };
 
         let divider_px = DIVIDER_WIDTH;
-        let scaled_pane_pad = self.backend.scaled_px(crate::gui::pane::PANE_INNER_PADDING);
+        let scaled_pane_pad = self.backend.pane_inner_padding_px();
         let Some(tab) = self.active_tab_mut() else {
             return;
         };

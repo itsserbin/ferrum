@@ -1,6 +1,4 @@
-use super::{FONT_SIZE, LINE_PADDING, SCROLLBAR_HIT_ZONE, SCROLLBAR_MARGIN, SCROLLBAR_WIDTH, WINDOW_PADDING};
-#[cfg(not(target_os = "macos"))]
-use super::TAB_BAR_HEIGHT;
+use super::{SCROLLBAR_HIT_ZONE, SCROLLBAR_MARGIN};
 use fontdue::Font;
 
 /// Font metrics shared across renderers.
@@ -15,13 +13,20 @@ pub struct FontMetrics {
     pub ascent: i32,
     #[cfg_attr(target_os = "macos", allow(dead_code))]
     pub tab_bar_visible: bool,
+    // -- Configurable base values (from AppConfig) --
+    pub base_font_size: f32,
+    pub base_line_padding: u32,
+    pub base_tab_bar_height: u32,
+    pub base_window_padding: u32,
+    pub base_scrollbar_width: u32,
+    pub base_pane_inner_padding: u32,
 }
 
 impl FontMetrics {
     /// Recomputes all metrics from the given font and current ui_scale.
     pub fn recompute(&mut self, font: &Font) {
-        let scaled_font_size = (FONT_SIZE as f64 * self.ui_scale).max(1.0) as f32;
-        let line_padding = self.scaled_px(LINE_PADDING);
+        let scaled_font_size = (self.base_font_size as f64 * self.ui_scale).max(1.0) as f32;
+        let line_padding = self.scaled_px(self.base_line_padding);
         let line_metrics = font
             .horizontal_line_metrics(scaled_font_size)
             .expect("no horizontal line metrics");
@@ -51,7 +56,7 @@ impl FontMetrics {
         #[cfg(not(target_os = "macos"))]
         {
             if self.tab_bar_visible {
-                self.scaled_px(TAB_BAR_HEIGHT)
+                self.scaled_px(self.base_tab_bar_height)
             } else {
                 0
             }
@@ -59,7 +64,7 @@ impl FontMetrics {
     }
 
     pub fn window_padding_px(&self) -> u32 {
-        self.scaled_px(WINDOW_PADDING)
+        self.scaled_px(self.base_window_padding)
     }
 
     pub fn scrollbar_hit_zone_px(&self) -> u32 {
@@ -67,10 +72,24 @@ impl FontMetrics {
     }
 
     pub fn scrollbar_width_px(&self) -> u32 {
-        self.scaled_px(SCROLLBAR_WIDTH)
+        self.scaled_px(self.base_scrollbar_width)
     }
 
     pub fn scrollbar_margin_px(&self) -> u32 {
         self.scaled_px(SCROLLBAR_MARGIN)
+    }
+
+    pub fn pane_inner_padding_px(&self) -> u32 {
+        self.scaled_px(self.base_pane_inner_padding)
+    }
+
+    /// Updates all configurable base values from config.
+    pub fn update_bases(&mut self, config: &crate::config::AppConfig) {
+        self.base_font_size = config.font.size;
+        self.base_line_padding = config.font.line_padding;
+        self.base_window_padding = config.layout.window_padding;
+        self.base_tab_bar_height = config.layout.tab_bar_height;
+        self.base_pane_inner_padding = config.layout.pane_inner_padding;
+        self.base_scrollbar_width = config.layout.scrollbar_width;
     }
 }

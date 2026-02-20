@@ -10,6 +10,7 @@ use super::super::TabInfo;
 impl super::GpuRenderer {
     // ── Tab bar rendering: orchestrator ─────────────────────────────────
 
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn draw_tab_bar_impl(
         &mut self,
         buf_width: usize,

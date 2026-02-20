@@ -20,6 +20,7 @@ use super::types::TabSlot;
 
 impl CpuRenderer {
     /// Draws top tab bar including tabs, controls, and separators.
+    #[allow(clippy::too_many_arguments)]
     pub fn draw_tab_bar(
         &mut self,
         target: &mut RenderTarget<'_>,

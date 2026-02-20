@@ -1,6 +1,5 @@
 #![cfg_attr(not(feature = "gpu"), allow(irrefutable_let_patterns))]
 
-use crate::core::Color;
 use crate::gui::renderer::backend::RendererBackend;
 use crate::gui::*;
 
@@ -29,17 +28,19 @@ impl FerrumWindow {
         };
 
         // Clear the full frame.
-        buffer.fill(Color::DEFAULT_BG.to_pixel());
+        buffer.fill(renderer.default_bg_pixel());
 
         // Build read-only frame params from the other fields of self
         // (split borrow: self.backend is already mutably borrowed above).
         let params = FrameParams {
             tab: self.tabs.get(self.active_tab),
             cursor_blink_start: self.cursor_blink_start,
+            cursor_blink_interval_ms: self.cursor_blink_interval_ms,
             hovered_tab: self.hovered_tab,
             mouse_pos: self.mouse_pos,
             pinned: self.pinned,
             security_popup: self.security_popup.as_ref(),
+            settings_overlay: self.settings_overlay.as_ref(),
         };
 
         draw_frame_content(

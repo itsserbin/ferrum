@@ -1,3 +1,4 @@
+use crate::config::AppConfig;
 use crate::gui::*;
 
 impl FerrumWindow {
@@ -6,6 +7,7 @@ impl FerrumWindow {
         event: &winit::event::KeyEvent,
         next_tab_id: &mut u64,
         tx: &mpsc::Sender<PtyEvent>,
+        config: &AppConfig,
     ) {
         if event.state != ElementState::Pressed {
             return;
@@ -13,6 +15,14 @@ impl FerrumWindow {
 
         // Reset blink phase so the cursor is immediately visible after keypress.
         self.cursor_blink_start = std::time::Instant::now();
+
+        // Settings overlay intercepts all keyboard input when open.
+        if self.settings_overlay.is_some() {
+            let key = Self::normalize_non_text_key(&event.logical_key, &event.physical_key);
+            if self.handle_settings_keyboard(&key) {
+                return;
+            }
+        }
 
         let key = Self::normalize_non_text_key(&event.logical_key, &event.physical_key);
 
@@ -36,10 +46,10 @@ impl FerrumWindow {
             return;
         }
 
-        if self.handle_ctrl_shortcuts(&key, &event.physical_key, next_tab_id, tx) {
+        if self.handle_ctrl_shortcuts(&key, &event.physical_key, next_tab_id, tx, config) {
             return;
         }
-        if self.handle_ctrl_shift_shortcuts(&key, &event.physical_key, next_tab_id, tx) {
+        if self.handle_ctrl_shift_shortcuts(&key, &event.physical_key, next_tab_id, tx, config) {
             return;
         }
         if self.handle_alt_shortcuts(&key, &event.physical_key) {

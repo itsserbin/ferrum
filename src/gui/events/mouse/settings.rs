@@ -147,12 +147,12 @@ impl FerrumWindow {
         }
 
         // Click inside panel but not on any control -> close any open dropdown.
-        if let Some(ref mut ov) = self.settings_overlay {
-            if ov.open_dropdown.is_some() {
-                ov.open_dropdown = None;
-                ov.hovered_dropdown_option = None;
-                self.window.request_redraw();
-            }
+        if let Some(ref mut ov) = self.settings_overlay
+            && ov.open_dropdown.is_some()
+        {
+            ov.open_dropdown = None;
+            ov.hovered_dropdown_option = None;
+            self.window.request_redraw();
         }
 
         true // Consume click inside panel even if nothing specific was hit.

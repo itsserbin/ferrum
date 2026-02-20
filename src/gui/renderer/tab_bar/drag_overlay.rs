@@ -3,8 +3,6 @@
 use super::super::{DragPosition, RenderTarget, RoundedShape, TabInfo};
 use super::super::shared::overlay_layout;
 use super::super::traits::Renderer;
-use super::{ACTIVE_TAB_BG, INSERTION_COLOR, TAB_BORDER};
-use crate::core::Color;
 
 impl super::super::CpuRenderer {
     /// Draws the drag overlay: ghost tab at cursor X + insertion indicator.
@@ -53,7 +51,7 @@ impl super::super::CpuRenderer {
                 w: layout.rect_w,
                 h: layout.rect_h,
                 radius: layout.radius,
-                color: ACTIVE_TAB_BG,
+                color: self.palette.active_tab_bg.to_pixel(),
                 alpha: 220,
             },
         );
@@ -67,7 +65,7 @@ impl super::super::CpuRenderer {
                 w: layout.rect_w,
                 h: layout.rect_h,
                 radius: layout.radius,
-                color: TAB_BORDER,
+                color: self.palette.tab_border.to_pixel(),
                 alpha: 100,
             },
         );
@@ -77,7 +75,7 @@ impl super::super::CpuRenderer {
         for (ci, ch) in layout.title_text.chars().enumerate() {
             let cx = layout.title_x + ci as i32 * self.metrics.cell_width as i32;
             if cx >= 0 && (cx as usize) < buf_width {
-                self.draw_char(target, cx as u32, layout.title_y, ch, Color::DEFAULT_FG);
+                self.draw_char(target, cx as u32, layout.title_y, ch, self.palette.default_fg);
             }
         }
 
@@ -90,7 +88,7 @@ impl super::super::CpuRenderer {
                 if (px as usize) < target.width && py < target.height {
                     let idx = py * target.width + px as usize;
                     if idx < target.buffer.len() {
-                        target.buffer[idx] = INSERTION_COLOR;
+                        target.buffer[idx] = self.palette.insertion_color.to_pixel();
                     }
                 }
             }

@@ -337,3 +337,71 @@ fn osc7_with_st_terminator() {
     term.process(b"\x1b]7;file:///tmp/test\x1b\\");
     assert_eq!(term.cwd.as_deref(), Some("/tmp/test"));
 }
+
+// ── Theme recoloring ──
+
+#[test]
+fn recolor_remaps_default_fg_bg() {
+    let old_fg = Color::DEFAULT_FG;
+    let old_bg = Color::DEFAULT_BG;
+    let new_fg = Color { r: 76, g: 79, b: 105 }; // Catppuccin Latte text
+    let new_bg = Color { r: 239, g: 241, b: 245 }; // Catppuccin Latte base
+
+    let mut term = Terminal::new(4, 4);
+    // Default cells have DEFAULT_FG/DEFAULT_BG.
+    assert_eq!(term.grid.get(0, 0).unwrap().fg, old_fg);
+    assert_eq!(term.grid.get(0, 0).unwrap().bg, old_bg);
+
+    term.recolor(old_fg, old_bg, &Color::ANSI, new_fg, new_bg, &Color::ANSI);
+
+    assert_eq!(term.grid.get(0, 0).unwrap().fg, new_fg);
+    assert_eq!(term.grid.get(0, 0).unwrap().bg, new_bg);
+    assert_eq!(term.default_fg, new_fg);
+    assert_eq!(term.default_bg, new_bg);
+}
+
+#[test]
+fn recolor_leaves_custom_sgr_colors_untouched() {
+    let old_fg = Color::DEFAULT_FG;
+    let old_bg = Color::DEFAULT_BG;
+    let new_fg = Color { r: 76, g: 79, b: 105 };
+    let new_bg = Color { r: 239, g: 241, b: 245 };
+
+    let mut term = Terminal::new(4, 10);
+    // Write text with a custom RGB color: ESC[38;2;255;128;0m (orange foreground)
+    term.process(b"\x1b[38;2;255;128;0mHello");
+
+    let custom_fg = Color { r: 255, g: 128, b: 0 };
+    assert_eq!(term.grid.get(0, 0).unwrap().fg, custom_fg);
+
+    term.recolor(old_fg, old_bg, &Color::ANSI, new_fg, new_bg, &Color::ANSI);
+
+    // Custom color should remain unchanged.
+    assert_eq!(term.grid.get(0, 0).unwrap().fg, custom_fg);
+    // Background was default, so it should be remapped.
+    assert_eq!(term.grid.get(0, 0).unwrap().bg, new_bg);
+}
+
+#[test]
+fn recolor_remaps_ansi_palette_colors() {
+    let old_fg = Color::DEFAULT_FG;
+    let old_bg = Color::DEFAULT_BG;
+    let old_ansi = Color::ANSI;
+    // Catppuccin Latte ANSI (different from Ferrum Dark)
+    let new_ansi: [Color; 16] = {
+        let mut a = Color::ANSI;
+        a[1] = Color { r: 210, g: 15, b: 57 }; // Catppuccin Latte red
+        a
+    };
+
+    let mut term = Terminal::new(4, 10);
+    // Write text with ANSI red: ESC[31m
+    term.process(b"\x1b[31mRed");
+
+    assert_eq!(term.grid.get(0, 0).unwrap().fg, old_ansi[1]);
+
+    term.recolor(old_fg, old_bg, &old_ansi, old_fg, old_bg, &new_ansi);
+
+    // ANSI red should be remapped to new palette red.
+    assert_eq!(term.grid.get(0, 0).unwrap().fg, new_ansi[1]);
+}

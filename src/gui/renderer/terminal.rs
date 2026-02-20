@@ -44,8 +44,8 @@ impl CpuRenderer {
                 if selected {
                     bg = Color::from_pixel(super::blend_rgb(
                         bg.to_pixel(),
-                        super::SELECTION_OVERLAY_COLOR,
-                        super::SELECTION_OVERLAY_ALPHA,
+                        self.palette.selection_overlay_color.to_pixel(),
+                        self.palette.selection_overlay_alpha,
                     ));
                 }
 
@@ -129,8 +129,8 @@ impl CpuRenderer {
                 if selected {
                     bg = Color::from_pixel(super::blend_rgb(
                         bg.to_pixel(),
-                        super::SELECTION_OVERLAY_COLOR,
-                        super::SELECTION_OVERLAY_ALPHA,
+                        self.palette.selection_overlay_color.to_pixel(),
+                        self.palette.selection_overlay_alpha,
                     ));
                 }
 

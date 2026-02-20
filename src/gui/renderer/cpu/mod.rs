@@ -4,6 +4,7 @@ mod trait_impl;
 use fontdue::{Font, FontSettings};
 use std::collections::HashMap;
 
+use crate::config::{AppConfig, ThemePalette};
 use super::metrics::FontMetrics;
 use super::types::GlyphBitmap;
 
@@ -12,15 +13,13 @@ pub struct CpuRenderer {
     pub(in crate::gui::renderer) font: Font,
     pub(in crate::gui::renderer) metrics: FontMetrics,
     pub(in crate::gui::renderer) glyph_cache: HashMap<char, GlyphBitmap>,
+    pub(in crate::gui::renderer) palette: ThemePalette,
 }
 
 impl CpuRenderer {
-    pub fn new() -> Self {
-        let font_data = include_bytes!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/assets/fonts/JetBrainsMono-Regular.ttf"
-        ));
-        let font = Font::from_bytes(font_data as &[u8], FontSettings::default())
+    pub fn new(config: &AppConfig) -> Self {
+        let font_data = crate::config::font_data(config.font.family);
+        let font = Font::from_bytes(font_data, FontSettings::default())
             .expect("font load failed");
 
         let mut metrics = FontMetrics {
@@ -30,14 +29,31 @@ impl CpuRenderer {
             ui_scale: 1.0,
             ascent: 0,
             tab_bar_visible: false,
+            base_font_size: config.font.size,
+            base_line_padding: config.font.line_padding,
+            base_tab_bar_height: config.layout.tab_bar_height,
+            base_window_padding: config.layout.window_padding,
+            base_scrollbar_width: config.layout.scrollbar_width,
+            base_pane_inner_padding: config.layout.pane_inner_padding,
         };
         metrics.recompute(&font);
+
+        let palette = config.theme.resolve();
 
         CpuRenderer {
             font,
             metrics,
             glyph_cache: HashMap::new(),
+            palette,
         }
+    }
+
+    pub(in crate::gui::renderer) fn apply_config(&mut self, config: &AppConfig) {
+        let font_data = crate::config::font_data(config.font.family);
+        self.font = Font::from_bytes(font_data, FontSettings::default()).expect("font load failed");
+        self.metrics.update_bases(config);
+        self.recompute_metrics();
+        self.palette = config.theme.resolve();
     }
 
     pub(in crate::gui::renderer) fn recompute_metrics(&mut self) {

@@ -41,6 +41,7 @@ pub(in crate::gui) struct CategoryLayout {
     /// Category label text.
     pub text: TextCmd,
     /// Whether this category is the currently active one.
+    #[allow(dead_code)] // Read in tests; will be used for rendering differentiation.
     pub is_active: bool,
 }
 
@@ -76,7 +77,9 @@ pub(in crate::gui) enum ItemControlLayout {
 pub(in crate::gui) struct DropdownOptionLayout {
     pub bg: FlatRectCmd,
     pub text: TextCmd,
+    #[allow(dead_code)] // Available for future rendering differentiation.
     pub is_selected: bool,
+    #[allow(dead_code)] // Available for future rendering differentiation.
     pub is_hovered: bool,
 }
 

@@ -31,10 +31,12 @@ impl FerrumWindow {
         let params = FrameParams {
             tab: self.tabs.get(self.active_tab),
             cursor_blink_start: self.cursor_blink_start,
+            cursor_blink_interval_ms: self.cursor_blink_interval_ms,
             hovered_tab: self.hovered_tab,
             mouse_pos: self.mouse_pos,
             pinned: self.pinned,
             security_popup: self.security_popup.as_ref(),
+            settings_overlay: self.settings_overlay.as_ref(),
         };
 
         draw_frame_content(

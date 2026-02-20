@@ -4,14 +4,11 @@
 
 use wgpu;
 
-use crate::core::Color;
-
 use super::MAX_UI_COMMANDS;
 use super::buffers::*;
 
 use super::super::shared::ui_layout;
 use super::super::traits::Renderer;
-use super::super::{CLOSE_HOVER_BG_COLOR, TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE};
 
 impl super::GpuRenderer {
     pub(super) fn draw_close_button_commands(
@@ -25,9 +22,9 @@ impl super::GpuRenderer {
             rect,
             hover_progress,
             self.metrics.ui_scale,
-            CLOSE_HOVER_BG_COLOR,
-            TAB_TEXT_INACTIVE,
-            TAB_TEXT_ACTIVE,
+            self.palette.close_hover_bg.to_pixel(),
+            self.palette.tab_text_inactive.to_pixel(),
+            self.palette.tab_text_active.to_pixel(),
         );
 
         if layout.show_hover_circle {
@@ -140,7 +137,7 @@ impl super::GpuRenderer {
             window_padding: self.metrics.window_padding_px() as f32,
             grid_pixel_width: grid_pixel_w as f32,
             grid_pixel_height: grid_pixel_h as f32,
-            bg_color: Color::DEFAULT_BG.to_pixel(),
+            bg_color: self.palette.default_bg.to_pixel(),
             _padding: 0,
         };
         self.queue.write_buffer(

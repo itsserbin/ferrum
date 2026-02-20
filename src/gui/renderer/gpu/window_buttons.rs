@@ -3,7 +3,6 @@
 #![cfg(not(target_os = "macos"))]
 
 use super::super::shared::{tab_math, ui_layout};
-use super::super::{INACTIVE_TAB_HOVER, TAB_TEXT_INACTIVE, WIN_BTN_CLOSE_HOVER};
 
 impl super::GpuRenderer {
     pub(super) fn draw_window_buttons_commands(&mut self, buf_width: u32, mouse_pos: (f64, f64)) {
@@ -17,9 +16,9 @@ impl super::GpuRenderer {
             let colors = ui_layout::window_button_colors(
                 btn.kind,
                 btn.hovered,
-                INACTIVE_TAB_HOVER,
-                WIN_BTN_CLOSE_HOVER,
-                TAB_TEXT_INACTIVE,
+                self.palette.inactive_tab_hover.to_pixel(),
+                self.palette.win_btn_close_hover.to_pixel(),
+                self.palette.tab_text_inactive.to_pixel(),
                 0xFFFFFF,
             );
 

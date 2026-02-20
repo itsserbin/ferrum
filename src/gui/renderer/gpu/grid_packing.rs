@@ -1,6 +1,6 @@
 //! Packs terminal grid cells into GPU buffer format.
 
-use crate::core::{Color, Grid, Selection};
+use crate::core::{Grid, Selection};
 use crate::gui::pane::PaneRect;
 
 use super::GridBatch;
@@ -30,7 +30,7 @@ impl super::GpuRenderer {
             return;
         }
 
-        let bg = Color::DEFAULT_BG.to_pixel();
+        let bg = self.palette.default_bg.to_pixel();
         self.grid_batches.push(GridBatch {
             cells: vec![PackedCell {
                 codepoint: 0,
@@ -106,8 +106,8 @@ impl super::GpuRenderer {
                 if selected {
                     bg = super::super::blend_rgb(
                         bg,
-                        super::super::SELECTION_OVERLAY_COLOR,
-                        super::super::SELECTION_OVERLAY_ALPHA,
+                        self.palette.selection_overlay_color.to_pixel(),
+                        self.palette.selection_overlay_alpha,
                     );
                 }
 
@@ -157,7 +157,7 @@ impl super::GpuRenderer {
                 cell_height: self.metrics.cell_height,
                 origin_x: region.x,
                 origin_y: region.y,
-                bg_color: Color::DEFAULT_BG.to_pixel(),
+                bg_color: self.palette.default_bg.to_pixel(),
                 _pad0: 0,
                 tex_width: self.width,
                 tex_height: self.height,

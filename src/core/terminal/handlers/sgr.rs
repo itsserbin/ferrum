@@ -40,7 +40,7 @@ pub(in super::super) fn handle_sgr(term: &mut Terminal, params: &Params) {
                     }
                 }
             }
-            39 => term.set_fg(Color::DEFAULT_FG),
+            39 => term.set_fg(term.default_fg),
             40..=47 => term.set_bg(Color::ANSI[(code - 40) as usize]),
             48 => {
                 // Extended background: 48;5;N (256-color) or 48;2;R;G;B (true color)
@@ -61,7 +61,7 @@ pub(in super::super) fn handle_sgr(term: &mut Terminal, params: &Params) {
                     }
                 }
             }
-            49 => term.set_bg(Color::DEFAULT_BG),
+            49 => term.set_bg(term.default_bg),
             90..=97 => term.set_fg(Color::ANSI[(code - 90 + 8) as usize]),
             100..=107 => term.set_bg(Color::ANSI[(code - 100 + 8) as usize]),
             _ => {}

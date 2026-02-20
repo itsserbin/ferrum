@@ -71,6 +71,7 @@ pub(in crate::gui) struct SettingsOverlay {
     /// Index into the items list that the mouse is hovering over (content area).
     pub hovered_item: Option<usize>,
     /// Snapshot taken when the overlay was opened, used for revert.
+    #[allow(dead_code)] // Reserved for future cancel/revert feature.
     pub original_config: AppConfig,
     /// Live-edited config; changes apply immediately for preview.
     pub editing_config: AppConfig,

@@ -102,6 +102,15 @@ impl Grid {
         self.rows_data[row].cells.clone()
     }
 
+    /// Applies a function to every cell in the grid.
+    pub fn recolor_cells(&mut self, mut map_fn: impl FnMut(&mut Cell)) {
+        for row in &mut self.rows_data {
+            for cell in &mut row.cells {
+                map_fn(cell);
+            }
+        }
+    }
+
     /// Get the Row struct for a given row index.
     ///
     /// Useful for inspecting row metadata (e.g., wrapped flag) without copying cells.
@@ -380,5 +389,25 @@ mod tests {
     fn grid_resized_zero_cols_panics() {
         let grid = Grid::new(3, 3);
         grid.resized(3, 0);
+    }
+
+    #[test]
+    fn recolor_cells_transforms_all_cells() {
+        use crate::core::Color;
+        let mut grid = Grid::new(2, 3);
+        let old_fg = Color::DEFAULT_FG;
+        let new_fg = Color { r: 1, g: 2, b: 3 };
+
+        grid.recolor_cells(|cell| {
+            if cell.fg == old_fg {
+                cell.fg = new_fg;
+            }
+        });
+
+        for row in 0..2 {
+            for col in 0..3 {
+                assert_eq!(grid.get(row, col).unwrap().fg, new_fg);
+            }
+        }
     }
 }

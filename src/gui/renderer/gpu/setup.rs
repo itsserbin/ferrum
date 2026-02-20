@@ -6,15 +6,16 @@ use fontdue::{Font, FontSettings};
 use wgpu;
 use winit::window::Window;
 
+use crate::config::AppConfig;
 use super::super::metrics::FontMetrics;
 use super::atlas::GlyphAtlas;
 use super::buffers::*;
 use super::pipelines;
-use super::{FONT_SIZE, MAX_UI_COMMANDS};
+use super::MAX_UI_COMMANDS;
 
 impl super::GpuRenderer {
     /// Creates a new GPU renderer, initializing wgpu device, pipelines, and textures.
-    pub fn new(window: Arc<Window>) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(window: Arc<Window>, config: &AppConfig) -> Result<Self, Box<dyn std::error::Error>> {
         let size = window.inner_size();
         let width = size.width.max(1);
         let height = size.height.max(1);
@@ -70,22 +71,27 @@ impl super::GpuRenderer {
         surface.configure(&device, &surface_config);
 
         // Font setup.
-        let font_data = include_bytes!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/assets/fonts/JetBrainsMono-Regular.ttf"
-        ));
+        let font_data = crate::config::font_data(config.font.family);
         let font =
-            Font::from_bytes(font_data as &[u8], FontSettings::default()).expect("font load fail");
+            Font::from_bytes(font_data, FontSettings::default()).expect("font load fail");
 
         let mut metrics = FontMetrics {
             cell_width: 1,
             cell_height: 1,
-            font_size: FONT_SIZE,
+            font_size: config.font.size,
             ui_scale: 1.0,
             ascent: 0,
             tab_bar_visible: false,
+            base_font_size: config.font.size,
+            base_line_padding: config.font.line_padding,
+            base_tab_bar_height: config.layout.tab_bar_height,
+            base_window_padding: config.layout.window_padding,
+            base_scrollbar_width: config.layout.scrollbar_width,
+            base_pane_inner_padding: config.layout.pane_inner_padding,
         };
         metrics.recompute(&font);
+
+        let palette = config.theme.resolve();
 
         // Create glyph atlas.
         let atlas = GlyphAtlas::new(&device, &queue, &font, metrics.font_size, metrics.ascent);
@@ -166,6 +172,7 @@ impl super::GpuRenderer {
             atlas,
             font,
             metrics,
+            palette,
             commands: Vec::with_capacity(MAX_UI_COMMANDS),
             grid_batches: Vec::new(),
             grid_dirty: false,
@@ -267,6 +274,17 @@ impl super::GpuRenderer {
         );
         self.ui_texture = ut;
         self.ui_texture_view = utv;
+    }
+
+    /// Applies config changes (font, metrics, atlas, palette).
+    pub(in crate::gui::renderer) fn apply_config(&mut self, config: &crate::config::AppConfig) {
+        let font_data = crate::config::font_data(config.font.family);
+        self.font = fontdue::Font::from_bytes(font_data, fontdue::FontSettings::default())
+            .expect("font load failed");
+        self.metrics.update_bases(config);
+        self.metrics.recompute(&self.font);
+        self.rebuild_atlas();
+        self.palette = config.theme.resolve();
     }
 
     /// Rebuilds glyph atlas and related buffer after scale change.

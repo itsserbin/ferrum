@@ -22,7 +22,7 @@ impl App {
         {
             let size = new_win.window.inner_size();
             let (rows, cols) = new_win.calc_grid_size(size.width, size.height);
-            new_win.new_tab_with_title(rows, cols, title, &mut self.next_tab_id, &self.tx, cwd);
+            new_win.new_tab_with_title(rows, cols, title, &mut self.next_tab_id, &self.tx, cwd, &self.config);
             if let Some(tab) = new_win.tabs.first() {
                 new_win.window.set_title(&tab.title);
             }
@@ -112,6 +112,7 @@ impl App {
                             &mut self.next_tab_id,
                             &self.tx,
                             cwd,
+                            &self.config,
                         );
                         #[cfg(target_os = "macos")]
                         if let Some(tab) = new_win.tabs.first() {
