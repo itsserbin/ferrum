@@ -97,9 +97,13 @@ begin
   P := Pos(';' + Uppercase(Path), Uppercase(Paths));
   if P = 0 then begin
     P := Pos(Uppercase(Path) + ';', Uppercase(Paths));
-    if P = 0 then
-      exit;
-    Delete(Paths, P, Length(Path) + 1);
+    if P = 0 then begin
+      if Uppercase(Paths) = Uppercase(Path) then
+        Paths := ''
+      else
+        exit;
+    end else
+      Delete(Paths, P, Length(Path) + 1);
   end else
     Delete(Paths, P, Length(Path) + 1);
 
@@ -117,6 +121,8 @@ end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
-  if CurUninstallStep = usPostUninstall then
-    EnvRemovePath(ExpandConstant('{app}'), IsAdminInstallMode());
+  if CurUninstallStep = usPostUninstall then begin
+    EnvRemovePath(ExpandConstant('{app}'), True);
+    EnvRemovePath(ExpandConstant('{app}'), False);
+  end;
 end;
