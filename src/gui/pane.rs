@@ -58,7 +58,6 @@ pub(super) struct DividerHit {
 }
 
 /// Width of the visible divider between panes, in pixels.
-#[allow(dead_code)] // Used in later tasks for rendering
 pub(super) const DIVIDER_WIDTH: u32 = 1;
 
 /// Width of the hit zone around a divider for mouse interaction, in pixels.
@@ -69,7 +68,7 @@ pub(super) const DIVIDER_HIT_ZONE: u32 = 6;
 ///
 /// The first rectangle gets `ratio` of the available space (total minus divider),
 /// and the second rectangle gets the remainder.
-fn split_rect(
+pub(super) fn split_rect(
     rect: PaneRect,
     direction: SplitDirection,
     ratio: f32,
@@ -215,7 +214,6 @@ impl PaneNode {
     /// Returns a list of `(PaneId, PaneRect)` pairs, one for each leaf, describing
     /// where each pane should be rendered.  `divider_px` is the pixel width of the
     /// divider bar between split panes.
-    #[allow(dead_code)] // Used in later tasks (multi-pane rendering)
     pub(super) fn layout(&self, rect: PaneRect, divider_px: u32) -> Vec<(PaneId, PaneRect)> {
         match self {
             PaneNode::Leaf(leaf) => vec![(leaf.id, rect)],

@@ -34,7 +34,7 @@ impl FerrumWindow {
         // Build read-only frame params from the other fields of self
         // (split borrow: self.backend is already mutably borrowed above).
         let params = FrameParams {
-            active_leaf: self.tabs.get(self.active_tab).and_then(|t| t.focused_leaf()),
+            tab: self.tabs.get(self.active_tab),
             cursor_blink_start: self.cursor_blink_start,
             hovered_tab: self.hovered_tab,
             mouse_pos: self.mouse_pos,

@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use crate::core::{CursorStyle, Grid, Selection};
+use crate::gui::pane::PaneRect;
 
 #[cfg(not(target_os = "macos"))]
 use super::WindowButton;
@@ -70,6 +71,58 @@ pub trait Renderer {
         grid: &Grid,
         style: CursorStyle,
     );
+
+    /// Renders terminal cells into a sub-rectangle of the buffer.
+    ///
+    /// Used for multi-pane rendering where each pane occupies a portion of the
+    /// window.  The default implementation is a no-op (GPU renderer overrides
+    /// separately).
+    fn render_in_rect(
+        &mut self,
+        _buffer: &mut [u32],
+        _buf_width: usize,
+        _buf_height: usize,
+        _grid: &Grid,
+        _selection: Option<&Selection>,
+        _viewport_start: usize,
+        _rect: PaneRect,
+    ) {
+    }
+
+    /// Draws the cursor at a position offset by a pane rectangle.
+    ///
+    /// Default implementation is a no-op (GPU renderer overrides separately).
+    #[allow(clippy::too_many_arguments)]
+    fn draw_cursor_in_rect(
+        &mut self,
+        _buffer: &mut [u32],
+        _buf_width: usize,
+        _buf_height: usize,
+        _row: usize,
+        _col: usize,
+        _grid: &Grid,
+        _style: CursorStyle,
+        _rect: PaneRect,
+    ) {
+    }
+
+    /// Renders the scrollbar within a pane sub-rectangle.
+    ///
+    /// Default implementation is a no-op (GPU renderer overrides separately).
+    #[allow(clippy::too_many_arguments)]
+    fn render_scrollbar_in_rect(
+        &mut self,
+        _buffer: &mut [u32],
+        _buf_width: usize,
+        _buf_height: usize,
+        _scroll_offset: usize,
+        _scrollback_len: usize,
+        _grid_rows: usize,
+        _opacity: f32,
+        _hover: bool,
+        _rect: PaneRect,
+    ) {
+    }
 
     // ── Scrollbar ───────────────────────────────────────────────────
 

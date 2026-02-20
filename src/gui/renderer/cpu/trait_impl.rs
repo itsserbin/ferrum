@@ -1,4 +1,5 @@
 use crate::core::{CursorStyle, Grid, Selection};
+use crate::gui::pane::PaneRect;
 
 use super::super::traits;
 use super::super::types::{SecurityPopup, TabInfo};
@@ -72,6 +73,70 @@ impl traits::Renderer for CpuRenderer {
         style: CursorStyle,
     ) {
         CpuRenderer::draw_cursor(self, buffer, buf_width, buf_height, row, col, grid, style);
+    }
+
+    fn render_in_rect(
+        &mut self,
+        buffer: &mut [u32],
+        buf_width: usize,
+        buf_height: usize,
+        grid: &Grid,
+        selection: Option<&Selection>,
+        viewport_start: usize,
+        rect: PaneRect,
+    ) {
+        CpuRenderer::render_in_rect(
+            self,
+            buffer,
+            buf_width,
+            buf_height,
+            grid,
+            selection,
+            viewport_start,
+            rect,
+        );
+    }
+
+    fn draw_cursor_in_rect(
+        &mut self,
+        buffer: &mut [u32],
+        buf_width: usize,
+        buf_height: usize,
+        row: usize,
+        col: usize,
+        grid: &Grid,
+        style: CursorStyle,
+        rect: PaneRect,
+    ) {
+        CpuRenderer::draw_cursor_in_rect(
+            self, buffer, buf_width, buf_height, row, col, grid, style, rect,
+        );
+    }
+
+    fn render_scrollbar_in_rect(
+        &mut self,
+        buffer: &mut [u32],
+        buf_width: usize,
+        buf_height: usize,
+        scroll_offset: usize,
+        scrollback_len: usize,
+        grid_rows: usize,
+        opacity: f32,
+        hover: bool,
+        rect: PaneRect,
+    ) {
+        CpuRenderer::render_scrollbar_in_rect(
+            self,
+            buffer,
+            buf_width,
+            buf_height,
+            scroll_offset,
+            scrollback_len,
+            grid_rows,
+            opacity,
+            hover,
+            rect,
+        );
     }
 
     fn render_scrollbar(
