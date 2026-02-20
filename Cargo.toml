@@ -51,7 +51,7 @@ cargo-dist-version = "0.30.4"
 # CI backends to support
 ci = ["github"]
 # The installers to generate for each app
-installers = ["shell", "powershell", "homebrew", "msi"]
+installers = ["homebrew"]
 # Target platforms to build apps for (Rust target-triple syntax)
 targets = ["x86_64-unknown-linux-gnu", "x86_64-apple-darwin", "aarch64-apple-darwin", "x86_64-pc-windows-msvc"]
 # The archive format to use for non-windows builds (defaults .tar.xz)
@@ -62,10 +62,6 @@ tap = "itsserbin/homebrew-tap"
 publish-jobs = ["homebrew"]
 # PR behavior for dist CI: build/upload artifacts for validation without publishing a release
 pr-run-mode = "upload"
-# We intentionally customize generated release CI to add notarization
-allow-dirty = ["ci"]
-# Sign macOS binaries with a Developer ID certificate in CI
-macos-sign = true
 # Path that installers should place binaries in
 install-path = "CARGO_HOME"
 # Whether to install an updater program
