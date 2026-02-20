@@ -1,9 +1,13 @@
-/// Cross-platform OS API fallback for querying the current working directory
-/// of a process given its PID.
-///
-/// Used when shell integration (OSC 7) is unavailable — falls back to
-/// platform-specific APIs to determine CWD from the shell process directly.
+//! Cross-platform OS API fallback for querying the current working directory
+//! of a process given its PID.
+//!
+//! Used when shell integration (OSC 7) is unavailable — falls back to
+//! platform-specific APIs to determine CWD from the shell process directly.
 
+/// Queries the OS for the current working directory of the given process.
+///
+/// Returns `None` if the PID is invalid, the process has exited, or
+/// the platform API call fails.
 pub fn get_process_cwd(pid: u32) -> Option<String> {
     #[cfg(target_os = "linux")]
     {
