@@ -3,8 +3,8 @@
 // Each workgroup thread handles one pixel. The shader determines which
 // cell the pixel belongs to, fills the background color, samples the
 // glyph from the atlas, applies foreground color with alpha blending,
-// and draws underlines. Pixels outside the grid area are filled with
-// the terminal background color.
+// and draws underlines. Each dispatch renders one batch at `origin_x/y`
+// in the grid texture.
 
 // ---- Uniforms (48 bytes, 16-byte aligned) ----
 
@@ -13,10 +13,10 @@ struct GridUniforms {
     rows:         u32,   // terminal row count
     cell_width:   u32,   // cell width in pixels
     cell_height:  u32,   // cell height in pixels
-    atlas_width:  u32,   // glyph atlas width in pixels
-    atlas_height: u32,   // glyph atlas height in pixels
-    baseline:     u32,   // ascent from top of cell in pixels
+    origin_x:     u32,   // batch origin X in grid texture pixels
+    origin_y:     u32,   // batch origin Y in grid texture pixels
     bg_color:     u32,   // default background color as 0xRRGGBB
+    _pad0:        u32,
     tex_width:    u32,   // output texture width in pixels
     tex_height:   u32,   // output texture height in pixels
     _pad1:        u32,
@@ -33,7 +33,6 @@ struct Cell {
                          // bit 1: italic
                          // bit 2: underline
                          // bit 3: reverse video
-                         // bit 4: selected
 }
 
 // ---- Glyph lookup entry (32 bytes, 16-byte aligned) ----
@@ -72,38 +71,38 @@ fn unpack_rgb(c: u32) -> vec3<f32> {
 
 @compute @workgroup_size(16, 16)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let pixel_x = gid.x;
-    let pixel_y = gid.y;
+    let local_x = gid.x;
+    let local_y = gid.y;
+    let pixel_x = local_x + uniforms.origin_x;
+    let pixel_y = local_y + uniforms.origin_y;
 
     // Out-of-texture guard (dispatch may overshoot texture dimensions).
     if pixel_x >= uniforms.tex_width || pixel_y >= uniforms.tex_height {
         return;
     }
 
-    // Which cell does this pixel belong to?
-    let col = pixel_x / uniforms.cell_width;
-    let row = pixel_y / uniforms.cell_height;
-
-    // Pixels outside the grid area get the default background color.
-    if col >= uniforms.cols || row >= uniforms.rows {
-        textureStore(output, vec2<i32>(i32(pixel_x), i32(pixel_y)),
-                     vec4<f32>(unpack_rgb(uniforms.bg_color), 1.0));
+    // Batch-local bounds (dispatch can overshoot because of workgroup ceil-div).
+    let batch_w = uniforms.cols * uniforms.cell_width;
+    let batch_h = uniforms.rows * uniforms.cell_height;
+    if local_x >= batch_w || local_y >= batch_h {
         return;
     }
 
+    // Which cell does this pixel belong to?
+    let col = local_x / uniforms.cell_width;
+    let row = local_y / uniforms.cell_height;
     let cell_idx = row * uniforms.cols + col;
     let cell = cells[cell_idx];
 
     // Local position within the cell.
-    let local_x = pixel_x - col * uniforms.cell_width;
-    let local_y = pixel_y - row * uniforms.cell_height;
+    let cell_x = local_x - col * uniforms.cell_width;
+    let cell_y = local_y - row * uniforms.cell_height;
 
-    // Resolve foreground / background, honoring reverse & selection.
+    // Resolve foreground / background, honoring reverse video.
     var fg = cell.fg;
     var bg = cell.bg;
-    let is_reverse  = (cell.attrs & 8u)  != 0u;
-    let is_selected = (cell.attrs & 16u) != 0u;
-    if is_reverse || is_selected {
+    let is_reverse = (cell.attrs & 8u) != 0u;
+    if is_reverse {
         let tmp = fg;
         fg = bg;
         bg = tmp;
@@ -119,8 +118,8 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
         if glyph.w > 0.0 {
             // Pixel position relative to glyph bounding box.
-            let gx = f32(local_x) - glyph.offset_x;
-            let gy = f32(local_y) - glyph.offset_y;
+            let gx = f32(cell_x) - glyph.offset_x;
+            let gy = f32(cell_y) - glyph.offset_y;
 
             if gx >= 0.0 && gx < glyph.w && gy >= 0.0 && gy < glyph.h {
                 // Integer texel coordinates into the atlas.
@@ -143,7 +142,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
     // Underline: 2 px line at the bottom of the cell.
     let is_underline = (cell.attrs & 4u) != 0u;
-    if is_underline && local_y >= uniforms.cell_height - 2u {
+    if is_underline && cell_y >= uniforms.cell_height - 2u {
         color = vec4<f32>(unpack_rgb(fg), 1.0);
     }
 
