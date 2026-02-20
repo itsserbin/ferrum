@@ -1,0 +1,146 @@
+name: Release Notes
+
+on:
+  workflow_run:
+    workflows: ["Release", "Publish macOS DMG", "Windows Installer", "Linux Packages"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v0.2.0)"
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-notes-${{ github.event.workflow_run.head_branch || github.event.inputs.tag }}
+  cancel-in-progress: true
+
+jobs:
+  update-release-notes:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Determine tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+          else
+            TAG="${{ github.event.workflow_run.head_branch }}"
+          fi
+
+          if [[ "$TAG" != v* ]]; then
+            echo "Tag '$TAG' does not start with 'v', skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - name: Update release notes
+        if: steps.tag.outputs.skip != 'true'
+        shell: bash
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          # Validate release exists
+          if ! gh release view "$TAG" --repo "$REPO" --json tagName > /dev/null 2>&1; then
+            echo "Release $TAG does not exist yet, skipping."
+            exit 0
+          fi
+
+          # Fetch asset list
+          ASSETS=$(gh release view "$TAG" --repo "$REPO" --json assets --jq '.assets[].name')
+
+          # Check all 9 required asset patterns
+          MISSING=0
+          check_pattern() {
+            if ! echo "$ASSETS" | grep -qE "$1"; then
+              echo "Missing asset matching: $1"
+              MISSING=1
+            fi
+          }
+
+          check_pattern '.*-aarch64-apple-darwin\.dmg$'
+          check_pattern '.*-x86_64-apple-darwin\.dmg$'
+          check_pattern '.*-Setup-x64\.exe$'
+          check_pattern '.*_amd64\.deb$'
+          check_pattern '.*\.x86_64\.rpm$'
+          check_pattern '.*-aarch64-apple-darwin\.zip$'
+          check_pattern '.*-x86_64-apple-darwin\.zip$'
+          check_pattern '.*-x86_64-pc-windows-msvc\.zip$'
+          check_pattern '.*-x86_64-unknown-linux-gnu\.zip$'
+          # source.tar.gz is always produced by cargo-dist's Release workflow;
+          # if Release failed, the zip archives above would also be missing.
+
+          if [ "$MISSING" -eq 1 ]; then
+            echo "Not all assets are present yet, skipping. Next trigger will retry."
+            exit 0
+          fi
+
+          # Extract exact filenames
+          DMG_ARM=$(echo "$ASSETS" | grep -m1 -E '.*-aarch64-apple-darwin\.dmg$')
+          DMG_INTEL=$(echo "$ASSETS" | grep -m1 -E '.*-x86_64-apple-darwin\.dmg$')
+          WIN_EXE=$(echo "$ASSETS" | grep -m1 -E '.*-Setup-x64\.exe$')
+          DEB_NAME=$(echo "$ASSETS" | grep -m1 -E '.*_amd64\.deb$')
+          RPM_NAME=$(echo "$ASSETS" | grep -m1 -E '.*\.x86_64\.rpm$')
+          ZIP_MAC_ARM=$(echo "$ASSETS" | grep -m1 -E '.*-aarch64-apple-darwin\.zip$')
+          ZIP_MAC_INTEL=$(echo "$ASSETS" | grep -m1 -E '.*-x86_64-apple-darwin\.zip$')
+          ZIP_WIN=$(echo "$ASSETS" | grep -m1 -E '.*-x86_64-pc-windows-msvc\.zip$')
+          ZIP_LINUX=$(echo "$ASSETS" | grep -m1 -E '.*-x86_64-unknown-linux-gnu\.zip$')
+
+          BASE_URL="https://github.com/${REPO}/releases/download/${TAG}"
+
+          # Generate release notes markdown
+          NOTES_FILE="$RUNNER_TEMP/release-notes.md"
+
+          {
+            echo '## Install'
+            echo ''
+            echo '```sh'
+            echo 'brew install itsserbin/tap/Ferrum'
+            echo '```'
+            echo ''
+            echo '## Download'
+            echo ''
+            echo '### 🍎 macOS'
+            echo ''
+            echo '| File | Architecture |'
+            echo '|------|-------------|'
+            echo "| [${DMG_ARM}](${BASE_URL}/${DMG_ARM}) | Apple Silicon (M1/M2/M3/M4) |"
+            echo "| [${DMG_INTEL}](${BASE_URL}/${DMG_INTEL}) | Intel |"
+            echo ''
+            echo '### 🪟 Windows'
+            echo ''
+            echo '| File | Architecture |'
+            echo '|------|-------------|'
+            echo "| [${WIN_EXE}](${BASE_URL}/${WIN_EXE}) | x64 Installer |"
+            echo ''
+            echo '### 🐧 Linux'
+            echo ''
+            echo '| File | Distro |'
+            echo '|------|--------|'
+            echo "| [${DEB_NAME}](${BASE_URL}/${DEB_NAME}) | Ubuntu / Debian |"
+            echo "| [${RPM_NAME}](${BASE_URL}/${RPM_NAME}) | Fedora / RHEL |"
+            echo ''
+            echo '### 📦 Portable Archives'
+            echo ''
+            echo '| File | Platform | Checksum |'
+            echo '|------|----------|----------|'
+            echo "| [${ZIP_MAC_ARM}](${BASE_URL}/${ZIP_MAC_ARM}) | macOS ARM | [sha256](${BASE_URL}/${ZIP_MAC_ARM}.sha256) |"
+            echo "| [${ZIP_MAC_INTEL}](${BASE_URL}/${ZIP_MAC_INTEL}) | macOS Intel | [sha256](${BASE_URL}/${ZIP_MAC_INTEL}.sha256) |"
+            echo "| [${ZIP_WIN}](${BASE_URL}/${ZIP_WIN}) | Windows x64 | [sha256](${BASE_URL}/${ZIP_WIN}.sha256) |"
+            echo "| [${ZIP_LINUX}](${BASE_URL}/${ZIP_LINUX}) | Linux x64 | [sha256](${BASE_URL}/${ZIP_LINUX}.sha256) |"
+            echo "| [source.tar.gz](${BASE_URL}/source.tar.gz) | Source | [sha256](${BASE_URL}/source.tar.gz.sha256) |"
+          } > "$NOTES_FILE"
+
+          gh release edit "$TAG" --repo "$REPO" --notes-file "$NOTES_FILE"
+
+          echo "Release notes for $TAG updated successfully."
