@@ -7,6 +7,7 @@ use super::shared::scrollbar_math;
 use super::shared::tab_hit_test;
 use super::shared::tab_math::{self, TabLayoutMetrics};
 use super::{SCROLLBAR_MIN_THUMB, SecurityPopup, TabBarHit, TabInfo};
+use super::{RenderTarget, ScrollbarState};
 
 /// Selects which rendering backend to use.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -20,7 +21,6 @@ pub enum BackendKind {
 ///
 /// Both CPU (softbuffer) and GPU (wgpu) renderers implement this trait,
 /// keeping the rest of the codebase backend-agnostic.
-#[allow(clippy::too_many_arguments)]
 pub trait Renderer {
     // ── Lifecycle ────────────────────────────────────────────────────
 
@@ -51,9 +51,7 @@ pub trait Renderer {
 
     fn render(
         &mut self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
+        target: &mut RenderTarget<'_>,
         grid: &Grid,
         selection: Option<&Selection>,
         viewport_start: usize,
@@ -61,9 +59,7 @@ pub trait Renderer {
 
     fn draw_cursor(
         &mut self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
+        target: &mut RenderTarget<'_>,
         row: usize,
         col: usize,
         grid: &Grid,
@@ -77,9 +73,7 @@ pub trait Renderer {
     /// separately).
     fn render_in_rect(
         &mut self,
-        _buffer: &mut [u32],
-        _buf_width: usize,
-        _buf_height: usize,
+        _target: &mut RenderTarget<'_>,
         _grid: &Grid,
         _selection: Option<&Selection>,
         _viewport_start: usize,
@@ -91,12 +85,9 @@ pub trait Renderer {
     /// Draws the cursor at a position offset by a pane rectangle.
     ///
     /// Default implementation is a no-op (GPU renderer overrides separately).
-    #[allow(clippy::too_many_arguments)]
     fn draw_cursor_in_rect(
         &mut self,
-        _buffer: &mut [u32],
-        _buf_width: usize,
-        _buf_height: usize,
+        _target: &mut RenderTarget<'_>,
         _row: usize,
         _col: usize,
         _grid: &Grid,
@@ -108,17 +99,10 @@ pub trait Renderer {
     /// Renders the scrollbar within a pane sub-rectangle.
     ///
     /// Default implementation is a no-op (GPU renderer overrides separately).
-    #[allow(clippy::too_many_arguments)]
     fn render_scrollbar_in_rect(
         &mut self,
-        _buffer: &mut [u32],
-        _buf_width: usize,
-        _buf_height: usize,
-        _scroll_offset: usize,
-        _scrollback_len: usize,
-        _grid_rows: usize,
-        _opacity: f32,
-        _hover: bool,
+        _target: &mut RenderTarget<'_>,
+        _state: &ScrollbarState,
         _rect: PaneRect,
     ) {
     }
@@ -132,14 +116,8 @@ pub trait Renderer {
 
     fn render_scrollbar(
         &mut self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
-        scroll_offset: usize,
-        scrollback_len: usize,
-        grid_rows: usize,
-        opacity: f32,
-        hover: bool,
+        target: &mut RenderTarget<'_>,
+        state: &ScrollbarState,
     );
 
     fn scrollbar_thumb_bounds(
@@ -171,9 +149,7 @@ pub trait Renderer {
 
     fn draw_tab_bar(
         &mut self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
+        target: &mut RenderTarget<'_>,
         tabs: &[TabInfo],
         hovered_tab: Option<usize>,
         mouse_pos: (f64, f64),
@@ -183,9 +159,7 @@ pub trait Renderer {
 
     fn draw_tab_drag_overlay(
         &mut self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
+        target: &mut RenderTarget<'_>,
         tabs: &[TabInfo],
         source_index: usize,
         current_x: f64,
@@ -194,9 +168,7 @@ pub trait Renderer {
 
     fn draw_tab_tooltip(
         &mut self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
+        target: &mut RenderTarget<'_>,
         mouse_pos: (f64, f64),
         title: &str,
     );
@@ -295,9 +267,7 @@ pub trait Renderer {
 
     fn draw_security_popup(
         &mut self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
+        target: &mut RenderTarget<'_>,
         popup: &SecurityPopup,
     );
 
