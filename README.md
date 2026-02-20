@@ -30,6 +30,14 @@ Expected release files:
 - `ferrum-<version>.x86_64.rpm`
 - `Ferrum-x86_64-pc-windows-msvc.zip`
 - `Ferrum-x86_64-pc-windows-msvc.msi`
+- `ferrum-aarch64-apple-darwin.dmg` (macOS Apple Silicon)
+- `ferrum-x86_64-apple-darwin.dmg` (macOS Intel)
+
+### macOS DMG
+
+Download the `.dmg` file for your architecture from [GitHub Releases](https://github.com/itsserbin/ferrum/releases/latest), open it, and drag Ferrum to Applications.
+
+> **Note:** Since Ferrum is not signed with an Apple Developer certificate, macOS will show a warning on first launch. To open it: right-click the app, select Open, then click Open again. You only need to do this once.
 
 ### Linux packages
 
