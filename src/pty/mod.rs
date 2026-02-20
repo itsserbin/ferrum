@@ -1,3 +1,5 @@
+pub mod cwd;
+
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use std::io::{Read, Write};
 use std::sync::OnceLock;
