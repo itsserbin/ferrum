@@ -221,7 +221,7 @@ impl FerrumWindow {
 
         // Spawn a new PTY session.
         let shell = pty::default_shell();
-        let session = match pty::Session::spawn(&shell, rows as u16, cols as u16)
+        let session = match pty::Session::spawn(&shell, rows as u16, cols as u16, None)
             .context("failed to spawn PTY session for new pane")
         {
             Ok(s) => s,

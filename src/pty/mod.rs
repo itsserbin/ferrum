@@ -93,7 +93,7 @@ pub struct Session {
 }
 
 impl Session {
-    pub fn spawn(shell: &str, rows: u16, cols: u16) -> anyhow::Result<Self> {
+    pub fn spawn(shell: &str, rows: u16, cols: u16, cwd: Option<&str>) -> anyhow::Result<Self> {
         let pty_system = native_pty_system();
 
         let pair = pty_system.openpty(PtySize {
@@ -128,6 +128,14 @@ impl Session {
                     cmd.arg("/K");
                     cmd.arg("chcp 65001 >nul");
                 }
+            }
+        }
+
+        if let Some(dir) = cwd {
+            let path = std::path::Path::new(dir);
+            if path.is_dir() {
+                cmd.cwd(dir);
+                cmd.env("PWD", dir);
             }
         }
 
