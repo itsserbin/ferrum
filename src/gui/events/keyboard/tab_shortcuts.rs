@@ -16,13 +16,15 @@ impl FerrumWindow {
         if Self::physical_key_is(physical, KeyCode::KeyT) {
             #[cfg(target_os = "macos")]
             {
-                self.pending_requests.push(WindowRequest::NewTab);
+                let cwd = self.active_leaf_ref().and_then(|l| l.terminal.cwd.clone());
+                self.pending_requests.push(WindowRequest::NewTab { cwd });
             }
             #[cfg(not(target_os = "macos"))]
             {
+                let cwd = self.active_leaf_ref().and_then(|l| l.terminal.cwd.clone());
                 let size = self.window.inner_size();
                 let (rows, cols) = self.calc_grid_size(size.width, size.height);
-                self.new_tab(rows, cols, next_tab_id, tx);
+                self.new_tab(rows, cols, next_tab_id, tx, cwd);
             }
             return Some(true);
         }
@@ -41,7 +43,8 @@ impl FerrumWindow {
         }
 
         if Self::physical_key_is(physical, KeyCode::KeyN) {
-            self.pending_requests.push(WindowRequest::NewWindow);
+            let cwd = self.active_leaf_ref().and_then(|l| l.terminal.cwd.clone());
+            self.pending_requests.push(WindowRequest::NewWindow { cwd });
             return Some(true);
         }
 

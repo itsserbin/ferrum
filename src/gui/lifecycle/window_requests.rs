@@ -8,6 +8,7 @@ impl App {
         event_loop: &ActiveEventLoop,
         source_window_id: WindowId,
         title: String,
+        cwd: Option<String>,
     ) {
         let existing_win = self
             .windows
@@ -21,7 +22,7 @@ impl App {
         {
             let size = new_win.window.inner_size();
             let (rows, cols) = new_win.calc_grid_size(size.width, size.height);
-            new_win.new_tab_with_title(rows, cols, Some(title), &mut self.next_tab_id, &self.tx);
+            new_win.new_tab_with_title(rows, cols, Some(title), &mut self.next_tab_id, &self.tx, cwd);
             if let Some(tab) = new_win.tabs.first() {
                 new_win.window.set_title(&tab.title);
             }
@@ -97,7 +98,7 @@ impl App {
                         self.windows.remove(&window_id);
                     }
                 }
-                WindowRequest::NewWindow => {
+                WindowRequest::NewWindow { cwd } => {
                     let tab_title = format!("bash #{}", self.windows.len() + 1);
                     if let Some(new_id) = self.create_window(event_loop, None)
                         && let Some(new_win) = self.windows.get_mut(&new_id)
@@ -110,6 +111,7 @@ impl App {
                             Some(tab_title),
                             &mut self.next_tab_id,
                             &self.tx,
+                            cwd,
                         );
                         #[cfg(target_os = "macos")]
                         if let Some(tab) = new_win.tabs.first() {
@@ -119,13 +121,13 @@ impl App {
                     }
                 }
                 #[cfg(target_os = "macos")]
-                WindowRequest::NewTab => {
+                WindowRequest::NewTab { cwd } => {
                     let tab_title = format!("bash #{}", self.windows.len() + 1);
-                    self.open_tab_in_native_group(event_loop, window_id, tab_title);
+                    self.open_tab_in_native_group(event_loop, window_id, tab_title, cwd);
                 }
                 #[cfg(target_os = "macos")]
                 WindowRequest::ReopenTab { title } => {
-                    self.open_tab_in_native_group(event_loop, window_id, title);
+                    self.open_tab_in_native_group(event_loop, window_id, title, None);
                 }
             }
         }

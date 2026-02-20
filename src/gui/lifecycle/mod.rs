@@ -33,7 +33,7 @@ impl ApplicationHandler for App {
 
             let size = win.window.inner_size();
             let (rows, cols) = win.calc_grid_size(size.width, size.height);
-            win.new_tab(rows, cols, &mut self.next_tab_id, &self.tx);
+            win.new_tab(rows, cols, &mut self.next_tab_id, &self.tx, None);
             #[cfg(target_os = "macos")]
             if let Some(tab) = win.tabs.first() {
                 win.window.set_title(&tab.title);
@@ -151,7 +151,8 @@ impl ApplicationHandler for App {
                     .map(|(id, _)| *id);
                 if let Some(win_id) = focused_id {
                     if let Some(win) = self.windows.get_mut(&win_id) {
-                        win.pending_requests.push(WindowRequest::NewTab);
+                        let cwd = win.active_leaf_ref().and_then(|l| l.terminal.cwd.clone());
+                        win.pending_requests.push(WindowRequest::NewTab { cwd });
                     }
                     self.process_window_requests(event_loop, win_id);
                 }

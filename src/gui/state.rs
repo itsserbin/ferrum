@@ -166,10 +166,10 @@ pub(super) enum WindowRequest {
     /// Close this window (all tabs gone or user closed).
     CloseWindow,
     /// Create a new standalone window (Ctrl/Cmd+N).
-    NewWindow,
+    NewWindow { cwd: Option<String> },
     /// Create a new native macOS tab (new window in tab group).
     #[cfg(target_os = "macos")]
-    NewTab,
+    NewTab { cwd: Option<String> },
     /// Reopen a recently closed tab as a native macOS tab.
     #[cfg(target_os = "macos")]
     ReopenTab { title: String },

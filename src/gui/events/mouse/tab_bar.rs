@@ -130,7 +130,7 @@ impl FerrumWindow {
                 self.last_topbar_empty_click = None;
                 let size = self.window.inner_size();
                 let (rows, cols) = self.calc_grid_size(size.width, size.height);
-                self.new_tab(rows, cols, next_tab_id, tx);
+                self.new_tab(rows, cols, next_tab_id, tx, None);
             }
             #[cfg(not(target_os = "macos"))]
             TabBarHit::WindowButton(btn) => {

@@ -10,8 +10,9 @@ impl FerrumWindow {
         cols: usize,
         next_tab_id: &mut u64,
         tx: &mpsc::Sender<PtyEvent>,
+        cwd: Option<String>,
     ) {
-        self.new_tab_with_title(rows, cols, None, next_tab_id, tx);
+        self.new_tab_with_title(rows, cols, None, next_tab_id, tx, cwd);
     }
 
     /// Creates a new tab with an optional custom title.
@@ -22,8 +23,9 @@ impl FerrumWindow {
         title: Option<String>,
         next_tab_id: &mut u64,
         tx: &mpsc::Sender<PtyEvent>,
+        cwd: Option<String>,
     ) {
-        match Self::build_tab_state(rows, cols, title, next_tab_id, tx) {
+        match Self::build_tab_state(rows, cols, title, next_tab_id, tx, cwd) {
             Ok(tab) => {
                 self.tabs.push(tab);
                 self.active_tab = self.tabs.len() - 1;
@@ -41,6 +43,7 @@ impl FerrumWindow {
         title: Option<String>,
         next_tab_id: &mut u64,
         tx: &mpsc::Sender<PtyEvent>,
+        cwd: Option<String>,
     ) -> anyhow::Result<TabState> {
         let id = *next_tab_id;
         *next_tab_id += 1;
@@ -48,7 +51,7 @@ impl FerrumWindow {
         let pane_id: u64 = 0;
 
         let shell = pty::default_shell();
-        let session = pty::Session::spawn(&shell, rows as u16, cols as u16, None)
+        let session = pty::Session::spawn(&shell, rows as u16, cols as u16, cwd.as_deref())
             .context("failed to spawn PTY session")?;
         let pty_writer = session.writer().context("failed to acquire PTY writer")?;
 

@@ -77,9 +77,12 @@ impl FerrumWindow {
             return;
         }
         let title = format!("{} (copy)", self.tabs[index].title);
+        let cwd = self.tabs[index]
+            .focused_leaf()
+            .and_then(|l| l.terminal.cwd.clone());
         let size = self.window.inner_size();
         let (rows, cols) = self.calc_grid_size(size.width, size.height);
-        self.new_tab_with_title(rows, cols, Some(title), next_tab_id, tx);
+        self.new_tab_with_title(rows, cols, Some(title), next_tab_id, tx, cwd);
     }
 
     /// Switches active tab.
@@ -219,9 +222,15 @@ impl FerrumWindow {
             }
         };
 
+        // Inherit CWD from the focused pane (if available via OSC 7).
+        let cwd = tab
+            .pane_tree
+            .find_leaf(focused_pane)
+            .and_then(|leaf| leaf.terminal.cwd.clone());
+
         // Spawn a new PTY session.
         let shell = pty::default_shell();
-        let session = match pty::Session::spawn(&shell, rows as u16, cols as u16, None)
+        let session = match pty::Session::spawn(&shell, rows as u16, cols as u16, cwd.as_deref())
             .context("failed to spawn PTY session for new pane")
         {
             Ok(s) => s,

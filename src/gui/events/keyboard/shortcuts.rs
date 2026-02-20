@@ -84,7 +84,7 @@ impl FerrumWindow {
             {
                 let size = self.window.inner_size();
                 let (rows, cols) = self.calc_grid_size(size.width, size.height);
-                self.new_tab_with_title(rows, cols, Some(closed.title), next_tab_id, tx);
+                self.new_tab_with_title(rows, cols, Some(closed.title), next_tab_id, tx, None);
             }
             return true;
         }
