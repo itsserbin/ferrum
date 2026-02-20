@@ -81,7 +81,6 @@ pub(in crate::gui::events) struct FrameParams<'a> {
     #[cfg_attr(target_os = "macos", allow(dead_code))]
     pub pinned: bool,
     pub security_popup: Option<&'a SecurityPopup>,
-    pub context_menu: Option<&'a ContextMenu>,
 }
 
 impl FerrumWindow {
@@ -194,7 +193,7 @@ impl FerrumWindow {
             .as_ref()
             .is_some_and(|drag| drag.is_active);
         let show_tooltip =
-            !dragging_active && self.context_menu.is_none() && self.security_popup.is_none();
+            !dragging_active && self.security_popup.is_none();
 
         let tab_bar_visible = self.backend.tab_bar_height_px() > 0;
 
@@ -326,10 +325,6 @@ pub(in crate::gui::events) fn draw_frame_content(
     // 6) Draw popups/menus.
     if let Some(popup) = params.security_popup {
         renderer.draw_security_popup(buffer, bw, bh, popup);
-    }
-
-    if let Some(menu) = params.context_menu {
-        renderer.draw_context_menu(buffer, bw, bh, menu);
     }
 
     // 7) Draw tooltip.

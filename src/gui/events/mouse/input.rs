@@ -39,7 +39,6 @@ impl FerrumWindow {
             ElementState::Pressed => {
                 self.commit_rename();
                 self.security_popup = None;
-                self.context_menu = None;
                 let (mx, my) = self.mouse_pos;
                 let tab_bar_height = self.backend.tab_bar_height_px();
 
@@ -141,10 +140,6 @@ impl FerrumWindow {
         }
 
         if self.handle_security_popup_left_click(state, mx, my) {
-            return;
-        }
-
-        if self.handle_context_menu_left_click(state, mx, my, next_tab_id, tx) {
             return;
         }
 

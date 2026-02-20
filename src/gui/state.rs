@@ -169,7 +169,6 @@ pub(super) struct FerrumWindow {
     pub(super) keyboard_selection_anchor: Option<crate::core::SelectionPoint>,
     pub(super) selection_drag_mode: SelectionDragMode,
     pub(super) hovered_tab: Option<usize>,
-    pub(super) context_menu: Option<ContextMenu>,
     pub(super) pending_menu_context: Option<MenuContext>,
     pub(super) security_popup: Option<SecurityPopup>,
     #[cfg(not(target_os = "macos"))]

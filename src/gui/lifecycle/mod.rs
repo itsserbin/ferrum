@@ -74,7 +74,6 @@ impl ApplicationHandler for App {
                         win.window.set_cursor(CursorIcon::Default);
                     }
                     win.commit_rename();
-                    win.context_menu = None;
                     win.pending_menu_context = None;
                 } else {
                     win.suppress_click_to_cursor_once = true;

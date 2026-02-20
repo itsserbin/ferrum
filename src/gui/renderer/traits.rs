@@ -7,7 +7,7 @@ use super::WindowButton;
 use super::shared::scrollbar_math;
 use super::shared::tab_hit_test;
 use super::shared::tab_math::{self, TabLayoutMetrics};
-use super::{ContextMenu, SCROLLBAR_MIN_THUMB, SecurityPopup, TabBarHit, TabInfo};
+use super::{SCROLLBAR_MIN_THUMB, SecurityPopup, TabBarHit, TabInfo};
 
 /// Selects which rendering backend to use.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -232,20 +232,6 @@ pub trait Renderer {
     fn window_button_at_position(&self, x: f64, y: f64, buf_width: u32) -> Option<WindowButton> {
         let m = self.tab_layout_metrics();
         tab_hit_test::window_button_at_position(x, y, buf_width, &m)
-    }
-
-    // ── Context menu ────────────────────────────────────────────────
-
-    fn draw_context_menu(
-        &mut self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
-        menu: &ContextMenu,
-    );
-
-    fn hit_test_context_menu(&self, menu: &ContextMenu, x: f64, y: f64) -> Option<usize> {
-        menu.hit_test(x, y, self.cell_width(), self.cell_height())
     }
 
     // ── Security ────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 use crate::core::{CursorStyle, Grid, Selection};
 
 use super::super::traits;
-use super::super::types::{ContextMenu, SecurityPopup, TabInfo};
+use super::super::types::{SecurityPopup, TabInfo};
 use super::CpuRenderer;
 
 impl traits::Renderer for CpuRenderer {
@@ -153,16 +153,6 @@ impl traits::Renderer for CpuRenderer {
         title: &str,
     ) {
         CpuRenderer::draw_tab_tooltip(self, buffer, buf_width, buf_height, mouse_pos, title);
-    }
-
-    fn draw_context_menu(
-        &mut self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
-        menu: &ContextMenu,
-    ) {
-        CpuRenderer::draw_context_menu(self, buffer, buf_width, buf_height, menu);
     }
 
     fn draw_security_popup(

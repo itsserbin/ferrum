@@ -43,6 +43,5 @@ impl FerrumWindow {
             title: "Security events",
             lines,
         });
-        self.context_menu = None;
     }
 }

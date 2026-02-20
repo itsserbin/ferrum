@@ -30,7 +30,7 @@ use crate::core::{MouseMode, Position, SecurityGuard, Selection};
 #[cfg(not(target_os = "macos"))]
 use crate::gui::renderer::TAB_BAR_HEIGHT;
 use crate::gui::renderer::{
-    ContextMenu, CpuRenderer, Renderer as _, RendererBackend, SecurityPopup, WINDOW_PADDING,
+    CpuRenderer, Renderer as _, RendererBackend, SecurityPopup, WINDOW_PADDING,
 };
 use crate::pty;
 use crate::update;
@@ -69,7 +69,6 @@ impl FerrumWindow {
             keyboard_selection_anchor: None,
             selection_drag_mode: SelectionDragMode::Character,
             hovered_tab: None,
-            context_menu: None,
             pending_menu_context: None,
             security_popup: None,
             #[cfg(not(target_os = "macos"))]

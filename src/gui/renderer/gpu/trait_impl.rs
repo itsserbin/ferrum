@@ -1,7 +1,7 @@
 use crate::core::{CursorStyle, Grid, Selection};
 
 use super::super::traits;
-use super::super::{ContextMenu, SecurityPopup, TabInfo};
+use super::super::{SecurityPopup, TabInfo};
 use super::GpuRenderer;
 
 impl traits::Renderer for GpuRenderer {
@@ -135,18 +135,6 @@ impl traits::Renderer for GpuRenderer {
         title: &str,
     ) {
         self.draw_tab_tooltip_impl(buf_width, buf_height, mouse_pos, title);
-    }
-
-    // ── Context menu ──────────────────────────────────────────────────
-
-    fn draw_context_menu(
-        &mut self,
-        _buffer: &mut [u32],
-        _buf_width: usize,
-        _buf_height: usize,
-        menu: &ContextMenu,
-    ) {
-        self.draw_context_menu_impl(menu);
     }
 
     // ── Security ──────────────────────────────────────────────────────

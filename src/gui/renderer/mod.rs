@@ -1,5 +1,4 @@
 pub mod backend;
-mod context_menu;
 mod cpu;
 mod cursor;
 #[cfg(feature = "gpu")]
@@ -67,18 +66,10 @@ pub(super) const ACTIVE_ACCENT: Color = Color {
 #[cfg_attr(target_os = "macos", allow(dead_code))]
 pub(super) const PIN_ACTIVE_COLOR: u32 = 0xB4BEFE;
 
-// -- Context menu palette --
+// -- Overlay palette --
 
-/// Context menu background (#1E2433).
+/// Overlay panel background (#1E2433).
 pub(super) const MENU_BG: u32 = 0x1E2433;
-/// Context menu hover highlight (#3A3F57).
-pub(super) const MENU_HOVER_BG: u32 = 0x3A3F57;
-/// Destructive action text color (Catppuccin Mocha Red #F38BA8).
-pub(super) const DESTRUCTIVE_COLOR: Color = Color {
-    r: 243,
-    g: 139,
-    b: 168,
-};
 
 /// Security indicator color (Catppuccin Mocha Yellow #F9E2AF).
 pub(super) const SECURITY_ACCENT: Color = Color {

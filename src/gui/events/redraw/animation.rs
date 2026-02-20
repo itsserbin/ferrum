@@ -10,8 +10,6 @@ pub(super) const ANIMATION_FRAME_INTERVAL: Duration = Duration::from_millis(16);
 const UI_ANIMATION_SPEED: f32 = 18.0;
 #[cfg(not(target_os = "macos"))]
 const UI_SETTLE_EPSILON: f32 = 0.01;
-#[cfg(not(target_os = "macos"))]
-const CONTEXT_MENU_OPEN_DURATION: Duration = Duration::from_millis(140);
 #[cfg(target_os = "macos")]
 pub(super) const NATIVE_TAB_SYNC_INTERVAL: Duration = Duration::from_millis(60);
 #[cfg(target_os = "macos")]
@@ -146,25 +144,6 @@ impl FerrumWindow {
                 }
             }
 
-            if let Some(menu) = self.context_menu.as_ref() {
-                if menu.opened_at.elapsed() < CONTEXT_MENU_OPEN_DURATION {
-                    pending = true;
-                } else {
-                    for i in 0..menu.items.len() {
-                        let target = if menu.hover_index == Some(i) {
-                            1.0
-                        } else {
-                            0.0
-                        };
-                        let value = menu.hover_progress.get(i).copied().unwrap_or(0.0);
-                        if (value - target).abs() > UI_SETTLE_EPSILON {
-                            pending = true;
-                            break;
-                        }
-                    }
-                }
-            }
-
             if pending {
                 Some((now + ANIMATION_FRAME_INTERVAL, true))
             } else {
@@ -229,17 +208,6 @@ impl FerrumWindow {
                 Self::animate_scalar(&mut self.close_hover_progress[i], close_target, factor);
             }
 
-            if let Some(menu) = self.context_menu.as_mut() {
-                menu.hover_progress.resize(menu.items.len(), 0.0);
-                for i in 0..menu.items.len() {
-                    let target = if menu.hover_index == Some(i) {
-                        1.0
-                    } else {
-                        0.0
-                    };
-                    Self::animate_scalar(&mut menu.hover_progress[i], target, factor);
-                }
-            }
         }
     }
 
