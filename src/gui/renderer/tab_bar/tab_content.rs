@@ -80,7 +80,8 @@ impl CpuRenderer {
             slot.tab.security_count,
         );
 
-        self.draw_tab_title(target, slot.tab, slot.x, tab_padding_h, text_y, fg, max_chars);
+        let text_x = slot.x + tab_padding_h;
+        self.draw_tab_title(target, slot.tab, text_x, text_y, fg, max_chars);
 
         self.draw_security_badge(target, slot.index, slot.tab, tab_count, text_y);
 
@@ -99,14 +100,12 @@ impl CpuRenderer {
         &mut self,
         target: &mut RenderTarget<'_>,
         tab: &super::super::TabInfo,
-        tab_x: u32,
-        tab_padding_h: u32,
+        text_x: u32,
         text_y: u32,
         fg: Color,
         max_chars: usize,
     ) {
         let title: String = tab.title.chars().take(max_chars).collect();
-        let text_x = tab_x + tab_padding_h;
 
         for (ci, ch) in title.chars().enumerate() {
             let cx = text_x + ci as u32 * self.metrics.cell_width;
