@@ -206,6 +206,28 @@ pub(super) struct GlyphBitmap {
     pub(super) top: i32,
 }
 
+/// Pixel buffer surface passed to rendering methods.
+///
+/// Groups the `(buffer, width, height)` triple that appears in every
+/// renderer method, eliminating repeated parameters.
+pub struct RenderTarget<'a> {
+    pub buffer: &'a mut [u32],
+    pub width: usize,
+    pub height: usize,
+}
+
+/// Scrollbar rendering parameters.
+///
+/// Groups scroll state, opacity, and hover flag that are always passed
+/// together to scrollbar drawing methods.
+pub struct ScrollbarState {
+    pub scroll_offset: usize,
+    pub scrollback_len: usize,
+    pub grid_rows: usize,
+    pub opacity: f32,
+    pub hover: bool,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
