@@ -181,6 +181,17 @@ impl ApplicationHandler for App {
         let now = std::time::Instant::now();
         let mut next_wakeup: Option<std::time::Instant> = None;
 
+        // Poll CWD via OS API for tabs without OSC 7 shell integration.
+        {
+            let cwd_poll_interval = std::time::Duration::from_secs(1);
+            for win in self.windows.values_mut() {
+                if now.duration_since(win.last_cwd_poll) >= cwd_poll_interval {
+                    win.last_cwd_poll = now;
+                    win.poll_cwd_for_tabs();
+                }
+            }
+        }
+
         let update = self.available_release.as_ref();
         for win in self.windows.values_mut() {
             win.sync_window_title(update);
@@ -190,6 +201,9 @@ impl ApplicationHandler for App {
                 }
                 next_wakeup = Some(next_wakeup.map_or(deadline, |current| current.min(deadline)));
             }
+            // Ensure we wake up for next CWD poll
+            let next_cwd = win.last_cwd_poll + std::time::Duration::from_secs(1);
+            next_wakeup = Some(next_wakeup.map_or(next_cwd, |current| current.min(next_cwd)));
         }
 
         match next_wakeup {

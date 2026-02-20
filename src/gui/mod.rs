@@ -94,6 +94,7 @@ impl FerrumWindow {
             pending_requests: Vec::new(),
             pinned: false,
             divider_drag: None,
+            last_cwd_poll: std::time::Instant::now(),
         }
     }
 
@@ -157,6 +158,32 @@ impl FerrumWindow {
         if self.window_title != next_title {
             self.window.set_title(&next_title);
             self.window_title = next_title;
+        }
+    }
+
+    /// Polls CWD via OS API for panes that haven't received OSC 7,
+    /// and updates `terminal.cwd` so the tab title auto-updates.
+    pub(super) fn poll_cwd_for_tabs(&mut self) {
+        for tab in &mut self.tabs {
+            if tab.is_renamed {
+                continue;
+            }
+            let focused = tab.focused_pane;
+            let leaf = match tab.pane_tree.find_leaf_mut(focused) {
+                Some(l) => l,
+                None => continue,
+            };
+            // Skip if we already have CWD from OSC 7
+            if leaf.terminal.cwd.is_some() {
+                continue;
+            }
+            let pid = match leaf.session.as_ref().and_then(|s| s.process_id()) {
+                Some(p) => p,
+                None => continue,
+            };
+            if let Some(cwd) = crate::pty::cwd::get_process_cwd(pid) {
+                leaf.terminal.cwd = Some(cwd);
+            }
         }
     }
 

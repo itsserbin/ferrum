@@ -226,6 +226,8 @@ pub(super) struct FerrumWindow {
     pub(super) pinned: bool,
     /// Active divider drag state (pane resize).
     pub(super) divider_drag: Option<DividerDragState>,
+    /// Last time CWD was polled via OS API for tabs without OSC 7.
+    pub(super) last_cwd_poll: std::time::Instant,
 }
 
 /// App is now a window manager holding multiple FerrumWindows.
