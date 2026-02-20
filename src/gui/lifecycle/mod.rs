@@ -75,6 +75,7 @@ impl ApplicationHandler for App {
                     }
                     win.commit_rename();
                     win.context_menu = None;
+                    win.pending_menu_context = None;
                 } else {
                     win.suppress_click_to_cursor_once = true;
                     #[cfg(target_os = "macos")]
@@ -134,6 +135,7 @@ impl ApplicationHandler for App {
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         self.drain_pty_events(event_loop);
+        self.drain_menu_events();
         self.drain_update_events();
 
         // Handle native macOS "+" button clicks (newWindowForTab: action).
@@ -198,6 +200,33 @@ impl ApplicationHandler for App {
 }
 
 impl App {
+    fn drain_menu_events(&mut self) {
+        while let Ok(event) = muda::MenuEvent::receiver().try_recv() {
+            for win in self.windows.values_mut() {
+                if let Some(ctx) = win.pending_menu_context.take() {
+                    let action_map = match &ctx {
+                        MenuContext::Tab { action_map, .. } => action_map,
+                        MenuContext::Terminal { action_map } => action_map,
+                    };
+                    let tab_index = match &ctx {
+                        MenuContext::Tab { tab_index, .. } => Some(*tab_index),
+                        MenuContext::Terminal { .. } => None,
+                    };
+                    if let Some((_, action)) = action_map.iter().find(|(id, _)| *id == event.id) {
+                        win.handle_menu_action(
+                            *action,
+                            tab_index,
+                            &mut self.next_tab_id,
+                            &self.tx,
+                        );
+                    }
+                    win.window.request_redraw();
+                    break;
+                }
+            }
+        }
+    }
+
     fn drain_update_events(&mut self) {
         while let Ok(release) = self.update_rx.try_recv() {
             eprintln!(

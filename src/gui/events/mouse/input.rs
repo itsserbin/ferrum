@@ -1,4 +1,5 @@
-use crate::gui::renderer::{ContextMenu, TabBarHit};
+use crate::gui::renderer::TabBarHit;
+use crate::gui::state::MenuContext;
 use crate::gui::*;
 
 impl FerrumWindow {
@@ -38,41 +39,50 @@ impl FerrumWindow {
             ElementState::Pressed => {
                 self.commit_rename();
                 self.security_popup = None;
+                self.context_menu = None;
                 let (mx, my) = self.mouse_pos;
                 let tab_bar_height = self.backend.tab_bar_height_px();
+
                 if my < tab_bar_height as f64 {
-                    // Right click on a tab opens its context menu.
-                    if let TabBarHit::Tab(idx) | TabBarHit::CloseTab(idx) = self.tab_bar_hit(mx, my)
+                    // Right-click on a tab: show native tab context menu.
+                    if let TabBarHit::Tab(idx) | TabBarHit::CloseTab(idx) =
+                        self.tab_bar_hit(mx, my)
                     {
-                        self.context_menu =
-                            Some(ContextMenu::for_tab(mx as u32, tab_bar_height, idx));
+                        let (menu, action_map) = menus::build_tab_context_menu();
+                        self.pending_menu_context = Some(MenuContext::Tab {
+                            tab_index: idx,
+                            action_map,
+                        });
+                        let pos = muda::dpi::Position::Physical(
+                            muda::dpi::PhysicalPosition::new(mx as i32, my as i32),
+                        );
+                        menus::show_context_menu(&self.window, &menu, Some(pos));
                     }
                     return;
                 }
 
+                // In mouse-reporting mode, forward right-click to the terminal.
                 if self.is_mouse_reporting() {
                     let (row, col) = self.pixel_to_grid(self.mouse_pos.0, self.mouse_pos.1);
                     self.send_mouse_event(2, col, row, true);
                     return;
                 }
 
-                self.context_menu = None;
-
-                let (row, col) = self.pixel_to_grid(mx, my);
-                let abs_row = self.screen_to_abs(row);
-                let clicked_selection = self
+                // Right-click on terminal area: show native terminal context menu.
+                let has_selection = self
                     .active_leaf_ref()
                     .and_then(|leaf| leaf.selection)
-                    .is_some_and(|selection| selection.contains(abs_row, col));
-
-                if clicked_selection {
-                    self.context_menu = Some(ContextMenu::for_terminal_selection(
-                        mx.max(0.0) as u32,
-                        my.max(0.0) as u32,
-                    ));
-                } else {
-                    self.paste_clipboard();
-                }
+                    .is_some();
+                let has_multiple_panes = self
+                    .active_tab_ref()
+                    .is_some_and(|t| t.has_multiple_panes());
+                let (menu, action_map) =
+                    menus::build_terminal_context_menu(has_selection, has_multiple_panes);
+                self.pending_menu_context = Some(MenuContext::Terminal { action_map });
+                let pos = muda::dpi::Position::Physical(muda::dpi::PhysicalPosition::new(
+                    mx as i32, my as i32,
+                ));
+                menus::show_context_menu(&self.window, &menu, Some(pos));
             }
             ElementState::Released => {
                 if self.is_mouse_reporting() {

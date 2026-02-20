@@ -41,8 +41,8 @@ const MIN_WINDOW_COLS: u32 = 40;
 const MIN_WINDOW_ROWS: u32 = 10;
 
 use self::state::{
-    App, ClosedTabInfo, DragState, FerrumWindow, PtyEvent, RenameState, ScrollbarState,
-    SelectionDragMode, TabReorderAnimation, TabState, WindowRequest,
+    App, ClosedTabInfo, DragState, FerrumWindow, MenuContext, PtyEvent, RenameState,
+    ScrollbarState, SelectionDragMode, TabReorderAnimation, TabState, WindowRequest,
 };
 
 impl FerrumWindow {
@@ -70,6 +70,7 @@ impl FerrumWindow {
             selection_drag_mode: SelectionDragMode::Character,
             hovered_tab: None,
             context_menu: None,
+            pending_menu_context: None,
             security_popup: None,
             #[cfg(not(target_os = "macos"))]
             tab_hover_progress: Vec::new(),

@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::time::Instant;
 
+use muda::MenuId;
+
 use crate::gui::*;
 
 /// PTY event tagged with the source tab id and pane id.
@@ -137,6 +139,17 @@ pub(super) enum WindowRequest {
     ReopenTab { title: String },
 }
 
+/// Tracks which context menu is currently open and what actions it maps to.
+pub(super) enum MenuContext {
+    Tab {
+        tab_index: usize,
+        action_map: Vec<(MenuId, crate::gui::menus::MenuAction)>,
+    },
+    Terminal {
+        action_map: Vec<(MenuId, crate::gui::menus::MenuAction)>,
+    },
+}
+
 /// Per-window state. Each window is self-contained with its own tabs, renderer, surface.
 pub(super) struct FerrumWindow {
     pub(super) window: Arc<Window>,
@@ -157,6 +170,7 @@ pub(super) struct FerrumWindow {
     pub(super) selection_drag_mode: SelectionDragMode,
     pub(super) hovered_tab: Option<usize>,
     pub(super) context_menu: Option<ContextMenu>,
+    pub(super) pending_menu_context: Option<MenuContext>,
     pub(super) security_popup: Option<SecurityPopup>,
     #[cfg(not(target_os = "macos"))]
     pub(super) tab_hover_progress: Vec<f32>,
