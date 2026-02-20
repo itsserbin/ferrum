@@ -31,10 +31,10 @@ const SCRIPT_PS: &str = include_str!("scripts/ps.cmd");
 const SCRIPT_INIT: &str = include_str!("scripts/init.cmd");
 
 // Shell integration scripts (all platforms)
-const SHELL_INTEGRATION_ZSH: &str = include_str!("../shell-integration/zsh/ferrum-integration");
-const SHELL_INTEGRATION_BASH: &str = include_str!("../shell-integration/bash/ferrum.bash");
+const SHELL_INTEGRATION_ZSH: &str = include_str!("shell-integration/zsh/ferrum-integration");
+const SHELL_INTEGRATION_BASH: &str = include_str!("shell-integration/bash/ferrum.bash");
 const SHELL_INTEGRATION_FISH: &str =
-    include_str!("../shell-integration/fish/vendor_conf.d/ferrum-shell-integration.fish");
+    include_str!("shell-integration/fish/vendor_conf.d/ferrum-shell-integration.fish");
 
 /// Create Unix-style command wrapper scripts in temp directory
 #[cfg(windows)]
@@ -406,10 +406,8 @@ impl Drop for Session {
         // Kill only — no wait(). This is a safety net for sessions that
         // weren't extracted for background cleanup (e.g. during a panic).
         // Blocking wait() was removed to prevent UI thread hangs.
-        if let Err(e) = self.child.kill() {
-            if e.kind() != std::io::ErrorKind::InvalidInput {
-                eprintln!("Failed to kill PTY child process: {}", e);
-            }
-        }
+        // Errors are silenced: the process is usually already dead
+        // (killed by shutdown() on the background thread).
+        let _ = self.child.kill();
     }
 }
