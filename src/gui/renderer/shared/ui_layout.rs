@@ -123,6 +123,69 @@ pub fn pin_icon_layout(
     }
 }
 
+// ── Gear icon ─────────────────────────────────────────────────────────
+
+/// Pre-computed gear icon layout.
+///
+/// The gear is drawn as a ring (outer circle minus inner circle) with 6
+/// rectangular teeth around the perimeter, plus a hollow center circle.
+/// All coordinates are physical pixels as `f32` so that both the CPU
+/// renderer and the GPU renderer can consume them.
+pub struct GearIconLayout {
+    /// Outer teeth: each tooth is a small filled rect `(x, y, w, h)`.
+    pub teeth: [(f32, f32, f32, f32); 6],
+    /// Outer ring circle center X.
+    pub ring_cx: f32,
+    /// Outer ring circle center Y.
+    pub ring_cy: f32,
+    /// Outer ring radius.
+    pub ring_outer_radius: f32,
+    /// Inner ring radius (the ring is drawn between outer and inner).
+    pub ring_inner_radius: f32,
+    /// Center hole circle center X.
+    pub hole_cx: f32,
+    /// Center hole circle center Y.
+    pub hole_cy: f32,
+    /// Center hole radius.
+    pub hole_radius: f32,
+    /// Icon color as 0xRRGGBB.
+    pub color: u32,
+}
+
+/// Computes a gear icon centered at `(cx, cy)` with the given `icon_size`.
+///
+/// # Arguments
+/// * `cx`, `cy` — center of the gear icon (physical pixels).
+/// * `icon_size` — overall bounding size of the icon (physical pixels).
+/// * `color` — icon color as 0xRRGGBB.
+pub fn gear_icon_layout(cx: f32, cy: f32, icon_size: f32, color: u32) -> GearIconLayout {
+    let outer_r = icon_size * 0.42;
+    let inner_r = icon_size * 0.30;
+    let hole_r = icon_size * 0.14;
+    let tooth_w = icon_size * 0.16;
+    let tooth_h = icon_size * 0.14;
+
+    let mut teeth = [(0.0f32, 0.0f32, 0.0f32, 0.0f32); 6];
+    for (i, tooth) in teeth.iter_mut().enumerate() {
+        let angle = (i as f32) * std::f32::consts::TAU / 6.0;
+        let tx = cx + angle.cos() * (outer_r + tooth_h * 0.3);
+        let ty = cy + angle.sin() * (outer_r + tooth_h * 0.3);
+        *tooth = (tx - tooth_w / 2.0, ty - tooth_h / 2.0, tooth_w, tooth_h);
+    }
+
+    GearIconLayout {
+        teeth,
+        ring_cx: cx,
+        ring_cy: cy,
+        ring_outer_radius: outer_r,
+        ring_inner_radius: inner_r,
+        hole_cx: cx,
+        hole_cy: cy,
+        hole_radius: hole_r,
+        color,
+    }
+}
+
 // ── Window buttons ───────────────────────────────────────────────────
 
 /// Kind of window control button.
