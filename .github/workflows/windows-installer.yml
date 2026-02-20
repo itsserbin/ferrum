@@ -1,0 +1,69 @@
+name: Windows Installer
+
+on:
+  release:
+    types: [published, prereleased]
+
+permissions:
+  contents: write
+
+jobs:
+  build-installer:
+    name: Build Inno Setup installer
+    runs-on: windows-2022
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          persist-credentials: false
+
+      - name: Wait for Windows binary asset
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = "${{ github.event.release.tag_name }}"
+          $zipName = "Ferrum-x86_64-pc-windows-msvc.zip"
+          for ($i = 0; $i -lt 60; $i++) {
+            $assets = gh release view $tag --json assets --jq '.assets[].name' 2>$null
+            if ($assets -contains $zipName) {
+              Write-Host "Asset $zipName is available"
+              exit 0
+            }
+            Write-Host "Waiting for $zipName... attempt $($i + 1)/60"
+            Start-Sleep -Seconds 20
+          }
+          Write-Error "Asset $zipName was not published within 20 minutes"
+          exit 1
+
+      - name: Download Windows binary from release
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = "${{ github.event.release.tag_name }}"
+          $zipName = "Ferrum-x86_64-pc-windows-msvc.zip"
+          gh release download $tag --pattern $zipName --dir .
+          Expand-Archive -Path $zipName -DestinationPath extracted
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          choco install innosetup -y --no-progress
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = "${{ github.event.release.tag_name }}"
+          $version = $tag.TrimStart('v')
+          Copy-Item extracted\ferrum.exe installer\ferrum.exe
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DAppVersion=$version installer\ferrum.iss
+
+      - name: Upload installer to release
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = "${{ github.event.release.tag_name }}"
+          gh release upload $tag installer\Output\Ferrum-Setup-x64.exe --clobber

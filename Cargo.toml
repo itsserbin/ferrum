@@ -1,6 +1,6 @@
 [package]
-name = "ferrum"
-version = "0.1.1"
+name = "Ferrum"
+version = "0.1.2"
 edition = "2024"
 description = "A GPU-accelerated terminal emulator"
 repository = "https://github.com/itsserbin/ferrum"
@@ -8,6 +8,10 @@ homepage = "https://github.com/itsserbin/ferrum"
 license = "GPL-3.0"
 authors = ["itsserbin <itsserbin@users.noreply.github.com>"]
 readme = "README.md"
+
+[[bin]]
+name = "ferrum"
+path = "src/main.rs"
 
 [features]
 default = ["gpu"]
@@ -47,21 +51,21 @@ cargo-dist-version = "0.30.4"
 # CI backends to support
 ci = ["github"]
 # The installers to generate for each app
-installers = ["shell", "powershell", "homebrew", "msi"]
+installers = ["homebrew"]
 # Target platforms to build apps for (Rust target-triple syntax)
 targets = ["x86_64-unknown-linux-gnu", "x86_64-apple-darwin", "aarch64-apple-darwin", "x86_64-pc-windows-msvc"]
 # The archive format to use for non-windows builds (defaults .tar.xz)
-unix-archive = ".tar.gz"
+unix-archive = ".zip"
 # A GitHub repo to push Homebrew formulas to
 tap = "itsserbin/homebrew-tap"
 # Publish jobs to run in CI
 publish-jobs = ["homebrew"]
+# PR behavior for dist CI: build/upload artifacts for validation without publishing a release
+pr-run-mode = "upload"
 # Path that installers should place binaries in
 install-path = "CARGO_HOME"
 # Whether to install an updater program
 install-updater = false
-# Allow custom unmanaged WiX edits (shortcuts, branding, etc.)
-allow-dirty = ["msi"]
 
 [workspace.metadata.dist.github-custom-runners]
 x86_64-apple-darwin = "macos-15-intel"
@@ -95,9 +99,3 @@ assets = [
   { source = "README.md", dest = "/usr/share/doc/ferrum/README.md", mode = "644" },
   { source = "LICENSE", dest = "/usr/share/licenses/ferrum/LICENSE", mode = "644" },
 ]
-
-[package.metadata.wix]
-upgrade-guid = "0DB9556E-D490-4400-991C-DE9B310B579A"
-path-guid = "6FA019E8-2899-4DDD-BDB7-B269F5F1F937"
-license = false
-eula = false

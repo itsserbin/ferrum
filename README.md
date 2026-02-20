@@ -25,27 +25,19 @@ Download the latest artifacts from:
 
 Expected release files:
 
-- `ferrum-aarch64-apple-darwin.tar.gz`
-- `ferrum-x86_64-apple-darwin.tar.gz`
-- `ferrum-aarch64-apple-darwin.dmg`
-- `ferrum-x86_64-apple-darwin.dmg`
-- `ferrum-x86_64-unknown-linux-gnu.tar.gz`
-- `ferrum_0.1.0_amd64.deb`
-- `ferrum-0.1.0.x86_64.rpm`
-- `ferrum-x86_64-pc-windows-msvc.zip`
-- `ferrum-x86_64-pc-windows-msvc.msi`
+- `Ferrum-x86_64-unknown-linux-gnu.zip`
+- `ferrum_<version>_amd64.deb`
+- `ferrum-<version>.x86_64.rpm`
+- `Ferrum-x86_64-pc-windows-msvc.zip`
+- `Ferrum-x86_64-pc-windows-msvc.msi`
+- `ferrum-aarch64-apple-darwin.dmg` (macOS Apple Silicon)
+- `ferrum-x86_64-apple-darwin.dmg` (macOS Intel)
 
-macOS archive notes:
+### macOS DMG
 
-- Apple Silicon (M1/M2/M3): use `ferrum-aarch64-apple-darwin.tar.gz`
-- Intel Mac: use `ferrum-x86_64-apple-darwin.tar.gz`
-- If macOS blocks launch (quarantine), run:
+Download the `.dmg` file for your architecture from [GitHub Releases](https://github.com/itsserbin/ferrum/releases/latest), open it, and drag Ferrum to Applications.
 
-```bash
-chmod +x ferrum
-xattr -dr com.apple.quarantine ferrum
-./ferrum
-```
+> **Note:** Since Ferrum is not signed with an Apple Developer certificate, macOS will show a warning on first launch. To open it: right-click the app, select Open, then click Open again. You only need to do this once.
 
 ### Linux packages
 

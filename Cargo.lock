@@ -3,6 +3,31 @@
 version = 4
 
 [[package]]
+name = "Ferrum"
+version = "0.1.2"
+dependencies = [
+ "anyhow",
+ "arboard",
+ "bytemuck",
+ "fontdue",
+ "libc",
+ "objc2 0.6.3",
+ "objc2-app-kit 0.3.2",
+ "objc2-foundation 0.3.2",
+ "pollster",
+ "portable-pty",
+ "semver",
+ "serde",
+ "serde_json",
+ "softbuffer",
+ "unicode-width",
+ "ureq",
+ "vte",
+ "wgpu",
+ "winit",
+]
+
+[[package]]
 name = "ab_glyph"
 version = "0.2.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -586,31 +611,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e6853b52649d4ac5c0bd02320cddc5ba956bdb407c4b75a2c6b75bf51500f8c"
 dependencies = [
  "simd-adler32",
-]
-
-[[package]]
-name = "ferrum"
-version = "0.1.1"
-dependencies = [
- "anyhow",
- "arboard",
- "bytemuck",
- "fontdue",
- "libc",
- "objc2 0.6.3",
- "objc2-app-kit 0.3.2",
- "objc2-foundation 0.3.2",
- "pollster",
- "portable-pty",
- "semver",
- "serde",
- "serde_json",
- "softbuffer",
- "unicode-width",
- "ureq",
- "vte",
- "wgpu",
- "winit",
 ]
 
 [[package]]
