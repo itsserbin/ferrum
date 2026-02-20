@@ -164,6 +164,16 @@ impl PaneNode {
         matches!(self, PaneNode::Leaf(_))
     }
 
+    /// Returns `true` if a leaf with the given id exists in this subtree.
+    fn contains_leaf(&self, id: PaneId) -> bool {
+        match self {
+            PaneNode::Leaf(leaf) => leaf.id == id,
+            PaneNode::Split(split) => {
+                split.first.contains_leaf(id) || split.second.contains_leaf(id)
+            }
+        }
+    }
+
     /// Recursively counts the number of leaf nodes in this tree.
     #[allow(dead_code)] // Used in later tasks and tests
     pub(super) fn leaf_count(&self) -> usize {
@@ -271,6 +281,60 @@ impl PaneNode {
         }
 
         best.map(|(id, _)| id)
+    }
+
+    /// Split the leaf with `target_id`. The new sibling is `new_node`.
+    /// When `reverse` is false, the original stays first and `new_node` goes second.
+    /// When `reverse` is true, `new_node` goes first and the original goes second
+    /// (used for SplitLeft/SplitUp).
+    pub(super) fn split_with_node(
+        &mut self,
+        target_id: PaneId,
+        direction: SplitDirection,
+        new_node: PaneNode,
+        reverse: bool,
+    ) -> bool {
+        match self {
+            PaneNode::Leaf(leaf) if leaf.id == target_id => {
+                let original = std::mem::replace(
+                    self,
+                    PaneNode::Leaf(PaneLeaf {
+                        id: u64::MAX,
+                        terminal: Terminal::new(1, 1),
+                        session: None,
+                        pty_writer: Box::new(std::io::sink()),
+                        selection: None,
+                        scroll_offset: 0,
+                        security: SecurityGuard::default(),
+                        scrollbar: ScrollbarState::new(),
+                    }),
+                );
+                let (first, second) = if reverse {
+                    (new_node, original)
+                } else {
+                    (original, new_node)
+                };
+                *self = PaneNode::Split(PaneSplit {
+                    direction,
+                    ratio: 0.5,
+                    first: Box::new(first),
+                    second: Box::new(second),
+                });
+                true
+            }
+            PaneNode::Leaf(_) => false,
+            PaneNode::Split(split) => {
+                if split.first.contains_leaf(target_id) {
+                    split
+                        .first
+                        .split_with_node(target_id, direction, new_node, reverse)
+                } else {
+                    split
+                        .second
+                        .split_with_node(target_id, direction, new_node, reverse)
+                }
+            }
+        }
     }
 
     /// Splits the leaf identified by `target_id` into two panes.

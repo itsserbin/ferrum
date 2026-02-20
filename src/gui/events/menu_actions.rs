@@ -1,4 +1,5 @@
 use crate::gui::menus::MenuAction;
+use crate::gui::pane::SplitDirection;
 use crate::gui::*;
 
 impl FerrumWindow {
@@ -22,14 +23,20 @@ impl FerrumWindow {
                 self.selection_anchor = None;
                 self.keyboard_selection_anchor = None;
             }
-            MenuAction::SplitRight
-            | MenuAction::SplitDown
-            | MenuAction::SplitLeft
-            | MenuAction::SplitUp => {
-                // TODO: split pane (Task 9)
+            MenuAction::SplitRight => {
+                self.split_pane(SplitDirection::Horizontal, false, next_tab_id, tx);
+            }
+            MenuAction::SplitDown => {
+                self.split_pane(SplitDirection::Vertical, false, next_tab_id, tx);
+            }
+            MenuAction::SplitLeft => {
+                self.split_pane(SplitDirection::Horizontal, true, next_tab_id, tx);
+            }
+            MenuAction::SplitUp => {
+                self.split_pane(SplitDirection::Vertical, true, next_tab_id, tx);
             }
             MenuAction::ClosePane => {
-                // TODO: close pane (Task 9)
+                self.close_focused_pane();
             }
             MenuAction::ClearTerminal => {
                 // Send "clear screen + move cursor home" escape sequence to the PTY.

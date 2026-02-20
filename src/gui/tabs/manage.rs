@@ -1,3 +1,6 @@
+use anyhow::Context;
+
+use crate::gui::pane::{PaneLeaf, PaneNode, PaneRect, SplitDirection, DIVIDER_WIDTH};
 use crate::gui::tabs::normalized_active_index_after_remove;
 use crate::gui::*;
 
@@ -153,6 +156,199 @@ impl FerrumWindow {
             self.security_popup = None;
         } else if popup.tab_index > removed_index {
             popup.tab_index -= 1;
+        }
+    }
+
+    /// Splits the focused pane in the active tab, creating a new terminal pane.
+    ///
+    /// `reverse`: when true the new pane is placed *before* the original
+    /// (used for SplitLeft / SplitUp).
+    pub(in crate::gui) fn split_pane(
+        &mut self,
+        direction: SplitDirection,
+        reverse: bool,
+        _next_tab_id: &mut u64,
+        tx: &mpsc::Sender<PtyEvent>,
+    ) {
+        let Some(tab) = self.tabs.get_mut(self.active_tab) else {
+            return;
+        };
+
+        let focused_pane = tab.focused_pane;
+        let pane_id = tab.next_pane_id;
+        tab.next_pane_id += 1;
+        let tab_id = tab.id;
+
+        // Calculate rows/cols for the new pane (roughly half the focused pane's terminal).
+        let (rows, cols) = {
+            let Some(leaf) = tab.pane_tree.find_leaf(focused_pane) else {
+                return;
+            };
+            let term_rows = leaf.terminal.grid.rows;
+            let term_cols = leaf.terminal.grid.cols;
+            match direction {
+                SplitDirection::Horizontal => (term_rows, (term_cols / 2).max(1)),
+                SplitDirection::Vertical => ((term_rows / 2).max(1), term_cols),
+            }
+        };
+
+        // Spawn a new PTY session.
+        let shell = pty::default_shell();
+        let session = match pty::Session::spawn(&shell, rows as u16, cols as u16)
+            .context("failed to spawn PTY session for new pane")
+        {
+            Ok(s) => s,
+            Err(err) => {
+                eprintln!("Failed to split pane: {err}");
+                return;
+            }
+        };
+        let pty_writer = match session.writer().context("failed to acquire PTY writer for new pane")
+        {
+            Ok(w) => w,
+            Err(err) => {
+                eprintln!("Failed to split pane: {err}");
+                return;
+            }
+        };
+
+        // Spawn PTY reader thread (same pattern as tabs/create.rs).
+        {
+            let tx = tx.clone();
+            let mut reader = match session
+                .reader()
+                .context("failed to clone PTY reader for new pane")
+            {
+                Ok(r) => r,
+                Err(err) => {
+                    eprintln!("Failed to split pane: {err}");
+                    return;
+                }
+            };
+            let reader_pane_id = pane_id;
+            std::thread::Builder::new()
+                .name(format!("pty-reader-{}-{}", tab_id, reader_pane_id))
+                .spawn(move || {
+                    use std::io::Read;
+                    let mut buf = [0u8; 4096];
+                    loop {
+                        match reader.read(&mut buf) {
+                            Ok(0) => {
+                                let _ = tx.send(PtyEvent::Exited {
+                                    tab_id,
+                                    pane_id: reader_pane_id,
+                                });
+                                break;
+                            }
+                            Err(err) => {
+                                eprintln!(
+                                    "PTY read error for tab {tab_id} pane {reader_pane_id}: {err}"
+                                );
+                                let _ = tx.send(PtyEvent::Exited {
+                                    tab_id,
+                                    pane_id: reader_pane_id,
+                                });
+                                break;
+                            }
+                            Ok(n) => {
+                                if tx
+                                    .send(PtyEvent::Data {
+                                        tab_id,
+                                        pane_id: reader_pane_id,
+                                        bytes: buf[..n].to_vec(),
+                                    })
+                                    .is_err()
+                                {
+                                    eprintln!(
+                                        "PTY reader {}-{}: channel disconnected",
+                                        tab_id, reader_pane_id
+                                    );
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                })
+                .ok();
+        }
+
+        let terminal = Terminal::new(rows, cols);
+
+        let new_leaf = PaneNode::Leaf(PaneLeaf {
+            id: pane_id,
+            terminal,
+            session: Some(session),
+            pty_writer,
+            selection: None,
+            scroll_offset: 0,
+            security: SecurityGuard::new(),
+            scrollbar: ScrollbarState::new(),
+        });
+
+        // Re-borrow tab after the reader thread was spawned.
+        let tab = &mut self.tabs[self.active_tab];
+        tab.pane_tree
+            .split_with_node(focused_pane, direction, new_leaf, reverse);
+        tab.focused_pane = pane_id;
+
+        self.resize_all_panes();
+    }
+
+    /// Closes the focused pane in the active tab.
+    /// If the tab has only one pane, this is a no-op (can't close the last pane).
+    pub(in crate::gui) fn close_focused_pane(&mut self) {
+        let Some(tab) = self.active_tab_mut() else {
+            return;
+        };
+        if tab.pane_tree.is_leaf() {
+            return; // Can't close the only pane
+        }
+        let closing_id = tab.focused_pane;
+        tab.pane_tree.close(closing_id);
+        // Move focus to first remaining pane
+        if let Some(first_id) = tab.pane_tree.leaf_ids().first().copied() {
+            tab.focused_pane = first_id;
+        }
+        self.resize_all_panes();
+    }
+
+    /// Recalculates pane dimensions for the active tab based on current window size,
+    /// resizing each pane's terminal and PTY session accordingly.
+    pub(in crate::gui) fn resize_all_panes(&mut self) {
+        let size = self.window.inner_size();
+        let tab_bar_h = self.backend.tab_bar_height_px();
+        let padding = self.backend.window_padding_px();
+        let cw = self.backend.cell_width();
+        let ch = self.backend.cell_height();
+
+        let terminal_rect = PaneRect {
+            x: padding,
+            y: tab_bar_h + padding,
+            width: size.width.saturating_sub(padding * 2),
+            height: size.height.saturating_sub(tab_bar_h + padding * 2),
+        };
+
+        let divider_px = DIVIDER_WIDTH;
+        let Some(tab) = self.active_tab_mut() else {
+            return;
+        };
+        let layout = tab.pane_tree.layout(terminal_rect, divider_px);
+
+        for (pane_id, rect) in layout {
+            if let Some(leaf) = tab.pane_tree.find_leaf_mut(pane_id) {
+                let cols = (rect.width / cw).max(1) as usize;
+                let rows = (rect.height / ch).max(1) as usize;
+                leaf.terminal.resize(rows, cols);
+                leaf.scroll_offset = leaf.scroll_offset.min(leaf.terminal.scrollback.len());
+                if let Some(ref session) = leaf.session {
+                    if let Err(err) = session.resize(rows as u16, cols as u16) {
+                        eprintln!(
+                            "Failed to resize PTY for pane {}: {err}",
+                            pane_id
+                        );
+                    }
+                }
+            }
         }
     }
 }
