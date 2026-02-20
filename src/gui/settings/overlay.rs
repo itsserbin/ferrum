@@ -156,11 +156,12 @@ impl SettingsOverlay {
                 max: 50_000,
                 step: 100,
             },
-            SettingItem::IntSlider {
+            SettingItem::LargeIntSlider {
                 label: "Cursor Blink (ms)",
-                value: terminal.cursor_blink_interval_ms as u32,
+                value: terminal.cursor_blink_interval_ms as usize,
                 min: 100,
                 max: 2000,
+                step: 50,
             },
         ]
     }

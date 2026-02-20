@@ -303,9 +303,6 @@ impl FerrumWindow {
                 let new_val = (*value as i64 + direction as i64).clamp(*min as i64, *max as i64) as u32;
                 match *label {
                     "Line Padding" => overlay.editing_config.font.line_padding = new_val,
-                    "Cursor Blink (ms)" => {
-                        overlay.editing_config.terminal.cursor_blink_interval_ms = new_val as u64;
-                    }
                     "Window Padding" => overlay.editing_config.layout.window_padding = new_val,
                     "Tab Bar Height" => overlay.editing_config.layout.tab_bar_height = new_val,
                     "Pane Padding" => overlay.editing_config.layout.pane_inner_padding = new_val,
@@ -322,8 +319,12 @@ impl FerrumWindow {
             } => {
                 let delta = *step as i64 * direction as i64;
                 let new_val = (*value as i64 + delta).clamp(*min as i64, *max as i64) as usize;
-                if *label == "Max Scrollback" {
-                    overlay.editing_config.terminal.max_scrollback = new_val;
+                match *label {
+                    "Max Scrollback" => overlay.editing_config.terminal.max_scrollback = new_val,
+                    "Cursor Blink (ms)" => {
+                        overlay.editing_config.terminal.cursor_blink_interval_ms = new_val as u64;
+                    }
+                    _ => {}
                 }
             }
             _ => {}
