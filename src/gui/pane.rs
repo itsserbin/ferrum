@@ -45,6 +45,15 @@ pub(super) enum NavigateDirection {
     Right,
 }
 
+/// Result of a divider hit-test, describing which divider was hit.
+#[allow(dead_code)] // Fields used in later tasks for resize dragging
+pub(super) struct DividerHit {
+    pub direction: SplitDirection,
+    pub ratio: f32,
+    pub position: u32,
+    pub available_size: u32,
+}
+
 /// Width of the visible divider between panes, in pixels.
 #[allow(dead_code)] // Used in later tasks for rendering
 pub(super) const DIVIDER_WIDTH: u32 = 1;
@@ -292,6 +301,189 @@ impl PaneNode {
                 .split(target_id, direction, new_id)
                 .or_else(|| split.second.split(target_id, direction, new_id)),
         }
+    }
+
+    /// Tests whether a pixel coordinate hits a divider in this pane tree.
+    ///
+    /// Returns `Some(DividerHit)` if `(px, py)` is within `hit_zone` pixels of
+    /// a divider, `None` otherwise.  For leaf nodes, always returns `None`.
+    #[allow(dead_code)] // Used in later tasks for resize dragging
+    pub(super) fn hit_test_divider(
+        &self,
+        px: u32,
+        py: u32,
+        rect: PaneRect,
+        divider_px: u32,
+        hit_zone: u32,
+    ) -> Option<DividerHit> {
+        let PaneNode::Split(split) = self else {
+            return None;
+        };
+
+        let (first_rect, second_rect) =
+            split_rect(rect, split.direction, split.ratio, divider_px);
+
+        // Compute divider position and check hit.
+        match split.direction {
+            SplitDirection::Horizontal => {
+                let divider_x = first_rect.x + first_rect.width;
+                let available = rect.width.saturating_sub(divider_px);
+                // Check if click is within hit_zone of divider center and within rect bounds.
+                let divider_center = divider_x + divider_px / 2;
+                let in_zone_x = (px as i64 - divider_center as i64).unsigned_abs() <= hit_zone as u64;
+                let in_bounds_y = py >= rect.y && py < rect.y + rect.height;
+                if in_zone_x && in_bounds_y {
+                    return Some(DividerHit {
+                        direction: split.direction,
+                        ratio: split.ratio,
+                        position: divider_x,
+                        available_size: available,
+                    });
+                }
+            }
+            SplitDirection::Vertical => {
+                let divider_y = first_rect.y + first_rect.height;
+                let available = rect.height.saturating_sub(divider_px);
+                let divider_center = divider_y + divider_px / 2;
+                let in_zone_y = (py as i64 - divider_center as i64).unsigned_abs() <= hit_zone as u64;
+                let in_bounds_x = px >= rect.x && px < rect.x + rect.width;
+                if in_zone_y && in_bounds_x {
+                    return Some(DividerHit {
+                        direction: split.direction,
+                        ratio: split.ratio,
+                        position: divider_y,
+                        available_size: available,
+                    });
+                }
+            }
+        }
+
+        // Not on this divider — recurse into children.
+        split
+            .first
+            .hit_test_divider(px, py, first_rect, divider_px, hit_zone)
+            .or_else(|| {
+                split
+                    .second
+                    .hit_test_divider(px, py, second_rect, divider_px, hit_zone)
+            })
+    }
+
+    /// Finds which leaf pane contains the given pixel coordinate.
+    ///
+    /// Returns `Some(PaneId)` if the pixel is inside a leaf's bounding rect,
+    /// `None` otherwise.
+    #[allow(dead_code)] // Used in later tasks for focus-follows-mouse
+    pub(super) fn pane_at_pixel(
+        &self,
+        px: u32,
+        py: u32,
+        rect: PaneRect,
+        divider_px: u32,
+    ) -> Option<PaneId> {
+        match self {
+            PaneNode::Leaf(leaf) => {
+                if px >= rect.x
+                    && px < rect.x + rect.width
+                    && py >= rect.y
+                    && py < rect.y + rect.height
+                {
+                    Some(leaf.id)
+                } else {
+                    None
+                }
+            }
+            PaneNode::Split(split) => {
+                let (first_rect, second_rect) =
+                    split_rect(rect, split.direction, split.ratio, divider_px);
+                split
+                    .first
+                    .pane_at_pixel(px, py, first_rect, divider_px)
+                    .or_else(|| split.second.pane_at_pixel(px, py, second_rect, divider_px))
+            }
+        }
+    }
+
+    /// Finds the divider at `(px, py)` and updates its ratio so the divider
+    /// moves to `new_pixel_pos`.  Clamps the ratio so that each child pane
+    /// is at least 20 px in the split dimension.  Returns `true` if a divider
+    /// was found and updated.
+    #[allow(dead_code)] // Used in later tasks for resize dragging
+    pub(super) fn resize_divider_at(
+        &mut self,
+        px: u32,
+        py: u32,
+        rect: PaneRect,
+        divider_px: u32,
+        hit_zone: u32,
+        new_pixel_pos: u32,
+    ) -> bool {
+        let PaneNode::Split(split) = self else {
+            return false;
+        };
+
+        let (first_rect, _second_rect) =
+            split_rect(rect, split.direction, split.ratio, divider_px);
+
+        // Check if the click is on this node's divider.
+        let is_this_divider = match split.direction {
+            SplitDirection::Horizontal => {
+                let divider_x = first_rect.x + first_rect.width;
+                let divider_center = divider_x + divider_px / 2;
+                let in_zone_x =
+                    (px as i64 - divider_center as i64).unsigned_abs() <= hit_zone as u64;
+                let in_bounds_y = py >= rect.y && py < rect.y + rect.height;
+                in_zone_x && in_bounds_y
+            }
+            SplitDirection::Vertical => {
+                let divider_y = first_rect.y + first_rect.height;
+                let divider_center = divider_y + divider_px / 2;
+                let in_zone_y =
+                    (py as i64 - divider_center as i64).unsigned_abs() <= hit_zone as u64;
+                let in_bounds_x = px >= rect.x && px < rect.x + rect.width;
+                in_zone_y && in_bounds_x
+            }
+        };
+
+        if is_this_divider {
+            let min_pane = 20u32;
+            match split.direction {
+                SplitDirection::Horizontal => {
+                    let available = rect.width.saturating_sub(divider_px);
+                    if available == 0 {
+                        return true;
+                    }
+                    let first_w =
+                        new_pixel_pos.saturating_sub(rect.x).min(available).max(min_pane);
+                    let first_w = first_w.min(available.saturating_sub(min_pane));
+                    split.ratio = first_w as f32 / available as f32;
+                }
+                SplitDirection::Vertical => {
+                    let available = rect.height.saturating_sub(divider_px);
+                    if available == 0 {
+                        return true;
+                    }
+                    let first_h =
+                        new_pixel_pos.saturating_sub(rect.y).min(available).max(min_pane);
+                    let first_h = first_h.min(available.saturating_sub(min_pane));
+                    split.ratio = first_h as f32 / available as f32;
+                }
+            }
+            return true;
+        }
+
+        // Recurse into children.
+        let PaneNode::Split(split) = self else {
+            unreachable!();
+        };
+        let (first_rect, second_rect) =
+            split_rect(rect, split.direction, split.ratio, divider_px);
+        split
+            .first
+            .resize_divider_at(px, py, first_rect, divider_px, hit_zone, new_pixel_pos)
+            || split
+                .second
+                .resize_divider_at(px, py, second_rect, divider_px, hit_zone, new_pixel_pos)
     }
 
     /// Closes the leaf identified by `target_id`, replacing the parent split
@@ -622,5 +814,42 @@ mod tests {
             PaneNode::navigate_spatial(&layout, 1, NavigateDirection::Right),
             None
         );
+    }
+
+    // --- Divider hit-testing tests ---
+
+    #[test]
+    fn divider_hit_horizontal() {
+        let mut tree = PaneNode::new_leaf(1);
+        tree.split(1, SplitDirection::Horizontal, 2);
+        let rect = PaneRect {
+            x: 0,
+            y: 0,
+            width: 800,
+            height: 600,
+        };
+        let divider_px = 1;
+        let layout = tree.layout(rect, divider_px);
+        // Divider is right after the first pane's width
+        let first_w = layout[0].1.width;
+        let hit = tree.hit_test_divider(first_w, 300, rect, divider_px, 6);
+        assert!(hit.is_some());
+        let hit = hit.unwrap();
+        assert_eq!(hit.direction, SplitDirection::Horizontal);
+    }
+
+    #[test]
+    fn divider_hit_miss() {
+        let mut tree = PaneNode::new_leaf(1);
+        tree.split(1, SplitDirection::Horizontal, 2);
+        let rect = PaneRect {
+            x: 0,
+            y: 0,
+            width: 800,
+            height: 600,
+        };
+        // Click far from divider
+        let hit = tree.hit_test_divider(100, 300, rect, 1, 6);
+        assert!(hit.is_none());
     }
 }
