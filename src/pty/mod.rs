@@ -91,7 +91,7 @@ static SHELL_INTEGRATION_DIR: OnceLock<Option<std::path::PathBuf>> = OnceLock::n
 /// Files are written only once per process via [`OnceLock`].
 fn get_shell_integration_dir() -> Option<&'static std::path::PathBuf> {
     SHELL_INTEGRATION_DIR
-        .get_or_init(|| setup_shell_integration())
+        .get_or_init(setup_shell_integration)
         .as_ref()
 }
 
@@ -284,15 +284,15 @@ impl Session {
 
     #[cfg(not(windows))]
     fn shutdown_unix(&mut self) {
-        if let Err(e) = self.child.kill() {
-            if e.kind() != std::io::ErrorKind::InvalidInput {
-                eprintln!("Failed to kill PTY child process: {}", e);
-            }
+        if let Err(e) = self.child.kill()
+            && e.kind() != std::io::ErrorKind::InvalidInput
+        {
+            eprintln!("Failed to kill PTY child process: {}", e);
         }
-        if let Err(e) = self.child.wait() {
-            if e.kind() != std::io::ErrorKind::InvalidInput {
-                eprintln!("Failed to wait on PTY child process: {}", e);
-            }
+        if let Err(e) = self.child.wait()
+            && e.kind() != std::io::ErrorKind::InvalidInput
+        {
+            eprintln!("Failed to wait on PTY child process: {}", e);
         }
     }
 
@@ -315,7 +315,7 @@ impl Session {
 
                 // Wait up to 150ms for the process to exit gracefully.
                 let handle = OpenProcess(PROCESS_SYNCHRONIZE, 0, pid);
-                if handle != 0 {
+                if !handle.is_null() {
                     WaitForSingleObject(handle, 150);
                     CloseHandle(handle);
                 }
@@ -323,15 +323,15 @@ impl Session {
         }
 
         // Hard kill if still alive (kill() handles the "already dead" case).
-        if let Err(e) = self.child.kill() {
-            if e.kind() != std::io::ErrorKind::InvalidInput {
-                eprintln!("Failed to kill PTY child process: {}", e);
-            }
+        if let Err(e) = self.child.kill()
+            && e.kind() != std::io::ErrorKind::InvalidInput
+        {
+            eprintln!("Failed to kill PTY child process: {}", e);
         }
-        if let Err(e) = self.child.wait() {
-            if e.kind() != std::io::ErrorKind::InvalidInput {
-                eprintln!("Failed to wait on PTY child process: {}", e);
-            }
+        if let Err(e) = self.child.wait()
+            && e.kind() != std::io::ErrorKind::InvalidInput
+        {
+            eprintln!("Failed to wait on PTY child process: {}", e);
         }
     }
 }
@@ -363,16 +363,13 @@ fn has_active_child_processes_unix(shell_pid: u32) -> bool {
     let pid = shell_pid.to_string();
 
     // Fast path: pgrep exits with code 0 when a child exists, 1 when none.
-    match Command::new("pgrep").arg("-P").arg(&pid).output() {
-        Ok(output) => {
-            if output.status.success() {
-                return !String::from_utf8_lossy(&output.stdout).trim().is_empty();
-            }
-            if output.status.code() == Some(1) {
-                return false;
-            }
+    if let Ok(output) = Command::new("pgrep").arg("-P").arg(&pid).output() {
+        if output.status.success() {
+            return !String::from_utf8_lossy(&output.stdout).trim().is_empty();
         }
-        Err(_) => {}
+        if output.status.code() == Some(1) {
+            return false;
+        }
     }
 
     // Fallback for environments without pgrep.

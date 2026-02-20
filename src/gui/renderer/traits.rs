@@ -9,14 +9,6 @@ use super::shared::tab_math::{self, TabLayoutMetrics};
 use super::{SCROLLBAR_MIN_THUMB, SecurityPopup, TabBarHit, TabInfo};
 use super::{RenderTarget, ScrollbarState};
 
-/// Selects which rendering backend to use.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BackendKind {
-    Gpu,
-    Cpu,
-    Auto,
-}
-
 /// Trait defining the full renderer interface used by the GUI layer.
 ///
 /// Both CPU (softbuffer) and GPU (wgpu) renderers implement this trait,
@@ -147,6 +139,7 @@ pub trait Renderer {
 
     // ── Tab bar ─────────────────────────────────────────────────────
 
+    #[cfg(not(target_os = "macos"))]
     fn draw_tab_bar(
         &mut self,
         target: &mut RenderTarget<'_>,
@@ -157,6 +150,7 @@ pub trait Renderer {
         pinned: bool,
     );
 
+    #[cfg(not(target_os = "macos"))]
     fn draw_tab_drag_overlay(
         &mut self,
         target: &mut RenderTarget<'_>,
@@ -166,6 +160,7 @@ pub trait Renderer {
         indicator_x: f32,
     );
 
+    #[cfg(not(target_os = "macos"))]
     fn draw_tab_tooltip(
         &mut self,
         target: &mut RenderTarget<'_>,
@@ -173,6 +168,7 @@ pub trait Renderer {
         title: &str,
     );
 
+    #[cfg(not(target_os = "macos"))]
     fn tab_hover_tooltip<'a>(
         &self,
         tabs: &'a [TabInfo<'a>],
@@ -191,11 +187,6 @@ pub trait Renderer {
     fn tab_width(&self, tab_count: usize, buf_width: u32) -> u32 {
         let m = self.tab_layout_metrics();
         tab_math::calculate_tab_width(&m, tab_count, buf_width)
-    }
-
-    fn tab_strip_start_x(&self) -> u32 {
-        let m = self.tab_layout_metrics();
-        tab_math::tab_strip_start_x(&m)
     }
 
     fn tab_origin_x(&self, tab_index: usize, tw: u32) -> u32 {

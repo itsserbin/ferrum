@@ -122,7 +122,7 @@ impl FerrumWindow {
         Ok(TabState {
             id,
             title: title.unwrap_or_else(|| format!("bash #{}", id + 1)),
-            pane_tree: PaneNode::Leaf(leaf),
+            pane_tree: PaneNode::Leaf(Box::new(leaf)),
             focused_pane: pane_id,
             next_pane_id: 1,
         })

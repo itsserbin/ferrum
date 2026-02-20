@@ -113,13 +113,13 @@ impl FerrumWindow {
                     // Clamp scroll_offset to valid range after resize (scrollback may have changed)
                     leaf.scroll_offset = leaf.scroll_offset.min(leaf.terminal.scrollback.len());
 
-                    if let Some(ref session) = leaf.session {
-                        if let Err(err) = session.resize(rows as u16, cols as u16) {
-                            eprintln!(
-                                "Failed to resize PTY for tab {}, pane {}: {err}",
-                                tab.id, leaf_id
-                            );
-                        }
+                    if let Some(ref session) = leaf.session
+                        && let Err(err) = session.resize(rows as u16, cols as u16)
+                    {
+                        eprintln!(
+                            "Failed to resize PTY for tab {}, pane {}: {err}",
+                            tab.id, leaf_id
+                        );
                     }
                 }
             }
@@ -312,7 +312,7 @@ impl FerrumWindow {
 
         let terminal = Terminal::new(rows, cols);
 
-        let new_leaf = PaneNode::Leaf(PaneLeaf {
+        let new_leaf = PaneNode::Leaf(Box::new(PaneLeaf {
             id: pane_id,
             terminal,
             session: Some(session),
@@ -321,7 +321,7 @@ impl FerrumWindow {
             scroll_offset: 0,
             security: SecurityGuard::new(),
             scrollbar: ScrollbarState::new(),
-        });
+        }));
 
         // Re-borrow tab after the reader thread was spawned.
         let tab = &mut self.tabs[self.active_tab];
@@ -407,10 +407,10 @@ impl FerrumWindow {
                 let rows = (content.height / ch).max(1) as usize;
                 leaf.terminal.resize(rows, cols);
                 leaf.scroll_offset = leaf.scroll_offset.min(leaf.terminal.scrollback.len());
-                if let Some(ref session) = leaf.session {
-                    if let Err(err) = session.resize(rows as u16, cols as u16) {
-                        eprintln!("Failed to resize PTY for pane {}: {err}", pane_id);
-                    }
+                if let Some(ref session) = leaf.session
+                    && let Err(err) = session.resize(rows as u16, cols as u16)
+                {
+                    eprintln!("Failed to resize PTY for pane {}: {err}", pane_id);
                 }
             }
         }

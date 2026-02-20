@@ -141,7 +141,7 @@ pub(super) struct PaneSplit {
 
 /// A node in the binary pane tree: either a terminal leaf or a split.
 pub(super) enum PaneNode {
-    Leaf(PaneLeaf),
+    Leaf(Box<PaneLeaf>),
     Split(PaneSplit),
 }
 
@@ -149,7 +149,7 @@ impl PaneNode {
     /// Create a test-only leaf with stub PTY handles.
     #[cfg(test)]
     fn new_leaf(id: PaneId) -> Self {
-        PaneNode::Leaf(PaneLeaf {
+        PaneNode::Leaf(Box::new(PaneLeaf {
             id,
             terminal: Terminal::new(24, 80),
             session: None,
@@ -158,7 +158,7 @@ impl PaneNode {
             scroll_offset: 0,
             security: SecurityGuard::default(),
             scrollbar: ScrollbarState::new(),
-        })
+        }))
     }
 
     /// Returns `true` if this node is a leaf (not a split).
@@ -168,7 +168,7 @@ impl PaneNode {
 
     /// Creates a lightweight placeholder node for `mem::replace` swaps.
     fn placeholder() -> Self {
-        PaneNode::Leaf(PaneLeaf {
+        PaneNode::Leaf(Box::new(PaneLeaf {
             id: u64::MAX,
             terminal: Terminal::new(1, 1),
             session: None,
@@ -177,7 +177,7 @@ impl PaneNode {
             scroll_offset: 0,
             security: SecurityGuard::default(),
             scrollbar: ScrollbarState::new(),
-        })
+        }))
     }
 
     /// Returns `true` if a leaf with the given id exists in this subtree.
@@ -230,7 +230,7 @@ impl PaneNode {
     /// Recursively searches for a leaf by ID, returning an immutable reference.
     pub(super) fn find_leaf(&self, id: PaneId) -> Option<&PaneLeaf> {
         match self {
-            PaneNode::Leaf(leaf) if leaf.id == id => Some(leaf),
+            PaneNode::Leaf(leaf) if leaf.id == id => Some(leaf.as_ref()),
             PaneNode::Leaf(_) => None,
             PaneNode::Split(split) => split
                 .first
@@ -242,7 +242,7 @@ impl PaneNode {
     /// Recursively searches for a leaf by ID, returning a mutable reference.
     pub(super) fn find_leaf_mut(&mut self, id: PaneId) -> Option<&mut PaneLeaf> {
         match self {
-            PaneNode::Leaf(leaf) if leaf.id == id => Some(leaf),
+            PaneNode::Leaf(leaf) if leaf.id == id => Some(leaf.as_mut()),
             PaneNode::Leaf(_) => None,
             PaneNode::Split(split) => split
                 .first
@@ -306,7 +306,7 @@ impl PaneNode {
             }
 
             let dist = (cx - from_cx).abs() + (cy - from_cy).abs();
-            if best.map_or(true, |(_, d)| dist < d) {
+            if best.is_none_or(|(_, d)| dist < d) {
                 best = Some((id, dist));
             }
         }

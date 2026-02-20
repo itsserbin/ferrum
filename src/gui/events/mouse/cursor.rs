@@ -186,21 +186,21 @@ impl FerrumWindow {
             return false;
         }
 
-        if let Some(tab) = self.active_tab_ref() {
-            if let Some(hit) = tab.pane_tree.hit_test_divider(
+        if let Some(tab) = self.active_tab_ref()
+            && let Some(hit) = tab.pane_tree.hit_test_divider(
                 mx as u32,
                 my as u32,
                 terminal_rect,
                 DIVIDER_WIDTH,
                 DIVIDER_HIT_ZONE,
-            ) {
-                let cursor = match hit.direction {
-                    SplitDirection::Horizontal => CursorIcon::ColResize,
-                    SplitDirection::Vertical => CursorIcon::RowResize,
-                };
-                self.window.set_cursor(cursor);
-                return true;
-            }
+            )
+        {
+            let cursor = match hit.direction {
+                SplitDirection::Horizontal => CursorIcon::ColResize,
+                SplitDirection::Vertical => CursorIcon::RowResize,
+            };
+            self.window.set_cursor(cursor);
+            return true;
         }
 
         false

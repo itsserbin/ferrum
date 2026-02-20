@@ -10,27 +10,27 @@ impl FerrumWindow {
                 pane_id,
                 bytes,
             } => {
-                if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == *tab_id) {
-                    if let Some(leaf) = tab.pane_tree.find_leaf_mut(*pane_id) {
-                        leaf.terminal.process(bytes);
-                        leaf.scroll_offset = 0;
+                if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == *tab_id)
+                    && let Some(leaf) = tab.pane_tree.find_leaf_mut(*pane_id)
+                {
+                    leaf.terminal.process(bytes);
+                    leaf.scroll_offset = 0;
 
-                        let popped = leaf.terminal.drain_scrollback_popped();
-                        if popped > 0 {
-                            leaf.selection = leaf
-                                .selection
-                                .and_then(|sel| sel.adjust_for_scrollback_pop(popped));
-                        }
+                    let popped = leaf.terminal.drain_scrollback_popped();
+                    if popped > 0 {
+                        leaf.selection = leaf
+                            .selection
+                            .and_then(|sel| sel.adjust_for_scrollback_pop(popped));
+                    }
 
-                        for event in leaf.terminal.drain_security_events() {
-                            leaf.security.record(event);
-                        }
+                    for event in leaf.terminal.drain_security_events() {
+                        leaf.security.record(event);
+                    }
 
-                        let responses = leaf.terminal.drain_responses();
-                        if !responses.is_empty() {
-                            let _ = leaf.pty_writer.write_all(&responses);
-                            let _ = leaf.pty_writer.flush();
-                        }
+                    let responses = leaf.terminal.drain_responses();
+                    if !responses.is_empty() {
+                        let _ = leaf.pty_writer.write_all(&responses);
+                        let _ = leaf.pty_writer.flush();
                     }
                 }
             }

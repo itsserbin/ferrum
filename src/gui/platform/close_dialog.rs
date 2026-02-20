@@ -51,8 +51,6 @@ fn confirm_window_close_macos(window: &Window) -> bool {
 
 #[cfg(target_os = "windows")]
 fn confirm_window_close_windows(window: &Window) -> bool {
-    use std::ffi::OsStr;
-    use std::os::windows::ffi::OsStrExt;
     use std::ptr;
     use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 

@@ -2,7 +2,9 @@ use crate::core::{CursorStyle, Grid, Selection};
 use crate::gui::pane::PaneRect;
 
 use super::super::traits;
-use super::super::{RenderTarget, ScrollbarState, SecurityPopup, TabInfo};
+use super::super::{RenderTarget, ScrollbarState, SecurityPopup};
+#[cfg(not(target_os = "macos"))]
+use super::super::TabInfo;
 use super::GpuRenderer;
 
 impl traits::Renderer for GpuRenderer {
@@ -139,6 +141,7 @@ impl traits::Renderer for GpuRenderer {
 
     // ── Tab bar (delegates to tab_layout) ─────────────────────────────
 
+    #[cfg(not(target_os = "macos"))]
     fn draw_tab_bar(
         &mut self,
         target: &mut RenderTarget<'_>,
@@ -151,6 +154,7 @@ impl traits::Renderer for GpuRenderer {
         self.draw_tab_bar_impl(target.width, tabs, hovered_tab, mouse_pos, tab_offsets, pinned);
     }
 
+    #[cfg(not(target_os = "macos"))]
     fn draw_tab_drag_overlay(
         &mut self,
         target: &mut RenderTarget<'_>,
@@ -162,6 +166,7 @@ impl traits::Renderer for GpuRenderer {
         self.draw_tab_drag_overlay_impl(target.width, tabs, source_index, current_x, indicator_x);
     }
 
+    #[cfg(not(target_os = "macos"))]
     fn draw_tab_tooltip(
         &mut self,
         target: &mut RenderTarget<'_>,

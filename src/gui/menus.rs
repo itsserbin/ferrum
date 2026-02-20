@@ -127,14 +127,14 @@ pub(super) fn show_context_menu(
     #[cfg(target_os = "macos")]
     {
         use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
-        if let Ok(handle) = window.window_handle() {
-            if let RawWindowHandle::AppKit(appkit) = handle.as_raw() {
-                unsafe {
-                    menu.show_context_menu_for_nsview(
-                        appkit.ns_view.as_ptr() as *const std::ffi::c_void,
-                        position,
-                    );
-                }
+        if let Ok(handle) = window.window_handle()
+            && let RawWindowHandle::AppKit(appkit) = handle.as_raw()
+        {
+            unsafe {
+                menu.show_context_menu_for_nsview(
+                    appkit.ns_view.as_ptr() as *const std::ffi::c_void,
+                    position,
+                );
             }
         }
     }

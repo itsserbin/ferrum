@@ -179,20 +179,20 @@ impl FerrumWindow {
             let terminal_rect = self.terminal_content_rect();
             let divider_px = DIVIDER_WIDTH;
 
-            if let Some(tab) = self.active_tab_ref() {
-                if let Some(hit) = tab.pane_tree.hit_test_divider(
+            if let Some(tab) = self.active_tab_ref()
+                && let Some(hit) = tab.pane_tree.hit_test_divider(
                     mx as u32,
                     my as u32,
                     terminal_rect,
                     divider_px,
                     DIVIDER_HIT_ZONE,
-                ) {
-                    self.divider_drag = Some(DividerDragState {
-                        initial_mouse_pos: (mx as u32, my as u32),
-                        direction: hit.direction,
-                    });
-                    return; // Don't forward click to terminal
-                }
+                )
+            {
+                self.divider_drag = Some(DividerDragState {
+                    initial_mouse_pos: (mx as u32, my as u32),
+                    direction: hit.direction,
+                });
+                return; // Don't forward click to terminal
             }
 
             // Check which pane was clicked and set focus.
@@ -200,12 +200,11 @@ impl FerrumWindow {
                 tab.pane_tree
                     .pane_at_pixel(mx as u32, my as u32, terminal_rect, divider_px)
             });
-            if let Some(pane_id) = clicked_pane {
-                if let Some(tab) = self.active_tab_mut() {
-                    if pane_id != tab.focused_pane {
-                        tab.focused_pane = pane_id;
-                    }
-                }
+            if let Some(pane_id) = clicked_pane
+                && let Some(tab) = self.active_tab_mut()
+                && pane_id != tab.focused_pane
+            {
+                tab.focused_pane = pane_id;
             }
         }
 

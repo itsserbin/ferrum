@@ -115,7 +115,7 @@ impl FerrumWindow {
                 let should_move_cursor = self.selection_drag_mode == SelectionDragMode::Character
                     && self.tabs[idx]
                         .focused_leaf()
-                        .map_or(true, |l| l.selection.is_none());
+                        .is_none_or(|l| l.selection.is_none());
                 self.is_selecting = false;
                 self.selection_anchor = None;
                 if should_move_cursor {

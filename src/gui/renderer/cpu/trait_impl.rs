@@ -2,7 +2,9 @@ use crate::core::{CursorStyle, Grid, Selection};
 use crate::gui::pane::PaneRect;
 
 use super::super::traits;
-use super::super::types::{SecurityPopup, TabInfo};
+use super::super::types::SecurityPopup;
+#[cfg(not(target_os = "macos"))]
+use super::super::types::TabInfo;
 use super::super::{RenderTarget, ScrollbarState};
 use super::CpuRenderer;
 
@@ -105,6 +107,7 @@ impl traits::Renderer for CpuRenderer {
         CpuRenderer::render_scrollbar(self, target, state);
     }
 
+    #[cfg(not(target_os = "macos"))]
     fn draw_tab_bar(
         &mut self,
         target: &mut RenderTarget<'_>,
@@ -117,6 +120,7 @@ impl traits::Renderer for CpuRenderer {
         CpuRenderer::draw_tab_bar(self, target, tabs, hovered_tab, mouse_pos, tab_offsets, pinned);
     }
 
+    #[cfg(not(target_os = "macos"))]
     fn draw_tab_drag_overlay(
         &mut self,
         target: &mut RenderTarget<'_>,
@@ -128,6 +132,7 @@ impl traits::Renderer for CpuRenderer {
         CpuRenderer::draw_tab_drag_overlay(self, target, tabs, source_index, current_x, indicator_x);
     }
 
+    #[cfg(not(target_os = "macos"))]
     fn draw_tab_tooltip(
         &mut self,
         target: &mut RenderTarget<'_>,
