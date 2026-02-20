@@ -9,6 +9,10 @@ license = "GPL-3.0"
 authors = ["itsserbin <itsserbin@users.noreply.github.com>"]
 readme = "README.md"
 
+[[bin]]
+name = "ferrum"
+path = "src/main.rs"
+
 [features]
 default = ["gpu"]
 gpu = ["wgpu", "pollster", "bytemuck"]
