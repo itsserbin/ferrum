@@ -1,5 +1,4 @@
 pub mod backend;
-mod context_menu;
 mod cpu;
 mod cursor;
 #[cfg(feature = "gpu")]
@@ -19,8 +18,13 @@ pub use backend::RendererBackend;
 pub use cpu::CpuRenderer;
 pub use traits::Renderer;
 
-pub(super) const FONT_SIZE: f32 = 15.0;
+pub(super) const FONT_SIZE: f32 = 14.0;
 pub(super) const LINE_PADDING: u32 = 2;
+
+/// Terminal selection overlay color (semi-transparent over cell background).
+pub(super) const SELECTION_OVERLAY_COLOR: u32 = 0x5F7FA3;
+/// Terminal selection overlay alpha (0..=255).
+pub(super) const SELECTION_OVERLAY_ALPHA: u8 = 96;
 
 /// Scrollbar thumb width in pixels.
 pub const SCROLLBAR_WIDTH: u32 = 6;
@@ -50,10 +54,6 @@ pub(super) const SCROLLBAR_HOVER_COLOR: Color = Color {
 pub const TAB_BAR_HEIGHT: u32 = 36;
 
 /// Outer terminal padding inside the window.
-#[cfg(target_os = "windows")]
-pub const WINDOW_PADDING: u32 = 12;
-/// Outer terminal padding inside the window.
-#[cfg(not(target_os = "windows"))]
 pub const WINDOW_PADDING: u32 = 8;
 
 /// Active-tab accent (Catppuccin Mocha Lavender #B4BEFE) — used by rename selection.
@@ -67,18 +67,10 @@ pub(super) const ACTIVE_ACCENT: Color = Color {
 #[cfg_attr(target_os = "macos", allow(dead_code))]
 pub(super) const PIN_ACTIVE_COLOR: u32 = 0xB4BEFE;
 
-// -- Context menu palette --
+// -- Overlay palette --
 
-/// Context menu background (#1E2433).
+/// Overlay panel background (#1E2433).
 pub(super) const MENU_BG: u32 = 0x1E2433;
-/// Context menu hover highlight (#3A3F57).
-pub(super) const MENU_HOVER_BG: u32 = 0x3A3F57;
-/// Destructive action text color (Catppuccin Mocha Red #F38BA8).
-pub(super) const DESTRUCTIVE_COLOR: Color = Color {
-    r: 243,
-    g: 139,
-    b: 168,
-};
 
 /// Security indicator color (Catppuccin Mocha Yellow #F9E2AF).
 pub(super) const SECURITY_ACCENT: Color = Color {
@@ -94,43 +86,46 @@ pub(super) const SCROLLBAR_MIN_THUMB: u32 = 20;
 /// CPU uses as `u32`, GPU uses as `f32 / 255.0`.
 pub(super) const SCROLLBAR_BASE_ALPHA: u32 = 180;
 
-// -- Tab bar palette (Catppuccin Mocha, flat Chrome-style) --
+// -- Tab bar palette (derived from terminal background #282C34) --
+//
+// All colors maintain the neutral gray tone of the terminal palette,
+// avoiding the blue/purple tint of Catppuccin Mocha.
 
-/// Mantle — bar background.
+/// Bar background — darkened terminal bg, neutral gray.
 #[cfg_attr(target_os = "macos", allow(dead_code))]
-pub(super) const BAR_BG: u32 = 0x181825;
+pub(super) const BAR_BG: u32 = 0x1E2127;
 
-/// Base — active-tab fill that merges with the terminal area.
+/// Active-tab fill — matches terminal background exactly.
 #[cfg_attr(target_os = "macos", allow(dead_code))]
-pub(super) const ACTIVE_TAB_BG: u32 = 0x1E1E2E;
+pub(super) const ACTIVE_TAB_BG: u32 = 0x282C34;
 
-/// Surface0 — inactive-tab hover highlight.
+/// Inactive-tab hover highlight — between bar bg and active tab.
 #[cfg_attr(target_os = "macos", allow(dead_code))]
-pub(super) const INACTIVE_TAB_HOVER: u32 = 0x313244;
+pub(super) const INACTIVE_TAB_HOVER: u32 = 0x2E333C;
 
-/// Text — active-tab text color.
+/// Active-tab text — matches terminal default fg.
 #[cfg_attr(target_os = "macos", allow(dead_code))]
-pub(super) const TAB_TEXT_ACTIVE: u32 = 0xCDD6F4;
+pub(super) const TAB_TEXT_ACTIVE: u32 = 0xD2DBEB;
 
-/// Overlay0 — inactive-tab text color.
+/// Inactive-tab text — muted neutral gray.
 #[cfg_attr(target_os = "macos", allow(dead_code))]
-pub(super) const TAB_TEXT_INACTIVE: u32 = 0x6C7086;
+pub(super) const TAB_TEXT_INACTIVE: u32 = 0x6C7480;
 
-/// Surface0 — tab bottom separator / border.
+/// Tab bottom separator / border.
 #[cfg_attr(target_os = "macos", allow(dead_code))]
-pub(super) const TAB_BORDER: u32 = 0x313244;
+pub(super) const TAB_BORDER: u32 = 0x2E333C;
 
-/// Surface2 — close-button hover background.
+/// Close-button hover background — terminal ANSI black.
 #[cfg_attr(target_os = "macos", allow(dead_code))]
-pub(super) const CLOSE_HOVER_BG_COLOR: u32 = 0x585B70;
+pub(super) const CLOSE_HOVER_BG_COLOR: u32 = 0x454B59;
 
-/// Distinct editable-field background for rename input.
+/// Editable-field background for rename input.
 #[cfg_attr(target_os = "macos", allow(dead_code))]
-pub(super) const RENAME_FIELD_BG: u32 = 0x24273A;
+pub(super) const RENAME_FIELD_BG: u32 = 0x1E2127;
 
-/// Subtle field border for rename input.
+/// Field border for rename input.
 #[cfg_attr(target_os = "macos", allow(dead_code))]
-pub(super) const RENAME_FIELD_BORDER: u32 = 0x6C7086;
+pub(super) const RENAME_FIELD_BORDER: u32 = 0x6C7480;
 
 /// Rename selection highlight (Catppuccin Mocha Lavender #B4BEFE).
 #[cfg_attr(not(feature = "gpu"), allow(dead_code))]
@@ -158,6 +153,33 @@ pub(super) fn sanitize_scale(scale_factor: f64) -> f64 {
 /// Returns `true` when the new scale differs meaningfully from the old scale.
 pub(super) fn scale_changed(old: f64, new: f64) -> bool {
     (old - new).abs() >= 1e-6
+}
+
+/// Blends `src` over `dst` with `alpha` in 0..=255 (both colors are 0xRRGGBB).
+pub(super) fn blend_rgb(dst: u32, src: u32, alpha: u8) -> u32 {
+    if alpha == 255 {
+        return src;
+    }
+    if alpha == 0 {
+        return dst;
+    }
+
+    let a = alpha as u32;
+    let inv = 255 - a;
+
+    let dr = (dst >> 16) & 0xFF;
+    let dg = (dst >> 8) & 0xFF;
+    let db = dst & 0xFF;
+
+    let sr = (src >> 16) & 0xFF;
+    let sg = (src >> 8) & 0xFF;
+    let sb = src & 0xFF;
+
+    let r = (sr * a + dr * inv + 127) / 255;
+    let g = (sg * a + dg * inv + 127) / 255;
+    let b = (sb * a + db * inv + 127) / 255;
+
+    (r << 16) | (g << 8) | b
 }
 
 /// Resolves the effective tab-bar visibility for the current platform.

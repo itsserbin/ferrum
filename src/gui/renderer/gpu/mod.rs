@@ -39,6 +39,14 @@ use buffers::*;
 /// Maximum number of UI draw commands per frame.
 const MAX_UI_COMMANDS: usize = 4096;
 
+/// One grid compute batch for the current frame.
+struct GridBatch {
+    cells: Vec<PackedCell>,
+    uniforms: GridUniforms,
+    dispatch_width: u32,
+    dispatch_height: u32,
+}
+
 /// GPU-based renderer using wgpu compute and render pipelines.
 pub struct GpuRenderer {
     // wgpu core
@@ -84,9 +92,8 @@ pub struct GpuRenderer {
     // UI command accumulator (filled during draw_* calls, flushed in present).
     commands: Vec<GpuDrawCommand>,
 
-    // Grid state for the current frame (filled in render(), dispatched in present()).
-    grid_cells: Vec<PackedCell>,
-    grid_uniforms: GridUniforms,
+    // Grid batches for the current frame (single pane = 1 batch + clear).
+    grid_batches: Vec<GridBatch>,
     grid_dirty: bool,
 
     // Window dimensions

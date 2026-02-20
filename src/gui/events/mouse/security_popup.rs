@@ -9,7 +9,11 @@ impl FerrumWindow {
             self.security_popup = None;
             return;
         };
-        let events = tab.security.take_active_events();
+        let Some(leaf) = tab.focused_leaf_mut() else {
+            self.security_popup = None;
+            return;
+        };
+        let events = leaf.security.take_active_events();
         if events.is_empty() {
             self.security_popup = None;
             return;
@@ -39,6 +43,5 @@ impl FerrumWindow {
             title: "Security events",
             lines,
         });
-        self.context_menu = None;
     }
 }

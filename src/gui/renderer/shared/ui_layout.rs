@@ -71,20 +71,18 @@ pub struct PinIconLayout {
 /// * `scale` — UI scale factor (e.g. 1.0, 2.0).
 /// * `pinned` — whether the window is currently pinned (always-on-top).
 /// * `hovered` — whether the mouse is over the pin button.
-/// * `pin_active_color` — color when pinned.
-/// * `hover_color` — color when hovered but not pinned.
-/// * `inactive_color` — color when neither pinned nor hovered.
-#[allow(clippy::too_many_arguments)]
+/// * `colors` — pin button color triple (active, hover, inactive).
 pub fn pin_icon_layout(
     cx: f32,
     cy: f32,
     scale: f32,
     pinned: bool,
     hovered: bool,
-    pin_active_color: u32,
-    hover_color: u32,
-    inactive_color: u32,
+    colors: &crate::gui::renderer::types::PinColors,
 ) -> PinIconLayout {
+    let pin_active_color = colors.active;
+    let hover_color = colors.hover;
+    let inactive_color = colors.inactive;
     let head_w = 6.0 * scale;
     let head_h = 2.0 * scale;
     let body_w = 3.0 * scale;
@@ -165,8 +163,14 @@ pub fn window_buttons_layout(
     mouse_pos: (f64, f64),
 ) -> [WindowButtonLayout; 3] {
     let kinds = [
-        (buf_width.saturating_sub(btn_width * 3), WindowButtonKind::Minimize),
-        (buf_width.saturating_sub(btn_width * 2), WindowButtonKind::Maximize),
+        (
+            buf_width.saturating_sub(btn_width * 3),
+            WindowButtonKind::Minimize,
+        ),
+        (
+            buf_width.saturating_sub(btn_width * 2),
+            WindowButtonKind::Maximize,
+        ),
         (buf_width.saturating_sub(btn_width), WindowButtonKind::Close),
     ];
 
@@ -200,9 +204,7 @@ pub fn rename_selection_chars(
         if start >= end {
             return None;
         }
-        let start_chars = text
-            .get(..start)
-            .map_or(0, |prefix| prefix.chars().count());
+        let start_chars = text.get(..start).map_or(0, |prefix| prefix.chars().count());
         let end_chars = text
             .get(..end)
             .map_or(start_chars, |prefix| prefix.chars().count());
@@ -310,8 +312,18 @@ pub fn compute_window_button_icon_lines(
         WindowButtonKind::Close => {
             let half = half_w_px as f32 * 0.7;
             vec![
-                (center_x - half, center_y - half, center_x + half, center_y + half),
-                (center_x + half, center_y - half, center_x - half, center_y + half),
+                (
+                    center_x - half,
+                    center_y - half,
+                    center_x + half,
+                    center_y + half,
+                ),
+                (
+                    center_x + half,
+                    center_y - half,
+                    center_x - half,
+                    center_y + half,
+                ),
             ]
         }
     };
@@ -533,27 +545,35 @@ mod tests {
 
     // ── pin_icon_layout ──────────────────────────────────────────────
 
+    fn test_pin_colors(active: u32, hover: u32, inactive: u32) -> crate::gui::renderer::types::PinColors {
+        crate::gui::renderer::types::PinColors { active, hover, inactive }
+    }
+
     #[test]
     fn pin_layout_pinned_color() {
-        let layout = pin_icon_layout(50.0, 50.0, 1.0, true, false, 0xAA, 0xBB, 0xCC);
+        let colors = test_pin_colors(0xAA, 0xBB, 0xCC);
+        let layout = pin_icon_layout(50.0, 50.0, 1.0, true, false, &colors);
         assert_eq!(layout.color, 0xAA);
     }
 
     #[test]
     fn pin_layout_hovered_color() {
-        let layout = pin_icon_layout(50.0, 50.0, 1.0, false, true, 0xAA, 0xBB, 0xCC);
+        let colors = test_pin_colors(0xAA, 0xBB, 0xCC);
+        let layout = pin_icon_layout(50.0, 50.0, 1.0, false, true, &colors);
         assert_eq!(layout.color, 0xBB);
     }
 
     #[test]
     fn pin_layout_inactive_color() {
-        let layout = pin_icon_layout(50.0, 50.0, 1.0, false, false, 0xAA, 0xBB, 0xCC);
+        let colors = test_pin_colors(0xAA, 0xBB, 0xCC);
+        let layout = pin_icon_layout(50.0, 50.0, 1.0, false, false, &colors);
         assert_eq!(layout.color, 0xCC);
     }
 
     #[test]
     fn pin_layout_head_above_body() {
-        let layout = pin_icon_layout(100.0, 100.0, 2.0, false, false, 0, 0, 0);
+        let colors = test_pin_colors(0, 0, 0);
+        let layout = pin_icon_layout(100.0, 100.0, 2.0, false, false, &colors);
         // Head y should be above body y.
         assert!(layout.head.1 < layout.body.1);
         // Body y should be above platform y.
@@ -562,7 +582,8 @@ mod tests {
 
     #[test]
     fn pin_layout_needle_below_platform() {
-        let layout = pin_icon_layout(100.0, 100.0, 1.0, false, false, 0, 0, 0);
+        let colors = test_pin_colors(0, 0, 0);
+        let layout = pin_icon_layout(100.0, 100.0, 1.0, false, false, &colors);
         // Needle y_start should be at platform bottom.
         let platform_bottom = layout.platform.1 + layout.platform.3;
         assert!((layout.needle.1 - platform_bottom).abs() < 0.01);
@@ -570,11 +591,12 @@ mod tests {
 
     #[test]
     fn pin_layout_thickness_clamped() {
+        let colors = test_pin_colors(0, 0, 0);
         // Very small scale — thickness should clamp to 1.0.
-        let layout = pin_icon_layout(50.0, 50.0, 0.5, false, false, 0, 0, 0);
+        let layout = pin_icon_layout(50.0, 50.0, 0.5, false, false, &colors);
         assert!((layout.needle_thickness - 1.0).abs() < 0.01);
         // Very large scale — thickness should clamp to 2.0.
-        let layout = pin_icon_layout(50.0, 50.0, 4.0, false, false, 0, 0, 0);
+        let layout = pin_icon_layout(50.0, 50.0, 4.0, false, false, &colors);
         assert!((layout.needle_thickness - 2.0).abs() < 0.01);
     }
 
@@ -693,41 +715,23 @@ mod tests {
 
     #[test]
     fn close_btn_no_hover_hides_circle() {
-        let layout = compute_close_button_layout(
-            (100, 10, 16, 16),
-            0.0,
-            1.0,
-            0x585B70,
-            0x6C7086,
-            0xCDD6F4,
-        );
+        let layout =
+            compute_close_button_layout((100, 10, 16, 16), 0.0, 1.0, 0x585B70, 0x6C7086, 0xCDD6F4);
         assert!(!layout.show_hover_circle);
     }
 
     #[test]
     fn close_btn_full_hover_shows_circle() {
-        let layout = compute_close_button_layout(
-            (100, 10, 16, 16),
-            1.0,
-            1.0,
-            0x585B70,
-            0x6C7086,
-            0xCDD6F4,
-        );
+        let layout =
+            compute_close_button_layout((100, 10, 16, 16), 1.0, 1.0, 0x585B70, 0x6C7086, 0xCDD6F4);
         assert!(layout.show_hover_circle);
         assert!(layout.circle_alpha > 0.8);
     }
 
     #[test]
     fn close_btn_center_computation() {
-        let layout = compute_close_button_layout(
-            (100, 20, 16, 16),
-            0.5,
-            1.0,
-            0x585B70,
-            0x6C7086,
-            0xCDD6F4,
-        );
+        let layout =
+            compute_close_button_layout((100, 20, 16, 16), 0.5, 1.0, 0x585B70, 0x6C7086, 0xCDD6F4);
         // Center should be at (100 + 8, 20 + 8) = (108, 28)
         assert!((layout.circle_cx - 108.0).abs() < 0.01);
         assert!((layout.circle_cy - 28.0).abs() < 0.01);
@@ -736,48 +740,21 @@ mod tests {
     #[test]
     fn close_btn_radius_uses_min_dimension() {
         // Non-square rect: w=16, h=12 -> radius = 12/2 = 6
-        let layout = compute_close_button_layout(
-            (100, 20, 16, 12),
-            0.5,
-            1.0,
-            0x585B70,
-            0x6C7086,
-            0xCDD6F4,
-        );
+        let layout =
+            compute_close_button_layout((100, 20, 16, 12), 0.5, 1.0, 0x585B70, 0x6C7086, 0xCDD6F4);
         assert!((layout.circle_radius - 6.0).abs() < 0.01);
     }
 
     #[test]
     fn close_btn_icon_thickness_scales() {
-        let layout_1x = compute_close_button_layout(
-            (0, 0, 16, 16),
-            0.5,
-            1.0,
-            0,
-            0,
-            0,
-        );
-        let layout_2x = compute_close_button_layout(
-            (0, 0, 16, 16),
-            0.5,
-            2.0,
-            0,
-            0,
-            0,
-        );
+        let layout_1x = compute_close_button_layout((0, 0, 16, 16), 0.5, 1.0, 0, 0, 0);
+        let layout_2x = compute_close_button_layout((0, 0, 16, 16), 0.5, 2.0, 0, 0, 0);
         assert!(layout_2x.icon_thickness > layout_1x.icon_thickness);
     }
 
     #[test]
     fn close_btn_x_lines_symmetric() {
-        let layout = compute_close_button_layout(
-            (100, 20, 16, 16),
-            0.5,
-            1.0,
-            0,
-            0,
-            0,
-        );
+        let layout = compute_close_button_layout((100, 20, 16, 16), 0.5, 1.0, 0, 0, 0);
         // line_a: top-left to bottom-right
         // line_b: top-right to bottom-left
         // line_a.x1 should equal line_b.x2 (both are center_x - half)
@@ -875,7 +852,11 @@ mod tests {
     #[test]
     fn minimize_icon_has_one_line() {
         let btn = WindowButtonLayout {
-            x: 100, w: 46, h: 36, hovered: false, kind: WindowButtonKind::Minimize,
+            x: 100,
+            w: 46,
+            h: 36,
+            hovered: false,
+            kind: WindowButtonKind::Minimize,
         };
         let icon = compute_window_button_icon_lines(&btn, 1.0, 5);
         assert_eq!(icon.lines.len(), 1);
@@ -887,7 +868,11 @@ mod tests {
     #[test]
     fn maximize_icon_has_four_lines() {
         let btn = WindowButtonLayout {
-            x: 100, w: 46, h: 36, hovered: false, kind: WindowButtonKind::Maximize,
+            x: 100,
+            w: 46,
+            h: 36,
+            hovered: false,
+            kind: WindowButtonKind::Maximize,
         };
         let icon = compute_window_button_icon_lines(&btn, 1.0, 5);
         assert_eq!(icon.lines.len(), 4);
@@ -896,7 +881,11 @@ mod tests {
     #[test]
     fn close_icon_has_two_lines() {
         let btn = WindowButtonLayout {
-            x: 100, w: 46, h: 36, hovered: false, kind: WindowButtonKind::Close,
+            x: 100,
+            w: 46,
+            h: 36,
+            hovered: false,
+            kind: WindowButtonKind::Close,
         };
         let icon = compute_window_button_icon_lines(&btn, 1.0, 5);
         assert_eq!(icon.lines.len(), 2);
@@ -905,7 +894,11 @@ mod tests {
     #[test]
     fn window_button_icon_uses_shared_thickness() {
         let btn = WindowButtonLayout {
-            x: 0, w: 46, h: 36, hovered: false, kind: WindowButtonKind::Minimize,
+            x: 0,
+            w: 46,
+            h: 36,
+            hovered: false,
+            kind: WindowButtonKind::Minimize,
         };
         let icon = compute_window_button_icon_lines(&btn, 1.5, 5);
         assert!((icon.thickness - icon_stroke_thickness(1.5)).abs() < 0.001);
@@ -916,7 +909,12 @@ mod tests {
     #[test]
     fn window_button_colors_not_hovered() {
         let colors = window_button_colors(
-            WindowButtonKind::Close, false, 0x111111, 0xF38BA8, 0x6C7086, 0xFFFFFF,
+            WindowButtonKind::Close,
+            false,
+            0x111111,
+            0xF38BA8,
+            0x6C7086,
+            0xFFFFFF,
         );
         assert!(colors.hover_bg.is_none());
         assert_eq!(colors.icon_color, 0x6C7086);
@@ -925,7 +923,12 @@ mod tests {
     #[test]
     fn window_button_colors_close_hovered() {
         let colors = window_button_colors(
-            WindowButtonKind::Close, true, 0x111111, 0xF38BA8, 0x6C7086, 0xFFFFFF,
+            WindowButtonKind::Close,
+            true,
+            0x111111,
+            0xF38BA8,
+            0x6C7086,
+            0xFFFFFF,
         );
         assert_eq!(colors.hover_bg, Some(0xF38BA8));
         assert_eq!(colors.icon_color, 0xFFFFFF);
@@ -934,7 +937,12 @@ mod tests {
     #[test]
     fn window_button_colors_minimize_hovered() {
         let colors = window_button_colors(
-            WindowButtonKind::Minimize, true, 0x313244, 0xF38BA8, 0x6C7086, 0xFFFFFF,
+            WindowButtonKind::Minimize,
+            true,
+            0x313244,
+            0xF38BA8,
+            0x6C7086,
+            0xFFFFFF,
         );
         assert_eq!(colors.hover_bg, Some(0x313244));
         assert_eq!(colors.icon_color, 0x6C7086);

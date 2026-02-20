@@ -2,55 +2,9 @@
 
 //! Context menu and security popup drawing for the GPU renderer.
 
-use super::super::{ContextMenu, SecurityPopup};
+use super::super::SecurityPopup;
 
 impl super::GpuRenderer {
-    // ── Context menu ──────────────────────────────────────────────────
-
-    /// Draws context menu overlay using a shared layout.
-    pub(super) fn draw_context_menu_impl(&mut self, menu: &ContextMenu) {
-        let layout = menu.layout(
-            self.metrics.cell_width,
-            self.metrics.cell_height,
-            self.metrics.ui_scale,
-        );
-
-        self.push_rounded_rect(
-            layout.bg.x,
-            layout.bg.y,
-            layout.bg.w,
-            layout.bg.h,
-            layout.bg.radius,
-            layout.bg.color,
-            layout.bg.opacity,
-        );
-        self.push_rounded_rect(
-            layout.border.x,
-            layout.border.y,
-            layout.border.w,
-            layout.border.h,
-            layout.border.radius,
-            layout.border.color,
-            layout.border.opacity,
-        );
-
-        for item in &layout.items {
-            if let Some(ref hover) = item.hover_rect {
-                self.push_rounded_rect(
-                    hover.x, hover.y, hover.w, hover.h, hover.radius, hover.color, hover.opacity,
-                );
-            }
-
-            self.push_text(
-                item.text.x,
-                item.text.y,
-                &item.text.text,
-                item.text.color,
-                item.text.opacity,
-            );
-        }
-    }
-
     // ── Security ──────────────────────────────────────────────────────
 
     /// Draws security popup overlay using a shared layout.
@@ -68,24 +22,8 @@ impl super::GpuRenderer {
             buf_height as u32,
         );
 
-        self.push_rounded_rect(
-            layout.bg.x,
-            layout.bg.y,
-            layout.bg.w,
-            layout.bg.h,
-            layout.bg.radius,
-            layout.bg.color,
-            layout.bg.opacity,
-        );
-        self.push_rounded_rect(
-            layout.border.x,
-            layout.border.y,
-            layout.border.w,
-            layout.border.h,
-            layout.border.radius,
-            layout.border.color,
-            layout.border.opacity,
-        );
+        self.push_rounded_rect_cmd(&layout.bg);
+        self.push_rounded_rect_cmd(&layout.border);
 
         // Title.
         self.push_text(
@@ -108,7 +46,13 @@ impl super::GpuRenderer {
 
         // Content lines.
         for text_cmd in &layout.lines {
-            self.push_text(text_cmd.x, text_cmd.y, &text_cmd.text, text_cmd.color, text_cmd.opacity);
+            self.push_text(
+                text_cmd.x,
+                text_cmd.y,
+                &text_cmd.text,
+                text_cmd.color,
+                text_cmd.opacity,
+            );
         }
     }
 }

@@ -1,5 +1,7 @@
 @echo off
 chcp 65001 >nul
+REM OSC 7: report CWD to terminal on every prompt
+prompt $e]7;file://%COMPUTERNAME%/$p$e\$p$g
 REM Unix-style command aliases for Windows
 REM Scripts directory is added to PATH by Ferrum
 

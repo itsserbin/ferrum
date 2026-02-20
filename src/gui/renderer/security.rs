@@ -1,5 +1,6 @@
 use super::shared::ui_layout;
 use super::*;
+use super::RenderTarget;
 
 impl SecurityPopup {
     pub(crate) fn line_height(&self, cell_height: u32) -> u32 {
@@ -57,12 +58,9 @@ impl SecurityPopup {
 }
 
 impl CpuRenderer {
-    #[allow(clippy::too_many_arguments)]
     pub(super) fn draw_security_shield_icon(
         &self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
+        target: &mut RenderTarget<'_>,
         x: u32,
         y: u32,
         size: u32,
@@ -73,18 +71,18 @@ impl CpuRenderer {
 
         for (dy, &(left, right)) in spans.iter().enumerate() {
             let py = y as usize + dy;
-            if py >= buf_height {
+            if py >= target.height {
                 break;
             }
 
             for dx in left..=right {
                 let px = x as usize + dx as usize;
-                if px >= buf_width {
+                if px >= target.width {
                     continue;
                 }
-                let idx = py * buf_width + px;
-                if idx < buffer.len() {
-                    buffer[idx] = pixel;
+                let idx = py * target.width + px;
+                if idx < target.buffer.len() {
+                    target.buffer[idx] = pixel;
                 }
             }
         }
@@ -93,21 +91,19 @@ impl CpuRenderer {
     /// Draws security popup overlay using a shared layout.
     pub fn draw_security_popup(
         &mut self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
+        target: &mut RenderTarget<'_>,
         popup: &SecurityPopup,
     ) {
         let layout = popup.layout(
             self.metrics.cell_width,
             self.metrics.cell_height,
             self.ui_scale(),
-            buf_width as u32,
-            buf_height as u32,
+            target.width as u32,
+            target.height as u32,
         );
 
-        self.draw_rounded_rect_cmd(buffer, buf_width, buf_height, &layout.bg);
-        self.draw_rounded_rect_cmd(buffer, buf_width, buf_height, &layout.border);
+        self.draw_rounded_rect_cmd(target, &layout.bg);
+        self.draw_rounded_rect_cmd(target, &layout.border);
 
         // Title text.
         let title_fg = Color::from_pixel(layout.title.color);
@@ -115,11 +111,11 @@ impl CpuRenderer {
         let title_y = layout.title.y as u32;
         for (i, ch) in layout.title.text.chars().enumerate() {
             let x = title_x + i as u32 * self.metrics.cell_width;
-            self.draw_char(buffer, buf_width, buf_height, x, title_y, ch, title_fg);
+            self.draw_char(target, x, title_y, ch, title_fg);
         }
 
         // Separator line.
-        self.draw_flat_rect_cmd(buffer, buf_width, buf_height, &layout.separator);
+        self.draw_flat_rect_cmd(target, &layout.separator);
 
         // Content lines.
         for text_cmd in &layout.lines {
@@ -128,7 +124,7 @@ impl CpuRenderer {
             let ty = text_cmd.y as u32;
             for (i, ch) in text_cmd.text.chars().enumerate() {
                 let x = tx + i as u32 * self.metrics.cell_width;
-                self.draw_char(buffer, buf_width, buf_height, x, ty, ch, fg);
+                self.draw_char(target, x, ty, ch, fg);
             }
         }
     }

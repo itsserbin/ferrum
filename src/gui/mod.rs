@@ -2,6 +2,8 @@ mod events;
 mod input;
 mod interaction;
 mod lifecycle;
+mod menus;
+mod pane;
 mod platform;
 mod renderer;
 mod state;
@@ -28,7 +30,7 @@ use crate::core::{MouseMode, Position, SecurityGuard, Selection};
 #[cfg(not(target_os = "macos"))]
 use crate::gui::renderer::TAB_BAR_HEIGHT;
 use crate::gui::renderer::{
-    ContextMenu, CpuRenderer, Renderer as _, RendererBackend, SecurityPopup, WINDOW_PADDING,
+    CpuRenderer, Renderer as _, RendererBackend, SecurityPopup, WINDOW_PADDING,
 };
 use crate::pty;
 use crate::update;
@@ -39,8 +41,8 @@ const MIN_WINDOW_COLS: u32 = 40;
 const MIN_WINDOW_ROWS: u32 = 10;
 
 use self::state::{
-    App, ClosedTabInfo, DragState, FerrumWindow, PtyEvent, RenameState, ScrollbarState,
-    SelectionDragMode, TabReorderAnimation, TabState, WindowRequest,
+    App, ClosedTabInfo, DividerDragState, DragState, FerrumWindow, MenuContext, PtyEvent,
+    RenameState, ScrollbarState, SelectionDragMode, TabReorderAnimation, TabState, WindowRequest,
 };
 
 impl FerrumWindow {
@@ -67,7 +69,7 @@ impl FerrumWindow {
             keyboard_selection_anchor: None,
             selection_drag_mode: SelectionDragMode::Character,
             hovered_tab: None,
-            context_menu: None,
+            pending_menu_context: None,
             security_popup: None,
             #[cfg(not(target_os = "macos"))]
             tab_hover_progress: Vec::new(),
@@ -91,6 +93,8 @@ impl FerrumWindow {
             scroll_accumulator: 0.0,
             pending_requests: Vec::new(),
             pinned: false,
+            divider_drag: None,
+            last_cwd_poll: std::time::Instant::now(),
         }
     }
 
@@ -115,14 +119,46 @@ impl FerrumWindow {
         self.tabs.get(self.active_tab)
     }
 
+    /// Returns the focused pane leaf of the active tab (immutable).
+    fn active_leaf_ref(&self) -> Option<&pane::PaneLeaf> {
+        self.active_tab_ref().and_then(|t| t.focused_leaf())
+    }
+
+    /// Returns the focused pane leaf of the active tab (mutable).
+    fn active_leaf_mut(&mut self) -> Option<&mut pane::PaneLeaf> {
+        self.active_tab_mut().and_then(|t| t.focused_leaf_mut())
+    }
+
+    /// Returns the terminal content rectangle (area below tab bar, inside padding).
+    fn terminal_content_rect(&self) -> pane::PaneRect {
+        let size = self.window.inner_size();
+        let tab_bar_h = self.backend.tab_bar_height_px();
+        let padding = self.backend.window_padding_px();
+        pane::PaneRect {
+            x: padding,
+            y: tab_bar_h + padding,
+            width: size.width.saturating_sub(padding * 2),
+            height: size.height.saturating_sub(tab_bar_h + padding * 2),
+        }
+    }
+
     fn compose_window_title(&self, update: Option<&crate::update::AvailableRelease>) -> String {
         let base = self
             .active_tab_ref()
-            .map(|tab| tab.title.as_str())
-            .unwrap_or("Ferrum");
+            .map(|tab| {
+                if tab.is_renamed {
+                    tab.title.clone()
+                } else {
+                    tab.focused_leaf()
+                        .and_then(|leaf| leaf.cwd())
+                        .map(|cwd| renderer::shared::path_display::replace_home_prefix(&cwd))
+                        .unwrap_or_else(|| tab.title.clone())
+                }
+            })
+            .unwrap_or_else(|| "Ferrum".to_string());
         match update {
             Some(release) => format!("{base} - Update {} available", release.tag_name),
-            None => base.to_string(),
+            None => base,
         }
     }
 
@@ -131,6 +167,32 @@ impl FerrumWindow {
         if self.window_title != next_title {
             self.window.set_title(&next_title);
             self.window_title = next_title;
+        }
+    }
+
+    /// Polls CWD via OS API for panes that haven't received OSC 7,
+    /// and updates `terminal.cwd` so the tab title auto-updates.
+    pub(super) fn poll_cwd_for_tabs(&mut self) {
+        for tab in &mut self.tabs {
+            if tab.is_renamed {
+                continue;
+            }
+            let focused = tab.focused_pane;
+            let leaf = match tab.pane_tree.find_leaf_mut(focused) {
+                Some(l) => l,
+                None => continue,
+            };
+            // Skip if we already have CWD from OSC 7
+            if leaf.terminal.cwd.is_some() {
+                continue;
+            }
+            let pid = match leaf.session.as_ref().and_then(|s| s.process_id()) {
+                Some(p) => p,
+                None => continue,
+            };
+            if let Some(cwd) = crate::pty::cwd::get_process_cwd(pid) {
+                leaf.terminal.cwd = Some(cwd);
+            }
         }
     }
 

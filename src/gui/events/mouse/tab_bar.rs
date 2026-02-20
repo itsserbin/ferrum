@@ -9,12 +9,15 @@ impl FerrumWindow {
             .enumerate()
             .map(|(idx, tab)| TabInfo {
                 title: &tab.title,
+                index: idx,
                 is_active: idx == self.active_tab,
-                security_count: if tab.security.has_events() {
-                    tab.security.active_event_count()
-                } else {
-                    0
-                },
+                security_count: tab.focused_leaf().map_or(0, |leaf| {
+                    if leaf.security.has_events() {
+                        leaf.security.active_event_count()
+                    } else {
+                        0
+                    }
+                }),
                 hover_progress: 0.0,
                 close_hover_progress: 0.0,
                 is_renaming: false,
@@ -128,7 +131,7 @@ impl FerrumWindow {
                 self.last_topbar_empty_click = None;
                 let size = self.window.inner_size();
                 let (rows, cols) = self.calc_grid_size(size.width, size.height);
-                self.new_tab(rows, cols, next_tab_id, tx);
+                self.new_tab(rows, cols, next_tab_id, tx, None);
             }
             #[cfg(not(target_os = "macos"))]
             TabBarHit::WindowButton(btn) => {

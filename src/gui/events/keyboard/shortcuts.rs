@@ -1,3 +1,4 @@
+use crate::gui::pane::{NavigateDirection, SplitDirection};
 use crate::gui::*;
 
 impl FerrumWindow {
@@ -59,9 +60,6 @@ impl FerrumWindow {
         next_tab_id: &mut u64,
         tx: &mpsc::Sender<PtyEvent>,
     ) -> bool {
-        #[cfg(target_os = "macos")]
-        let _ = (&next_tab_id, tx);
-
         if !self.is_action_modifier() || !self.modifiers.shift_key() {
             return false;
         }
@@ -86,7 +84,7 @@ impl FerrumWindow {
             {
                 let size = self.window.inner_size();
                 let (rows, cols) = self.calc_grid_size(size.width, size.height);
-                self.new_tab_with_title(rows, cols, Some(closed.title), next_tab_id, tx);
+                self.new_tab_with_title(rows, cols, Some(closed.title), next_tab_id, tx, None);
             }
             return true;
         }
@@ -102,6 +100,30 @@ impl FerrumWindow {
             || Self::physical_key_is(physical, KeyCode::KeyV);
         if is_paste_key {
             self.paste_clipboard();
+            return true;
+        }
+
+        // ── Pane splitting ────────────────────────────────────────────────
+        if Self::physical_key_is(physical, KeyCode::KeyR) {
+            self.split_pane(SplitDirection::Horizontal, false, next_tab_id, tx);
+            return true;
+        }
+        if Self::physical_key_is(physical, KeyCode::KeyD) {
+            self.split_pane(SplitDirection::Vertical, false, next_tab_id, tx);
+            return true;
+        }
+        if Self::physical_key_is(physical, KeyCode::KeyL) {
+            self.split_pane(SplitDirection::Horizontal, true, next_tab_id, tx);
+            return true;
+        }
+        if Self::physical_key_is(physical, KeyCode::KeyU) {
+            self.split_pane(SplitDirection::Vertical, true, next_tab_id, tx);
+            return true;
+        }
+
+        // ── Close terminal window ─────────────────────────────────────────
+        if Self::physical_key_is(physical, KeyCode::KeyW) {
+            self.request_close_window();
             return true;
         }
 
@@ -121,6 +143,24 @@ impl FerrumWindow {
                 }
                 true
             }
+            // ── Pane navigation (arrow keys) ──────────────────────────────
+            Key::Named(NamedKey::ArrowUp) if !self.modifiers.super_key() => {
+                self.navigate_pane(NavigateDirection::Up);
+                true
+            }
+            Key::Named(NamedKey::ArrowDown) if !self.modifiers.super_key() => {
+                self.navigate_pane(NavigateDirection::Down);
+                true
+            }
+            Key::Named(NamedKey::ArrowLeft) if !self.modifiers.super_key() => {
+                self.navigate_pane(NavigateDirection::Left);
+                true
+            }
+            Key::Named(NamedKey::ArrowRight) if !self.modifiers.super_key() => {
+                self.navigate_pane(NavigateDirection::Right);
+                true
+            }
+            // ── macOS line navigation (Cmd+Shift+Arrow) ───────────────────
             Key::Named(NamedKey::ArrowLeft) if self.modifiers.super_key() => {
                 self.write_pty_bytes(b"\x01"); // Ctrl+A - beginning of line
                 true

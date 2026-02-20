@@ -1,28 +1,18 @@
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
 use crate::gui::renderer::CpuRenderer;
+use crate::gui::renderer::RoundedShape;
+use crate::gui::renderer::types::RenderTarget;
 
 impl CpuRenderer {
     /// Draws a rounded rect with only the top corners rounded (bottom corners square).
     /// Used for active/hovered tab shapes that merge with the terminal below.
-    #[allow(clippy::too_many_arguments)]
     pub(in crate::gui::renderer) fn draw_top_rounded_rect(
         &self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
-        x: i32,
-        y: i32,
-        w: u32,
-        h: u32,
-        radius: u32,
-        color: u32,
-        alpha: u8,
+        target: &mut RenderTarget<'_>,
+        shape: &RoundedShape,
     ) {
-        Self::draw_rounded_impl(
-            buffer, buf_width, buf_height, x, y, w, h, radius, color, alpha,
-            Self::top_rounded_coverage,
-        );
+        Self::draw_rounded_impl(target, shape, Self::top_rounded_coverage);
     }
 
     /// Coverage function for a rect with only the top two corners rounded.

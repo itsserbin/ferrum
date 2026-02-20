@@ -5,7 +5,6 @@
 //! code, no side effects.  Both CPU and GPU renderers can call these
 //! functions to avoid duplicating layout logic.
 
-
 /// Maximum tab width in logical pixels (before HiDPI scaling).
 pub const MAX_TAB_WIDTH: u32 = 240;
 
@@ -58,7 +57,6 @@ pub const PIN_BUTTON_GAP: u32 = 8;
 #[cfg(not(target_os = "macos"))]
 pub const WIN_BTN_WIDTH: u32 = 46;
 
-
 /// A rectangle defined by origin + size, all in physical (scaled) pixels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Rect {
@@ -109,7 +107,6 @@ impl TabLayoutMetrics {
     }
 }
 
-
 /// Returns the x-offset where the tab strip begins, in physical pixels.
 ///
 /// On macOS this accounts for the traffic-light buttons.  On Windows/Linux
@@ -121,9 +118,7 @@ pub fn tab_strip_start_x(m: &TabLayoutMetrics) -> u32 {
     }
     #[cfg(not(target_os = "macos"))]
     {
-        m.scaled_px(TAB_STRIP_START_X)
-            + m.scaled_px(PIN_BUTTON_SIZE)
-            + m.scaled_px(PIN_BUTTON_GAP)
+        m.scaled_px(TAB_STRIP_START_X) + m.scaled_px(PIN_BUTTON_SIZE) + m.scaled_px(PIN_BUTTON_GAP)
     }
 }
 
@@ -168,9 +163,16 @@ pub fn tab_origin_x(m: &TabLayoutMetrics, tab_index: usize, tab_width: u32) -> u
 /// Returns the rectangle for a per-tab close button.
 pub fn close_button_rect(m: &TabLayoutMetrics, tab_index: usize, tab_width: u32) -> Rect {
     let btn_size = m.scaled_px(CLOSE_BUTTON_SIZE);
-    let x = tab_origin_x(m, tab_index, tab_width) + tab_width - btn_size - m.scaled_px(CLOSE_BUTTON_MARGIN);
+    let x = tab_origin_x(m, tab_index, tab_width) + tab_width
+        - btn_size
+        - m.scaled_px(CLOSE_BUTTON_MARGIN);
     let y = (m.tab_bar_height.saturating_sub(btn_size)) / 2;
-    Rect { x, y, w: btn_size, h: btn_size }
+    Rect {
+        x,
+        y,
+        w: btn_size,
+        h: btn_size,
+    }
 }
 
 /// Returns the rectangle for the new-tab (+) button.
@@ -178,7 +180,12 @@ pub fn plus_button_rect(m: &TabLayoutMetrics, tab_count: usize, tab_width: u32) 
     let btn_size = m.scaled_px(PLUS_BUTTON_SIZE);
     let x = tab_strip_start_x(m) + tab_count as u32 * tab_width + m.scaled_px(PLUS_BUTTON_GAP);
     let y = (m.tab_bar_height.saturating_sub(btn_size)) / 2;
-    Rect { x, y, w: btn_size, h: btn_size }
+    Rect {
+        x,
+        y,
+        w: btn_size,
+        h: btn_size,
+    }
 }
 
 /// Returns the rectangle for the pin button (non-macOS only).
@@ -187,7 +194,12 @@ pub fn pin_button_rect(m: &TabLayoutMetrics) -> Rect {
     let btn_size = m.scaled_px(PIN_BUTTON_SIZE);
     let x = m.scaled_px(TAB_STRIP_START_X);
     let y = (m.tab_bar_height.saturating_sub(btn_size)) / 2;
-    Rect { x, y, w: btn_size, h: btn_size }
+    Rect {
+        x,
+        y,
+        w: btn_size,
+        h: btn_size,
+    }
 }
 
 /// Returns the width (in physical pixels) reserved by the security badge
@@ -206,7 +218,8 @@ pub fn security_badge_reserved_width(m: &TabLayoutMetrics, security_count: usize
     };
     let badge_min = m.scaled_px(10);
     let badge_max = m.scaled_px(15);
-    let badge_icon_size = m.cell_height
+    let badge_icon_size = m
+        .cell_height
         .saturating_sub(m.scaled_px(10))
         .clamp(badge_min, badge_max);
     badge_icon_size + count_width + m.scaled_px(6)
@@ -252,7 +265,12 @@ pub fn security_badge_rect(
     let indicator_right = tab_x + tw.saturating_sub(right_gutter);
     let x = indicator_right.saturating_sub(indicator_width + m.scaled_px(2));
     let y = (m.tab_bar_height.saturating_sub(badge_size)) / 2;
-    Some(Rect { x, y, w: badge_size, h: badge_size })
+    Some(Rect {
+        x,
+        y,
+        w: badge_size,
+        h: badge_size,
+    })
 }
 
 /// Returns the width reserved by the close button when it is visible.
@@ -336,7 +354,6 @@ pub fn tab_insert_index_from_x(
     idx
 }
 
-
 /// Point-in-rectangle hit test. Returns true when `(x, y)` falls inside
 /// the rectangle described by `(rx, ry, rw, rh)`.
 pub fn point_in_rect(x: f64, y: f64, rect: (u32, u32, u32, u32)) -> bool {
@@ -369,7 +386,6 @@ mod tests {
         }
     }
 
-
     #[test]
     fn scaled_px_identity_at_1x() {
         let m = default_metrics();
@@ -389,7 +405,6 @@ mod tests {
         let m = default_metrics();
         assert_eq!(m.scaled_px(0), 0);
     }
-
 
     #[test]
     fn single_tab_gets_max_width() {
@@ -420,7 +435,6 @@ mod tests {
         assert!(tw_2 >= tw_10);
     }
 
-
     #[test]
     fn tab_origin_x_first_tab_at_strip_start() {
         let m = default_metrics();
@@ -433,7 +447,6 @@ mod tests {
         let tw = 200;
         assert_eq!(tab_origin_x(&m, 1, tw), tab_strip_start_x(&m) + tw);
     }
-
 
     #[test]
     fn close_button_within_tab_bounds() {
@@ -451,7 +464,6 @@ mod tests {
         let rect = close_button_rect(&m, 0, 200);
         assert_eq!(rect.w, m.scaled_px(CLOSE_BUTTON_SIZE));
     }
-
 
     #[test]
     fn plus_button_after_last_tab() {
@@ -471,7 +483,6 @@ mod tests {
         assert_eq!(rect.h, m.scaled_px(PLUS_BUTTON_SIZE));
     }
 
-
     #[cfg(not(target_os = "macos"))]
     #[test]
     fn pin_button_before_tab_strip() {
@@ -487,7 +498,6 @@ mod tests {
         let rect = pin_button_rect(&m);
         assert_eq!(rect.w, m.scaled_px(PIN_BUTTON_SIZE));
     }
-
 
     #[test]
     fn security_badge_zero_count_returns_zero() {
@@ -511,7 +521,6 @@ mod tests {
         assert!(w5 > w1);
     }
 
-
     #[test]
     fn security_badge_none_for_zero_count() {
         let m = default_metrics();
@@ -534,7 +543,6 @@ mod tests {
         let tab_end = tab_origin_x(&m, 0, tw) + tw;
         assert!(r.x + r.w <= tab_end);
     }
-
 
     #[test]
     fn close_reserved_matches_components() {
@@ -566,7 +574,6 @@ mod tests {
         assert!(!should_show_close_button(false, false, 0.01));
     }
 
-
     #[test]
     fn title_chars_decrease_with_close_button() {
         let m = default_metrics();
@@ -591,7 +598,6 @@ mod tests {
         assert_eq!(tab_title_max_chars(&m, 0, true, 0), 0);
     }
 
-
     #[test]
     fn show_number_for_narrow_tab() {
         let m = default_metrics();
@@ -605,7 +611,6 @@ mod tests {
         let wide = m.scaled_px(MIN_TAB_WIDTH_FOR_TITLE);
         assert!(!should_show_number(&m, wide));
     }
-
 
     #[test]
     fn rename_field_within_tab() {
@@ -624,14 +629,12 @@ mod tests {
         assert!(chars > 0);
     }
 
-
     #[test]
     fn text_y_vertically_centered() {
         let m = default_metrics();
         let y = tab_text_y(&m);
         assert_eq!(y, (m.tab_bar_height - m.cell_height) / 2 + m.scaled_px(1));
     }
-
 
     #[test]
     fn insert_index_before_first_tab() {
@@ -647,39 +650,61 @@ mod tests {
         assert_eq!(idx, 3);
     }
 
-
     #[test]
     fn rect_contains_center() {
-        let r = Rect { x: 10, y: 10, w: 20, h: 20 };
+        let r = Rect {
+            x: 10,
+            y: 10,
+            w: 20,
+            h: 20,
+        };
         assert!(r.contains(20.0, 20.0));
     }
 
     #[test]
     fn rect_excludes_outside() {
-        let r = Rect { x: 10, y: 10, w: 20, h: 20 };
+        let r = Rect {
+            x: 10,
+            y: 10,
+            w: 20,
+            h: 20,
+        };
         assert!(!r.contains(5.0, 15.0));
         assert!(!r.contains(31.0, 15.0));
     }
 
     #[test]
     fn rect_contains_top_left_edge() {
-        let r = Rect { x: 10, y: 10, w: 20, h: 20 };
+        let r = Rect {
+            x: 10,
+            y: 10,
+            w: 20,
+            h: 20,
+        };
         assert!(r.contains(10.0, 10.0));
     }
 
     #[test]
     fn rect_excludes_bottom_right_edge() {
-        let r = Rect { x: 10, y: 10, w: 20, h: 20 };
+        let r = Rect {
+            x: 10,
+            y: 10,
+            w: 20,
+            h: 20,
+        };
         assert!(!r.contains(30.0, 30.0));
     }
 
-
     #[test]
     fn rect_to_tuple_round_trip() {
-        let r = Rect { x: 1, y: 2, w: 3, h: 4 };
+        let r = Rect {
+            x: 1,
+            y: 2,
+            w: 3,
+            h: 4,
+        };
         assert_eq!(r.to_tuple(), (1, 2, 3, 4));
     }
-
 
     #[test]
     fn hidpi_close_button_scales() {

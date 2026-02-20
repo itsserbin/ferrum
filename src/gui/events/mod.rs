@@ -1,4 +1,5 @@
 mod keyboard;
+mod menu_actions;
 mod mouse;
 mod pty;
 mod redraw;

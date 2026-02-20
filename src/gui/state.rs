@@ -1,12 +1,21 @@
 use std::collections::HashMap;
 use std::time::Instant;
 
+use muda::MenuId;
+
 use crate::gui::*;
 
-/// PTY event tagged with the source tab id.
+/// PTY event tagged with the source tab id and pane id.
 pub(super) enum PtyEvent {
-    Data { tab_id: u64, bytes: Vec<u8> },
-    Exited { tab_id: u64 },
+    Data {
+        tab_id: u64,
+        pane_id: u64,
+        bytes: Vec<u8>,
+    },
+    Exited {
+        tab_id: u64,
+        pane_id: u64,
+    },
 }
 
 /// Metadata for recently closed tabs (Ctrl+Shift+T restore).
@@ -38,16 +47,65 @@ impl ScrollbarState {
 }
 
 /// Runtime state for a single terminal tab.
+///
+/// Each tab holds a pane tree (binary tree of terminal panes).
+/// For single-pane tabs, the tree is a single `PaneNode::Leaf`.
 pub(super) struct TabState {
     pub(super) id: u64,
-    pub(super) terminal: Terminal,
-    pub(super) session: pty::Session,
-    pub(super) pty_writer: Box<dyn Write + Send>,
     pub(super) title: String,
-    pub(super) scroll_offset: usize,
-    pub(super) selection: Option<Selection>,
-    pub(super) security: SecurityGuard,
-    pub(super) scrollbar: ScrollbarState,
+    pub(super) pane_tree: crate::gui::pane::PaneNode,
+    pub(super) focused_pane: crate::gui::pane::PaneId,
+    pub(super) next_pane_id: crate::gui::pane::PaneId,
+    /// `true` when the user has explicitly renamed this tab.
+    /// When `false`, the title auto-updates from the focused pane's CWD.
+    pub(super) is_renamed: bool,
+}
+
+impl TabState {
+    /// Returns the focused pane leaf (immutable).
+    pub(super) fn focused_leaf(&self) -> Option<&crate::gui::pane::PaneLeaf> {
+        self.pane_tree.find_leaf(self.focused_pane)
+    }
+
+    /// Returns the focused pane leaf (mutable).
+    pub(super) fn focused_leaf_mut(&mut self) -> Option<&mut crate::gui::pane::PaneLeaf> {
+        self.pane_tree.find_leaf_mut(self.focused_pane)
+    }
+
+    /// Returns `true` if this tab contains more than one pane.
+    pub(super) fn has_multiple_panes(&self) -> bool {
+        !self.pane_tree.is_leaf()
+    }
+
+    /// Picks the pane that should receive focus after `closing_id` is removed.
+    ///
+    /// Preference order:
+    /// 1) Most recently created pane with id `< closing_id` (reverse create order)
+    /// 2) Otherwise, the most recently created remaining pane.
+    pub(super) fn focus_after_closing_pane(
+        &self,
+        closing_id: crate::gui::pane::PaneId,
+    ) -> Option<crate::gui::pane::PaneId> {
+        let mut previous_created: Option<crate::gui::pane::PaneId> = None;
+        let mut newest_remaining: Option<crate::gui::pane::PaneId> = None;
+
+        for pane_id in self.pane_tree.leaf_ids() {
+            newest_remaining = Some(newest_remaining.map_or(pane_id, |v| v.max(pane_id)));
+            if pane_id < closing_id {
+                previous_created = Some(previous_created.map_or(pane_id, |v| v.max(pane_id)));
+            }
+        }
+
+        previous_created.or(newest_remaining)
+    }
+}
+
+/// Drag state for divider resize between panes.
+pub(super) struct DividerDragState {
+    /// Last pointer position used to identify the dragged divider.
+    pub(super) initial_mouse_pos: (u32, u32),
+    /// Direction of the divider being dragged.
+    pub(super) direction: crate::gui::pane::SplitDirection,
 }
 
 /// Drag-and-drop state for tab reordering.
@@ -99,13 +157,25 @@ pub(super) enum WindowRequest {
     /// Close this window (all tabs gone or user closed).
     CloseWindow,
     /// Create a new standalone window (Ctrl/Cmd+N).
-    NewWindow,
+    NewWindow { cwd: Option<String> },
     /// Create a new native macOS tab (new window in tab group).
     #[cfg(target_os = "macos")]
-    NewTab,
+    NewTab { cwd: Option<String> },
     /// Reopen a recently closed tab as a native macOS tab.
     #[cfg(target_os = "macos")]
     ReopenTab { title: String },
+}
+
+/// Tracks which context menu is currently open and what actions it maps to.
+pub(super) enum MenuContext {
+    Tab {
+        tab_index: usize,
+        action_map: Vec<(MenuId, crate::gui::menus::MenuAction)>,
+    },
+    Terminal {
+        pane_id: Option<crate::gui::pane::PaneId>,
+        action_map: Vec<(MenuId, crate::gui::menus::MenuAction)>,
+    },
 }
 
 /// Per-window state. Each window is self-contained with its own tabs, renderer, surface.
@@ -127,7 +197,7 @@ pub(super) struct FerrumWindow {
     pub(super) keyboard_selection_anchor: Option<crate::core::SelectionPoint>,
     pub(super) selection_drag_mode: SelectionDragMode,
     pub(super) hovered_tab: Option<usize>,
-    pub(super) context_menu: Option<ContextMenu>,
+    pub(super) pending_menu_context: Option<MenuContext>,
     pub(super) security_popup: Option<SecurityPopup>,
     #[cfg(not(target_os = "macos"))]
     pub(super) tab_hover_progress: Vec<f32>,
@@ -154,6 +224,10 @@ pub(super) struct FerrumWindow {
     pub(super) pending_requests: Vec<WindowRequest>,
     /// Whether this window is pinned (always-on-top).
     pub(super) pinned: bool,
+    /// Active divider drag state (pane resize).
+    pub(super) divider_drag: Option<DividerDragState>,
+    /// Last time CWD was polled via OS API for tabs without OSC 7.
+    pub(super) last_cwd_poll: std::time::Instant,
 }
 
 /// App is now a window manager holding multiple FerrumWindows.

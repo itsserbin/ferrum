@@ -3,9 +3,14 @@
 use wgpu;
 
 impl super::GpuRenderer {
-    /// Encodes the grid compute pass (Pass 1).
-    pub(super) fn encode_grid_pass(&self, encoder: &mut wgpu::CommandEncoder) {
-        if !self.grid_dirty || self.grid_cells.is_empty() {
+    /// Encodes one grid compute batch.
+    pub(super) fn encode_grid_batch_pass(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        dispatch_width: u32,
+        dispatch_height: u32,
+    ) {
+        if dispatch_width == 0 || dispatch_height == 0 {
             return;
         }
 
@@ -43,10 +48,8 @@ impl super::GpuRenderer {
         compute_pass.set_pipeline(&self.grid_pipeline);
         compute_pass.set_bind_group(0, &grid_bind_group, &[]);
 
-        // Dispatch enough workgroups to cover the entire texture so the
-        // compute shader fills out-of-grid pixels with the background color.
-        let wg_x = self.width.div_ceil(16);
-        let wg_y = self.height.div_ceil(16);
+        let wg_x = dispatch_width.div_ceil(16);
+        let wg_y = dispatch_height.div_ceil(16);
         compute_pass.dispatch_workgroups(wg_x, wg_y, 1);
     }
 

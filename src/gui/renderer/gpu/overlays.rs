@@ -2,6 +2,7 @@
 
 use super::super::shared::overlay_layout;
 use super::super::traits::Renderer;
+use super::super::types::{DragPosition, RoundedRectCmd};
 use super::super::{ACTIVE_TAB_BG, INSERTION_COLOR, TAB_BORDER, TAB_TEXT_ACTIVE, TabInfo};
 
 impl super::GpuRenderer {
@@ -14,13 +15,13 @@ impl super::GpuRenderer {
         indicator_x: f32,
     ) {
         let m = self.tab_layout_metrics();
+        let drag_pos = DragPosition { current_x, indicator_x };
         let layout = match overlay_layout::compute_drag_overlay_layout(
             &m,
             tabs.len(),
             source_index,
             tabs[source_index].title,
-            current_x,
-            indicator_x,
+            &drag_pos,
             buf_width as u32,
         ) {
             Some(l) => l,
@@ -28,35 +29,35 @@ impl super::GpuRenderer {
         };
 
         // Shadow.
-        self.push_rounded_rect(
-            layout.shadow_x as f32,
-            layout.shadow_y as f32,
-            layout.rect_w as f32,
-            layout.rect_h as f32,
-            layout.radius as f32,
-            0x000000,
-            0.24,
-        );
+        self.push_rounded_rect_cmd(&RoundedRectCmd {
+            x: layout.shadow_x as f32,
+            y: layout.shadow_y as f32,
+            w: layout.rect_w as f32,
+            h: layout.rect_h as f32,
+            radius: layout.radius as f32,
+            color: 0x000000,
+            opacity: 0.24,
+        });
         // Body.
-        self.push_rounded_rect(
-            layout.body_x as f32,
-            layout.body_y as f32,
-            layout.rect_w as f32,
-            layout.rect_h as f32,
-            layout.radius as f32,
-            ACTIVE_TAB_BG,
-            0.86,
-        );
+        self.push_rounded_rect_cmd(&RoundedRectCmd {
+            x: layout.body_x as f32,
+            y: layout.body_y as f32,
+            w: layout.rect_w as f32,
+            h: layout.rect_h as f32,
+            radius: layout.radius as f32,
+            color: ACTIVE_TAB_BG,
+            opacity: 0.86,
+        });
         // Border.
-        self.push_rounded_rect(
-            layout.body_x as f32,
-            layout.body_y as f32,
-            layout.rect_w as f32,
-            layout.rect_h as f32,
-            layout.radius as f32,
-            TAB_BORDER,
-            0.39,
-        );
+        self.push_rounded_rect_cmd(&RoundedRectCmd {
+            x: layout.body_x as f32,
+            y: layout.body_y as f32,
+            w: layout.rect_w as f32,
+            h: layout.rect_h as f32,
+            radius: layout.radius as f32,
+            color: TAB_BORDER,
+            opacity: 0.39,
+        });
 
         // Ghost title.
         self.push_text(
@@ -100,8 +101,12 @@ impl super::GpuRenderer {
         let (x, y) = (layout.bg_x as f32, layout.bg_y as f32);
         let (w, h) = (layout.bg_w as f32, layout.bg_h as f32);
         let r = layout.radius as f32;
-        self.push_rounded_rect(x, y, w, h, r, ACTIVE_TAB_BG, 0.96);
-        self.push_rounded_rect(x, y, w, h, r, TAB_BORDER, 0.31);
+        self.push_rounded_rect_cmd(&RoundedRectCmd {
+            x, y, w, h, radius: r, color: ACTIVE_TAB_BG, opacity: 0.96,
+        });
+        self.push_rounded_rect_cmd(&RoundedRectCmd {
+            x, y, w, h, radius: r, color: TAB_BORDER, opacity: 0.31,
+        });
 
         self.push_text(
             layout.text_x as f32,

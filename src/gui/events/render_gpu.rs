@@ -4,7 +4,7 @@ use crate::gui::renderer::backend::RendererBackend;
 use crate::gui::*;
 
 #[cfg(feature = "gpu")]
-use super::render_shared::{draw_frame_content, FrameParams};
+use super::render_shared::{FrameParams, draw_frame_content};
 
 #[cfg(feature = "gpu")]
 impl FerrumWindow {
@@ -29,13 +29,12 @@ impl FerrumWindow {
         // Build read-only frame params from the other fields of self
         // (split borrow: self.backend is already mutably borrowed above).
         let params = FrameParams {
-            active_tab: self.tabs.get(self.active_tab),
+            tab: self.tabs.get(self.active_tab),
             cursor_blink_start: self.cursor_blink_start,
             hovered_tab: self.hovered_tab,
             mouse_pos: self.mouse_pos,
             pinned: self.pinned,
             security_popup: self.security_popup.as_ref(),
-            context_menu: self.context_menu.as_ref(),
         };
 
         draw_frame_content(

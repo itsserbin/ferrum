@@ -40,7 +40,7 @@ impl FerrumWindow {
                 self.window.set_maximized(!maximized);
             }
             WindowButton::Close => {
-                self.pending_requests.push(WindowRequest::CloseWindow);
+                self.request_close_window();
             }
         }
     }

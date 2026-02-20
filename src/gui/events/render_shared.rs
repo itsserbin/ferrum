@@ -4,11 +4,18 @@
 //! verbatim in `render_cpu.rs` and `render_gpu.rs`.
 
 use crate::core::terminal::CursorStyle;
+use crate::gui::pane::{DIVIDER_WIDTH, PaneNode, PaneRect, SplitDirection, split_rect};
 use crate::gui::renderer::traits::Renderer;
+use crate::gui::renderer::{RenderTarget, ScrollbarState};
 use crate::gui::*;
 
 #[cfg(not(target_os = "macos"))]
 use crate::gui::renderer::TabInfo;
+
+/// Opacity of the inactive-pane dim overlay.
+const INACTIVE_PANE_DIM_ALPHA: f32 = 0.18;
+/// Catppuccin Mocha Surface2 for split dividers.
+const SPLIT_DIVIDER_COLOR: u32 = 0xFF585B70;
 
 /// Pre-computed tab bar state needed by both CPU and GPU render paths.
 ///
@@ -28,6 +35,7 @@ pub(in crate::gui) struct TabBarFrameState {
 #[cfg(not(target_os = "macos"))]
 pub(in crate::gui) struct TabBarFrameTabInfo {
     pub title: String,
+    pub index: usize,
     pub is_active: bool,
     pub security_count: usize,
     pub hover_progress: f32,
@@ -43,6 +51,7 @@ impl TabBarFrameTabInfo {
     fn as_tab_info(&self) -> TabInfo<'_> {
         TabInfo {
             title: &self.title,
+            index: self.index,
             is_active: self.is_active,
             security_count: self.security_count,
             hover_progress: self.hover_progress,
@@ -72,7 +81,7 @@ impl TabBarFrameState {
 /// `self.backend`, enabling split borrows between the renderer and the
 /// remaining `FerrumWindow` fields.
 pub(in crate::gui::events) struct FrameParams<'a> {
-    pub active_tab: Option<&'a TabState>,
+    pub tab: Option<&'a crate::gui::state::TabState>,
     pub cursor_blink_start: std::time::Instant,
     #[cfg_attr(target_os = "macos", allow(dead_code))]
     pub hovered_tab: Option<usize>,
@@ -81,7 +90,6 @@ pub(in crate::gui::events) struct FrameParams<'a> {
     #[cfg_attr(target_os = "macos", allow(dead_code))]
     pub pinned: bool,
     pub security_popup: Option<&'a SecurityPopup>,
-    pub context_menu: Option<&'a ContextMenu>,
 }
 
 impl FerrumWindow {
@@ -112,13 +120,23 @@ impl FerrumWindow {
             .enumerate()
             .map(|(i, t)| {
                 let is_renaming = renaming.as_ref().is_some_and(|(ri, _, _, _)| *ri == i);
-                let security_count = if t.security.has_events() {
-                    t.security.active_event_count()
+                let security_count = t.focused_leaf().map_or(0, |leaf| {
+                    if leaf.security.has_events() {
+                        leaf.security.active_event_count()
+                    } else {
+                        0
+                    }
+                });
+                let display_title = if t.is_renamed {
+                    t.title.clone()
                 } else {
-                    0
+                    t.focused_leaf()
+                        .and_then(|leaf| leaf.cwd())
+                        .unwrap_or_else(|| t.title.clone())
                 };
                 TabBarFrameTabInfo {
-                    title: t.title.clone(),
+                    title: display_title,
+                    index: i,
                     is_active: i == self.active_tab,
                     security_count,
                     hover_progress: self.tab_hover_progress.get(i).copied().unwrap_or(0.0),
@@ -191,8 +209,7 @@ impl FerrumWindow {
             .dragging_tab
             .as_ref()
             .is_some_and(|drag| drag.is_active);
-        let show_tooltip =
-            !dragging_active && self.context_menu.is_none() && self.security_popup.is_none();
+        let show_tooltip = !dragging_active && self.security_popup.is_none();
 
         let tab_bar_visible = self.backend.tab_bar_height_px() > 0;
 
@@ -211,6 +228,10 @@ impl FerrumWindow {
 ///
 /// This is the unified render sequence shared by both CPU and GPU paths:
 /// terminal grid, cursor, scrollbar, tab bar, drag overlay, popups, tooltip.
+///
+/// For tabs with multiple panes, iterates the pane tree and renders each leaf
+/// into its assigned sub-rectangle, with dividers between panes and a dim
+/// overlay on inactive panes.
 pub(in crate::gui::events) fn draw_frame_content(
     renderer: &mut dyn Renderer,
     buffer: &mut [u32],
@@ -220,73 +241,178 @@ pub(in crate::gui::events) fn draw_frame_content(
     #[cfg(not(target_os = "macos"))] tab_bar: &TabBarFrameState,
     #[cfg(not(target_os = "macos"))] frame_tab_infos: &[TabInfo<'_>],
 ) {
-    // 1) Draw active tab terminal content.
-    if let Some(tab) = params.active_tab {
-        let viewport_start = tab
-            .terminal
-            .scrollback
-            .len()
-            .saturating_sub(tab.scroll_offset);
-        if tab.scroll_offset == 0 {
-            renderer.render(
-                buffer,
-                bw,
-                bh,
-                &tab.terminal.grid,
-                tab.selection.as_ref(),
-                viewport_start,
-            );
-        } else {
-            let display = tab.terminal.build_display(tab.scroll_offset);
-            renderer.render(
-                buffer,
-                bw,
-                bh,
-                &display,
-                tab.selection.as_ref(),
-                viewport_start,
-            );
-        }
+    let mut target = RenderTarget { buffer, width: bw, height: bh };
 
-        // 2) Draw cursor on top of terminal cells.
-        if tab.scroll_offset == 0
-            && tab.terminal.cursor_visible
-            && should_show_cursor(params.cursor_blink_start, tab.terminal.cursor_style)
-        {
-            renderer.draw_cursor(
-                buffer,
-                bw,
-                bh,
-                tab.terminal.cursor_row,
-                tab.terminal.cursor_col,
-                &tab.terminal.grid,
-                tab.terminal.cursor_style,
-            );
-        }
-    }
+    // 1) Draw terminal content — single-pane fast path or multi-pane loop.
+    if let Some(tab) = params.tab {
+        if tab.has_multiple_panes() {
+            // Multi-pane: compute layout and render each pane into its rect.
+            let tab_bar_h = renderer.tab_bar_height_px();
+            let padding = renderer.window_padding_px();
+            let terminal_rect = PaneRect {
+                x: padding,
+                y: tab_bar_h + padding,
+                width: (bw as u32).saturating_sub(padding * 2),
+                height: (bh as u32).saturating_sub(tab_bar_h + padding * 2),
+            };
+            let divider_px = DIVIDER_WIDTH;
+            let pane_pad = renderer.scaled_px(crate::gui::pane::PANE_INNER_PADDING);
+            let pane_layout = tab.pane_tree.layout(terminal_rect, divider_px);
 
-    // 3) Draw scrollbar overlay.
-    if let Some(tab) = params.active_tab {
-        let scrollback_len = tab.terminal.scrollback.len();
-        if scrollback_len > 0 {
-            let hover = tab.scrollbar.hover || tab.scrollbar.dragging;
-            let opacity = scrollbar_opacity(
-                tab.scrollbar.hover,
-                tab.scrollbar.dragging,
-                tab.scrollbar.last_activity,
-            );
+            for &(pane_id, rect) in &pane_layout {
+                if let Some(leaf) = tab.pane_tree.find_leaf(pane_id) {
+                    let is_focused = pane_id == tab.focused_pane;
+                    let fg_dim = if is_focused {
+                        0.0
+                    } else {
+                        INACTIVE_PANE_DIM_ALPHA
+                    };
 
-            if opacity > 0.0 {
-                renderer.render_scrollbar(
-                    buffer,
-                    bw,
-                    bh,
-                    tab.scroll_offset,
-                    scrollback_len,
-                    tab.terminal.grid.rows,
-                    opacity,
-                    hover,
+                    let content = rect.inset(pane_pad);
+
+                    // Render terminal grid into pane content area.
+                    let viewport_start = leaf
+                        .terminal
+                        .scrollback
+                        .len()
+                        .saturating_sub(leaf.scroll_offset);
+                    if leaf.scroll_offset == 0 {
+                        renderer.render_in_rect(
+                            &mut target,
+                            &leaf.terminal.grid,
+                            leaf.selection.as_ref(),
+                            viewport_start,
+                            content,
+                            fg_dim,
+                        );
+                    } else {
+                        let display = leaf.terminal.build_display(leaf.scroll_offset);
+                        renderer.render_in_rect(
+                            &mut target,
+                            &display,
+                            leaf.selection.as_ref(),
+                            viewport_start,
+                            content,
+                            fg_dim,
+                        );
+                    }
+
+                    // Cursor.
+                    if leaf.scroll_offset == 0
+                        && leaf.terminal.cursor_visible
+                        && is_focused
+                        && should_show_cursor(params.cursor_blink_start, leaf.terminal.cursor_style)
+                    {
+                        renderer.draw_cursor_in_rect(
+                            &mut target,
+                            leaf.terminal.cursor_row,
+                            leaf.terminal.cursor_col,
+                            &leaf.terminal.grid,
+                            leaf.terminal.cursor_style,
+                            content,
+                        );
+                    }
+
+                    // Scrollbar within the full pane rect (not inset).
+                    let scrollback_len = leaf.terminal.scrollback.len();
+                    if scrollback_len > 0 {
+                        let hover = leaf.scrollbar.hover || leaf.scrollbar.dragging;
+                        let opacity = scrollbar_opacity(
+                            leaf.scrollbar.hover,
+                            leaf.scrollbar.dragging,
+                            leaf.scrollbar.last_activity,
+                        );
+                        if opacity > 0.0 {
+                            renderer.render_scrollbar_in_rect(
+                                &mut target,
+                                &ScrollbarState {
+                                    scroll_offset: leaf.scroll_offset,
+                                    scrollback_len,
+                                    grid_rows: leaf.terminal.grid.rows,
+                                    opacity,
+                                    hover,
+                                },
+                                rect,
+                            );
+                        }
+                    }
+                }
+            }
+
+            // Draw dividers between panes.
+            if !target.buffer.is_empty() {
+                draw_dividers(
+                    target.buffer,
+                    target.width,
+                    target.height,
+                    &tab.pane_tree,
+                    terminal_rect,
+                    divider_px,
                 );
+            } else {
+                draw_dividers_with_renderer(renderer, &tab.pane_tree, terminal_rect, divider_px);
+            }
+        } else {
+            // Single-pane: use the original render path (faster, no rect clipping).
+            if let Some(leaf) = tab.focused_leaf() {
+                let viewport_start = leaf
+                    .terminal
+                    .scrollback
+                    .len()
+                    .saturating_sub(leaf.scroll_offset);
+                if leaf.scroll_offset == 0 {
+                    renderer.render(
+                        &mut target,
+                        &leaf.terminal.grid,
+                        leaf.selection.as_ref(),
+                        viewport_start,
+                    );
+                } else {
+                    let display = leaf.terminal.build_display(leaf.scroll_offset);
+                    renderer.render(
+                        &mut target,
+                        &display,
+                        leaf.selection.as_ref(),
+                        viewport_start,
+                    );
+                }
+
+                // Cursor.
+                if leaf.scroll_offset == 0
+                    && leaf.terminal.cursor_visible
+                    && should_show_cursor(params.cursor_blink_start, leaf.terminal.cursor_style)
+                {
+                    renderer.draw_cursor(
+                        &mut target,
+                        leaf.terminal.cursor_row,
+                        leaf.terminal.cursor_col,
+                        &leaf.terminal.grid,
+                        leaf.terminal.cursor_style,
+                    );
+                }
+
+                // Scrollbar.
+                let scrollback_len = leaf.terminal.scrollback.len();
+                if scrollback_len > 0 {
+                    let hover = leaf.scrollbar.hover || leaf.scrollbar.dragging;
+                    let opacity = scrollbar_opacity(
+                        leaf.scrollbar.hover,
+                        leaf.scrollbar.dragging,
+                        leaf.scrollbar.last_activity,
+                    );
+                    if opacity > 0.0 {
+                        renderer.render_scrollbar(
+                            &mut target,
+                            &ScrollbarState {
+                                scroll_offset: leaf.scroll_offset,
+                                scrollback_len,
+                                grid_rows: leaf.terminal.grid.rows,
+                                opacity,
+                                hover,
+                            },
+                        );
+                    }
+                }
             }
         }
     }
@@ -296,9 +422,7 @@ pub(in crate::gui::events) fn draw_frame_content(
     {
         if tab_bar.tab_bar_visible {
             renderer.draw_tab_bar(
-                buffer,
-                bw,
-                bh,
+                &mut target,
                 frame_tab_infos,
                 params.hovered_tab,
                 params.mouse_pos,
@@ -309,9 +433,7 @@ pub(in crate::gui::events) fn draw_frame_content(
             // 5) Draw drag overlay.
             if let Some((source_index, current_x, indicator_x)) = tab_bar.drag_info {
                 renderer.draw_tab_drag_overlay(
-                    buffer,
-                    bw,
-                    bh,
+                    &mut target,
                     frame_tab_infos,
                     source_index,
                     current_x,
@@ -323,11 +445,7 @@ pub(in crate::gui::events) fn draw_frame_content(
 
     // 6) Draw popups/menus.
     if let Some(popup) = params.security_popup {
-        renderer.draw_security_popup(buffer, bw, bh, popup);
-    }
-
-    if let Some(menu) = params.context_menu {
-        renderer.draw_context_menu(buffer, bw, bh, menu);
+        renderer.draw_security_popup(&mut target, popup);
     }
 
     // 7) Draw tooltip.
@@ -336,7 +454,87 @@ pub(in crate::gui::events) fn draw_frame_content(
         && tab_bar.tab_bar_visible
         && let Some(ref title) = tab_bar.tab_tooltip
     {
-        renderer.draw_tab_tooltip(buffer, bw, bh, params.mouse_pos, title);
+        renderer.draw_tab_tooltip(&mut target, params.mouse_pos, title);
+    }
+}
+
+/// Recursively draws divider lines between split panes.
+fn draw_dividers(
+    buffer: &mut [u32],
+    bw: usize,
+    bh: usize,
+    tree: &PaneNode,
+    rect: PaneRect,
+    divider_px: u32,
+) {
+    if let PaneNode::Split(split) = tree {
+        let (first_rect, second_rect) = split_rect(rect, split.direction, split.ratio, divider_px);
+
+        match split.direction {
+            SplitDirection::Horizontal => {
+                let div_x = first_rect.x + first_rect.width;
+                for py in rect.y..(rect.y + rect.height).min(bh as u32) {
+                    for dx in 0..divider_px {
+                        let px = div_x + dx;
+                        if (px as usize) < bw {
+                            let idx = py as usize * bw + px as usize;
+                            if idx < buffer.len() {
+                                buffer[idx] = SPLIT_DIVIDER_COLOR;
+                            }
+                        }
+                    }
+                }
+            }
+            SplitDirection::Vertical => {
+                let div_y = first_rect.y + first_rect.height;
+                for dy in 0..divider_px {
+                    let py = div_y + dy;
+                    if (py as usize) < bh {
+                        for px in rect.x..(rect.x + rect.width).min(bw as u32) {
+                            let idx = py as usize * bw + px as usize;
+                            if idx < buffer.len() {
+                                buffer[idx] = SPLIT_DIVIDER_COLOR;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Recurse into children.
+        draw_dividers(buffer, bw, bh, &split.first, first_rect, divider_px);
+        draw_dividers(buffer, bw, bh, &split.second, second_rect, divider_px);
+    }
+}
+
+/// Recursively emits split divider rectangles to the renderer (GPU path).
+fn draw_dividers_with_renderer(
+    renderer: &mut dyn Renderer,
+    tree: &PaneNode,
+    rect: PaneRect,
+    divider_px: u32,
+) {
+    if let PaneNode::Split(split) = tree {
+        let (first_rect, second_rect) = split_rect(rect, split.direction, split.ratio, divider_px);
+
+        let divider_rect = match split.direction {
+            SplitDirection::Horizontal => PaneRect {
+                x: first_rect.x + first_rect.width,
+                y: rect.y,
+                width: divider_px,
+                height: rect.height,
+            },
+            SplitDirection::Vertical => PaneRect {
+                x: rect.x,
+                y: first_rect.y + first_rect.height,
+                width: rect.width,
+                height: divider_px,
+            },
+        };
+        renderer.draw_pane_divider(divider_rect);
+
+        draw_dividers_with_renderer(renderer, &split.first, first_rect, divider_px);
+        draw_dividers_with_renderer(renderer, &split.second, second_rect, divider_px);
     }
 }
 

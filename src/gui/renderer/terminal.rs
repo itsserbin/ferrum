@@ -1,16 +1,18 @@
 use super::*;
+use super::RenderTarget;
+use crate::gui::pane::PaneRect;
 
 impl CpuRenderer {
     /// Renders terminal cells with top/left offsets for tab bar and padding.
     pub fn render(
         &mut self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
+        target: &mut RenderTarget<'_>,
         grid: &Grid,
         selection: Option<&Selection>,
         viewport_start: usize,
     ) {
+        let buf_width = target.width;
+        let buf_height = target.height;
         let y_offset = self.tab_bar_height_px() + self.window_padding_px();
         let x_offset = self.window_padding_px();
 
@@ -26,16 +28,11 @@ impl CpuRenderer {
                     continue;
                 }
 
-                // Invert colors if the cell is selected
                 let selected = selection.is_some_and(|s| s.contains(abs_row, col));
-                let (mut fg, mut bg) = if selected {
-                    (cell.bg, cell.fg)
-                } else {
-                    (cell.fg, cell.bg)
-                };
+                let (mut fg, mut bg) = (cell.fg, cell.bg);
 
                 // Reverse video
-                if cell.reverse && !selected {
+                if cell.reverse {
                     std::mem::swap(&mut fg, &mut bg);
                 }
 
@@ -44,10 +41,18 @@ impl CpuRenderer {
                     fg = fg.bold_bright();
                 }
 
-                self.draw_bg(buffer, buf_width, buf_height, x, y, bg);
+                if selected {
+                    bg = Color::from_pixel(super::blend_rgb(
+                        bg.to_pixel(),
+                        super::SELECTION_OVERLAY_COLOR,
+                        super::SELECTION_OVERLAY_ALPHA,
+                    ));
+                }
+
+                self.draw_bg(target, x, y, bg);
 
                 if cell.character != ' ' {
-                    self.draw_char(buffer, buf_width, buf_height, x, y, cell.character, fg);
+                    self.draw_char(target, x, y, cell.character, fg);
                 }
 
                 // Underline
@@ -59,8 +64,92 @@ impl CpuRenderer {
                             let px = x as usize + dx;
                             if px < buf_width {
                                 let idx = underline_y as usize * buf_width + px;
-                                if idx < buffer.len() {
-                                    buffer[idx] = pixel;
+                                if idx < target.buffer.len() {
+                                    target.buffer[idx] = pixel;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Renders terminal cells into a sub-rectangle of the buffer.
+    ///
+    /// Like `render()` but uses `rect` as the origin and clips to its bounds.
+    pub fn render_in_rect(
+        &mut self,
+        target: &mut RenderTarget<'_>,
+        grid: &Grid,
+        selection: Option<&Selection>,
+        viewport_start: usize,
+        rect: PaneRect,
+        fg_dim: f32,
+    ) {
+        let buf_width = target.width;
+        let buf_height = target.height;
+        let rect_right = (rect.x + rect.width) as usize;
+        let rect_bottom = (rect.y + rect.height) as usize;
+        for row in 0..grid.rows {
+            let abs_row = viewport_start + row;
+            for col in 0..grid.cols {
+                let cell = grid.get_unchecked(row, col);
+                let x = col as u32 * self.metrics.cell_width + rect.x;
+                let y = row as u32 * self.metrics.cell_height + rect.y;
+
+                // Clip to pane rect and buffer bounds.
+                // Check the cell's full extent (not just its origin) to prevent
+                // partial cells at the boundary from bleeding into adjacent panes.
+                let cell_w = self.metrics.cell_width;
+                let cell_h = self.metrics.cell_height;
+                if (x + cell_w) as usize > rect_right
+                    || (y + cell_h) as usize > rect_bottom
+                    || x as usize >= buf_width
+                    || y as usize >= buf_height
+                {
+                    continue;
+                }
+
+                let selected = selection.is_some_and(|s| s.contains(abs_row, col));
+                let (mut fg, mut bg) = (cell.fg, cell.bg);
+
+                if cell.reverse {
+                    std::mem::swap(&mut fg, &mut bg);
+                }
+
+                if cell.bold {
+                    fg = fg.bold_bright();
+                }
+
+                if fg_dim > 0.0 {
+                    fg = fg.dimmed(fg_dim);
+                }
+
+                if selected {
+                    bg = Color::from_pixel(super::blend_rgb(
+                        bg.to_pixel(),
+                        super::SELECTION_OVERLAY_COLOR,
+                        super::SELECTION_OVERLAY_ALPHA,
+                    ));
+                }
+
+                self.draw_bg(target, x, y, bg);
+
+                if cell.character != ' ' {
+                    self.draw_char(target, x, y, cell.character, fg);
+                }
+
+                if cell.underline {
+                    let underline_y = y + self.metrics.cell_height - 2;
+                    if (underline_y as usize) < buf_height && (underline_y as usize) < rect_bottom {
+                        let pixel = fg.to_pixel();
+                        for dx in 0..self.metrics.cell_width as usize {
+                            let px = x as usize + dx;
+                            if px < buf_width && px < rect_right {
+                                let idx = underline_y as usize * buf_width + px;
+                                if idx < target.buffer.len() {
+                                    target.buffer[idx] = pixel;
                                 }
                             }
                         }

@@ -69,6 +69,7 @@ pub struct Terminal {
     pub resize_at: Option<std::time::Instant>,
     scrollback_popped: usize,
     parser: Parser,
+    pub cwd: Option<String>,
 }
 
 impl Terminal {
@@ -102,6 +103,7 @@ impl Terminal {
             resize_at: None,
             scrollback_popped: 0,
             parser: Parser::new(),
+            cwd: None,
         }
     }
 
@@ -132,6 +134,12 @@ impl Terminal {
     /// Returns and resets the accumulated scrollback-popped counter.
     pub fn drain_scrollback_popped(&mut self) -> usize {
         std::mem::take(&mut self.scrollback_popped)
+    }
+
+    /// Resets the scroll region to span the entire visible grid.
+    pub fn reset_scroll_region(&mut self) {
+        self.scroll_top = 0;
+        self.scroll_bottom = self.grid.rows.saturating_sub(1);
     }
 
     /// Drains security events detected while parsing terminal output.
@@ -230,7 +238,7 @@ impl Terminal {
         matches!(self.param(params, 0), 20 | 21)
     }
 
-    fn full_reset(&mut self) {
+    pub fn full_reset(&mut self) {
         let rows = self.grid.rows;
         let cols = self.grid.cols;
 
@@ -252,7 +260,9 @@ impl Terminal {
         if self.security_config.clear_mouse_on_reset {
             self.clear_mouse_tracking(true);
         }
+        self.cwd = None;
         self.reset_attributes();
+        self.parser = Parser::new();
     }
 
     fn handle_private_mode(&mut self, params: &Params, intermediates: &[u8], action: char) -> bool {
@@ -384,7 +394,19 @@ impl Perform for Terminal {
 
     fn put(&mut self, _byte: u8) {}
     fn unhook(&mut self) {}
-    fn osc_dispatch(&mut self, _params: &[&[u8]], _bell_terminated: bool) {}
+    fn osc_dispatch(&mut self, params: &[&[u8]], _bell_terminated: bool) {
+        if params.is_empty() {
+            return;
+        }
+        if params[0] == b"7" {
+            if params.len() < 2 || params[1].is_empty() {
+                self.cwd = None;
+                return;
+            }
+            let uri = String::from_utf8_lossy(params[1]);
+            self.cwd = parse_osc7_uri(&uri);
+        }
+    }
     fn csi_dispatch(&mut self, params: &Params, intermediates: &[u8], _ignore: bool, action: char) {
         if self.is_blocked_title_query(action, params) {
             self.emit_security_event(SecurityEventKind::TitleQuery);
@@ -437,6 +459,65 @@ impl Perform for Terminal {
             b'c' => self.full_reset(), // RIS - full terminal reset
             _ => {}
         }
+    }
+}
+
+fn parse_osc7_uri(uri: &str) -> Option<String> {
+    let after_scheme = uri
+        .strip_prefix("file://")
+        .or_else(|| uri.strip_prefix("kitty-shell-cwd://"))?;
+    let (hostname, path) = if let Some(idx) = after_scheme.find('/') {
+        (&after_scheme[..idx], &after_scheme[idx..])
+    } else {
+        return None;
+    };
+    if !hostname.is_empty() && hostname != "localhost" {
+        let local = gethostname::gethostname();
+        if hostname != local.to_string_lossy().as_ref() {
+            return None;
+        }
+    }
+    let decoded = percent_decode(path);
+    if decoded.is_empty() {
+        return None;
+    }
+    // On Windows, URI path is "/C:\Users\..." — strip leading slash before drive letter
+    #[cfg(target_os = "windows")]
+    {
+        if decoded.len() >= 3 && decoded.as_bytes()[0] == b'/' && decoded.as_bytes()[2] == b':' {
+            return Some(decoded[1..].replace('/', "\\"));
+        }
+    }
+    Some(decoded)
+}
+
+fn percent_decode(input: &str) -> String {
+    let mut bytes = Vec::with_capacity(input.len());
+    let mut iter = input.bytes();
+    while let Some(b) = iter.next() {
+        if b == b'%' {
+            if let (Some(h), Some(l)) = (iter.next(), iter.next()) {
+                if let (Some(hv), Some(lv)) = (hex_val(h), hex_val(l)) {
+                    bytes.push(hv << 4 | lv);
+                    continue;
+                }
+                bytes.extend_from_slice(&[b'%', h, l]);
+            } else {
+                bytes.push(b'%');
+            }
+        } else {
+            bytes.push(b);
+        }
+    }
+    String::from_utf8_lossy(&bytes).into_owned()
+}
+
+fn hex_val(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
     }
 }
 

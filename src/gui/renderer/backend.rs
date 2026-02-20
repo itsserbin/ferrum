@@ -4,7 +4,7 @@ use softbuffer::Surface;
 use winit::window::Window;
 
 use super::traits::Renderer;
-use super::{ContextMenu, CpuRenderer, SecurityPopup, TabBarHit, TabInfo};
+use super::{CpuRenderer, SecurityPopup, TabBarHit, TabInfo};
 
 #[cfg(feature = "gpu")]
 use super::gpu::GpuRenderer;
@@ -117,8 +117,12 @@ impl RendererBackend {
         scrollback_len: usize,
         grid_rows: usize,
     ) -> Option<(f32, f32)> {
-        self.as_renderer()
-            .scrollbar_thumb_bounds(buf_height, scroll_offset, scrollback_len, grid_rows)
+        self.as_renderer().scrollbar_thumb_bounds(
+            buf_height,
+            scroll_offset,
+            scrollback_len,
+            grid_rows,
+        )
     }
 
     // ── Tab bar metrics / hit testing ─────────────────────────────────
@@ -183,12 +187,6 @@ impl RendererBackend {
     ) -> Option<(u32, u32, u32, u32)> {
         self.as_renderer()
             .security_badge_rect(tab_index, tab_count, buf_width, security_count)
-    }
-
-    // ── Context menu ────────────────────────────────────────────────
-
-    pub fn hit_test_context_menu(&self, menu: &ContextMenu, x: f64, y: f64) -> Option<usize> {
-        self.as_renderer().hit_test_context_menu(menu, x, y)
     }
 
     // ── Security ────────────────────────────────────────────────────

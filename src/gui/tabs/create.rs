@@ -1,3 +1,4 @@
+use crate::gui::pane::{PaneLeaf, PaneNode};
 use crate::gui::*;
 use anyhow::Context;
 
@@ -9,8 +10,9 @@ impl FerrumWindow {
         cols: usize,
         next_tab_id: &mut u64,
         tx: &mpsc::Sender<PtyEvent>,
+        cwd: Option<String>,
     ) {
-        self.new_tab_with_title(rows, cols, None, next_tab_id, tx);
+        self.new_tab_with_title(rows, cols, None, next_tab_id, tx, cwd);
     }
 
     /// Creates a new tab with an optional custom title.
@@ -21,8 +23,9 @@ impl FerrumWindow {
         title: Option<String>,
         next_tab_id: &mut u64,
         tx: &mpsc::Sender<PtyEvent>,
+        cwd: Option<String>,
     ) {
-        match Self::build_tab_state(rows, cols, title, next_tab_id, tx) {
+        match Self::build_tab_state(rows, cols, title, next_tab_id, tx, cwd) {
             Ok(tab) => {
                 self.tabs.push(tab);
                 self.active_tab = self.tabs.len() - 1;
@@ -40,39 +43,50 @@ impl FerrumWindow {
         title: Option<String>,
         next_tab_id: &mut u64,
         tx: &mpsc::Sender<PtyEvent>,
+        cwd: Option<String>,
     ) -> anyhow::Result<TabState> {
         let id = *next_tab_id;
         *next_tab_id += 1;
 
+        let pane_id: u64 = 0;
+
         let shell = pty::default_shell();
-        let session = pty::Session::spawn(&shell, rows as u16, cols as u16)
+        let session = pty::Session::spawn(&shell, rows as u16, cols as u16, cwd.as_deref())
             .context("failed to spawn PTY session")?;
         let pty_writer = session.writer().context("failed to acquire PTY writer")?;
 
-        // Spawn a dedicated PTY reader thread for this tab.
+        // Spawn a dedicated PTY reader thread for this tab/pane.
         let tx = tx.clone();
         let mut reader = session.reader().context("failed to clone PTY reader")?;
         let tab_id = id;
+        let reader_pane_id = pane_id;
         std::thread::Builder::new()
-            .name(format!("pty-reader-{}", tab_id))
+            .name(format!("pty-reader-{}-{}", tab_id, reader_pane_id))
             .spawn(move || {
                 use std::io::Read;
                 let mut buf = [0u8; 4096];
                 loop {
                     match reader.read(&mut buf) {
                         Ok(0) => {
-                            let _ = tx.send(PtyEvent::Exited { tab_id });
+                            let _ = tx.send(PtyEvent::Exited {
+                                tab_id,
+                                pane_id: reader_pane_id,
+                            });
                             break;
                         }
                         Err(err) => {
                             eprintln!("PTY read error for tab {tab_id}: {err}");
-                            let _ = tx.send(PtyEvent::Exited { tab_id });
+                            let _ = tx.send(PtyEvent::Exited {
+                                tab_id,
+                                pane_id: reader_pane_id,
+                            });
                             break;
                         }
                         Ok(n) => {
                             if tx
                                 .send(PtyEvent::Data {
                                     tab_id,
+                                    pane_id: reader_pane_id,
                                     bytes: buf[..n].to_vec(),
                                 })
                                 .is_err()
@@ -94,16 +108,33 @@ impl FerrumWindow {
             terminal.process(msg.as_bytes());
         }
 
-        Ok(TabState {
-            id,
+        let leaf = PaneLeaf {
+            id: pane_id,
             terminal,
-            session,
+            session: Some(session),
             pty_writer,
-            title: title.unwrap_or_else(|| format!("bash #{}", id + 1)),
-            scroll_offset: 0,
             selection: None,
+            scroll_offset: 0,
             security: SecurityGuard::new(),
             scrollbar: ScrollbarState::new(),
+        };
+
+        let shell_name = std::path::Path::new(&shell)
+            .file_stem()
+            .and_then(|n| n.to_str())
+            .unwrap_or("shell")
+            .to_string();
+
+        let is_renamed = title.is_some();
+        let tab_title = title.unwrap_or(shell_name);
+
+        Ok(TabState {
+            id,
+            title: tab_title,
+            pane_tree: PaneNode::Leaf(Box::new(leaf)),
+            focused_pane: pane_id,
+            next_pane_id: 1,
+            is_renamed,
         })
     }
 }

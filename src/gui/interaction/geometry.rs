@@ -32,9 +32,9 @@ impl FerrumWindow {
             / self.backend.cell_width() as usize;
         let row = (y as u32).saturating_sub(tab_bar_height + window_padding) as usize
             / self.backend.cell_height() as usize;
-        if let Some(tab) = self.active_tab_ref() {
-            let row = row.min(tab.terminal.grid.rows.saturating_sub(1));
-            let col = col.min(tab.terminal.grid.cols.saturating_sub(1));
+        if let Some(leaf) = self.active_leaf_ref() {
+            let row = row.min(leaf.terminal.grid.rows.saturating_sub(1));
+            let col = col.min(leaf.terminal.grid.cols.saturating_sub(1));
             (row, col)
         } else {
             (0, 0)

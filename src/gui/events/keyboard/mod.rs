@@ -13,11 +13,11 @@ use crate::gui::*;
 
 impl FerrumWindow {
     pub(in crate::gui) fn write_pty_bytes(&mut self, bytes: &[u8]) {
-        if let Some(tab) = self.active_tab_mut() {
-            tab.scroll_offset = 0;
-            tab.selection = None;
-            let _ = tab.pty_writer.write_all(bytes);
-            let _ = tab.pty_writer.flush();
+        if let Some(leaf) = self.active_leaf_mut() {
+            leaf.scroll_offset = 0;
+            leaf.selection = None;
+            let _ = leaf.pty_writer.write_all(bytes);
+            let _ = leaf.pty_writer.flush();
         }
         self.keyboard_selection_anchor = None;
     }

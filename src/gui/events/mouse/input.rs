@@ -1,4 +1,6 @@
-use crate::gui::renderer::{ContextMenu, TabBarHit};
+use crate::gui::pane::{DIVIDER_HIT_ZONE, DIVIDER_WIDTH};
+use crate::gui::renderer::TabBarHit;
+use crate::gui::state::MenuContext;
 use crate::gui::*;
 
 impl FerrumWindow {
@@ -40,39 +42,55 @@ impl FerrumWindow {
                 self.security_popup = None;
                 let (mx, my) = self.mouse_pos;
                 let tab_bar_height = self.backend.tab_bar_height_px();
+
                 if my < tab_bar_height as f64 {
-                    // Right click on a tab opens its context menu.
+                    // Right-click on a tab: show native tab context menu.
                     if let TabBarHit::Tab(idx) | TabBarHit::CloseTab(idx) = self.tab_bar_hit(mx, my)
                     {
-                        self.context_menu =
-                            Some(ContextMenu::for_tab(mx as u32, tab_bar_height, idx));
+                        let (menu, action_map) = menus::build_tab_context_menu();
+                        self.pending_menu_context = Some(MenuContext::Tab {
+                            tab_index: idx,
+                            action_map,
+                        });
+                        menus::show_context_menu(&self.window, &menu, None);
                     }
                     return;
                 }
 
+                // In mouse-reporting mode, forward right-click to the terminal.
                 if self.is_mouse_reporting() {
                     let (row, col) = self.pixel_to_grid(self.mouse_pos.0, self.mouse_pos.1);
                     self.send_mouse_event(2, col, row, true);
                     return;
                 }
 
-                self.context_menu = None;
-
-                let (row, col) = self.pixel_to_grid(mx, my);
-                let abs_row = self.screen_to_abs(row);
-                let clicked_selection = self
-                    .active_tab_ref()
-                    .and_then(|tab| tab.selection)
-                    .is_some_and(|selection| selection.contains(abs_row, col));
-
-                if clicked_selection {
-                    self.context_menu = Some(ContextMenu::for_terminal_selection(
-                        mx.max(0.0) as u32,
-                        my.max(0.0) as u32,
-                    ));
-                } else {
-                    self.paste_clipboard();
+                // Right-click on terminal area: show native terminal context menu.
+                let terminal_rect = self.terminal_content_rect();
+                let clicked_pane = self.active_tab_ref().and_then(|tab| {
+                    tab.pane_tree
+                        .pane_at_pixel(mx as u32, my as u32, terminal_rect, DIVIDER_WIDTH)
+                });
+                if let Some(pane_id) = clicked_pane
+                    && let Some(tab) = self.active_tab_mut()
+                    && tab.focused_pane != pane_id
+                {
+                    tab.focused_pane = pane_id;
                 }
+
+                let has_selection = self
+                    .active_leaf_ref()
+                    .and_then(|leaf| leaf.selection)
+                    .is_some();
+                let has_multiple_panes = self
+                    .active_tab_ref()
+                    .is_some_and(|t| t.has_multiple_panes());
+                let (menu, action_map) =
+                    menus::build_terminal_context_menu(has_selection, has_multiple_panes);
+                self.pending_menu_context = Some(MenuContext::Terminal {
+                    pane_id: clicked_pane,
+                    action_map,
+                });
+                menus::show_context_menu(&self.window, &menu, None);
             }
             ElementState::Released => {
                 if self.is_mouse_reporting() {
@@ -117,7 +135,7 @@ impl FerrumWindow {
         }
 
         // If releasing mouse during an active tab drag, handle drop regardless of position.
-        // (Custom tab bar drag — not used on macOS.)
+        // (Custom tab bar drag -- not used on macOS.)
         #[cfg(not(target_os = "macos"))]
         if state == ElementState::Released {
             if self.dragging_tab.as_ref().is_some_and(|d| d.is_active) {
@@ -130,11 +148,14 @@ impl FerrumWindow {
             }
         }
 
-        if self.handle_security_popup_left_click(state, mx, my) {
+        // End divider drag on mouse release.
+        if state == ElementState::Released && self.divider_drag.take().is_some() {
+            self.resize_all_panes();
+            self.window.request_redraw();
             return;
         }
 
-        if self.handle_context_menu_left_click(state, mx, my, next_tab_id, tx) {
+        if self.handle_security_popup_left_click(state, mx, my) {
             return;
         }
 
@@ -153,6 +174,40 @@ impl FerrumWindow {
             return;
         }
 
+        // Check if clicking on a pane divider (start drag resize).
+        if state == ElementState::Pressed {
+            let terminal_rect = self.terminal_content_rect();
+            let divider_px = DIVIDER_WIDTH;
+
+            if let Some(tab) = self.active_tab_ref()
+                && let Some(hit) = tab.pane_tree.hit_test_divider(
+                    mx as u32,
+                    my as u32,
+                    terminal_rect,
+                    divider_px,
+                    DIVIDER_HIT_ZONE,
+                )
+            {
+                self.divider_drag = Some(DividerDragState {
+                    initial_mouse_pos: (mx as u32, my as u32),
+                    direction: hit.direction,
+                });
+                return; // Don't forward click to terminal
+            }
+
+            // Check which pane was clicked and set focus.
+            let clicked_pane = self.active_tab_ref().and_then(|tab| {
+                tab.pane_tree
+                    .pane_at_pixel(mx as u32, my as u32, terminal_rect, divider_px)
+            });
+            if let Some(pane_id) = clicked_pane
+                && let Some(tab) = self.active_tab_mut()
+                && pane_id != tab.focused_pane
+            {
+                tab.focused_pane = pane_id;
+            }
+        }
+
         self.handle_terminal_left_click(state, mx, my);
     }
 
@@ -161,10 +216,10 @@ impl FerrumWindow {
     fn handle_scrollbar_left_click(&mut self, state: ElementState, mx: f64, my: f64) -> bool {
         // On release: end scrollbar drag if active.
         if state == ElementState::Released {
-            if self.active_tab_ref().is_some_and(|t| t.scrollbar.dragging) {
-                if let Some(tab) = self.active_tab_mut() {
-                    tab.scrollbar.dragging = false;
-                    tab.scrollbar.last_activity = std::time::Instant::now();
+            if self.active_leaf_ref().is_some_and(|l| l.scrollbar.dragging) {
+                if let Some(leaf) = self.active_leaf_mut() {
+                    leaf.scrollbar.dragging = false;
+                    leaf.scrollbar.last_activity = std::time::Instant::now();
                 }
                 return true;
             }
@@ -177,18 +232,18 @@ impl FerrumWindow {
             return false;
         }
 
-        let tab = match self.active_tab_ref() {
-            Some(t) => t,
+        let leaf = match self.active_leaf_ref() {
+            Some(l) => l,
             None => return false,
         };
-        let scrollback_len = tab.terminal.scrollback.len();
+        let scrollback_len = leaf.terminal.scrollback.len();
         if scrollback_len == 0 {
             return false;
         }
 
         let buf_height = size.height as usize;
-        let grid_rows = tab.terminal.grid.rows;
-        let scroll_offset = tab.scroll_offset;
+        let grid_rows = leaf.terminal.grid.rows;
+        let scroll_offset = leaf.scroll_offset;
         let tab_bar_height = self.backend.tab_bar_height_px() as f64;
         let window_padding = self.backend.window_padding_px() as f64;
 
@@ -218,11 +273,11 @@ impl FerrumWindow {
 
             if on_thumb {
                 // Start thumb drag.
-                if let Some(tab) = self.active_tab_mut() {
-                    tab.scrollbar.dragging = true;
-                    tab.scrollbar.drag_start_y = my;
-                    tab.scrollbar.drag_start_offset = tab.scroll_offset;
-                    tab.scrollbar.last_activity = std::time::Instant::now();
+                if let Some(leaf) = self.active_leaf_mut() {
+                    leaf.scrollbar.dragging = true;
+                    leaf.scrollbar.drag_start_y = my;
+                    leaf.scrollbar.drag_start_offset = leaf.scroll_offset;
+                    leaf.scrollbar.last_activity = std::time::Instant::now();
                 }
             } else {
                 // Click on track: jump to proportional position.
@@ -231,9 +286,9 @@ impl FerrumWindow {
                 let new_offset =
                     (max_offset as f64 - click_ratio * max_offset as f64).round() as isize;
                 let clamped = new_offset.max(0) as usize;
-                if let Some(tab) = self.active_tab_mut() {
-                    tab.scroll_offset = clamped.min(tab.terminal.scrollback.len());
-                    tab.scrollbar.last_activity = std::time::Instant::now();
+                if let Some(leaf) = self.active_leaf_mut() {
+                    leaf.scroll_offset = clamped.min(leaf.terminal.scrollback.len());
+                    leaf.scrollbar.last_activity = std::time::Instant::now();
                 }
             }
         }

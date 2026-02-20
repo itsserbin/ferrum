@@ -1,7 +1,10 @@
 use crate::core::{CursorStyle, Grid, Selection};
+use crate::gui::pane::PaneRect;
 
 use super::super::traits;
-use super::super::{ContextMenu, SecurityPopup, TabInfo};
+use super::super::{RenderTarget, ScrollbarState, SecurityPopup};
+#[cfg(not(target_os = "macos"))]
+use super::super::TabInfo;
 use super::GpuRenderer;
 
 impl traits::Renderer for GpuRenderer {
@@ -51,21 +54,23 @@ impl traits::Renderer for GpuRenderer {
 
     fn render(
         &mut self,
-        _buffer: &mut [u32],
-        _buf_width: usize,
-        _buf_height: usize,
+        _target: &mut RenderTarget<'_>,
         grid: &Grid,
         selection: Option<&Selection>,
         viewport_start: usize,
     ) {
-        self.pack_grid(grid, selection, viewport_start);
+        let padding = self.metrics.window_padding_px();
+        let max_width = self.width.saturating_sub(padding.saturating_mul(2));
+        let max_height = self
+            .height
+            .saturating_sub(self.metrics.tab_bar_height_px() + padding.saturating_mul(2));
+        let region = PaneRect { x: 0, y: 0, width: max_width, height: max_height };
+        self.queue_grid_batch(grid, selection, viewport_start, region, 0.0);
     }
 
     fn draw_cursor(
         &mut self,
-        _buffer: &mut [u32],
-        _buf_width: usize,
-        _buf_height: usize,
+        _target: &mut RenderTarget<'_>,
         row: usize,
         col: usize,
         grid: &Grid,
@@ -74,90 +79,110 @@ impl traits::Renderer for GpuRenderer {
         self.draw_cursor_impl(row, col, grid, style);
     }
 
+    fn render_in_rect(
+        &mut self,
+        _target: &mut RenderTarget<'_>,
+        grid: &Grid,
+        selection: Option<&Selection>,
+        viewport_start: usize,
+        rect: PaneRect,
+        fg_dim: f32,
+    ) {
+        let padding = self.metrics.window_padding_px();
+        let top = self.metrics.tab_bar_height_px().saturating_add(padding);
+        let origin_x = rect.x.saturating_sub(padding);
+        let origin_y = rect.y.saturating_sub(top);
+        let region = PaneRect { x: origin_x, y: origin_y, width: rect.width, height: rect.height };
+        self.queue_grid_batch(grid, selection, viewport_start, region, fg_dim);
+    }
+
+    fn draw_cursor_in_rect(
+        &mut self,
+        _target: &mut RenderTarget<'_>,
+        row: usize,
+        col: usize,
+        grid: &Grid,
+        style: CursorStyle,
+        rect: PaneRect,
+    ) {
+        self.draw_cursor_in_rect_impl(row, col, grid, style, rect);
+    }
+
+    fn render_scrollbar_in_rect(
+        &mut self,
+        _target: &mut RenderTarget<'_>,
+        state: &ScrollbarState,
+        rect: PaneRect,
+    ) {
+        self.render_scrollbar_in_rect_impl(state, rect);
+    }
+
+    fn draw_pane_divider(&mut self, rect: PaneRect) {
+        // Catppuccin Mocha Surface2 (same as CPU divider path).
+        self.push_rect(
+            rect.x as f32,
+            rect.y as f32,
+            rect.width as f32,
+            rect.height as f32,
+            0x585B70,
+            1.0,
+        );
+    }
+
     // ── Scrollbar ─────────────────────────────────────────────────────
 
     fn render_scrollbar(
         &mut self,
-        _buffer: &mut [u32],
-        _buf_width: usize,
-        buf_height: usize,
-        scroll_offset: usize,
-        scrollback_len: usize,
-        grid_rows: usize,
-        opacity: f32,
-        hover: bool,
+        target: &mut RenderTarget<'_>,
+        state: &ScrollbarState,
     ) {
-        self.render_scrollbar_impl(
-            buf_height,
-            scroll_offset,
-            scrollback_len,
-            grid_rows,
-            opacity,
-            hover,
-        );
+        self.render_scrollbar_impl(target.height, state);
     }
 
     // ── Tab bar (delegates to tab_layout) ─────────────────────────────
 
+    #[cfg(not(target_os = "macos"))]
     fn draw_tab_bar(
         &mut self,
-        _buffer: &mut [u32],
-        buf_width: usize,
-        _buf_height: usize,
+        target: &mut RenderTarget<'_>,
         tabs: &[TabInfo],
         hovered_tab: Option<usize>,
         mouse_pos: (f64, f64),
         tab_offsets: Option<&[f32]>,
         pinned: bool,
     ) {
-        self.draw_tab_bar_impl(buf_width, tabs, hovered_tab, mouse_pos, tab_offsets, pinned);
+        self.draw_tab_bar_impl(target.width, tabs, hovered_tab, mouse_pos, tab_offsets, pinned);
     }
 
+    #[cfg(not(target_os = "macos"))]
     fn draw_tab_drag_overlay(
         &mut self,
-        _buffer: &mut [u32],
-        buf_width: usize,
-        _buf_height: usize,
+        target: &mut RenderTarget<'_>,
         tabs: &[TabInfo],
         source_index: usize,
         current_x: f64,
         indicator_x: f32,
     ) {
-        self.draw_tab_drag_overlay_impl(buf_width, tabs, source_index, current_x, indicator_x);
+        self.draw_tab_drag_overlay_impl(target.width, tabs, source_index, current_x, indicator_x);
     }
 
+    #[cfg(not(target_os = "macos"))]
     fn draw_tab_tooltip(
         &mut self,
-        _buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
+        target: &mut RenderTarget<'_>,
         mouse_pos: (f64, f64),
         title: &str,
     ) {
-        self.draw_tab_tooltip_impl(buf_width, buf_height, mouse_pos, title);
-    }
-
-    // ── Context menu ──────────────────────────────────────────────────
-
-    fn draw_context_menu(
-        &mut self,
-        _buffer: &mut [u32],
-        _buf_width: usize,
-        _buf_height: usize,
-        menu: &ContextMenu,
-    ) {
-        self.draw_context_menu_impl(menu);
+        self.draw_tab_tooltip_impl(target.width, target.height, mouse_pos, title);
     }
 
     // ── Security ──────────────────────────────────────────────────────
 
     fn draw_security_popup(
         &mut self,
-        _buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
+        target: &mut RenderTarget<'_>,
         popup: &SecurityPopup,
     ) {
-        self.draw_security_popup_impl(buf_width, buf_height, popup);
+        self.draw_security_popup_impl(target.width, target.height, popup);
     }
 }

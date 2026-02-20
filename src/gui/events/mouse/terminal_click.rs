@@ -46,7 +46,7 @@ impl FerrumWindow {
             return;
         }
 
-        // Shell mode — click-to-cursor + full editor-style selection.
+        // Shell mode -- click-to-cursor + full editor-style selection.
         let pos = Position { row, col };
         let idx = self.active_tab;
         if idx >= self.tabs.len() {
@@ -75,15 +75,18 @@ impl FerrumWindow {
                     self.last_click_pos = pos;
 
                     let anchor = self.tabs[idx]
-                        .selection
+                        .focused_leaf()
+                        .and_then(|l| l.selection)
                         .map(|sel| sel.start)
                         .unwrap_or(abs_pos);
                     self.selection_anchor = Some(anchor);
                     self.selection_drag_mode = SelectionDragMode::Character;
-                    self.tabs[idx].selection = Some(Selection {
-                        start: anchor,
-                        end: abs_pos,
-                    });
+                    if let Some(leaf) = self.tabs[idx].focused_leaf_mut() {
+                        leaf.selection = Some(Selection {
+                            start: anchor,
+                            end: abs_pos,
+                        });
+                    }
                     return;
                 }
 
@@ -92,7 +95,9 @@ impl FerrumWindow {
                     1 => {
                         // Single-click arms char-wise drag; selection starts on movement.
                         self.selection_drag_mode = SelectionDragMode::Character;
-                        self.tabs[idx].selection = None;
+                        if let Some(leaf) = self.tabs[idx].focused_leaf_mut() {
+                            leaf.selection = None;
+                        }
                     }
                     2 => {
                         // Double-click selects word and keeps word-wise drag active.
@@ -108,7 +113,9 @@ impl FerrumWindow {
             }
             ElementState::Released => {
                 let should_move_cursor = self.selection_drag_mode == SelectionDragMode::Character
-                    && self.tabs[idx].selection.is_none();
+                    && self.tabs[idx]
+                        .focused_leaf()
+                        .is_none_or(|l| l.selection.is_none());
                 self.is_selecting = false;
                 self.selection_anchor = None;
                 if should_move_cursor {

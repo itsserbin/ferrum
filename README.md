@@ -39,6 +39,12 @@ Download the `.dmg` file for your architecture from [GitHub Releases](https://gi
 
 > **Note:** Since Ferrum is not signed with an Apple Developer certificate, macOS will show a warning on first launch. To open it: right-click the app, select Open, then click Open again. You only need to do this once.
 
+To use `ferrum` from the terminal:
+
+```bash
+sudo ln -sf /Applications/Ferrum.app/Contents/MacOS/Ferrum /usr/local/bin/ferrum
+```
+
 ### Linux packages
 
 Debian/Ubuntu:

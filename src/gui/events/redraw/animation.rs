@@ -10,8 +10,6 @@ pub(super) const ANIMATION_FRAME_INTERVAL: Duration = Duration::from_millis(16);
 const UI_ANIMATION_SPEED: f32 = 18.0;
 #[cfg(not(target_os = "macos"))]
 const UI_SETTLE_EPSILON: f32 = 0.01;
-#[cfg(not(target_os = "macos"))]
-const CONTEXT_MENU_OPEN_DURATION: Duration = Duration::from_millis(140);
 #[cfg(target_os = "macos")]
 pub(super) const NATIVE_TAB_SYNC_INTERVAL: Duration = Duration::from_millis(60);
 #[cfg(target_os = "macos")]
@@ -29,7 +27,6 @@ impl FerrumWindow {
         let scrollbar = self.scrollbar_animation_schedule(now);
         let tab_anim = self.tab_animation_schedule(now);
         let ui_anim = self.ui_animation_schedule(now);
-
         let schedules = [cursor, scrollbar, tab_anim, ui_anim];
         let mut result: Option<(Instant, bool)> = None;
         for s in schedules.into_iter().flatten() {
@@ -73,10 +70,10 @@ impl FerrumWindow {
     }
 
     fn cursor_animation_schedule(&self, now: Instant) -> Option<(Instant, bool)> {
-        let tab = self.active_tab_ref()?;
-        if tab.scroll_offset != 0
-            || !tab.terminal.cursor_visible
-            || !tab.terminal.cursor_style.is_blinking()
+        let leaf = self.active_leaf_ref()?;
+        if leaf.scroll_offset != 0
+            || !leaf.terminal.cursor_visible
+            || !leaf.terminal.cursor_style.is_blinking()
         {
             return None;
         }
@@ -102,14 +99,14 @@ impl FerrumWindow {
     }
 
     fn scrollbar_animation_schedule(&self, now: Instant) -> Option<(Instant, bool)> {
-        let tab = self.active_tab_ref()?;
-        if tab.terminal.scrollback.is_empty() || tab.scrollbar.hover || tab.scrollbar.dragging {
+        let leaf = self.active_leaf_ref()?;
+        if leaf.terminal.scrollback.is_empty() || leaf.scrollbar.hover || leaf.scrollbar.dragging {
             return None;
         }
 
-        let elapsed = now.saturating_duration_since(tab.scrollbar.last_activity);
+        let elapsed = now.saturating_duration_since(leaf.scrollbar.last_activity);
         if elapsed < SCROLLBAR_FADE_START {
-            return Some((tab.scrollbar.last_activity + SCROLLBAR_FADE_START, false));
+            return Some((leaf.scrollbar.last_activity + SCROLLBAR_FADE_START, false));
         }
         if elapsed < SCROLLBAR_FADE_END {
             return Some((now + ANIMATION_FRAME_INTERVAL, true));
@@ -146,25 +143,6 @@ impl FerrumWindow {
                 }
             }
 
-            if let Some(menu) = self.context_menu.as_ref() {
-                if menu.opened_at.elapsed() < CONTEXT_MENU_OPEN_DURATION {
-                    pending = true;
-                } else {
-                    for i in 0..menu.items.len() {
-                        let target = if menu.hover_index == Some(i) {
-                            1.0
-                        } else {
-                            0.0
-                        };
-                        let value = menu.hover_progress.get(i).copied().unwrap_or(0.0);
-                        if (value - target).abs() > UI_SETTLE_EPSILON {
-                            pending = true;
-                            break;
-                        }
-                    }
-                }
-            }
-
             if pending {
                 Some((now + ANIMATION_FRAME_INTERVAL, true))
             } else {
@@ -193,6 +171,9 @@ impl FerrumWindow {
     }
 
     pub(in crate::gui) fn advance_ui_animations(&mut self) {
+        #[cfg(not(target_os = "macos"))]
+        let now = Instant::now();
+
         #[cfg(target_os = "macos")]
         {
             // Native tab/window controls handle hover/transition visuals.
@@ -200,7 +181,6 @@ impl FerrumWindow {
 
         #[cfg(not(target_os = "macos"))]
         {
-            let now = Instant::now();
             let dt = now
                 .saturating_duration_since(self.ui_animation_last_tick)
                 .as_secs_f32()
@@ -227,18 +207,6 @@ impl FerrumWindow {
 
                 let close_target = if close_hover == Some(i) { 1.0 } else { 0.0 };
                 Self::animate_scalar(&mut self.close_hover_progress[i], close_target, factor);
-            }
-
-            if let Some(menu) = self.context_menu.as_mut() {
-                menu.hover_progress.resize(menu.items.len(), 0.0);
-                for i in 0..menu.items.len() {
-                    let target = if menu.hover_index == Some(i) {
-                        1.0
-                    } else {
-                        0.0
-                    };
-                    Self::animate_scalar(&mut menu.hover_progress[i], target, factor);
-                }
             }
         }
     }

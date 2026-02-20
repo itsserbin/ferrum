@@ -33,7 +33,7 @@ impl ApplicationHandler for App {
 
             let size = win.window.inner_size();
             let (rows, cols) = win.calc_grid_size(size.width, size.height);
-            win.new_tab(rows, cols, &mut self.next_tab_id, &self.tx);
+            win.new_tab(rows, cols, &mut self.next_tab_id, &self.tx, None);
             #[cfg(target_os = "macos")]
             if let Some(tab) = win.tabs.first() {
                 win.window.set_title(&tab.title);
@@ -55,7 +55,8 @@ impl ApplicationHandler for App {
 
         match event {
             WindowEvent::CloseRequested => {
-                win.pending_requests.push(WindowRequest::CloseWindow);
+                win.request_close_window();
+                should_redraw = true;
             }
             WindowEvent::Focused(focused) => {
                 win.modifiers = ModifiersState::empty();
@@ -73,8 +74,9 @@ impl ApplicationHandler for App {
                     if win.dragging_tab.take().is_some() {
                         win.window.set_cursor(CursorIcon::Default);
                     }
+                    win.divider_drag = None;
                     win.commit_rename();
-                    win.context_menu = None;
+                    win.pending_menu_context = None;
                 } else {
                     win.suppress_click_to_cursor_once = true;
                     #[cfg(target_os = "macos")]
@@ -134,6 +136,7 @@ impl ApplicationHandler for App {
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         self.drain_pty_events(event_loop);
+        self.drain_menu_events();
         self.drain_update_events();
 
         // Handle native macOS "+" button clicks (newWindowForTab: action).
@@ -148,7 +151,8 @@ impl ApplicationHandler for App {
                     .map(|(id, _)| *id);
                 if let Some(win_id) = focused_id {
                     if let Some(win) = self.windows.get_mut(&win_id) {
-                        win.pending_requests.push(WindowRequest::NewTab);
+                        let cwd = win.active_leaf_ref().and_then(|l| l.cwd());
+                        win.pending_requests.push(WindowRequest::NewTab { cwd });
                     }
                     self.process_window_requests(event_loop, win_id);
                 }
@@ -177,6 +181,17 @@ impl ApplicationHandler for App {
         let now = std::time::Instant::now();
         let mut next_wakeup: Option<std::time::Instant> = None;
 
+        // Poll CWD via OS API for tabs without OSC 7 shell integration.
+        {
+            let cwd_poll_interval = std::time::Duration::from_secs(1);
+            for win in self.windows.values_mut() {
+                if now.duration_since(win.last_cwd_poll) >= cwd_poll_interval {
+                    win.last_cwd_poll = now;
+                    win.poll_cwd_for_tabs();
+                }
+            }
+        }
+
         let update = self.available_release.as_ref();
         for win in self.windows.values_mut() {
             win.sync_window_title(update);
@@ -186,6 +201,9 @@ impl ApplicationHandler for App {
                 }
                 next_wakeup = Some(next_wakeup.map_or(deadline, |current| current.min(deadline)));
             }
+            // Ensure we wake up for next CWD poll
+            let next_cwd = win.last_cwd_poll + std::time::Duration::from_secs(1);
+            next_wakeup = Some(next_wakeup.map_or(next_cwd, |current| current.min(next_cwd)));
         }
 
         match next_wakeup {
@@ -198,6 +216,38 @@ impl ApplicationHandler for App {
 }
 
 impl App {
+    fn drain_menu_events(&mut self) {
+        while let Ok(event) = muda::MenuEvent::receiver().try_recv() {
+            for win in self.windows.values_mut() {
+                if let Some(ctx) = win.pending_menu_context.take() {
+                    let action_map = match &ctx {
+                        MenuContext::Tab { action_map, .. } => action_map,
+                        MenuContext::Terminal { action_map, .. } => action_map,
+                    };
+                    let tab_index = match &ctx {
+                        MenuContext::Tab { tab_index, .. } => Some(*tab_index),
+                        MenuContext::Terminal { .. } => None,
+                    };
+                    let pane_id = match &ctx {
+                        MenuContext::Tab { .. } => None,
+                        MenuContext::Terminal { pane_id, .. } => *pane_id,
+                    };
+                    if let Some((_, action)) = action_map.iter().find(|(id, _)| *id == event.id) {
+                        win.handle_menu_action(
+                            *action,
+                            tab_index,
+                            pane_id,
+                            &mut self.next_tab_id,
+                            &self.tx,
+                        );
+                    }
+                    win.window.request_redraw();
+                    break;
+                }
+            }
+        }
+    }
+
     fn drain_update_events(&mut self) {
         while let Ok(release) = self.update_rx.try_recv() {
             eprintln!(

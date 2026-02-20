@@ -76,12 +76,12 @@ impl FerrumWindow {
 
     pub(in crate::gui) fn copy_selection(&mut self) {
         let text = {
-            let tab = match self.active_tab_ref() {
-                Some(t) => t,
+            let leaf = match self.active_leaf_ref() {
+                Some(l) => l,
                 None => return,
             };
-            let Some(sel) = tab.selection else { return };
-            Self::selected_text_from_terminal(&tab.terminal, sel)
+            let Some(sel) = leaf.selection else { return };
+            Self::selected_text_from_terminal(&leaf.terminal, sel)
         };
 
         if let Some(ref mut clipboard) = self.clipboard
@@ -108,18 +108,18 @@ impl FerrumWindow {
         }
 
         if self
-            .active_tab_ref()
-            .is_some_and(|tab| tab.selection.is_some())
+            .active_leaf_ref()
+            .is_some_and(|leaf| leaf.selection.is_some())
         {
             let _ = self.delete_terminal_selection(false);
         }
 
         let bytes = {
-            let Some(tab) = self.active_tab_mut() else {
+            let Some(leaf) = self.active_leaf_mut() else {
                 return;
             };
-            tab.security.check_paste_payload(&text);
-            if tab.security.should_wrap_paste() {
+            leaf.security.check_paste_payload(&text);
+            if leaf.security.should_wrap_paste() {
                 Self::wrap_bracketed_paste(&text)
             } else {
                 text.as_bytes().to_vec()

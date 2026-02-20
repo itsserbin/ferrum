@@ -1,34 +1,45 @@
+pub mod cwd;
+
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use std::io::{Read, Write};
+use std::sync::OnceLock;
 
 #[cfg(windows)]
 use std::path::{Path, PathBuf};
 
 // Embed script files at compile time
 #[cfg(windows)]
-const SCRIPT_LS: &str = include_str!("scripts/ls.cmd");
+const SCRIPT_LS: &str = include_str!("windows-aliases/ls.cmd");
 #[cfg(windows)]
-const SCRIPT_LL: &str = include_str!("scripts/ll.cmd");
+const SCRIPT_LL: &str = include_str!("windows-aliases/ll.cmd");
 #[cfg(windows)]
-const SCRIPT_CAT: &str = include_str!("scripts/cat.cmd");
+const SCRIPT_CAT: &str = include_str!("windows-aliases/cat.cmd");
 #[cfg(windows)]
-const SCRIPT_RM: &str = include_str!("scripts/rm.cmd");
+const SCRIPT_RM: &str = include_str!("windows-aliases/rm.cmd");
 #[cfg(windows)]
-const SCRIPT_GREP: &str = include_str!("scripts/grep.cmd");
+const SCRIPT_GREP: &str = include_str!("windows-aliases/grep.cmd");
 #[cfg(windows)]
-const SCRIPT_HEAD: &str = include_str!("scripts/head.cmd");
+const SCRIPT_HEAD: &str = include_str!("windows-aliases/head.cmd");
 #[cfg(windows)]
-const SCRIPT_TAIL: &str = include_str!("scripts/tail.cmd");
+const SCRIPT_TAIL: &str = include_str!("windows-aliases/tail.cmd");
 #[cfg(windows)]
-const SCRIPT_WC: &str = include_str!("scripts/wc.cmd");
+const SCRIPT_WC: &str = include_str!("windows-aliases/wc.cmd");
 #[cfg(windows)]
-const SCRIPT_FIND: &str = include_str!("scripts/find.cmd");
+const SCRIPT_FIND: &str = include_str!("windows-aliases/find.cmd");
 #[cfg(windows)]
-const SCRIPT_DU: &str = include_str!("scripts/du.cmd");
+const SCRIPT_DU: &str = include_str!("windows-aliases/du.cmd");
 #[cfg(windows)]
-const SCRIPT_PS: &str = include_str!("scripts/ps.cmd");
+const SCRIPT_PS: &str = include_str!("windows-aliases/ps.cmd");
 #[cfg(windows)]
-const SCRIPT_INIT: &str = include_str!("scripts/init.cmd");
+const SCRIPT_INIT: &str = include_str!("windows-aliases/init.cmd");
+
+// Shell integration scripts (all platforms)
+const SHELL_INTEGRATION_ZSH: &str = include_str!("shell-integration/zsh/ferrum-integration");
+const SHELL_INTEGRATION_BASH: &str = include_str!("shell-integration/bash/ferrum.bash");
+const SHELL_INTEGRATION_FISH: &str =
+    include_str!("shell-integration/fish/vendor_conf.d/ferrum-shell-integration.fish");
+const SHELL_INTEGRATION_POWERSHELL: &str =
+    include_str!("shell-integration/powershell/ferrum.ps1");
 
 /// Create Unix-style command wrapper scripts in temp directory
 #[cfg(windows)]
@@ -77,6 +88,38 @@ fn create_unix_aliases_script() -> Option<PathBuf> {
     Some(init_script)
 }
 
+static SHELL_INTEGRATION_DIR: OnceLock<Option<std::path::PathBuf>> = OnceLock::new();
+
+/// Write shell integration scripts to a temp directory so they can be
+/// sourced by the spawned shell.  Returns the root temp dir on success.
+/// Files are written only once per process via [`OnceLock`].
+fn get_shell_integration_dir() -> Option<&'static std::path::PathBuf> {
+    SHELL_INTEGRATION_DIR
+        .get_or_init(setup_shell_integration)
+        .as_ref()
+}
+
+fn setup_shell_integration() -> Option<std::path::PathBuf> {
+    let temp_dir = std::env::temp_dir().join("ferrum_shell_integration");
+    let zsh_dir = temp_dir.join("zsh");
+    let bash_dir = temp_dir.join("bash");
+    let fish_dir = temp_dir.join("fish").join("vendor_conf.d");
+    std::fs::create_dir_all(&zsh_dir).ok()?;
+    std::fs::create_dir_all(&bash_dir).ok()?;
+    std::fs::create_dir_all(&fish_dir).ok()?;
+    std::fs::write(zsh_dir.join("ferrum-integration"), SHELL_INTEGRATION_ZSH).ok()?;
+    std::fs::write(bash_dir.join("ferrum.bash"), SHELL_INTEGRATION_BASH).ok()?;
+    std::fs::write(
+        fish_dir.join("ferrum-shell-integration.fish"),
+        SHELL_INTEGRATION_FISH,
+    )
+    .ok()?;
+    let ps_dir = temp_dir.join("powershell");
+    std::fs::create_dir_all(&ps_dir).ok()?;
+    std::fs::write(ps_dir.join("ferrum.ps1"), SHELL_INTEGRATION_POWERSHELL).ok()?;
+    Some(temp_dir)
+}
+
 #[cfg(unix)]
 pub fn default_shell() -> String {
     std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string())
@@ -93,7 +136,7 @@ pub struct Session {
 }
 
 impl Session {
-    pub fn spawn(shell: &str, rows: u16, cols: u16) -> anyhow::Result<Self> {
+    pub fn spawn(shell: &str, rows: u16, cols: u16, cwd: Option<&str>) -> anyhow::Result<Self> {
         let pty_system = native_pty_system();
 
         let pair = pty_system.openpty(PtySize {
@@ -131,9 +174,85 @@ impl Session {
             }
         }
 
+        if let Some(dir) = cwd {
+            let path = std::path::Path::new(dir);
+            if path.is_dir() {
+                cmd.cwd(dir);
+                cmd.env("PWD", dir);
+            }
+        }
+
         #[cfg(target_os = "macos")]
         cmd.arg("-l");
         cmd.env("TERM", "xterm-256color");
+
+        // Shell integration: set marker env and configure per-shell sourcing.
+        cmd.env("FERRUM_SHELL_INTEGRATION", "1");
+
+        if let Some(integration_dir) = get_shell_integration_dir() {
+            let shell_name = std::path::Path::new(shell)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or(shell);
+
+            match shell_name {
+                "zsh" => {
+                    let zdotdir = integration_dir.join("zsh");
+                    let user_zdotdir = std::env::var("ZDOTDIR").unwrap_or_else(|_| {
+                        std::env::var("HOME").unwrap_or_else(|_| String::from("/"))
+                    });
+                    let zshenv_content = format!(
+                        "ZDOTDIR=\"{user_zdotdir}\"\n\
+                         [[ -f \"$ZDOTDIR/.zshenv\" ]] && source \"$ZDOTDIR/.zshenv\"\n\
+                         source \"{}/ferrum-integration\"\n",
+                        zdotdir.display()
+                    );
+                    let _ = std::fs::write(zdotdir.join(".zshenv"), zshenv_content);
+                    cmd.env("ZDOTDIR", zdotdir.to_string_lossy().as_ref());
+                }
+                "bash" => {
+                    let bash_dir = integration_dir.join("bash");
+                    let bash_integration = bash_dir.join("ferrum.bash");
+                    // BASH_ENV is sourced by non-interactive bash
+                    cmd.env("BASH_ENV", bash_integration.to_string_lossy().as_ref());
+                    // For interactive bash, create a wrapper rcfile that sources
+                    // the user's .bashrc first, then our integration script.
+                    let user_bashrc = std::env::var("HOME")
+                        .map(|h| format!("{h}/.bashrc"))
+                        .unwrap_or_default();
+                    let rcfile_content = format!(
+                        "[ -f \"{user_bashrc}\" ] && source \"{user_bashrc}\"\nsource \"{}\"\n",
+                        bash_integration.display()
+                    );
+                    let rcfile_path = bash_dir.join("bashrc-wrapper");
+                    let _ = std::fs::write(&rcfile_path, rcfile_content);
+                    // --rcfile works for interactive non-login bash.
+                    // On macOS where -l is added, login bash ignores --rcfile
+                    // but sources ~/.bash_profile (which typically sources .bashrc).
+                    cmd.arg("--rcfile");
+                    cmd.arg(rcfile_path.to_string_lossy().as_ref());
+                }
+                "fish" => {
+                    let fish_dir = integration_dir.join("fish");
+                    let existing = std::env::var("XDG_DATA_DIRS")
+                        .unwrap_or_else(|_| "/usr/local/share:/usr/share".to_string());
+                    let new_xdg = format!("{}:{}", fish_dir.display(), existing);
+                    cmd.env("XDG_DATA_DIRS", &new_xdg);
+                }
+                name if name == "powershell"
+                    || name == "pwsh"
+                    || name == "powershell.exe"
+                    || name == "pwsh.exe" =>
+                {
+                    let ps_script = integration_dir.join("powershell").join("ferrum.ps1");
+                    cmd.arg("-NoExit");
+                    cmd.arg("-File");
+                    cmd.arg(ps_script.to_string_lossy().as_ref());
+                }
+                _ => {}
+            }
+        }
+
         let child = pair.slave.spawn_command(cmd)?;
 
         // Drop slave handle after spawn to avoid fd leaks and ensure EOF propagation.
@@ -164,18 +283,173 @@ impl Session {
         })?;
         Ok(())
     }
+
+    /// Returns the PID of the shell process running inside this PTY session.
+    pub fn process_id(&self) -> Option<u32> {
+        self.child.process_id()
+    }
+
+    /// Performs a full graceful shutdown: kill the child process and wait
+    /// for it to exit. Meant to be called from a background thread.
+    pub fn shutdown(mut self) {
+        #[cfg(windows)]
+        self.shutdown_windows();
+
+        #[cfg(not(windows))]
+        self.shutdown_unix();
+    }
+
+    #[cfg(not(windows))]
+    fn shutdown_unix(&mut self) {
+        if let Err(e) = self.child.kill()
+            && e.kind() != std::io::ErrorKind::InvalidInput
+        {
+            eprintln!("Failed to kill PTY child process: {}", e);
+        }
+        if let Err(e) = self.child.wait()
+            && e.kind() != std::io::ErrorKind::InvalidInput
+        {
+            eprintln!("Failed to wait on PTY child process: {}", e);
+        }
+    }
+
+    #[cfg(windows)]
+    fn shutdown_windows(&mut self) {
+        use windows_sys::Win32::Foundation::CloseHandle;
+        use windows_sys::Win32::System::Console::{GenerateConsoleCtrlEvent, CTRL_BREAK_EVENT};
+        use windows_sys::Win32::System::Threading::{
+            OpenProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE,
+        };
+
+        // Try graceful shutdown first: send CTRL_BREAK to the process group.
+        // This lets cmd.exe exit cleanly without flashing its console window.
+        // Note: portable-pty spawns conpty processes with CREATE_NEW_PROCESS_GROUP,
+        // so the child PID equals its process group ID.
+        if let Some(pid) = self.child.process_id() {
+            unsafe {
+                // Send CTRL_BREAK to the process group (PID == PGID for conpty).
+                let _ = GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, pid);
+
+                // Wait up to 150ms for the process to exit gracefully.
+                let handle = OpenProcess(PROCESS_SYNCHRONIZE, 0, pid);
+                if !handle.is_null() {
+                    WaitForSingleObject(handle, 150);
+                    CloseHandle(handle);
+                }
+            }
+        }
+
+        // Hard kill if still alive (kill() handles the "already dead" case).
+        if let Err(e) = self.child.kill()
+            && e.kind() != std::io::ErrorKind::InvalidInput
+        {
+            eprintln!("Failed to kill PTY child process: {}", e);
+        }
+        if let Err(e) = self.child.wait()
+            && e.kind() != std::io::ErrorKind::InvalidInput
+        {
+            eprintln!("Failed to wait on PTY child process: {}", e);
+        }
+    }
+}
+
+/// Returns `true` when the shell process has at least one child process.
+/// This is used as a heuristic for "active command is running".
+pub fn has_active_child_processes(shell_pid: u32) -> bool {
+    #[cfg(unix)]
+    {
+        return has_active_child_processes_unix(shell_pid);
+    }
+
+    #[cfg(windows)]
+    {
+        return has_active_child_processes_windows(shell_pid);
+    }
+
+    #[allow(unreachable_code)]
+    {
+        let _ = shell_pid;
+        false
+    }
+}
+
+#[cfg(unix)]
+fn has_active_child_processes_unix(shell_pid: u32) -> bool {
+    use std::process::Command;
+
+    let pid = shell_pid.to_string();
+
+    // Fast path: pgrep exits with code 0 when a child exists, 1 when none.
+    if let Ok(output) = Command::new("pgrep").arg("-P").arg(&pid).output() {
+        if output.status.success() {
+            return !String::from_utf8_lossy(&output.stdout).trim().is_empty();
+        }
+        if output.status.code() == Some(1) {
+            return false;
+        }
+    }
+
+    // Fallback for environments without pgrep.
+    let output = match Command::new("ps").arg("-e").arg("-o").arg("ppid=").output() {
+        Ok(output) => output,
+        Err(_) => return false,
+    };
+
+    if !output.status.success() {
+        return false;
+    }
+
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|line| line.trim().parse::<u32>().ok())
+        .any(|ppid| ppid == shell_pid)
+}
+
+#[cfg(windows)]
+fn has_active_child_processes_windows(shell_pid: u32) -> bool {
+    use std::mem;
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Process32First, Process32Next, PROCESSENTRY32,
+        TH32CS_SNAPPROCESS,
+    };
+
+    unsafe {
+        let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if snapshot == -1_isize as _ {
+            return false;
+        }
+
+        let mut entry: PROCESSENTRY32 = mem::zeroed();
+        entry.dwSize = mem::size_of::<PROCESSENTRY32>() as u32;
+
+        if Process32First(snapshot, &mut entry) == 0 {
+            CloseHandle(snapshot);
+            return false;
+        }
+
+        loop {
+            if entry.th32ParentProcessID == shell_pid {
+                CloseHandle(snapshot);
+                return true;
+            }
+            if Process32Next(snapshot, &mut entry) == 0 {
+                break;
+            }
+        }
+
+        CloseHandle(snapshot);
+        false
+    }
 }
 
 impl Drop for Session {
     fn drop(&mut self) {
-        if let Err(e) = self.child.kill() {
-            // Don't log InvalidInput error - process may have already exited
-            if e.kind() != std::io::ErrorKind::InvalidInput {
-                eprintln!("Failed to kill PTY child process: {}", e);
-            }
-        }
-        if let Err(e) = self.child.wait() {
-            eprintln!("Failed to wait on PTY child process: {}", e);
-        }
+        // Kill only — no wait(). This is a safety net for sessions that
+        // weren't extracted for background cleanup (e.g. during a panic).
+        // Blocking wait() was removed to prevent UI thread hangs.
+        // Errors are silenced: the process is usually already dead
+        // (killed by shutdown() on the background thread).
+        let _ = self.child.kill();
     }
 }

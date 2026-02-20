@@ -5,19 +5,19 @@ impl FerrumWindow {
     /// Shell mode only supports horizontal moves on the current cursor row.
     /// Alt-screen mode allows vertical moves, but horizontal deltas are safe only on the same row.
     pub(in crate::gui) fn move_cursor_to(&mut self, target_row: usize, target_col: usize) {
-        let tab = match self.active_tab_mut() {
-            Some(t) => t,
+        let leaf = match self.active_leaf_mut() {
+            Some(l) => l,
             None => return,
         };
 
         // Don't move cursor if scrolled - user is viewing scrollback, not live content
-        if tab.scroll_offset > 0 {
+        if leaf.scroll_offset > 0 {
             return;
         }
 
         // Don't move cursor shortly after resize - cursor position may not be synced with shell
         // Use longer timeout (2 seconds) until reflow sync is properly fixed
-        if tab
+        if leaf
             .terminal
             .resize_at
             .is_some_and(|t| t.elapsed().as_millis() < 2000)
@@ -25,9 +25,9 @@ impl FerrumWindow {
             return;
         }
 
-        let cur_row = tab.terminal.cursor_row;
-        let cur_col = tab.terminal.cursor_col;
-        let alt_screen = tab.terminal.is_alt_screen();
+        let cur_row = leaf.terminal.cursor_row;
+        let cur_col = leaf.terminal.cursor_col;
+        let alt_screen = leaf.terminal.is_alt_screen();
 
         let mut bytes = Vec::new();
 
@@ -44,11 +44,11 @@ impl FerrumWindow {
             }
 
             // Horizontal delta is only reliable on the same visible row.
-            if target_row == cur_row && target_row < tab.terminal.grid.rows {
-                let last_content = (0..tab.terminal.grid.cols)
+            if target_row == cur_row && target_row < leaf.terminal.grid.rows {
+                let last_content = (0..leaf.terminal.grid.cols)
                     .rev()
                     // Safe: c < grid.cols and target_row < grid.rows checked above
-                    .find(|&c| tab.terminal.grid.get_unchecked(target_row, c).character != ' ');
+                    .find(|&c| leaf.terminal.grid.get_unchecked(target_row, c).character != ' ');
                 if let Some(last_col) = last_content {
                     let safe_col = target_col.min(last_col + 1);
                     if safe_col < cur_col {
@@ -72,13 +72,13 @@ impl FerrumWindow {
             // Find the last non-space column on this row to avoid sending arrows
             // past the actual content (cmd.exe interprets RIGHT on empty input
             // as "copy from previous command").
-            if cur_row >= tab.terminal.grid.rows {
+            if cur_row >= leaf.terminal.grid.rows {
                 return;
             }
-            let last_content = (0..tab.terminal.grid.cols)
+            let last_content = (0..leaf.terminal.grid.cols)
                 .rev()
                 // Safe: c < grid.cols and cur_row < grid.rows checked above
-                .find(|&c| tab.terminal.grid.get_unchecked(cur_row, c).character != ' ');
+                .find(|&c| leaf.terminal.grid.get_unchecked(cur_row, c).character != ' ');
 
             // Only allow movement within content bounds
             let max_col = last_content.map(|c| c + 1).unwrap_or(0);
@@ -96,8 +96,8 @@ impl FerrumWindow {
         }
 
         if !bytes.is_empty() {
-            let _ = tab.pty_writer.write_all(&bytes);
-            let _ = tab.pty_writer.flush();
+            let _ = leaf.pty_writer.write_all(&bytes);
+            let _ = leaf.pty_writer.flush();
         }
     }
 }

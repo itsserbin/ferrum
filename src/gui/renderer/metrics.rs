@@ -1,6 +1,6 @@
-use super::{FONT_SIZE, LINE_PADDING, SCROLLBAR_HIT_ZONE, SCROLLBAR_MARGIN, SCROLLBAR_WIDTH};
+use super::{FONT_SIZE, LINE_PADDING, SCROLLBAR_HIT_ZONE, SCROLLBAR_MARGIN, SCROLLBAR_WIDTH, WINDOW_PADDING};
 #[cfg(not(target_os = "macos"))]
-use super::{TAB_BAR_HEIGHT, WINDOW_PADDING};
+use super::TAB_BAR_HEIGHT;
 use fontdue::Font;
 
 /// Font metrics shared across renderers.
@@ -59,14 +59,7 @@ impl FontMetrics {
     }
 
     pub fn window_padding_px(&self) -> u32 {
-        #[cfg(target_os = "macos")]
-        {
-            0
-        }
-        #[cfg(not(target_os = "macos"))]
-        {
-            self.scaled_px(WINDOW_PADDING)
-        }
+        self.scaled_px(WINDOW_PADDING)
     }
 
     pub fn scrollbar_hit_zone_px(&self) -> u32 {

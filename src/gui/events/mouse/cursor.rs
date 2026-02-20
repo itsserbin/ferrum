@@ -1,3 +1,4 @@
+use crate::gui::pane::{DIVIDER_HIT_ZONE, DIVIDER_WIDTH, SplitDirection};
 use crate::gui::renderer::TabBarHit;
 use crate::gui::*;
 
@@ -61,6 +62,12 @@ impl FerrumWindow {
             self.resize_direction = None;
         }
 
+        // Handle active divider drag (pane resize).
+        if self.divider_drag.is_some() {
+            self.handle_divider_drag(mx, my);
+            return;
+        }
+
         // Update drag state tracking (custom tab bar only -- not on macOS).
         #[cfg(not(target_os = "macos"))]
         if self.update_drag(mx, my) {
@@ -72,19 +79,6 @@ impl FerrumWindow {
         self.hovered_tab = self
             .backend
             .hit_test_tab_hover(mx, my, self.tabs.len(), size.width);
-
-        // Track hovered context-menu item.
-        if let Some(ref mut menu) = self.context_menu {
-            menu.hover_index = self.backend.hit_test_context_menu(menu, mx, my);
-            self.hovered_tab = None;
-            let cursor = if menu.hover_index.is_some() {
-                CursorIcon::Pointer
-            } else {
-                CursorIcon::Default
-            };
-            self.window.set_cursor(cursor);
-            return;
-        }
 
         let cursor = if my < tab_bar_height {
             match self.tab_bar_hit(mx, my) {
@@ -110,6 +104,11 @@ impl FerrumWindow {
             return;
         }
 
+        // Check if hovering over a pane divider — show resize cursor.
+        if self.handle_divider_hover(mx, my) {
+            return;
+        }
+
         // Scrollbar drag / hover / terminal area.
         if self.handle_scrollbar_drag(my, tab_bar_height) {
             return;
@@ -128,27 +127,106 @@ impl FerrumWindow {
         }
     }
 
+    /// Handles divider drag during mouse movement — updates the split ratio.
+    fn handle_divider_drag(&mut self, mx: f64, my: f64) {
+        let terminal_rect = self.terminal_content_rect();
+        let divider_px = DIVIDER_WIDTH;
+
+        let (hit_pos, direction) = {
+            let drag = self.divider_drag.as_ref().unwrap();
+            (drag.initial_mouse_pos, drag.direction)
+        };
+
+        // Set appropriate resize cursor during drag.
+        let cursor = match direction {
+            SplitDirection::Horizontal => CursorIcon::ColResize,
+            SplitDirection::Vertical => CursorIcon::RowResize,
+        };
+        self.window.set_cursor(cursor);
+
+        // Compute the new pixel position based on drag direction.
+        let new_pixel_pos = match direction {
+            SplitDirection::Horizontal => mx as u32,
+            SplitDirection::Vertical => my as u32,
+        };
+
+        let mut resized = false;
+        if let Some(tab) = self.active_tab_mut() {
+            resized = tab.pane_tree.resize_divider_at(
+                hit_pos.0,
+                hit_pos.1,
+                terminal_rect,
+                divider_px,
+                DIVIDER_HIT_ZONE,
+                new_pixel_pos,
+            );
+        }
+        // Keep the hit anchor in sync with drag progression so subsequent
+        // events continue targeting the same divider after it moves.
+        if resized && let Some(drag) = self.divider_drag.as_mut() {
+            drag.initial_mouse_pos = (mx as u32, my as u32);
+        }
+        if resized {
+            // Apply terminal/PTTY resize immediately so width reflow is visible while dragging.
+            self.resize_all_panes();
+        }
+
+        self.window.request_redraw();
+    }
+
+    /// Checks if hovering over a pane divider. Returns `true` if cursor was
+    /// set to a resize cursor (event consumed).
+    fn handle_divider_hover(&mut self, mx: f64, my: f64) -> bool {
+        let terminal_rect = self.terminal_content_rect();
+        let has_multiple_panes = self
+            .active_tab_ref()
+            .is_some_and(|t| t.has_multiple_panes());
+
+        if !has_multiple_panes {
+            return false;
+        }
+
+        if let Some(tab) = self.active_tab_ref()
+            && let Some(hit) = tab.pane_tree.hit_test_divider(
+                mx as u32,
+                my as u32,
+                terminal_rect,
+                DIVIDER_WIDTH,
+                DIVIDER_HIT_ZONE,
+            )
+        {
+            let cursor = match hit.direction {
+                SplitDirection::Horizontal => CursorIcon::ColResize,
+                SplitDirection::Vertical => CursorIcon::RowResize,
+            };
+            self.window.set_cursor(cursor);
+            return true;
+        }
+
+        false
+    }
+
     /// Handles scrollbar thumb dragging. Returns `true` when drag is active
     /// and the event should not propagate further.
     fn handle_scrollbar_drag(&mut self, my: f64, tab_bar_height: f64) -> bool {
-        if !self.active_tab_ref().is_some_and(|t| t.scrollbar.dragging) {
+        if !self.active_leaf_ref().is_some_and(|l| l.scrollbar.dragging) {
             return false;
         }
 
         let window_padding = self.backend.window_padding_px() as f64;
         let size = self.window.inner_size();
         let buf_height = size.height as usize;
-        let Some(tab) = self.active_tab_ref() else {
+        let Some(leaf) = self.active_leaf_ref() else {
             return false;
         };
-        let scrollback_len = tab.terminal.scrollback.len();
-        let grid_rows = tab.terminal.grid.rows;
-        let drag_start_y = tab.scrollbar.drag_start_y;
-        let drag_start_offset = tab.scrollbar.drag_start_offset;
+        let scrollback_len = leaf.terminal.scrollback.len();
+        let grid_rows = leaf.terminal.grid.rows;
+        let drag_start_y = leaf.scrollbar.drag_start_y;
+        let drag_start_offset = leaf.scrollbar.drag_start_offset;
 
         if let Some((_, thumb_height)) = self.backend.scrollbar_thumb_bounds(
             buf_height,
-            tab.scroll_offset,
+            leaf.scroll_offset,
             scrollback_len,
             grid_rows,
         ) {
@@ -163,9 +241,9 @@ impl FerrumWindow {
                 let new_offset = drag_start_offset as f64 - delta_y * lines_per_pixel;
                 let new_offset = new_offset.round() as isize;
                 let clamped = new_offset.max(0) as usize;
-                if let Some(tab) = self.active_tab_mut() {
-                    tab.scroll_offset = clamped.min(tab.terminal.scrollback.len());
-                    tab.scrollbar.last_activity = std::time::Instant::now();
+                if let Some(leaf) = self.active_leaf_mut() {
+                    leaf.scroll_offset = clamped.min(leaf.terminal.scrollback.len());
+                    leaf.scrollbar.last_activity = std::time::Instant::now();
                 }
             }
         }
@@ -179,18 +257,18 @@ impl FerrumWindow {
         let size = self.window.inner_size();
         let in_zone = self.is_in_scrollbar_zone(mx, size.width);
         let has_scrollback = self
-            .active_tab_ref()
-            .is_some_and(|t| !t.terminal.scrollback.is_empty());
+            .active_leaf_ref()
+            .is_some_and(|l| !l.terminal.scrollback.is_empty());
         let track_top = tab_bar_height + window_padding;
         let track_bottom = size.height as f64 - window_padding;
         let in_track = my >= track_top && my <= track_bottom;
         let new_hover = in_zone && has_scrollback && in_track;
 
-        if let Some(tab) = self.active_tab_mut() {
-            let was_hover = tab.scrollbar.hover;
-            tab.scrollbar.hover = new_hover;
+        if let Some(leaf) = self.active_leaf_mut() {
+            let was_hover = leaf.scrollbar.hover;
+            leaf.scrollbar.hover = new_hover;
             if new_hover != was_hover {
-                tab.scrollbar.last_activity = std::time::Instant::now();
+                leaf.scrollbar.last_activity = std::time::Instant::now();
             }
         }
 
@@ -203,8 +281,8 @@ impl FerrumWindow {
     /// Returns `true` when the event was consumed by mouse reporting.
     fn handle_mouse_motion_reporting(&mut self, row: usize, col: usize) -> bool {
         let mouse_mode = self
-            .active_tab_ref()
-            .map_or(MouseMode::Off, |t| t.terminal.mouse_mode);
+            .active_leaf_ref()
+            .map_or(MouseMode::Off, |l| l.terminal.mouse_mode);
 
         if self.modifiers.shift_key() {
             return false;

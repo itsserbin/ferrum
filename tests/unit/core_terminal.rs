@@ -275,3 +275,65 @@ fn scrollback_preserved() {
     // Scrollback should not exceed max (1000)
     assert!(term.scrollback.len() <= 1000);
 }
+
+// ── OSC 7: working directory reporting ──
+
+#[test]
+fn osc7_sets_cwd_from_file_uri() {
+    let mut term = Terminal::new(4, 80);
+    term.process(b"\x1b]7;file://localhost/Users/test/project\x07");
+    assert_eq!(term.cwd.as_deref(), Some("/Users/test/project"));
+}
+
+#[test]
+fn osc7_sets_cwd_from_file_uri_without_host() {
+    let mut term = Terminal::new(4, 80);
+    term.process(b"\x1b]7;file:///home/user\x07");
+    assert_eq!(term.cwd.as_deref(), Some("/home/user"));
+}
+
+#[test]
+fn osc7_sets_cwd_from_kitty_scheme() {
+    let mut term = Terminal::new(4, 80);
+    term.process(b"\x1b]7;kitty-shell-cwd:///tmp/work\x07");
+    assert_eq!(term.cwd.as_deref(), Some("/tmp/work"));
+}
+
+#[test]
+fn osc7_ignores_remote_hostname() {
+    let mut term = Terminal::new(4, 80);
+    term.process(b"\x1b]7;file://remote-server/var/log\x07");
+    assert_eq!(term.cwd, None);
+}
+
+#[test]
+fn osc7_empty_resets_cwd() {
+    let mut term = Terminal::new(4, 80);
+    term.process(b"\x1b]7;file:///some/path\x07");
+    assert_eq!(term.cwd.as_deref(), Some("/some/path"));
+    term.process(b"\x1b]7;\x07");
+    assert_eq!(term.cwd, None);
+}
+
+#[test]
+fn osc7_full_reset_clears_cwd() {
+    let mut term = Terminal::new(4, 80);
+    term.process(b"\x1b]7;file:///some/path\x07");
+    assert_eq!(term.cwd.as_deref(), Some("/some/path"));
+    term.process(b"\x1bc");
+    assert_eq!(term.cwd, None);
+}
+
+#[test]
+fn osc7_decodes_percent_encoded_path() {
+    let mut term = Terminal::new(4, 80);
+    term.process(b"\x1b]7;file:///home/user/my%20project\x07");
+    assert_eq!(term.cwd.as_deref(), Some("/home/user/my project"));
+}
+
+#[test]
+fn osc7_with_st_terminator() {
+    let mut term = Terminal::new(4, 80);
+    term.process(b"\x1b]7;file:///tmp/test\x1b\\");
+    assert_eq!(term.cwd.as_deref(), Some("/tmp/test"));
+}

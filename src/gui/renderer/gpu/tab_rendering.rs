@@ -2,6 +2,7 @@
 
 use super::super::shared::{tab_math, ui_layout};
 use super::super::traits::Renderer;
+use super::super::types::{RoundedRectCmd, TabSlot};
 use super::super::{
     ACTIVE_TAB_BG, BAR_BG, INACTIVE_TAB_HOVER, RENAME_FIELD_BG, RENAME_FIELD_BORDER,
     RENAME_SELECTION_BG, SECURITY_ACCENT, TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE, TabInfo,
@@ -11,15 +12,15 @@ impl super::GpuRenderer {
     /// Draws the tab bar background rectangle.
     pub(super) fn tab_bar_background_commands(&mut self, buf_width: u32) {
         let tab_bar_h = self.metrics.tab_bar_height_px() as f32;
-        self.push_rounded_rect(
-            0.0,
-            0.0,
-            buf_width as f32,
-            tab_bar_h,
-            self.metrics.scaled_px(10) as f32,
-            BAR_BG,
-            1.0,
-        );
+        self.push_rounded_rect_cmd(&RoundedRectCmd {
+            x: 0.0,
+            y: 0.0,
+            w: buf_width as f32,
+            h: tab_bar_h,
+            radius: self.metrics.scaled_px(10) as f32,
+            color: BAR_BG,
+            opacity: 1.0,
+        });
     }
 
     /// Draws the background for a single tab (active, hovered, or nothing).
@@ -60,24 +61,14 @@ impl super::GpuRenderer {
         let field_w = r.w as f32;
         let field_h = r.h as f32;
         let radius = self.metrics.scaled_px(6) as f32;
-        self.push_rounded_rect(
-            field_x,
-            field_y,
-            field_w,
-            field_h,
-            radius,
-            RENAME_FIELD_BG,
-            0.96,
-        );
-        self.push_rounded_rect(
-            field_x,
-            field_y,
-            field_w,
-            field_h,
-            radius,
-            RENAME_FIELD_BORDER,
-            0.35,
-        );
+        self.push_rounded_rect_cmd(&RoundedRectCmd {
+            x: field_x, y: field_y, w: field_w, h: field_h, radius,
+            color: RENAME_FIELD_BG, opacity: 0.96,
+        });
+        self.push_rounded_rect_cmd(&RoundedRectCmd {
+            x: field_x, y: field_y, w: field_w, h: field_h, radius,
+            color: RENAME_FIELD_BORDER, opacity: 0.35,
+        });
 
         // Rename text characters with optional selection highlight.
         for (ci, ch) in rename_text.chars().take(max_chars).enumerate() {
@@ -119,23 +110,24 @@ impl super::GpuRenderer {
     /// Draws a tab in number mode (narrow tabs): centered number + optional close button.
     pub(super) fn tab_number_commands(
         &mut self,
-        tab_index: usize,
-        tab: &TabInfo,
+        slot: &TabSlot,
         tab_x: f32,
         tw: u32,
         text_y: u32,
-        is_hovered: bool,
     ) {
-        let fg_color = if tab.is_active {
+        let fg_color = if slot.tab.is_active {
             TAB_TEXT_ACTIVE
         } else {
             TAB_TEXT_INACTIVE
         };
 
         let m = self.tab_layout_metrics();
-        let number_str = (tab_index + 1).to_string();
-        let show_close =
-            tab_math::should_show_close_button(tab.is_active, is_hovered, tab.hover_progress);
+        let number_str = (slot.index + 1).to_string();
+        let show_close = tab_math::should_show_close_button(
+            slot.tab.is_active,
+            slot.is_hovered,
+            slot.tab.hover_progress,
+        );
         let close_reserved = if show_close {
             tab_math::close_button_reserved_width(&m)
         } else {
@@ -146,32 +138,32 @@ impl super::GpuRenderer {
         self.push_text(tx, text_y as f32, &number_str, fg_color, 1.0);
 
         if show_close {
-            self.draw_close_button_commands(tab_index, tw, tab.close_hover_progress);
+            self.draw_close_button_commands(slot.index, tw, slot.tab.close_hover_progress);
         }
     }
 
     /// Draws a tab in normal mode: title text + optional close button.
     /// Delegates to title, security badge, and close button helpers.
-    #[allow(clippy::too_many_arguments)]
     pub(super) fn tab_content_commands(
         &mut self,
-        tab_index: usize,
-        tab: &TabInfo,
+        slot: &TabSlot,
         tab_count: usize,
         buf_width: u32,
         tab_x: f32,
         tw: u32,
         text_y: u32,
-        is_hovered: bool,
     ) {
-        let show_close =
-            tab_math::should_show_close_button(tab.is_active, is_hovered, tab.hover_progress);
+        let show_close = tab_math::should_show_close_button(
+            slot.tab.is_active,
+            slot.is_hovered,
+            slot.tab.hover_progress,
+        );
 
-        self.tab_title_commands(tab, tab_x, tw, text_y, show_close);
-        self.tab_security_badge_commands(tab_index, tab, tab_count, buf_width, text_y);
+        self.tab_title_commands(slot.tab, tab_x, tw, text_y, show_close);
+        self.tab_security_badge_commands(slot.index, slot.tab, tab_count, buf_width, text_y);
 
         if show_close {
-            self.draw_close_button_commands(tab_index, tw, tab.close_hover_progress);
+            self.draw_close_button_commands(slot.index, tw, slot.tab.close_hover_progress);
         }
     }
 
@@ -184,6 +176,7 @@ impl super::GpuRenderer {
         text_y: u32,
         show_close: bool,
     ) {
+        use crate::gui::renderer::shared::path_display::format_tab_path;
         let fg_color = if tab.is_active {
             TAB_TEXT_ACTIVE
         } else {
@@ -193,7 +186,8 @@ impl super::GpuRenderer {
         let m = self.tab_layout_metrics();
         let max_chars = tab_math::tab_title_max_chars(&m, tw, show_close, tab.security_count);
         let tab_padding_h = self.metrics.scaled_px(tab_math::TAB_PADDING_H);
-        let title: String = tab.title.chars().take(max_chars).collect();
+        let fallback = format!("#{}", tab.index + 1);
+        let title = format_tab_path(tab.title, max_chars, &fallback);
         let tx = tab_x + tab_padding_h as f32;
         self.push_text(tx, text_y as f32, &title, fg_color, 1.0);
     }

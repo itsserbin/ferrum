@@ -6,8 +6,6 @@ use fontdue::{Font, FontSettings};
 use wgpu;
 use winit::window::Window;
 
-use crate::core::Color;
-
 use super::super::metrics::FontMetrics;
 use super::atlas::GlyphAtlas;
 use super::buffers::*;
@@ -169,21 +167,7 @@ impl super::GpuRenderer {
             font,
             metrics,
             commands: Vec::with_capacity(MAX_UI_COMMANDS),
-            grid_cells: Vec::new(),
-            grid_uniforms: GridUniforms {
-                cols: 0,
-                rows: 0,
-                cell_width: 0,
-                cell_height: 0,
-                atlas_width: 0,
-                atlas_height: 0,
-                baseline: 0,
-                bg_color: Color::DEFAULT_BG.to_pixel(),
-                tex_width: width,
-                tex_height: height,
-                _pad1: 0,
-                _pad2: 0,
-            },
+            grid_batches: Vec::new(),
             grid_dirty: false,
             width,
             height,

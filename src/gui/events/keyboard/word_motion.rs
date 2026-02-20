@@ -1,5 +1,5 @@
-use crate::gui::state::TabState;
 use crate::gui::FerrumWindow;
+use crate::gui::pane::PaneLeaf;
 
 #[derive(Clone, Copy)]
 pub(super) enum HorizontalMotion {
@@ -100,22 +100,23 @@ impl FerrumWindow {
         }
     }
 
-    pub(super) fn word_motion_target_col(
-        tab: &TabState,
+    /// Computes the target column for a word-wise cursor motion from the given leaf's terminal.
+    pub(super) fn word_motion_target_col_from_leaf(
+        leaf: &PaneLeaf,
         cursor_col: usize,
         motion: HorizontalMotion,
     ) -> usize {
-        let rows = tab.terminal.grid.rows;
-        let cols = tab.terminal.grid.cols;
+        let rows = leaf.terminal.grid.rows;
+        let cols = leaf.terminal.grid.cols;
         if rows == 0 || cols == 0 {
             return 0;
         }
 
-        let row = tab.terminal.cursor_row.min(rows.saturating_sub(1));
+        let row = leaf.terminal.cursor_row.min(rows.saturating_sub(1));
         let mut line = Vec::with_capacity(cols);
         for col in 0..cols {
             // Safe: col < cols and row < rows
-            line.push(tab.terminal.grid.get_unchecked(row, col).character);
+            line.push(leaf.terminal.grid.get_unchecked(row, col).character);
         }
 
         Self::word_motion_target_col_for_line(&line, cursor_col, motion)

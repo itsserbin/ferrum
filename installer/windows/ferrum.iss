@@ -21,7 +21,7 @@ PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 OutputBaseFilename=Ferrum-Setup-x64
 SetupIconFile=..\..\assets\icon.ico
-UninstallDisplayIcon={app}\{#AppExeName}
+UninstallDisplayIcon={app}\ferrum.ico
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -40,10 +40,11 @@ Name: "addtopath"; Description: "Add to PATH"; GroupDescription: "System integra
 
 [Files]
 Source: "ferrum.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\..\assets\icon.ico"; DestDir: "{app}"; DestName: "ferrum.ico"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Tasks: startmenu
-Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Tasks: desktopicon
+Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"; IconFilename: "{app}\ferrum.ico"; Tasks: startmenu
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; IconFilename: "{app}\ferrum.ico"; Tasks: desktopicon
 
 [Code]
 procedure EnvAddPath(Path: string; IsSystem: Boolean);

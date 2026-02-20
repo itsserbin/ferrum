@@ -25,6 +25,10 @@ impl FerrumWindow {
             let size = self.window.inner_size();
             let (rows, cols) = self.calc_grid_size(size.width, size.height);
             self.resize_all_tabs(rows, cols);
+            // Recalculate pane layout for the active tab so each pane gets its
+            // correct dimensions based on the split tree (resize_all_tabs uses a
+            // uniform size which is only accurate for single-pane tabs).
+            self.resize_all_panes();
             // Show mouse cursor after resize completes
             self.window.set_cursor_visible(true);
         }
