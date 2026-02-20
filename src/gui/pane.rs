@@ -189,6 +189,22 @@ impl PaneNode {
         }
     }
 
+
+    /// Extracts all PTY sessions from the pane tree via `.take()`.
+    ///
+    /// Returns a `Vec<Option<pty::Session>>` — one entry per leaf.
+    /// After this call every leaf's `session` field is `None`, so
+    /// dropping the tree will no longer block on `Session::drop()`.
+    pub(super) fn drain_sessions(&mut self) -> Vec<Option<pty::Session>> {
+        match self {
+            PaneNode::Leaf(leaf) => vec![leaf.session.take()],
+            PaneNode::Split(split) => {
+                let mut sessions = split.first.drain_sessions();
+                sessions.extend(split.second.drain_sessions());
+                sessions
+            }
+        }
+    }
     /// Recursively searches for a leaf by ID, returning an immutable reference.
     pub(super) fn find_leaf(&self, id: PaneId) -> Option<&PaneLeaf> {
         match self {
@@ -917,5 +933,29 @@ mod tests {
         // Click far from divider
         let hit = tree.hit_test_divider(100, 300, rect, 1, 6);
         assert!(hit.is_none());
+    }
+
+    #[test]
+    fn drain_sessions_empties_all() {
+        let mut tree = PaneNode::new_leaf(1);
+        tree.split(1, SplitDirection::Horizontal, 2);
+        tree.split(2, SplitDirection::Vertical, 3);
+
+        // All test leaves have session = None, but drain should still work.
+        let sessions = tree.drain_sessions();
+        assert_eq!(sessions.len(), 3);
+
+        // After draining, all leaves should have session = None.
+        for id in tree.leaf_ids() {
+            let leaf = tree.find_leaf(id).unwrap();
+            assert!(leaf.session.is_none());
+        }
+    }
+
+    #[test]
+    fn drain_sessions_single_leaf() {
+        let mut tree = PaneNode::new_leaf(1);
+        let sessions = tree.drain_sessions();
+        assert_eq!(sessions.len(), 1);
     }
 }
