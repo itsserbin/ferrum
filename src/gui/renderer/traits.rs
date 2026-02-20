@@ -1,8 +1,6 @@
 use crate::core::{CursorStyle, Grid, Selection};
 use crate::gui::pane::PaneRect;
 
-#[cfg(not(target_os = "macos"))]
-use super::WindowButton;
 use super::shared::scrollbar_math;
 use super::shared::tab_hit_test;
 use super::shared::tab_math::{self, TabLayoutMetrics};
@@ -246,12 +244,6 @@ pub trait Renderer {
     ) -> Option<usize> {
         let m = self.tab_layout_metrics();
         tab_hit_test::hit_test_tab_security_badge(x, y, tabs, buf_width, &m)
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    fn window_button_at_position(&self, x: f64, y: f64, buf_width: u32) -> Option<WindowButton> {
-        let m = self.tab_layout_metrics();
-        tab_hit_test::window_button_at_position(x, y, buf_width, &m)
     }
 
     // ── Security ────────────────────────────────────────────────────
