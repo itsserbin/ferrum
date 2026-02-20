@@ -74,11 +74,13 @@ impl FerrumWindow {
                     leaf.terminal.scrollback.clear();
                     leaf.terminal.cursor_row = 0;
                     leaf.terminal.cursor_col = 0;
+                    leaf.terminal.reset_scroll_region();
                     leaf.scroll_offset = 0;
                     leaf.selection = None;
                     let _ = leaf.pty_writer.write_all(b"\x0c");
                     let _ = leaf.pty_writer.flush();
                 }
+                self.selection_anchor = None;
                 self.keyboard_selection_anchor = None;
             }
             MenuAction::ResetTerminal => {
@@ -89,6 +91,7 @@ impl FerrumWindow {
                     let _ = leaf.pty_writer.write_all(b"\x0c");
                     let _ = leaf.pty_writer.flush();
                 }
+                self.selection_anchor = None;
                 self.keyboard_selection_anchor = None;
             }
             MenuAction::RenameTab => {

@@ -136,6 +136,12 @@ impl Terminal {
         std::mem::take(&mut self.scrollback_popped)
     }
 
+    /// Resets the scroll region to span the entire visible grid.
+    pub fn reset_scroll_region(&mut self) {
+        self.scroll_top = 0;
+        self.scroll_bottom = self.grid.rows.saturating_sub(1);
+    }
+
     /// Drains security events detected while parsing terminal output.
     pub fn drain_security_events(&mut self) -> Vec<SecurityEventKind> {
         std::mem::take(&mut self.pending_security_events)
@@ -256,6 +262,7 @@ impl Terminal {
         }
         self.cwd = None;
         self.reset_attributes();
+        self.parser = Parser::new();
     }
 
     fn handle_private_mode(&mut self, params: &Params, intermediates: &[u8], action: char) -> bool {

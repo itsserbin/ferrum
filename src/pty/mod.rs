@@ -1,5 +1,6 @@
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use std::io::{Read, Write};
+use std::sync::OnceLock;
 
 #[cfg(windows)]
 use std::path::{Path, PathBuf};
@@ -83,8 +84,17 @@ fn create_unix_aliases_script() -> Option<PathBuf> {
     Some(init_script)
 }
 
+static SHELL_INTEGRATION_DIR: OnceLock<Option<std::path::PathBuf>> = OnceLock::new();
+
 /// Write shell integration scripts to a temp directory so they can be
 /// sourced by the spawned shell.  Returns the root temp dir on success.
+/// Files are written only once per process via [`OnceLock`].
+fn get_shell_integration_dir() -> Option<&'static std::path::PathBuf> {
+    SHELL_INTEGRATION_DIR
+        .get_or_init(|| setup_shell_integration())
+        .as_ref()
+}
+
 fn setup_shell_integration() -> Option<std::path::PathBuf> {
     let temp_dir = std::env::temp_dir().join("ferrum_shell_integration");
     let zsh_dir = temp_dir.join("zsh");
@@ -172,7 +182,7 @@ impl Session {
         // Shell integration: set marker env and configure per-shell sourcing.
         cmd.env("FERRUM_SHELL_INTEGRATION", "1");
 
-        if let Some(integration_dir) = setup_shell_integration() {
+        if let Some(integration_dir) = get_shell_integration_dir() {
             let shell_name = std::path::Path::new(shell)
                 .file_name()
                 .and_then(|n| n.to_str())
@@ -194,8 +204,26 @@ impl Session {
                     cmd.env("ZDOTDIR", zdotdir.to_string_lossy().as_ref());
                 }
                 "bash" => {
-                    let bash_integration = integration_dir.join("bash").join("ferrum.bash");
+                    let bash_dir = integration_dir.join("bash");
+                    let bash_integration = bash_dir.join("ferrum.bash");
+                    // BASH_ENV is sourced by non-interactive bash
                     cmd.env("BASH_ENV", bash_integration.to_string_lossy().as_ref());
+                    // For interactive bash, create a wrapper rcfile that sources
+                    // the user's .bashrc first, then our integration script.
+                    let user_bashrc = std::env::var("HOME")
+                        .map(|h| format!("{h}/.bashrc"))
+                        .unwrap_or_default();
+                    let rcfile_content = format!(
+                        "[ -f \"{user_bashrc}\" ] && source \"{user_bashrc}\"\nsource \"{}\"\n",
+                        bash_integration.display()
+                    );
+                    let rcfile_path = bash_dir.join("bashrc-wrapper");
+                    let _ = std::fs::write(&rcfile_path, rcfile_content);
+                    // --rcfile works for interactive non-login bash.
+                    // On macOS where -l is added, login bash ignores --rcfile
+                    // but sources ~/.bash_profile (which typically sources .bashrc).
+                    cmd.arg("--rcfile");
+                    cmd.arg(rcfile_path.to_string_lossy().as_ref());
                 }
                 "fish" => {
                     let fish_dir = integration_dir.join("fish");

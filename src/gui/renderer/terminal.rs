@@ -99,8 +99,12 @@ impl CpuRenderer {
                 let y = row as u32 * self.metrics.cell_height + rect.y;
 
                 // Clip to pane rect and buffer bounds.
-                if x as usize >= rect_right
-                    || y as usize >= rect_bottom
+                // Check the cell's full extent (not just its origin) to prevent
+                // partial cells at the boundary from bleeding into adjacent panes.
+                let cell_w = self.metrics.cell_width;
+                let cell_h = self.metrics.cell_height;
+                if (x + cell_w) as usize > rect_right
+                    || (y + cell_h) as usize > rect_bottom
                     || x as usize >= buf_width
                     || y as usize >= buf_height
                 {

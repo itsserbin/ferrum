@@ -170,6 +170,20 @@ impl PaneNode {
         matches!(self, PaneNode::Leaf(_))
     }
 
+    /// Creates a lightweight placeholder node for `mem::replace` swaps.
+    fn placeholder() -> Self {
+        PaneNode::Leaf(PaneLeaf {
+            id: u64::MAX,
+            terminal: Terminal::new(1, 1),
+            session: None,
+            pty_writer: Box::new(std::io::sink()),
+            selection: None,
+            scroll_offset: 0,
+            security: SecurityGuard::default(),
+            scrollbar: ScrollbarState::new(),
+        })
+    }
+
     /// Returns `true` if a leaf with the given id exists in this subtree.
     fn contains_leaf(&self, id: PaneId) -> bool {
         match self {
@@ -317,19 +331,7 @@ impl PaneNode {
     ) -> bool {
         match self {
             PaneNode::Leaf(leaf) if leaf.id == target_id => {
-                let original = std::mem::replace(
-                    self,
-                    PaneNode::Leaf(PaneLeaf {
-                        id: u64::MAX,
-                        terminal: Terminal::new(1, 1),
-                        session: None,
-                        pty_writer: Box::new(std::io::sink()),
-                        selection: None,
-                        scroll_offset: 0,
-                        security: SecurityGuard::default(),
-                        scrollbar: ScrollbarState::new(),
-                    }),
-                );
+                let original = std::mem::replace(self, PaneNode::placeholder());
                 let (first, second) = if reverse {
                     (new_node, original)
                 } else {
@@ -609,19 +611,7 @@ impl PaneNode {
         // zero-cost Leaf placeholder that will be overwritten immediately.
         // Since we own `self` as `&mut`, we must put something valid back.
         // We reconstruct below in all paths.
-        let node = std::mem::replace(
-            self,
-            PaneNode::Leaf(PaneLeaf {
-                id: u64::MAX,
-                terminal: Terminal::new(1, 1),
-                session: None,
-                pty_writer: Box::new(std::io::sink()),
-                selection: None,
-                scroll_offset: 0,
-                security: SecurityGuard::default(),
-                scrollbar: ScrollbarState::new(),
-            }),
-        );
+        let node = std::mem::replace(self, PaneNode::placeholder());
 
         let PaneNode::Split(split) = node else {
             unreachable!("close_inner: node was verified as Split before mem::replace");

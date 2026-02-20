@@ -24,7 +24,11 @@ impl FerrumWindow {
         let tab = self.active_tab_ref()?;
         let leaf = tab.pane_tree.find_leaf(pane_id)?;
         let terminal_rect = self.terminal_content_rect();
-        let pane_pad = self.backend.scaled_px(PANE_INNER_PADDING);
+        let pane_pad = if tab.has_multiple_panes() {
+            self.backend.scaled_px(PANE_INNER_PADDING)
+        } else {
+            0
+        };
         let content = tab
             .pane_tree
             .layout(terminal_rect, DIVIDER_WIDTH)
