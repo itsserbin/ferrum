@@ -3,6 +3,7 @@ use crate::gui::pane::PaneRect;
 
 use super::super::traits;
 use super::super::types::{SecurityPopup, TabInfo};
+use super::super::{RenderTarget, ScrollbarState};
 use super::CpuRenderer;
 
 impl traits::Renderer for CpuRenderer {
@@ -44,191 +45,103 @@ impl traits::Renderer for CpuRenderer {
 
     fn render(
         &mut self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
+        target: &mut RenderTarget<'_>,
         grid: &Grid,
         selection: Option<&Selection>,
         viewport_start: usize,
     ) {
-        CpuRenderer::render(
-            self,
-            buffer,
-            buf_width,
-            buf_height,
-            grid,
-            selection,
-            viewport_start,
-        );
+        CpuRenderer::render(self, target, grid, selection, viewport_start);
     }
 
     fn draw_cursor(
         &mut self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
+        target: &mut RenderTarget<'_>,
         row: usize,
         col: usize,
         grid: &Grid,
         style: CursorStyle,
     ) {
-        CpuRenderer::draw_cursor(self, buffer, buf_width, buf_height, row, col, grid, style);
+        CpuRenderer::draw_cursor(self, target, row, col, grid, style);
     }
 
     fn render_in_rect(
         &mut self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
+        target: &mut RenderTarget<'_>,
         grid: &Grid,
         selection: Option<&Selection>,
         viewport_start: usize,
         rect: PaneRect,
         fg_dim: f32,
     ) {
-        CpuRenderer::render_in_rect(
-            self,
-            buffer,
-            buf_width,
-            buf_height,
-            grid,
-            selection,
-            viewport_start,
-            rect,
-            fg_dim,
-        );
+        CpuRenderer::render_in_rect(self, target, grid, selection, viewport_start, rect, fg_dim);
     }
 
     fn draw_cursor_in_rect(
         &mut self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
+        target: &mut RenderTarget<'_>,
         row: usize,
         col: usize,
         grid: &Grid,
         style: CursorStyle,
         rect: PaneRect,
     ) {
-        CpuRenderer::draw_cursor_in_rect(
-            self, buffer, buf_width, buf_height, row, col, grid, style, rect,
-        );
+        CpuRenderer::draw_cursor_in_rect(self, target, row, col, grid, style, rect);
     }
 
     fn render_scrollbar_in_rect(
         &mut self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
-        scroll_offset: usize,
-        scrollback_len: usize,
-        grid_rows: usize,
-        opacity: f32,
-        hover: bool,
+        target: &mut RenderTarget<'_>,
+        state: &ScrollbarState,
         rect: PaneRect,
     ) {
-        CpuRenderer::render_scrollbar_in_rect(
-            self,
-            buffer,
-            buf_width,
-            buf_height,
-            scroll_offset,
-            scrollback_len,
-            grid_rows,
-            opacity,
-            hover,
-            rect,
-        );
+        CpuRenderer::render_scrollbar_in_rect(self, target, state, rect);
     }
 
     fn render_scrollbar(
         &mut self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
-        scroll_offset: usize,
-        scrollback_len: usize,
-        grid_rows: usize,
-        opacity: f32,
-        hover: bool,
+        target: &mut RenderTarget<'_>,
+        state: &ScrollbarState,
     ) {
-        CpuRenderer::render_scrollbar(
-            self,
-            buffer,
-            buf_width,
-            buf_height,
-            scroll_offset,
-            scrollback_len,
-            grid_rows,
-            opacity,
-            hover,
-        );
+        CpuRenderer::render_scrollbar(self, target, state);
     }
 
     fn draw_tab_bar(
         &mut self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
+        target: &mut RenderTarget<'_>,
         tabs: &[TabInfo],
         hovered_tab: Option<usize>,
         mouse_pos: (f64, f64),
         tab_offsets: Option<&[f32]>,
         pinned: bool,
     ) {
-        CpuRenderer::draw_tab_bar(
-            self,
-            buffer,
-            buf_width,
-            buf_height,
-            tabs,
-            hovered_tab,
-            mouse_pos,
-            tab_offsets,
-            pinned,
-        );
+        CpuRenderer::draw_tab_bar(self, target, tabs, hovered_tab, mouse_pos, tab_offsets, pinned);
     }
 
     fn draw_tab_drag_overlay(
         &mut self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
+        target: &mut RenderTarget<'_>,
         tabs: &[TabInfo],
         source_index: usize,
         current_x: f64,
         indicator_x: f32,
     ) {
-        CpuRenderer::draw_tab_drag_overlay(
-            self,
-            buffer,
-            buf_width,
-            buf_height,
-            tabs,
-            source_index,
-            current_x,
-            indicator_x,
-        );
+        CpuRenderer::draw_tab_drag_overlay(self, target, tabs, source_index, current_x, indicator_x);
     }
 
     fn draw_tab_tooltip(
         &mut self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
+        target: &mut RenderTarget<'_>,
         mouse_pos: (f64, f64),
         title: &str,
     ) {
-        CpuRenderer::draw_tab_tooltip(self, buffer, buf_width, buf_height, mouse_pos, title);
+        CpuRenderer::draw_tab_tooltip(self, target, mouse_pos, title);
     }
 
     fn draw_security_popup(
         &mut self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
+        target: &mut RenderTarget<'_>,
         popup: &SecurityPopup,
     ) {
-        CpuRenderer::draw_security_popup(self, buffer, buf_width, buf_height, popup);
+        CpuRenderer::draw_security_popup(self, target, popup);
     }
 }

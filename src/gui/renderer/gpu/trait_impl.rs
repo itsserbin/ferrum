@@ -2,7 +2,7 @@ use crate::core::{CursorStyle, Grid, Selection};
 use crate::gui::pane::PaneRect;
 
 use super::super::traits;
-use super::super::{SecurityPopup, TabInfo};
+use super::super::{RenderTarget, ScrollbarState, SecurityPopup, TabInfo};
 use super::GpuRenderer;
 
 impl traits::Renderer for GpuRenderer {
@@ -52,9 +52,7 @@ impl traits::Renderer for GpuRenderer {
 
     fn render(
         &mut self,
-        _buffer: &mut [u32],
-        _buf_width: usize,
-        _buf_height: usize,
+        _target: &mut RenderTarget<'_>,
         grid: &Grid,
         selection: Option<&Selection>,
         viewport_start: usize,
@@ -69,9 +67,7 @@ impl traits::Renderer for GpuRenderer {
 
     fn draw_cursor(
         &mut self,
-        _buffer: &mut [u32],
-        _buf_width: usize,
-        _buf_height: usize,
+        _target: &mut RenderTarget<'_>,
         row: usize,
         col: usize,
         grid: &Grid,
@@ -82,9 +78,7 @@ impl traits::Renderer for GpuRenderer {
 
     fn render_in_rect(
         &mut self,
-        _buffer: &mut [u32],
-        _buf_width: usize,
-        _buf_height: usize,
+        _target: &mut RenderTarget<'_>,
         grid: &Grid,
         selection: Option<&Selection>,
         viewport_start: usize,
@@ -109,9 +103,7 @@ impl traits::Renderer for GpuRenderer {
 
     fn draw_cursor_in_rect(
         &mut self,
-        _buffer: &mut [u32],
-        _buf_width: usize,
-        _buf_height: usize,
+        _target: &mut RenderTarget<'_>,
         row: usize,
         col: usize,
         grid: &Grid,
@@ -123,16 +115,11 @@ impl traits::Renderer for GpuRenderer {
 
     fn render_scrollbar_in_rect(
         &mut self,
-        _buffer: &mut [u32],
-        _buf_width: usize,
-        _buf_height: usize,
-        scroll_offset: usize,
-        scrollback_len: usize,
-        grid_rows: usize,
-        opacity: f32,
-        hover: bool,
+        _target: &mut RenderTarget<'_>,
+        state: &ScrollbarState,
         rect: PaneRect,
     ) {
+        let ScrollbarState { scroll_offset, scrollback_len, grid_rows, opacity, hover } = *state;
         self.render_scrollbar_in_rect_impl(
             scroll_offset,
             scrollback_len,
@@ -159,17 +146,12 @@ impl traits::Renderer for GpuRenderer {
 
     fn render_scrollbar(
         &mut self,
-        _buffer: &mut [u32],
-        _buf_width: usize,
-        buf_height: usize,
-        scroll_offset: usize,
-        scrollback_len: usize,
-        grid_rows: usize,
-        opacity: f32,
-        hover: bool,
+        target: &mut RenderTarget<'_>,
+        state: &ScrollbarState,
     ) {
+        let ScrollbarState { scroll_offset, scrollback_len, grid_rows, opacity, hover } = *state;
         self.render_scrollbar_impl(
-            buf_height,
+            target.height,
             scroll_offset,
             scrollback_len,
             grid_rows,
@@ -182,51 +164,43 @@ impl traits::Renderer for GpuRenderer {
 
     fn draw_tab_bar(
         &mut self,
-        _buffer: &mut [u32],
-        buf_width: usize,
-        _buf_height: usize,
+        target: &mut RenderTarget<'_>,
         tabs: &[TabInfo],
         hovered_tab: Option<usize>,
         mouse_pos: (f64, f64),
         tab_offsets: Option<&[f32]>,
         pinned: bool,
     ) {
-        self.draw_tab_bar_impl(buf_width, tabs, hovered_tab, mouse_pos, tab_offsets, pinned);
+        self.draw_tab_bar_impl(target.width, tabs, hovered_tab, mouse_pos, tab_offsets, pinned);
     }
 
     fn draw_tab_drag_overlay(
         &mut self,
-        _buffer: &mut [u32],
-        buf_width: usize,
-        _buf_height: usize,
+        target: &mut RenderTarget<'_>,
         tabs: &[TabInfo],
         source_index: usize,
         current_x: f64,
         indicator_x: f32,
     ) {
-        self.draw_tab_drag_overlay_impl(buf_width, tabs, source_index, current_x, indicator_x);
+        self.draw_tab_drag_overlay_impl(target.width, tabs, source_index, current_x, indicator_x);
     }
 
     fn draw_tab_tooltip(
         &mut self,
-        _buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
+        target: &mut RenderTarget<'_>,
         mouse_pos: (f64, f64),
         title: &str,
     ) {
-        self.draw_tab_tooltip_impl(buf_width, buf_height, mouse_pos, title);
+        self.draw_tab_tooltip_impl(target.width, target.height, mouse_pos, title);
     }
 
     // ── Security ──────────────────────────────────────────────────────
 
     fn draw_security_popup(
         &mut self,
-        _buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
+        target: &mut RenderTarget<'_>,
         popup: &SecurityPopup,
     ) {
-        self.draw_security_popup_impl(buf_width, buf_height, popup);
+        self.draw_security_popup_impl(target.width, target.height, popup);
     }
 }

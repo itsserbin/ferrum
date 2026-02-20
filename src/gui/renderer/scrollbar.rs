@@ -1,5 +1,6 @@
 use super::shared::scrollbar_math;
 use super::*;
+use super::{RenderTarget, ScrollbarState};
 use crate::gui::pane::PaneRect;
 
 // SCROLLBAR_BASE_ALPHA and SCROLLBAR_MIN_THUMB come from `use super::*`.
@@ -9,18 +10,13 @@ impl CpuRenderer {
     ///
     /// `opacity` ranges from 0.0 (invisible) to 1.0 (fully shown).
     /// `hover` indicates whether the thumb should use the brighter hover color.
-    #[allow(clippy::too_many_arguments)]
     pub fn render_scrollbar(
         &self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
-        scroll_offset: usize,
-        scrollback_len: usize,
-        grid_rows: usize,
-        opacity: f32,
-        hover: bool,
+        target: &mut RenderTarget<'_>,
+        state: &ScrollbarState,
     ) {
+        let (buffer, buf_width, buf_height) = (&mut *target.buffer, target.width, target.height);
+        let ScrollbarState { scroll_offset, scrollback_len, grid_rows, opacity, hover } = *state;
         if scrollback_len == 0 || opacity <= 0.0 {
             return;
         }
@@ -87,19 +83,14 @@ impl CpuRenderer {
     }
 
     /// Renders the scrollbar within a pane sub-rectangle.
-    #[allow(clippy::too_many_arguments)]
     pub fn render_scrollbar_in_rect(
         &self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
-        scroll_offset: usize,
-        scrollback_len: usize,
-        grid_rows: usize,
-        opacity: f32,
-        hover: bool,
+        target: &mut RenderTarget<'_>,
+        state: &ScrollbarState,
         rect: PaneRect,
     ) {
+        let (buffer, buf_width, buf_height) = (&mut *target.buffer, target.width, target.height);
+        let ScrollbarState { scroll_offset, scrollback_len, grid_rows, opacity, hover } = *state;
         if scrollback_len == 0 || opacity <= 0.0 {
             return;
         }

@@ -1,17 +1,17 @@
 use super::*;
+use super::RenderTarget;
 use crate::gui::pane::PaneRect;
 
 impl CpuRenderer {
     /// Renders terminal cells with top/left offsets for tab bar and padding.
     pub fn render(
         &mut self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
+        target: &mut RenderTarget<'_>,
         grid: &Grid,
         selection: Option<&Selection>,
         viewport_start: usize,
     ) {
+        let (buffer, buf_width, buf_height) = (&mut *target.buffer, target.width, target.height);
         let y_offset = self.tab_bar_height_px() + self.window_padding_px();
         let x_offset = self.window_padding_px();
 
@@ -77,18 +77,16 @@ impl CpuRenderer {
     /// Renders terminal cells into a sub-rectangle of the buffer.
     ///
     /// Like `render()` but uses `rect` as the origin and clips to its bounds.
-    #[allow(clippy::too_many_arguments)]
     pub fn render_in_rect(
         &mut self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
+        target: &mut RenderTarget<'_>,
         grid: &Grid,
         selection: Option<&Selection>,
         viewport_start: usize,
         rect: PaneRect,
         fg_dim: f32,
     ) {
+        let (buffer, buf_width, buf_height) = (&mut *target.buffer, target.width, target.height);
         let rect_right = (rect.x + rect.width) as usize;
         let rect_bottom = (rect.y + rect.height) as usize;
         for row in 0..grid.rows {

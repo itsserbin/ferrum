@@ -1,19 +1,18 @@
 use super::*;
+use super::RenderTarget;
 use crate::core::Cell;
 use crate::gui::pane::PaneRect;
 
 impl CpuRenderer {
-    #[allow(clippy::too_many_arguments)]
     pub fn draw_cursor(
         &mut self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
+        target: &mut RenderTarget<'_>,
         row: usize,
         col: usize,
         grid: &Grid,
         style: CursorStyle,
     ) {
+        let (buffer, buf_width, buf_height) = (&mut *target.buffer, target.width, target.height);
         let x = col as u32 * self.metrics.cell_width + self.window_padding_px();
         let y = row as u32 * self.metrics.cell_height
             + self.tab_bar_height_px()
@@ -74,18 +73,16 @@ impl CpuRenderer {
     }
 
     /// Draws the cursor at a position offset by a pane rectangle.
-    #[allow(clippy::too_many_arguments)]
     pub fn draw_cursor_in_rect(
         &mut self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
+        target: &mut RenderTarget<'_>,
         row: usize,
         col: usize,
         grid: &Grid,
         style: CursorStyle,
         rect: PaneRect,
     ) {
+        let (buffer, buf_width, buf_height) = (&mut *target.buffer, target.width, target.height);
         let x = col as u32 * self.metrics.cell_width + rect.x;
         let y = row as u32 * self.metrics.cell_height + rect.y;
         let cursor_pixel = Color::DEFAULT_FG.to_pixel();

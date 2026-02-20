@@ -1,5 +1,6 @@
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
+use super::super::RenderTarget;
 use super::super::TabInfo;
 use super::super::shared::overlay_layout;
 use super::super::traits::Renderer;
@@ -8,17 +9,15 @@ use crate::core::Color;
 
 impl super::super::CpuRenderer {
     /// Draws the drag overlay: ghost tab at cursor X + insertion indicator.
-    #[allow(clippy::too_many_arguments)]
     pub fn draw_tab_drag_overlay(
         &mut self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
+        target: &mut RenderTarget<'_>,
         tabs: &[TabInfo],
         source_index: usize,
         current_x: f64,
         indicator_x: f32,
     ) {
+        let (buffer, buf_width, buf_height) = (&mut *target.buffer, target.width, target.height);
         let m = self.tab_layout_metrics();
         let layout = match overlay_layout::compute_drag_overlay_layout(
             &m,

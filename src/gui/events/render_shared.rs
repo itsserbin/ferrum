@@ -6,6 +6,7 @@
 use crate::core::terminal::CursorStyle;
 use crate::gui::pane::{DIVIDER_WIDTH, PaneNode, PaneRect, SplitDirection, split_rect};
 use crate::gui::renderer::traits::Renderer;
+use crate::gui::renderer::{RenderTarget, ScrollbarState};
 use crate::gui::*;
 
 #[cfg(not(target_os = "macos"))]
@@ -265,9 +266,7 @@ pub(in crate::gui::events) fn draw_frame_content(
                         .saturating_sub(leaf.scroll_offset);
                     if leaf.scroll_offset == 0 {
                         renderer.render_in_rect(
-                            buffer,
-                            bw,
-                            bh,
+                            &mut RenderTarget { buffer: &mut *buffer, width: bw, height: bh },
                             &leaf.terminal.grid,
                             leaf.selection.as_ref(),
                             viewport_start,
@@ -277,9 +276,7 @@ pub(in crate::gui::events) fn draw_frame_content(
                     } else {
                         let display = leaf.terminal.build_display(leaf.scroll_offset);
                         renderer.render_in_rect(
-                            buffer,
-                            bw,
-                            bh,
+                            &mut RenderTarget { buffer: &mut *buffer, width: bw, height: bh },
                             &display,
                             leaf.selection.as_ref(),
                             viewport_start,
@@ -295,9 +292,7 @@ pub(in crate::gui::events) fn draw_frame_content(
                         && should_show_cursor(params.cursor_blink_start, leaf.terminal.cursor_style)
                     {
                         renderer.draw_cursor_in_rect(
-                            buffer,
-                            bw,
-                            bh,
+                            &mut RenderTarget { buffer: &mut *buffer, width: bw, height: bh },
                             leaf.terminal.cursor_row,
                             leaf.terminal.cursor_col,
                             &leaf.terminal.grid,
@@ -317,14 +312,14 @@ pub(in crate::gui::events) fn draw_frame_content(
                         );
                         if opacity > 0.0 {
                             renderer.render_scrollbar_in_rect(
-                                buffer,
-                                bw,
-                                bh,
-                                leaf.scroll_offset,
-                                scrollback_len,
-                                leaf.terminal.grid.rows,
-                                opacity,
-                                hover,
+                                &mut RenderTarget { buffer: &mut *buffer, width: bw, height: bh },
+                                &ScrollbarState {
+                                    scroll_offset: leaf.scroll_offset,
+                                    scrollback_len,
+                                    grid_rows: leaf.terminal.grid.rows,
+                                    opacity,
+                                    hover,
+                                },
                                 rect,
                             );
                         }
@@ -348,9 +343,7 @@ pub(in crate::gui::events) fn draw_frame_content(
                     .saturating_sub(leaf.scroll_offset);
                 if leaf.scroll_offset == 0 {
                     renderer.render(
-                        buffer,
-                        bw,
-                        bh,
+                        &mut RenderTarget { buffer: &mut *buffer, width: bw, height: bh },
                         &leaf.terminal.grid,
                         leaf.selection.as_ref(),
                         viewport_start,
@@ -358,9 +351,7 @@ pub(in crate::gui::events) fn draw_frame_content(
                 } else {
                     let display = leaf.terminal.build_display(leaf.scroll_offset);
                     renderer.render(
-                        buffer,
-                        bw,
-                        bh,
+                        &mut RenderTarget { buffer: &mut *buffer, width: bw, height: bh },
                         &display,
                         leaf.selection.as_ref(),
                         viewport_start,
@@ -373,9 +364,7 @@ pub(in crate::gui::events) fn draw_frame_content(
                     && should_show_cursor(params.cursor_blink_start, leaf.terminal.cursor_style)
                 {
                     renderer.draw_cursor(
-                        buffer,
-                        bw,
-                        bh,
+                        &mut RenderTarget { buffer: &mut *buffer, width: bw, height: bh },
                         leaf.terminal.cursor_row,
                         leaf.terminal.cursor_col,
                         &leaf.terminal.grid,
@@ -394,14 +383,14 @@ pub(in crate::gui::events) fn draw_frame_content(
                     );
                     if opacity > 0.0 {
                         renderer.render_scrollbar(
-                            buffer,
-                            bw,
-                            bh,
-                            leaf.scroll_offset,
-                            scrollback_len,
-                            leaf.terminal.grid.rows,
-                            opacity,
-                            hover,
+                            &mut RenderTarget { buffer: &mut *buffer, width: bw, height: bh },
+                            &ScrollbarState {
+                                scroll_offset: leaf.scroll_offset,
+                                scrollback_len,
+                                grid_rows: leaf.terminal.grid.rows,
+                                opacity,
+                                hover,
+                            },
                         );
                     }
                 }
@@ -414,9 +403,7 @@ pub(in crate::gui::events) fn draw_frame_content(
     {
         if tab_bar.tab_bar_visible {
             renderer.draw_tab_bar(
-                buffer,
-                bw,
-                bh,
+                &mut RenderTarget { buffer: &mut *buffer, width: bw, height: bh },
                 frame_tab_infos,
                 params.hovered_tab,
                 params.mouse_pos,
@@ -427,9 +414,7 @@ pub(in crate::gui::events) fn draw_frame_content(
             // 5) Draw drag overlay.
             if let Some((source_index, current_x, indicator_x)) = tab_bar.drag_info {
                 renderer.draw_tab_drag_overlay(
-                    buffer,
-                    bw,
-                    bh,
+                    &mut RenderTarget { buffer: &mut *buffer, width: bw, height: bh },
                     frame_tab_infos,
                     source_index,
                     current_x,
@@ -441,7 +426,10 @@ pub(in crate::gui::events) fn draw_frame_content(
 
     // 6) Draw popups/menus.
     if let Some(popup) = params.security_popup {
-        renderer.draw_security_popup(buffer, bw, bh, popup);
+        renderer.draw_security_popup(
+            &mut RenderTarget { buffer: &mut *buffer, width: bw, height: bh },
+            popup,
+        );
     }
 
     // 7) Draw tooltip.
@@ -450,7 +438,11 @@ pub(in crate::gui::events) fn draw_frame_content(
         && tab_bar.tab_bar_visible
         && let Some(ref title) = tab_bar.tab_tooltip
     {
-        renderer.draw_tab_tooltip(buffer, bw, bh, params.mouse_pos, title);
+        renderer.draw_tab_tooltip(
+            &mut RenderTarget { buffer: &mut *buffer, width: bw, height: bh },
+            params.mouse_pos,
+            title,
+        );
     }
 }
 

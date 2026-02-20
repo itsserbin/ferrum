@@ -10,6 +10,7 @@ mod tab_content;
 use super::shared::tab_math;
 
 use super::*;
+use super::RenderTarget;
 
 // Tab-bar palette constants (BAR_BG, TAB_TEXT_ACTIVE, INSERTION_COLOR, etc.)
 // are centralized in the parent `renderer/mod.rs` and imported via `use super::*`.
@@ -17,18 +18,16 @@ use super::*;
 
 impl CpuRenderer {
     /// Draws top tab bar including tabs, controls, and separators.
-    #[allow(clippy::too_many_arguments)]
     pub fn draw_tab_bar(
         &mut self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
+        target: &mut RenderTarget<'_>,
         tabs: &[TabInfo],
         hovered_tab: Option<usize>,
         mouse_pos: (f64, f64),
         tab_offsets: Option<&[f32]>,
         pinned: bool,
     ) {
+        let (buffer, buf_width, buf_height) = (&mut *target.buffer, target.width, target.height);
         let tab_bar_height = self.tab_bar_height_px();
         let bar_h = tab_bar_height as usize;
         let tw = self.tab_width(tabs.len(), buf_width as u32);

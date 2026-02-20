@@ -1,5 +1,6 @@
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
+use super::super::RenderTarget;
 use super::super::shared::overlay_layout;
 use super::super::traits::Renderer;
 use super::{ACTIVE_TAB_BG, TAB_BORDER};
@@ -9,12 +10,11 @@ impl super::super::CpuRenderer {
     /// Draws a small tooltip with full tab title near the pointer.
     pub fn draw_tab_tooltip(
         &mut self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
+        target: &mut RenderTarget<'_>,
         mouse_pos: (f64, f64),
         title: &str,
     ) {
+        let (buffer, buf_width, buf_height) = (&mut *target.buffer, target.width, target.height);
         let m = self.tab_layout_metrics();
         let layout = match overlay_layout::compute_tooltip_layout(
             title,

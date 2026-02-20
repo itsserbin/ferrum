@@ -1,5 +1,6 @@
 use super::shared::ui_layout;
 use super::*;
+use super::RenderTarget;
 
 impl SecurityPopup {
     pub(crate) fn line_height(&self, cell_height: u32) -> u32 {
@@ -93,11 +94,10 @@ impl CpuRenderer {
     /// Draws security popup overlay using a shared layout.
     pub fn draw_security_popup(
         &mut self,
-        buffer: &mut [u32],
-        buf_width: usize,
-        buf_height: usize,
+        target: &mut RenderTarget<'_>,
         popup: &SecurityPopup,
     ) {
+        let (buffer, buf_width, buf_height) = (&mut *target.buffer, target.width, target.height);
         let layout = popup.layout(
             self.metrics.cell_width,
             self.metrics.cell_height,
