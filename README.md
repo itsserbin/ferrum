@@ -27,11 +27,25 @@ Expected release files:
 
 - `ferrum-aarch64-apple-darwin.tar.gz`
 - `ferrum-x86_64-apple-darwin.tar.gz`
+- `ferrum-aarch64-apple-darwin.dmg`
+- `ferrum-x86_64-apple-darwin.dmg`
 - `ferrum-x86_64-unknown-linux-gnu.tar.gz`
 - `ferrum_0.1.0_amd64.deb`
 - `ferrum-0.1.0.x86_64.rpm`
 - `ferrum-x86_64-pc-windows-msvc.zip`
 - `ferrum-x86_64-pc-windows-msvc.msi`
+
+macOS archive notes:
+
+- Apple Silicon (M1/M2/M3): use `ferrum-aarch64-apple-darwin.tar.gz`
+- Intel Mac: use `ferrum-x86_64-apple-darwin.tar.gz`
+- If macOS blocks launch (quarantine), run:
+
+```bash
+chmod +x ferrum
+xattr -dr com.apple.quarantine ferrum
+./ferrum
+```
 
 ### Linux packages
 

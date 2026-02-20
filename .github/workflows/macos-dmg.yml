@@ -1,0 +1,79 @@
+name: Publish macOS DMG
+
+on:
+  release:
+    types: [published, prereleased]
+
+permissions:
+  contents: write
+
+jobs:
+  publish-macos-dmg:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: "macos-14"
+            target: "aarch64-apple-darwin"
+          - runner: "macos-15-intel"
+            target: "x86_64-apple-darwin"
+    runs-on: ${{ matrix.runner }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RUST_BACKTRACE: "1"
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          persist-credentials: false
+          submodules: recursive
+      - name: Build release binary
+        run: |
+          rustup target add "${{ matrix.target }}"
+          cargo build --release --target "${{ matrix.target }}"
+      - name: Package .app and .dmg
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.release.tag_name }}"
+          VERSION="${TAG#v}"
+          APP_ROOT="$PWD/dist-macos/Ferrum.app/Contents"
+          mkdir -p "$APP_ROOT/MacOS" "$APP_ROOT/Resources"
+          cp "target/${{ matrix.target }}/release/ferrum" "$APP_ROOT/MacOS/Ferrum"
+          chmod +x "$APP_ROOT/MacOS/Ferrum"
+
+          cat > "$APP_ROOT/Info.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleName</key>
+            <string>Ferrum</string>
+            <key>CFBundleDisplayName</key>
+            <string>Ferrum</string>
+            <key>CFBundleIdentifier</key>
+            <string>com.ferrum.terminal</string>
+            <key>CFBundleVersion</key>
+            <string>${VERSION}</string>
+            <key>CFBundleShortVersionString</key>
+            <string>${VERSION}</string>
+            <key>CFBundleExecutable</key>
+            <string>Ferrum</string>
+            <key>CFBundlePackageType</key>
+            <string>APPL</string>
+            <key>LSMinimumSystemVersion</key>
+            <string>12.0</string>
+          </dict>
+          </plist>
+          PLIST
+
+          mkdir -p dist-macos/dmg
+          cp -R dist-macos/Ferrum.app dist-macos/dmg/
+          ln -s /Applications dist-macos/dmg/Applications
+
+          DMG_NAME="ferrum-${{ matrix.target }}.dmg"
+          hdiutil create -volname "Ferrum" -srcfolder dist-macos/dmg -ov -format UDZO "$DMG_NAME"
+          echo "DMG_NAME=$DMG_NAME" >> "$GITHUB_ENV"
+      - name: Upload DMG to GitHub Release
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" "$DMG_NAME" --clobber
