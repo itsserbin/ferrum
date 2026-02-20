@@ -212,9 +212,11 @@ impl Session {
 
         // Try graceful shutdown first: send CTRL_BREAK to the process group.
         // This lets cmd.exe exit cleanly without flashing its console window.
+        // Note: portable-pty spawns conpty processes with CREATE_NEW_PROCESS_GROUP,
+        // so the child PID equals its process group ID.
         if let Some(pid) = self.child.process_id() {
             unsafe {
-                // Send CTRL_BREAK to the process group.
+                // Send CTRL_BREAK to the process group (PID == PGID for conpty).
                 let _ = GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, pid);
 
                 // Wait up to 150ms for the process to exit gracefully.

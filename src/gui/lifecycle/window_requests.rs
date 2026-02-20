@@ -75,14 +75,16 @@ impl App {
 
                     // Spawn background thread for cleanup (kill + wait).
                     if !sessions.is_empty() {
-                        std::thread::Builder::new()
+                        if let Err(e) = std::thread::Builder::new()
                             .name("pty-cleanup".into())
                             .spawn(move || {
                                 for session in sessions {
                                     session.shutdown();
                                 }
                             })
-                            .ok();
+                        {
+                            eprintln!("Failed to spawn PTY cleanup thread: {e}");
+                        }
                     }
 
                     // Now drop the window — sessions are already extracted,
