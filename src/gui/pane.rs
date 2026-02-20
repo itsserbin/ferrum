@@ -54,7 +54,6 @@ pub(super) enum NavigateDirection {
 }
 
 /// Result of a divider hit-test, describing which divider was hit.
-#[allow(dead_code)]
 pub(super) struct DividerHit {
     pub direction: SplitDirection,
     pub ratio: f32,

@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::core::{CursorStyle, Grid, Selection};
 use crate::gui::pane::PaneRect;
 

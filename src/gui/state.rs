@@ -69,18 +69,6 @@ impl TabState {
         self.pane_tree.find_leaf_mut(self.focused_pane)
     }
 
-    /// Convenience: immutable reference to the focused pane's terminal.
-    #[allow(dead_code)] // Used in later tasks
-    pub(super) fn terminal(&self) -> Option<&Terminal> {
-        self.focused_leaf().map(|l| &l.terminal)
-    }
-
-    /// Convenience: mutable reference to the focused pane's terminal.
-    #[allow(dead_code)] // Used in later tasks
-    pub(super) fn terminal_mut(&mut self) -> Option<&mut Terminal> {
-        self.focused_leaf_mut().map(|l| &mut l.terminal)
-    }
-
     /// Returns `true` if this tab contains more than one pane.
     pub(super) fn has_multiple_panes(&self) -> bool {
         !self.pane_tree.is_leaf()
