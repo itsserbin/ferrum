@@ -112,9 +112,7 @@ impl super::Terminal {
         let default_cell = Cell::default();
         let last_content_row = (0..self.grid.rows).rev().find(|&row| {
             self.grid.is_wrapped(row)
-                || (0..self.grid.cols).any(|col| {
-                    self.grid.get_unchecked(row, col) != &default_cell
-                })
+                || (0..self.grid.cols).any(|col| self.grid.get_unchecked(row, col) != &default_cell)
         });
         last_content_row
             .map(|row| (row + 1).max(cursor_rows))
@@ -150,10 +148,7 @@ mod tests {
                 ..Cell::default()
             })
             .collect();
-        let lines = vec![LogicalLine {
-            cells,
-            min_len: 0,
-        }];
+        let lines = vec![LogicalLine { cells, min_len: 0 }];
         let result = rewrap_lines(&lines, 10);
         assert_eq!(result.len(), 1);
         assert!(!result[0].wrapped);
@@ -170,10 +165,7 @@ mod tests {
                 ..Cell::default()
             })
             .collect();
-        let lines = vec![LogicalLine {
-            cells,
-            min_len: 0,
-        }];
+        let lines = vec![LogicalLine { cells, min_len: 0 }];
         let result = rewrap_lines(&lines, 4);
         assert_eq!(result.len(), 3);
         assert!(result[0].wrapped);
@@ -195,10 +187,7 @@ mod tests {
                 ..Cell::default()
             })
             .collect();
-        let lines = vec![LogicalLine {
-            cells,
-            min_len: 6,
-        }];
+        let lines = vec![LogicalLine { cells, min_len: 6 }];
         let result = rewrap_lines(&lines, 10);
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].cells[0].character, 'a');
@@ -219,10 +208,7 @@ mod tests {
             })
             .collect();
         cells.resize(10, Cell::default());
-        let lines = vec![LogicalLine {
-            cells,
-            min_len: 0,
-        }];
+        let lines = vec![LogicalLine { cells, min_len: 0 }];
         let result = rewrap_lines(&lines, 5);
         assert_eq!(result.len(), 1);
         assert!(!result[0].wrapped);

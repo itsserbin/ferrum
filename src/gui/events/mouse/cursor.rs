@@ -1,4 +1,4 @@
-use crate::gui::pane::{SplitDirection, DIVIDER_HIT_ZONE, DIVIDER_WIDTH};
+use crate::gui::pane::{DIVIDER_HIT_ZONE, DIVIDER_WIDTH, SplitDirection};
 use crate::gui::renderer::TabBarHit;
 use crate::gui::*;
 
@@ -132,7 +132,7 @@ impl FerrumWindow {
         let terminal_rect = self.terminal_content_rect();
         let divider_px = DIVIDER_WIDTH;
 
-        let (initial_pos, direction) = {
+        let (hit_pos, direction) = {
             let drag = self.divider_drag.as_ref().unwrap();
             (drag.initial_mouse_pos, drag.direction)
         };
@@ -150,15 +150,25 @@ impl FerrumWindow {
             SplitDirection::Vertical => my as u32,
         };
 
+        let mut resized = false;
         if let Some(tab) = self.active_tab_mut() {
-            tab.pane_tree.resize_divider_at(
-                initial_pos.0,
-                initial_pos.1,
+            resized = tab.pane_tree.resize_divider_at(
+                hit_pos.0,
+                hit_pos.1,
                 terminal_rect,
                 divider_px,
                 DIVIDER_HIT_ZONE,
                 new_pixel_pos,
             );
+        }
+        // Keep the hit anchor in sync with drag progression so subsequent
+        // events continue targeting the same divider after it moves.
+        if resized && let Some(drag) = self.divider_drag.as_mut() {
+            drag.initial_mouse_pos = (mx as u32, my as u32);
+        }
+        if resized {
+            // Apply terminal/PTTY resize immediately so width reflow is visible while dragging.
+            self.resize_all_panes();
         }
 
         self.window.request_redraw();

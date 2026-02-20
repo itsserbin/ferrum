@@ -121,15 +121,9 @@ impl FerrumWindow {
             return true;
         }
 
-        // ── Close pane / tab ──────────────────────────────────────────────
-        // When the active tab has multiple panes, close the focused pane.
-        // Otherwise fall through to close the entire tab.
+        // ── Close terminal window ─────────────────────────────────────────
         if Self::physical_key_is(physical, KeyCode::KeyW) {
-            if self.active_tab_ref().is_some_and(|t| t.has_multiple_panes()) {
-                self.close_focused_pane();
-            } else {
-                self.close_tab(self.active_tab);
-            }
+            self.request_close_window();
             return true;
         }
 

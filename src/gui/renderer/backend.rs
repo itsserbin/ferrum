@@ -117,8 +117,12 @@ impl RendererBackend {
         scrollback_len: usize,
         grid_rows: usize,
     ) -> Option<(f32, f32)> {
-        self.as_renderer()
-            .scrollbar_thumb_bounds(buf_height, scroll_offset, scrollback_len, grid_rows)
+        self.as_renderer().scrollbar_thumb_bounds(
+            buf_height,
+            scroll_offset,
+            scrollback_len,
+            grid_rows,
+        )
     }
 
     // ── Tab bar metrics / hit testing ─────────────────────────────────

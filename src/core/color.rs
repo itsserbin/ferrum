@@ -7,98 +7,98 @@ pub struct Color {
 
 impl Color {
     pub const DEFAULT_FG: Color = Color {
-        r: 205,
-        g: 214,
-        b: 244,
-    }; // #CDD6F4
+        r: 210,
+        g: 219,
+        b: 235,
+    }; // #D2DBEB
     pub const DEFAULT_BG: Color = Color {
-        r: 30,
-        g: 30,
-        b: 46,
-    }; // #1E1E2E
+        r: 40,
+        g: 44,
+        b: 52,
+    }; // #282C34
 
-    // Catppuccin Mocha — 16 ANSI colors (0-7 normal, 8-15 bright)
+    // Custom dark palette (ghostty-like vibe, not a 1:1 copy).
     pub const ANSI: [Color; 16] = [
         Color {
             r: 69,
-            g: 71,
-            b: 90,
-        }, //  0 black    #45475A
+            g: 75,
+            b: 89,
+        }, //  0 black    #454B59
         Color {
-            r: 243,
+            r: 224,
+            g: 108,
+            b: 117,
+        }, //  1 red      #E06C75
+        Color {
+            r: 152,
+            g: 195,
+            b: 121,
+        }, //  2 green    #98C379
+        Color {
+            r: 229,
+            g: 192,
+            b: 123,
+        }, //  3 yellow   #E5C07B
+        Color {
+            r: 97,
+            g: 175,
+            b: 239,
+        }, //  4 blue     #61AFEF
+        Color {
+            r: 198,
+            g: 120,
+            b: 221,
+        }, //  5 magenta  #C678DD
+        Color {
+            r: 86,
+            g: 182,
+            b: 194,
+        }, //  6 cyan     #56B6C2
+        Color {
+            r: 171,
+            g: 178,
+            b: 191,
+        }, //  7 white    #ABB2BF
+        Color {
+            r: 106,
+            g: 114,
+            b: 130,
+        }, //  8 br black #6A7282
+        Color {
+            r: 240,
             g: 139,
-            b: 168,
-        }, //  1 red      #F38BA8
+            b: 149,
+        }, //  9 br red   #F08B95
         Color {
-            r: 166,
-            g: 227,
-            b: 161,
-        }, //  2 green    #A6E3A1
+            r: 167,
+            g: 213,
+            b: 141,
+        }, // 10 br green #A7D58D
         Color {
-            r: 249,
-            g: 226,
-            b: 175,
-        }, //  3 yellow   #F9E2AF
+            r: 235,
+            g: 203,
+            b: 139,
+        }, // 11 br yello #EBCB8B
         Color {
-            r: 137,
-            g: 180,
-            b: 250,
-        }, //  4 blue     #89B4FA
+            r: 123,
+            g: 195,
+            b: 255,
+        }, // 12 br blue  #7BC3FF
         Color {
-            r: 245,
-            g: 194,
-            b: 231,
-        }, //  5 magenta  #F5C2E7
+            r: 215,
+            g: 153,
+            b: 240,
+        }, // 13 br magen #D799F0
         Color {
-            r: 148,
-            g: 226,
-            b: 213,
-        }, //  6 cyan     #94E2D5
+            r: 111,
+            g: 199,
+            b: 211,
+        }, // 14 br cyan  #6FC7D3
         Color {
-            r: 186,
-            g: 194,
-            b: 222,
-        }, //  7 white    #BAC2DE
-        Color {
-            r: 88,
-            g: 91,
-            b: 112,
-        }, //  8 br black #585B70
-        Color {
-            r: 243,
-            g: 139,
-            b: 168,
-        }, //  9 br red   #F38BA8
-        Color {
-            r: 166,
-            g: 227,
-            b: 161,
-        }, // 10 br green #A6E3A1
-        Color {
-            r: 249,
-            g: 226,
-            b: 175,
-        }, // 11 br yello #F9E2AF
-        Color {
-            r: 137,
-            g: 180,
-            b: 250,
-        }, // 12 br blue  #89B4FA
-        Color {
-            r: 245,
-            g: 194,
-            b: 231,
-        }, // 13 br magen #F5C2E7
-        Color {
-            r: 148,
-            g: 226,
-            b: 213,
-        }, // 14 br cyan  #94E2D5
-        Color {
-            r: 166,
-            g: 173,
-            b: 200,
-        }, // 15 br white #A6ADC8
+            r: 221,
+            g: 229,
+            b: 245,
+        }, // 15 br white #DDE5F5
     ];
 
     pub const fn to_pixel(self) -> u32 {
@@ -120,10 +120,7 @@ impl Color {
     /// bold-implies-bright convention for terminal emulators.
     pub fn bold_bright(self) -> Color {
         for i in 0..8 {
-            if self.r == Self::ANSI[i].r
-                && self.g == Self::ANSI[i].g
-                && self.b == Self::ANSI[i].b
-            {
+            if self.r == Self::ANSI[i].r && self.g == Self::ANSI[i].g && self.b == Self::ANSI[i].b {
                 return Self::ANSI[i + 8];
             }
         }
@@ -214,11 +211,7 @@ mod tests {
 
     #[test]
     fn bold_bright_returns_self_for_non_ansi() {
-        let custom = Color {
-            r: 1,
-            g: 2,
-            b: 3,
-        };
+        let custom = Color { r: 1, g: 2, b: 3 };
         assert_eq!(custom.bold_bright(), custom);
     }
 

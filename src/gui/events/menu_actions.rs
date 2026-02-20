@@ -3,13 +3,27 @@ use crate::gui::pane::SplitDirection;
 use crate::gui::*;
 
 impl FerrumWindow {
+    fn focus_menu_target_pane(&mut self, pane_id: Option<crate::gui::pane::PaneId>) {
+        let Some(pane_id) = pane_id else {
+            return;
+        };
+        if let Some(tab) = self.active_tab_mut()
+            && tab.pane_tree.find_leaf(pane_id).is_some()
+        {
+            tab.focused_pane = pane_id;
+        }
+    }
+
     pub(in crate::gui) fn handle_menu_action(
         &mut self,
         action: MenuAction,
         tab_index: Option<usize>,
+        pane_id: Option<crate::gui::pane::PaneId>,
         next_tab_id: &mut u64,
         tx: &mpsc::Sender<PtyEvent>,
     ) {
+        self.focus_menu_target_pane(pane_id);
+
         match action {
             MenuAction::Copy => self.copy_selection(),
             MenuAction::Paste => self.paste_clipboard(),

@@ -118,12 +118,7 @@ impl CpuRenderer {
         let btn_w = self.scaled_px(tab_math::WIN_BTN_WIDTH);
         let half_w_px = self.scaled_px(5);
 
-        let buttons = ui_layout::window_buttons_layout(
-            buf_width as u32,
-            bar_h,
-            btn_w,
-            mouse_pos,
-        );
+        let buttons = ui_layout::window_buttons_layout(buf_width as u32, bar_h, btn_w, mouse_pos);
 
         for btn in &buttons {
             let colors = ui_layout::window_button_colors(
@@ -149,11 +144,7 @@ impl CpuRenderer {
                 }
             }
 
-            let icon = ui_layout::compute_window_button_icon_lines(
-                btn,
-                self.ui_scale(),
-                half_w_px,
-            );
+            let icon = ui_layout::compute_window_button_icon_lines(btn, self.ui_scale(), half_w_px);
 
             for &(x1, y1, x2, y2) in &icon.lines {
                 Self::draw_stroked_line(

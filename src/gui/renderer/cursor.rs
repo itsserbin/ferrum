@@ -15,7 +15,9 @@ impl CpuRenderer {
         style: CursorStyle,
     ) {
         let x = col as u32 * self.metrics.cell_width + self.window_padding_px();
-        let y = row as u32 * self.metrics.cell_height + self.tab_bar_height_px() + self.window_padding_px();
+        let y = row as u32 * self.metrics.cell_height
+            + self.tab_bar_height_px()
+            + self.window_padding_px();
         let cursor_pixel = Color::DEFAULT_FG.to_pixel();
 
         match style {

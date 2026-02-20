@@ -18,7 +18,6 @@ pub struct PackedCell {
     ///   bit 1: italic (reserved)
     ///   bit 2: underline
     ///   bit 3: reverse video
-    ///   bit 4: selected
     pub attrs: u32,
 }
 
@@ -30,10 +29,11 @@ pub struct GridUniforms {
     pub rows: u32,
     pub cell_width: u32,
     pub cell_height: u32,
-    pub atlas_width: u32,
-    pub atlas_height: u32,
-    pub baseline: u32,
+    /// Top-left origin in the grid texture where this batch is drawn.
+    pub origin_x: u32,
+    pub origin_y: u32,
     pub bg_color: u32,
+    pub _pad0: u32,
     pub tex_width: u32,
     pub tex_height: u32,
     pub _pad1: u32,

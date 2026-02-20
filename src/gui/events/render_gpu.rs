@@ -4,7 +4,7 @@ use crate::gui::renderer::backend::RendererBackend;
 use crate::gui::*;
 
 #[cfg(feature = "gpu")]
-use super::render_shared::{draw_frame_content, FrameParams};
+use super::render_shared::{FrameParams, draw_frame_content};
 
 #[cfg(feature = "gpu")]
 impl FerrumWindow {

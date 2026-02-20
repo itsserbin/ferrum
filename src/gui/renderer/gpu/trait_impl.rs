@@ -1,4 +1,5 @@
 use crate::core::{CursorStyle, Grid, Selection};
+use crate::gui::pane::PaneRect;
 
 use super::super::traits;
 use super::super::{SecurityPopup, TabInfo};
@@ -58,7 +59,12 @@ impl traits::Renderer for GpuRenderer {
         selection: Option<&Selection>,
         viewport_start: usize,
     ) {
-        self.pack_grid(grid, selection, viewport_start);
+        let padding = self.metrics.window_padding_px();
+        let max_width = self.width.saturating_sub(padding.saturating_mul(2));
+        let max_height = self
+            .height
+            .saturating_sub(self.metrics.tab_bar_height_px() + padding.saturating_mul(2));
+        self.queue_grid_batch(grid, selection, viewport_start, 0, 0, max_width, max_height);
     }
 
     fn draw_cursor(
@@ -72,6 +78,90 @@ impl traits::Renderer for GpuRenderer {
         style: CursorStyle,
     ) {
         self.draw_cursor_impl(row, col, grid, style);
+    }
+
+    fn render_in_rect(
+        &mut self,
+        _buffer: &mut [u32],
+        _buf_width: usize,
+        _buf_height: usize,
+        grid: &Grid,
+        selection: Option<&Selection>,
+        viewport_start: usize,
+        rect: PaneRect,
+    ) {
+        let padding = self.metrics.window_padding_px();
+        let top = self.metrics.tab_bar_height_px().saturating_add(padding);
+        let origin_x = rect.x.saturating_sub(padding);
+        let origin_y = rect.y.saturating_sub(top);
+        self.queue_grid_batch(
+            grid,
+            selection,
+            viewport_start,
+            origin_x,
+            origin_y,
+            rect.width,
+            rect.height,
+        );
+    }
+
+    fn draw_cursor_in_rect(
+        &mut self,
+        _buffer: &mut [u32],
+        _buf_width: usize,
+        _buf_height: usize,
+        row: usize,
+        col: usize,
+        grid: &Grid,
+        style: CursorStyle,
+        rect: PaneRect,
+    ) {
+        self.draw_cursor_in_rect_impl(row, col, grid, style, rect);
+    }
+
+    fn render_scrollbar_in_rect(
+        &mut self,
+        _buffer: &mut [u32],
+        _buf_width: usize,
+        _buf_height: usize,
+        scroll_offset: usize,
+        scrollback_len: usize,
+        grid_rows: usize,
+        opacity: f32,
+        hover: bool,
+        rect: PaneRect,
+    ) {
+        self.render_scrollbar_in_rect_impl(
+            scroll_offset,
+            scrollback_len,
+            grid_rows,
+            opacity,
+            hover,
+            rect,
+        );
+    }
+
+    fn draw_pane_dim_overlay(&mut self, rect: PaneRect, alpha: f32) {
+        self.push_rect(
+            rect.x as f32,
+            rect.y as f32,
+            rect.width as f32,
+            rect.height as f32,
+            0x000000,
+            alpha,
+        );
+    }
+
+    fn draw_pane_divider(&mut self, rect: PaneRect) {
+        // Catppuccin Mocha Surface2 (same as CPU divider path).
+        self.push_rect(
+            rect.x as f32,
+            rect.y as f32,
+            rect.width as f32,
+            rect.height as f32,
+            0x585B70,
+            1.0,
+        );
     }
 
     // ── Scrollbar ─────────────────────────────────────────────────────

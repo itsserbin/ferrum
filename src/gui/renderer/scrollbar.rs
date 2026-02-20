@@ -1,5 +1,5 @@
-use super::*;
 use super::shared::scrollbar_math;
+use super::*;
 use crate::gui::pane::PaneRect;
 
 // SCROLLBAR_BASE_ALPHA and SCROLLBAR_MIN_THUMB come from `use super::*`.

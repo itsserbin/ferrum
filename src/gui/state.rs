@@ -7,8 +7,15 @@ use crate::gui::*;
 
 /// PTY event tagged with the source tab id and pane id.
 pub(super) enum PtyEvent {
-    Data { tab_id: u64, pane_id: u64, bytes: Vec<u8> },
-    Exited { tab_id: u64, pane_id: u64 },
+    Data {
+        tab_id: u64,
+        pane_id: u64,
+        bytes: Vec<u8>,
+    },
+    Exited {
+        tab_id: u64,
+        pane_id: u64,
+    },
 }
 
 /// Metadata for recently closed tabs (Ctrl+Shift+T restore).
@@ -82,7 +89,7 @@ impl TabState {
 
 /// Drag state for divider resize between panes.
 pub(super) struct DividerDragState {
-    /// Mouse position when the drag started (used to identify which divider).
+    /// Last pointer position used to identify the dragged divider.
     pub(super) initial_mouse_pos: (u32, u32),
     /// Direction of the divider being dragged.
     pub(super) direction: crate::gui::pane::SplitDirection,
@@ -153,6 +160,7 @@ pub(super) enum MenuContext {
         action_map: Vec<(MenuId, crate::gui::menus::MenuAction)>,
     },
     Terminal {
+        pane_id: Option<crate::gui::pane::PaneId>,
         action_map: Vec<(MenuId, crate::gui::menus::MenuAction)>,
     },
 }

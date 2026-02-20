@@ -124,6 +124,16 @@ pub trait Renderer {
     ) {
     }
 
+    /// Draws a translucent overlay over one pane rectangle (GPU path).
+    ///
+    /// CPU renderer can keep using direct buffer blending in the shared path.
+    fn draw_pane_dim_overlay(&mut self, _rect: PaneRect, _alpha: f32) {}
+
+    /// Draws a split divider rectangle (GPU path).
+    ///
+    /// CPU renderer can keep using direct buffer drawing in the shared path.
+    fn draw_pane_divider(&mut self, _rect: PaneRect) {}
+
     // ── Scrollbar ───────────────────────────────────────────────────
 
     fn render_scrollbar(

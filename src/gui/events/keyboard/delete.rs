@@ -66,7 +66,9 @@ impl FerrumWindow {
     }
 
     pub(super) fn cut_selection(&mut self) -> bool {
-        let has_selection = self.active_leaf_ref().is_some_and(|l| l.selection.is_some());
+        let has_selection = self
+            .active_leaf_ref()
+            .is_some_and(|l| l.selection.is_some());
         if !has_selection {
             return false;
         }

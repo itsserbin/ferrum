@@ -30,13 +30,16 @@ impl FerrumWindow {
 
         let mut start_col = col;
         // Safe: start_col - 1 >= 0, and row is in bounds
-        while start_col > 0 && Self::is_word_char(grid.get_unchecked(row, start_col - 1).character) {
+        while start_col > 0 && Self::is_word_char(grid.get_unchecked(row, start_col - 1).character)
+        {
             start_col -= 1;
         }
 
         let mut end_col = col;
         // Safe: end_col + 1 < grid.cols, and row is in bounds
-        while end_col + 1 < grid.cols && Self::is_word_char(grid.get_unchecked(row, end_col + 1).character) {
+        while end_col + 1 < grid.cols
+            && Self::is_word_char(grid.get_unchecked(row, end_col + 1).character)
+        {
             end_col += 1;
         }
 
@@ -66,7 +69,11 @@ impl FerrumWindow {
 
     fn viewport_start(&self) -> usize {
         match self.active_leaf_ref() {
-            Some(leaf) => leaf.terminal.scrollback.len().saturating_sub(leaf.scroll_offset),
+            Some(leaf) => leaf
+                .terminal
+                .scrollback
+                .len()
+                .saturating_sub(leaf.scroll_offset),
             None => 0,
         }
     }

@@ -65,8 +65,7 @@ pub fn compute_tooltip_layout(
     let radius = m.scaled_px(6);
     let text_x = x as u32 + m.scaled_px(1) + padding_x;
     let text_y = y as u32 + m.scaled_px(1) + padding_y;
-    let max_chars =
-        ((width - border_extra - padding_x * 2) / m.cell_width) as usize;
+    let max_chars = ((width - border_extra - padding_x * 2) / m.cell_width) as usize;
     let display_text: String = title.chars().take(max_chars).collect();
 
     Some(TooltipLayout {
@@ -264,10 +263,8 @@ mod tests {
     fn tooltip_hidpi_scales_dimensions() {
         let m1 = default_metrics();
         let m2 = hidpi_metrics();
-        let l1 = compute_tooltip_layout("Test", (100.0, 10.0), &m1, 800, 600)
-            .expect("layout 1x");
-        let l2 = compute_tooltip_layout("Test", (100.0, 10.0), &m2, 1600, 1200)
-            .expect("layout 2x");
+        let l1 = compute_tooltip_layout("Test", (100.0, 10.0), &m1, 800, 600).expect("layout 1x");
+        let l2 = compute_tooltip_layout("Test", (100.0, 10.0), &m2, 1600, 1200).expect("layout 2x");
         // 2x layout should have roughly double the dimensions.
         assert!(l2.bg_w > l1.bg_w);
         assert!(l2.bg_h > l1.bg_h);
@@ -326,10 +323,10 @@ mod tests {
     fn drag_overlay_hidpi_scales_radius() {
         let m1 = default_metrics();
         let m2 = hidpi_metrics();
-        let l1 = compute_drag_overlay_layout(&m1, 3, 0, "Tab", 200.0, 50.0, 800)
-            .expect("layout 1x");
-        let l2 = compute_drag_overlay_layout(&m2, 3, 0, "Tab", 200.0, 50.0, 1600)
-            .expect("layout 2x");
+        let l1 =
+            compute_drag_overlay_layout(&m1, 3, 0, "Tab", 200.0, 50.0, 800).expect("layout 1x");
+        let l2 =
+            compute_drag_overlay_layout(&m2, 3, 0, "Tab", 200.0, 50.0, 1600).expect("layout 2x");
         assert_eq!(l2.radius, l1.radius * 2);
     }
 }

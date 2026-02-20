@@ -27,11 +27,8 @@ impl super::GpuRenderer {
                 self.push_rect(btn.x as f32, 0.0, btn.w as f32, btn.h as f32, hover_bg, 1.0);
             }
 
-            let icon = ui_layout::compute_window_button_icon_lines(
-                btn,
-                self.metrics.ui_scale,
-                half_w_px,
-            );
+            let icon =
+                ui_layout::compute_window_button_icon_lines(btn, self.metrics.ui_scale, half_w_px);
 
             for &(x1, y1, x2, y2) in &icon.lines {
                 self.push_line(x1, y1, x2, y2, icon.thickness, colors.icon_color, 1.0);

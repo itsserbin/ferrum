@@ -194,9 +194,10 @@ impl PaneNode {
         match self {
             PaneNode::Leaf(leaf) if leaf.id == id => Some(leaf),
             PaneNode::Leaf(_) => None,
-            PaneNode::Split(split) => {
-                split.first.find_leaf(id).or_else(|| split.second.find_leaf(id))
-            }
+            PaneNode::Split(split) => split
+                .first
+                .find_leaf(id)
+                .or_else(|| split.second.find_leaf(id)),
         }
     }
 
@@ -379,8 +380,7 @@ impl PaneNode {
             return None;
         };
 
-        let (first_rect, second_rect) =
-            split_rect(rect, split.direction, split.ratio, divider_px);
+        let (first_rect, second_rect) = split_rect(rect, split.direction, split.ratio, divider_px);
 
         // Compute divider position and check hit.
         match split.direction {
@@ -389,7 +389,8 @@ impl PaneNode {
                 let available = rect.width.saturating_sub(divider_px);
                 // Check if click is within hit_zone of divider center and within rect bounds.
                 let divider_center = divider_x + divider_px / 2;
-                let in_zone_x = (px as i64 - divider_center as i64).unsigned_abs() <= hit_zone as u64;
+                let in_zone_x =
+                    (px as i64 - divider_center as i64).unsigned_abs() <= hit_zone as u64;
                 let in_bounds_y = py >= rect.y && py < rect.y + rect.height;
                 if in_zone_x && in_bounds_y {
                     return Some(DividerHit {
@@ -404,7 +405,8 @@ impl PaneNode {
                 let divider_y = first_rect.y + first_rect.height;
                 let available = rect.height.saturating_sub(divider_px);
                 let divider_center = divider_y + divider_px / 2;
-                let in_zone_y = (py as i64 - divider_center as i64).unsigned_abs() <= hit_zone as u64;
+                let in_zone_y =
+                    (py as i64 - divider_center as i64).unsigned_abs() <= hit_zone as u64;
                 let in_bounds_x = px >= rect.x && px < rect.x + rect.width;
                 if in_zone_y && in_bounds_x {
                     return Some(DividerHit {
@@ -479,8 +481,7 @@ impl PaneNode {
             return false;
         };
 
-        let (first_rect, _second_rect) =
-            split_rect(rect, split.direction, split.ratio, divider_px);
+        let (first_rect, _second_rect) = split_rect(rect, split.direction, split.ratio, divider_px);
 
         // Check if the click is on this node's divider.
         let is_this_divider = match split.direction {
@@ -510,8 +511,10 @@ impl PaneNode {
                     if available == 0 {
                         return true;
                     }
-                    let first_w =
-                        new_pixel_pos.saturating_sub(rect.x).min(available).max(min_pane);
+                    let first_w = new_pixel_pos
+                        .saturating_sub(rect.x)
+                        .min(available)
+                        .max(min_pane);
                     let first_w = first_w.min(available.saturating_sub(min_pane));
                     split.ratio = first_w as f32 / available as f32;
                 }
@@ -520,8 +523,10 @@ impl PaneNode {
                     if available == 0 {
                         return true;
                     }
-                    let first_h =
-                        new_pixel_pos.saturating_sub(rect.y).min(available).max(min_pane);
+                    let first_h = new_pixel_pos
+                        .saturating_sub(rect.y)
+                        .min(available)
+                        .max(min_pane);
                     let first_h = first_h.min(available.saturating_sub(min_pane));
                     split.ratio = first_h as f32 / available as f32;
                 }
@@ -533,14 +538,18 @@ impl PaneNode {
         let PaneNode::Split(split) = self else {
             unreachable!();
         };
-        let (first_rect, second_rect) =
-            split_rect(rect, split.direction, split.ratio, divider_px);
+        let (first_rect, second_rect) = split_rect(rect, split.direction, split.ratio, divider_px);
         split
             .first
             .resize_divider_at(px, py, first_rect, divider_px, hit_zone, new_pixel_pos)
-            || split
-                .second
-                .resize_divider_at(px, py, second_rect, divider_px, hit_zone, new_pixel_pos)
+            || split.second.resize_divider_at(
+                px,
+                py,
+                second_rect,
+                divider_px,
+                hit_zone,
+                new_pixel_pos,
+            )
     }
 
     /// Closes the leaf identified by `target_id`, replacing the parent split

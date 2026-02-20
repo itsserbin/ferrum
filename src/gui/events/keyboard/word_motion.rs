@@ -1,5 +1,5 @@
-use crate::gui::pane::PaneLeaf;
 use crate::gui::FerrumWindow;
+use crate::gui::pane::PaneLeaf;
 
 #[derive(Clone, Copy)]
 pub(super) enum HorizontalMotion {

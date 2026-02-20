@@ -20,7 +20,16 @@ impl CpuRenderer {
         alpha: u8,
     ) {
         Self::draw_rounded_impl(
-            buffer, buf_width, buf_height, x, y, w, h, radius, color, alpha,
+            buffer,
+            buf_width,
+            buf_height,
+            x,
+            y,
+            w,
+            h,
+            radius,
+            color,
+            alpha,
             Self::top_rounded_coverage,
         );
     }

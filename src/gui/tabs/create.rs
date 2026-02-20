@@ -65,12 +65,18 @@ impl FerrumWindow {
                 loop {
                     match reader.read(&mut buf) {
                         Ok(0) => {
-                            let _ = tx.send(PtyEvent::Exited { tab_id, pane_id: reader_pane_id });
+                            let _ = tx.send(PtyEvent::Exited {
+                                tab_id,
+                                pane_id: reader_pane_id,
+                            });
                             break;
                         }
                         Err(err) => {
                             eprintln!("PTY read error for tab {tab_id}: {err}");
-                            let _ = tx.send(PtyEvent::Exited { tab_id, pane_id: reader_pane_id });
+                            let _ = tx.send(PtyEvent::Exited {
+                                tab_id,
+                                pane_id: reader_pane_id,
+                            });
                             break;
                         }
                         Ok(n) => {

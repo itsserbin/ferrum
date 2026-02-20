@@ -5,7 +5,11 @@ impl FerrumWindow {
     /// Processes one PTY event.
     pub(in crate::gui) fn on_pty_event(&mut self, event: &PtyEvent) {
         match event {
-            PtyEvent::Data { tab_id, pane_id, bytes } => {
+            PtyEvent::Data {
+                tab_id,
+                pane_id,
+                bytes,
+            } => {
                 if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == *tab_id) {
                     if let Some(leaf) = tab.pane_tree.find_leaf_mut(*pane_id) {
                         leaf.terminal.process(bytes);
@@ -34,6 +38,12 @@ impl FerrumWindow {
                 if let Some(idx) = self.tabs.iter().position(|t| t.id == *tab_id) {
                     let tab = &mut self.tabs[idx];
 
+                    // Pane may have been closed manually (e.g. Cmd/Ctrl+W on split)
+                    // before the PTY reader thread delivered Exited. Ignore stale events.
+                    if tab.pane_tree.find_leaf(*pane_id).is_none() {
+                        return;
+                    }
+
                     // If the tab has multiple panes, close just the exited pane.
                     if tab.has_multiple_panes() {
                         // Run cleanup on the exiting pane's terminal.
@@ -48,7 +58,10 @@ impl FerrumWindow {
                         // If the focused pane was the one that exited, pick a new one.
                         if tab.focused_pane == *pane_id {
                             let ids = tab.pane_tree.leaf_ids();
-                            debug_assert!(!ids.is_empty(), "pane tree should have at least one leaf after close");
+                            debug_assert!(
+                                !ids.is_empty(),
+                                "pane tree should have at least one leaf after close"
+                            );
                             tab.focused_pane = ids.into_iter().next().unwrap_or(0);
                         }
                         self.window.request_redraw();

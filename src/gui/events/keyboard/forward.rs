@@ -3,7 +3,9 @@ use crate::gui::*;
 
 impl FerrumWindow {
     pub(in crate::gui::events::keyboard) fn forward_key_to_pty(&mut self, key: &Key) {
-        let should_replace_selection = self.active_leaf_ref().is_some_and(|leaf| leaf.selection.is_some())
+        let should_replace_selection = self
+            .active_leaf_ref()
+            .is_some_and(|leaf| leaf.selection.is_some())
             && Self::is_text_replacement_key(key, self.modifiers);
         if should_replace_selection {
             let _ = self.delete_terminal_selection(false);

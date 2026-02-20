@@ -60,27 +60,8 @@ impl super::GpuRenderer {
         );
     }
 
-    /// Uploads grid cell buffer and glyph info to the GPU.
-    fn upload_grid_data(&mut self) {
-        if !self.grid_dirty || self.grid_cells.is_empty() {
-            return;
-        }
-        let needed = self.grid_cells.len() * std::mem::size_of::<PackedCell>();
-        if needed as u64 > self.grid_cell_buffer.size() {
-            self.grid_cell_buffer =
-                Self::create_storage_buffer(&self.device, needed, "grid_cells");
-        }
-        self.queue.write_buffer(
-            &self.grid_cell_buffer,
-            0,
-            bytemuck::cast_slice(&self.grid_cells),
-        );
-        self.queue.write_buffer(
-            &self.grid_uniform_buffer,
-            0,
-            bytemuck::bytes_of(&self.grid_uniforms),
-        );
-
+    /// Uploads glyph metadata buffer used by the grid and UI passes.
+    fn upload_glyph_data(&mut self) {
         let glyph_data = self.atlas.glyph_info_buffer_data();
         let glyph_bytes = bytemuck::cast_slice(&glyph_data);
         if glyph_bytes.len() as u64 > self.glyph_info_buffer.size() {
@@ -89,6 +70,43 @@ impl super::GpuRenderer {
         } else {
             self.queue
                 .write_buffer(&self.glyph_info_buffer, 0, glyph_bytes);
+        }
+    }
+
+    /// Executes queued grid batches (clear + pane batches) before compositing.
+    fn run_grid_batches(&mut self) {
+        if !self.grid_dirty || self.grid_batches.is_empty() {
+            return;
+        }
+
+        for batch in &self.grid_batches {
+            if batch.cells.is_empty() || batch.dispatch_width == 0 || batch.dispatch_height == 0 {
+                continue;
+            }
+
+            let needed = batch.cells.len() * std::mem::size_of::<PackedCell>();
+            if needed as u64 > self.grid_cell_buffer.size() {
+                self.grid_cell_buffer =
+                    Self::create_storage_buffer(&self.device, needed, "grid_cells");
+            }
+            self.queue.write_buffer(
+                &self.grid_cell_buffer,
+                0,
+                bytemuck::cast_slice(&batch.cells),
+            );
+            self.queue.write_buffer(
+                &self.grid_uniform_buffer,
+                0,
+                bytemuck::bytes_of(&batch.uniforms),
+            );
+
+            let mut encoder = self
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("grid_batch_encoder"),
+                });
+            self.encode_grid_batch_pass(&mut encoder, batch.dispatch_width, batch.dispatch_height);
+            self.queue.submit(std::iter::once(encoder.finish()));
         }
     }
 
@@ -118,8 +136,7 @@ impl super::GpuRenderer {
                 .write_buffer(&self.ui_command_buffer, 0, cmd_bytes);
         }
 
-        let grid_pixel_w = self.grid_uniforms.cols * self.grid_uniforms.cell_width;
-        let grid_pixel_h = self.grid_uniforms.rows * self.grid_uniforms.cell_height;
+        let (grid_pixel_w, grid_pixel_h) = self.terminal_texture_extent();
         let composite_uniforms = CompositeUniforms {
             tab_bar_height: self.metrics.tab_bar_height_px() as f32,
             window_height: self.height as f32,
@@ -138,9 +155,7 @@ impl super::GpuRenderer {
     }
 
     /// Acquires the surface texture, reconfiguring once on failure.
-    fn acquire_surface(
-        &mut self,
-    ) -> Option<(wgpu::SurfaceTexture, wgpu::TextureView)> {
+    fn acquire_surface(&mut self) -> Option<(wgpu::SurfaceTexture, wgpu::TextureView)> {
         let output = match self.surface.get_current_texture() {
             Ok(t) => t,
             Err(_) => {
@@ -150,6 +165,7 @@ impl super::GpuRenderer {
                     Err(_) => {
                         self.commands.clear();
                         self.grid_dirty = false;
+                        self.grid_batches.clear();
                         return None;
                     }
                 }
@@ -163,7 +179,8 @@ impl super::GpuRenderer {
 
     /// Encodes all GPU passes and presents the frame.
     pub fn present_frame(&mut self) {
-        self.upload_grid_data();
+        self.upload_glyph_data();
+        self.run_grid_batches();
         self.upload_ui_data();
 
         let Some((output, output_view)) = self.acquire_surface() else {
@@ -176,7 +193,6 @@ impl super::GpuRenderer {
                 label: Some("frame_encoder"),
             });
 
-        self.encode_grid_pass(&mut encoder);
         self.encode_ui_pass(&mut encoder);
         self.encode_composite_pass(&mut encoder, &output_view);
 
@@ -185,6 +201,7 @@ impl super::GpuRenderer {
 
         self.commands.clear();
         self.grid_dirty = false;
+        self.grid_batches.clear();
     }
 
     /// Resizes the surface and internal textures.

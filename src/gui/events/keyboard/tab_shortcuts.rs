@@ -1,7 +1,7 @@
 use crate::gui::*;
 
 impl FerrumWindow {
-    /// Handles tab management shortcuts: new tab (T), close tab (W), new window (N),
+    /// Handles tab management shortcuts: new tab (T), close (W), new window (N),
     /// switch tab by digit, and Ctrl+Tab.
     pub(super) fn handle_tab_management_shortcuts(
         &mut self,
@@ -28,7 +28,15 @@ impl FerrumWindow {
         }
 
         if Self::physical_key_is(physical, KeyCode::KeyW) {
-            self.close_tab(self.active_tab);
+            // Cmd/Ctrl+W: close focused pane first, then tab, then window.
+            if self
+                .active_tab_ref()
+                .is_some_and(|tab| tab.has_multiple_panes())
+            {
+                self.close_focused_pane();
+            } else {
+                self.close_tab(self.active_tab);
+            }
             return Some(true);
         }
 

@@ -1,8 +1,8 @@
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
+use super::super::TabInfo;
 use super::super::shared::overlay_layout;
 use super::super::traits::Renderer;
-use super::super::TabInfo;
 use super::{ACTIVE_TAB_BG, INSERTION_COLOR, TAB_BORDER};
 use crate::core::Color;
 

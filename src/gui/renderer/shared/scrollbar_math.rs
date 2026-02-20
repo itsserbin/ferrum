@@ -108,8 +108,7 @@ mod tests {
         let track_top = 36.0;
         let track_bottom = 500.0;
         let track_height = track_bottom - track_top;
-        let result =
-            scrollbar_thumb_geometry(track_top, track_bottom, 0, 100, 24, 20.0).unwrap();
+        let result = scrollbar_thumb_geometry(track_top, track_bottom, 0, 100, 24, 20.0).unwrap();
         let (thumb_y, thumb_height) = result;
         // scroll_offset=0 means bottom: scroll_ratio = 1.0, thumb_y = track_top + track_height - thumb_height
         let expected_y = track_top + 1.0 * (track_height - thumb_height);
@@ -133,8 +132,7 @@ mod tests {
     fn min_thumb_respected() {
         // Large scrollback, small grid -> viewport_ratio is tiny -> thumb clamped to min
         let min_thumb = 50.0;
-        let result =
-            scrollbar_thumb_geometry(0.0, 100.0, 0, 10000, 1, min_thumb).unwrap();
+        let result = scrollbar_thumb_geometry(0.0, 100.0, 0, 10000, 1, min_thumb).unwrap();
         let (_, thumb_height) = result;
         assert!((thumb_height - min_thumb).abs() < 0.01);
     }

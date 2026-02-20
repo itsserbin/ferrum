@@ -57,12 +57,7 @@ impl super::Terminal {
     /// If all rewrapped content fits in the grid, it is placed at the top with
     /// the cursor at the last content row. Otherwise, excess rows go to
     /// scrollback and the cursor is placed at the bottom.
-    fn fill_grid_from_rewrapped(
-        &mut self,
-        rewrapped: &[Row],
-        new_rows: usize,
-        new_cols: usize,
-    ) {
+    fn fill_grid_from_rewrapped(&mut self, rewrapped: &[Row], new_rows: usize, new_cols: usize) {
         let total_rows = rewrapped.len();
 
         self.scrollback.clear();

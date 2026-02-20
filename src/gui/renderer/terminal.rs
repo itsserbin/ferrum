@@ -27,22 +27,25 @@ impl CpuRenderer {
                     continue;
                 }
 
-                // Invert colors if the cell is selected
                 let selected = selection.is_some_and(|s| s.contains(abs_row, col));
-                let (mut fg, mut bg) = if selected {
-                    (cell.bg, cell.fg)
-                } else {
-                    (cell.fg, cell.bg)
-                };
+                let (mut fg, mut bg) = (cell.fg, cell.bg);
 
                 // Reverse video
-                if cell.reverse && !selected {
+                if cell.reverse {
                     std::mem::swap(&mut fg, &mut bg);
                 }
 
                 // Bold: bright variant
                 if cell.bold {
                     fg = fg.bold_bright();
+                }
+
+                if selected {
+                    bg = Color::from_pixel(super::blend_rgb(
+                        bg.to_pixel(),
+                        super::SELECTION_OVERLAY_COLOR,
+                        super::SELECTION_OVERLAY_ALPHA,
+                    ));
                 }
 
                 self.draw_bg(buffer, buf_width, buf_height, x, y, bg);
@@ -105,18 +108,22 @@ impl CpuRenderer {
                 }
 
                 let selected = selection.is_some_and(|s| s.contains(abs_row, col));
-                let (mut fg, mut bg) = if selected {
-                    (cell.bg, cell.fg)
-                } else {
-                    (cell.fg, cell.bg)
-                };
+                let (mut fg, mut bg) = (cell.fg, cell.bg);
 
-                if cell.reverse && !selected {
+                if cell.reverse {
                     std::mem::swap(&mut fg, &mut bg);
                 }
 
                 if cell.bold {
                     fg = fg.bold_bright();
+                }
+
+                if selected {
+                    bg = Color::from_pixel(super::blend_rgb(
+                        bg.to_pixel(),
+                        super::SELECTION_OVERLAY_COLOR,
+                        super::SELECTION_OVERLAY_ALPHA,
+                    ));
                 }
 
                 self.draw_bg(buffer, buf_width, buf_height, x, y, bg);

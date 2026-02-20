@@ -4,7 +4,7 @@ use crate::core::Color;
 use crate::gui::renderer::backend::RendererBackend;
 use crate::gui::*;
 
-use super::render_shared::{draw_frame_content, FrameParams};
+use super::render_shared::{FrameParams, draw_frame_content};
 
 impl FerrumWindow {
     /// CPU rendering path: acquires the softbuffer surface, clears it,

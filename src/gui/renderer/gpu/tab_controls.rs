@@ -1,10 +1,10 @@
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
+#[cfg(not(target_os = "macos"))]
+use super::super::PIN_ACTIVE_COLOR;
 use super::super::shared::{tab_math, ui_layout};
 use super::super::traits::Renderer;
 use super::super::{INACTIVE_TAB_HOVER, TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE};
-#[cfg(not(target_os = "macos"))]
-use super::super::PIN_ACTIVE_COLOR;
 
 impl super::GpuRenderer {
     /// Draws the new-tab (+) button with hover highlight.
@@ -75,8 +75,22 @@ impl super::GpuRenderer {
 
         // Draw Bootstrap-style vertical pushpin icon from layout.
         let color = layout.color;
-        self.push_rect(layout.head.0, layout.head.1, layout.head.2, layout.head.3, color, 1.0);
-        self.push_rect(layout.body.0, layout.body.1, layout.body.2, layout.body.3, color, 1.0);
+        self.push_rect(
+            layout.head.0,
+            layout.head.1,
+            layout.head.2,
+            layout.head.3,
+            color,
+            1.0,
+        );
+        self.push_rect(
+            layout.body.0,
+            layout.body.1,
+            layout.body.2,
+            layout.body.3,
+            color,
+            1.0,
+        );
         self.push_rect(
             layout.platform.0,
             layout.platform.1,

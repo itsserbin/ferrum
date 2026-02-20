@@ -18,8 +18,13 @@ pub use backend::RendererBackend;
 pub use cpu::CpuRenderer;
 pub use traits::Renderer;
 
-pub(super) const FONT_SIZE: f32 = 15.0;
+pub(super) const FONT_SIZE: f32 = 14.0;
 pub(super) const LINE_PADDING: u32 = 2;
+
+/// Terminal selection overlay color (semi-transparent over cell background).
+pub(super) const SELECTION_OVERLAY_COLOR: u32 = 0x5F7FA3;
+/// Terminal selection overlay alpha (0..=255).
+pub(super) const SELECTION_OVERLAY_ALPHA: u8 = 96;
 
 /// Scrollbar thumb width in pixels.
 pub const SCROLLBAR_WIDTH: u32 = 6;
@@ -93,7 +98,7 @@ pub(super) const BAR_BG: u32 = 0x181825;
 
 /// Base — active-tab fill that merges with the terminal area.
 #[cfg_attr(target_os = "macos", allow(dead_code))]
-pub(super) const ACTIVE_TAB_BG: u32 = 0x1E1E2E;
+pub(super) const ACTIVE_TAB_BG: u32 = 0x282C34;
 
 /// Surface0 — inactive-tab hover highlight.
 #[cfg_attr(target_os = "macos", allow(dead_code))]
@@ -149,6 +154,33 @@ pub(super) fn sanitize_scale(scale_factor: f64) -> f64 {
 /// Returns `true` when the new scale differs meaningfully from the old scale.
 pub(super) fn scale_changed(old: f64, new: f64) -> bool {
     (old - new).abs() >= 1e-6
+}
+
+/// Blends `src` over `dst` with `alpha` in 0..=255 (both colors are 0xRRGGBB).
+pub(super) fn blend_rgb(dst: u32, src: u32, alpha: u8) -> u32 {
+    if alpha == 255 {
+        return src;
+    }
+    if alpha == 0 {
+        return dst;
+    }
+
+    let a = alpha as u32;
+    let inv = 255 - a;
+
+    let dr = (dst >> 16) & 0xFF;
+    let dg = (dst >> 8) & 0xFF;
+    let db = dst & 0xFF;
+
+    let sr = (src >> 16) & 0xFF;
+    let sg = (src >> 8) & 0xFF;
+    let sb = src & 0xFF;
+
+    let r = (sr * a + dr * inv + 127) / 255;
+    let g = (sg * a + dg * inv + 127) / 255;
+    let b = (sb * a + db * inv + 127) / 255;
+
+    (r << 16) | (g << 8) | b
 }
 
 /// Resolves the effective tab-bar visibility for the current platform.

@@ -164,6 +164,92 @@ impl Session {
         })?;
         Ok(())
     }
+
+    /// Returns the PID of the shell process running inside this PTY session.
+    pub fn process_id(&self) -> Option<u32> {
+        self.child.process_id()
+    }
+}
+
+/// Returns `true` when the shell process has at least one child process.
+/// This is used as a heuristic for "active command is running".
+pub fn has_active_child_processes(shell_pid: u32) -> bool {
+    #[cfg(unix)]
+    {
+        return has_active_child_processes_unix(shell_pid);
+    }
+
+    #[cfg(windows)]
+    {
+        return has_active_child_processes_windows(shell_pid);
+    }
+
+    #[allow(unreachable_code)]
+    {
+        let _ = shell_pid;
+        false
+    }
+}
+
+#[cfg(unix)]
+fn has_active_child_processes_unix(shell_pid: u32) -> bool {
+    use std::process::Command;
+
+    let pid = shell_pid.to_string();
+
+    // Fast path: pgrep exits with code 0 when a child exists, 1 when none.
+    match Command::new("pgrep").arg("-P").arg(&pid).output() {
+        Ok(output) => {
+            if output.status.success() {
+                return !String::from_utf8_lossy(&output.stdout).trim().is_empty();
+            }
+            if output.status.code() == Some(1) {
+                return false;
+            }
+        }
+        Err(_) => {}
+    }
+
+    // Fallback for environments without pgrep.
+    let output = match Command::new("ps").arg("-e").arg("-o").arg("ppid=").output() {
+        Ok(output) => output,
+        Err(_) => return false,
+    };
+
+    if !output.status.success() {
+        return false;
+    }
+
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|line| line.trim().parse::<u32>().ok())
+        .any(|ppid| ppid == shell_pid)
+}
+
+#[cfg(windows)]
+fn has_active_child_processes_windows(shell_pid: u32) -> bool {
+    use std::process::Command;
+
+    let script = format!(
+        "$p = Get-CimInstance Win32_Process -Filter \"ParentProcessId = {shell_pid}\" -ErrorAction SilentlyContinue; if ($p) {{ '1' }} else {{ '0' }}"
+    );
+
+    let output = match Command::new("powershell")
+        .arg("-NoProfile")
+        .arg("-NonInteractive")
+        .arg("-Command")
+        .arg(script)
+        .output()
+    {
+        Ok(output) => output,
+        Err(_) => return false,
+    };
+
+    if !output.status.success() {
+        return false;
+    }
+
+    String::from_utf8_lossy(&output.stdout).trim() == "1"
 }
 
 impl Drop for Session {

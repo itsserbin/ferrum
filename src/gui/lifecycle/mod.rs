@@ -55,7 +55,8 @@ impl ApplicationHandler for App {
 
         match event {
             WindowEvent::CloseRequested => {
-                win.pending_requests.push(WindowRequest::CloseWindow);
+                win.request_close_window();
+                should_redraw = true;
             }
             WindowEvent::Focused(focused) => {
                 win.modifiers = ModifiersState::empty();
@@ -206,16 +207,21 @@ impl App {
                 if let Some(ctx) = win.pending_menu_context.take() {
                     let action_map = match &ctx {
                         MenuContext::Tab { action_map, .. } => action_map,
-                        MenuContext::Terminal { action_map } => action_map,
+                        MenuContext::Terminal { action_map, .. } => action_map,
                     };
                     let tab_index = match &ctx {
                         MenuContext::Tab { tab_index, .. } => Some(*tab_index),
                         MenuContext::Terminal { .. } => None,
                     };
+                    let pane_id = match &ctx {
+                        MenuContext::Tab { .. } => None,
+                        MenuContext::Terminal { pane_id, .. } => *pane_id,
+                    };
                     if let Some((_, action)) = action_map.iter().find(|(id, _)| *id == event.id) {
                         win.handle_menu_action(
                             *action,
                             tab_index,
+                            pane_id,
                             &mut self.next_tab_id,
                             &self.tx,
                         );

@@ -272,7 +272,12 @@ mod tests {
         term.process(b"\x1b[0K");
         // Cols 0..2 preserved
         for c in 0..3 {
-            assert_eq!(term.grid.get_unchecked(0, c).character, 'A', "col {} should be A", c);
+            assert_eq!(
+                term.grid.get_unchecked(0, c).character,
+                'A',
+                "col {} should be A",
+                c
+            );
         }
         // Cols 3..9 erased
         for c in 3..10 {
@@ -302,7 +307,12 @@ mod tests {
         }
         // Cols 4..9 preserved
         for c in 4..10 {
-            assert_eq!(term.grid.get_unchecked(0, c).character, 'A', "col {} should be A", c);
+            assert_eq!(
+                term.grid.get_unchecked(0, c).character,
+                'A',
+                "col {} should be A",
+                c
+            );
         }
     }
 
@@ -330,7 +340,12 @@ mod tests {
         term.process(b"\x1b[K");
         // Same as 0K
         for c in 0..3 {
-            assert_eq!(term.grid.get_unchecked(0, c).character, 'A', "col {} should be A", c);
+            assert_eq!(
+                term.grid.get_unchecked(0, c).character,
+                'A',
+                "col {} should be A",
+                c
+            );
         }
         for c in 3..10 {
             assert_eq!(

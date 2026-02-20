@@ -1,4 +1,4 @@
-use muda::{ContextMenu, Menu, MenuItem, MenuId, PredefinedMenuItem};
+use muda::{ContextMenu, Menu, MenuId, MenuItem, PredefinedMenuItem};
 
 /// Identifiers for context menu actions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

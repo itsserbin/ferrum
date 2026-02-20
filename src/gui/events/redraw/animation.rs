@@ -27,7 +27,6 @@ impl FerrumWindow {
         let scrollbar = self.scrollbar_animation_schedule(now);
         let tab_anim = self.tab_animation_schedule(now);
         let ui_anim = self.ui_animation_schedule(now);
-
         let schedules = [cursor, scrollbar, tab_anim, ui_anim];
         let mut result: Option<(Instant, bool)> = None;
         for s in schedules.into_iter().flatten() {
@@ -172,6 +171,9 @@ impl FerrumWindow {
     }
 
     pub(in crate::gui) fn advance_ui_animations(&mut self) {
+        #[cfg(not(target_os = "macos"))]
+        let now = Instant::now();
+
         #[cfg(target_os = "macos")]
         {
             // Native tab/window controls handle hover/transition visuals.
@@ -179,7 +181,6 @@ impl FerrumWindow {
 
         #[cfg(not(target_os = "macos"))]
         {
-            let now = Instant::now();
             let dt = now
                 .saturating_duration_since(self.ui_animation_last_tick)
                 .as_secs_f32()
@@ -207,7 +208,6 @@ impl FerrumWindow {
                 let close_target = if close_hover == Some(i) { 1.0 } else { 0.0 };
                 Self::animate_scalar(&mut self.close_hover_progress[i], close_target, factor);
             }
-
         }
     }
 

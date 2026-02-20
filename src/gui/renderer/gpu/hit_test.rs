@@ -62,7 +62,13 @@ impl super::GpuRenderer {
 
         // Content lines.
         for text_cmd in &layout.lines {
-            self.push_text(text_cmd.x, text_cmd.y, &text_cmd.text, text_cmd.color, text_cmd.opacity);
+            self.push_text(
+                text_cmd.x,
+                text_cmd.y,
+                &text_cmd.text,
+                text_cmd.color,
+                text_cmd.opacity,
+            );
         }
     }
 }

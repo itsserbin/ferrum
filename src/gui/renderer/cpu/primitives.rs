@@ -1,7 +1,7 @@
 use crate::core::Color;
 
-use super::CpuRenderer;
 use super::super::types::{FlatRectCmd, RoundedRectCmd};
+use super::CpuRenderer;
 
 impl CpuRenderer {
     pub(in crate::gui::renderer) fn draw_bg(
@@ -121,7 +121,16 @@ impl CpuRenderer {
         alpha: u8,
     ) {
         Self::draw_rounded_impl(
-            buffer, buf_width, buf_height, x, y, w, h, radius, color, alpha,
+            buffer,
+            buf_width,
+            buf_height,
+            x,
+            y,
+            w,
+            h,
+            radius,
+            color,
+            alpha,
             Self::rounded_coverage,
         );
     }

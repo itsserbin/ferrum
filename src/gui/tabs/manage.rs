@@ -1,10 +1,31 @@
 use anyhow::Context;
 
-use crate::gui::pane::{NavigateDirection, PaneLeaf, PaneNode, PaneRect, SplitDirection, DIVIDER_WIDTH};
+use crate::gui::pane::{
+    DIVIDER_WIDTH, NavigateDirection, PaneLeaf, PaneNode, PaneRect, SplitDirection,
+};
 use crate::gui::tabs::normalized_active_index_after_remove;
 use crate::gui::*;
 
 impl FerrumWindow {
+    fn has_running_processes_in_window(&self) -> bool {
+        self.tabs.iter().any(|tab| {
+            tab.pane_tree.leaf_ids().into_iter().any(|leaf_id| {
+                tab.pane_tree
+                    .find_leaf(leaf_id)
+                    .and_then(|leaf| leaf.session.as_ref())
+                    .and_then(|session| session.process_id())
+                    .is_some_and(pty::has_active_child_processes)
+            })
+        })
+    }
+
+    pub(in crate::gui) fn request_close_window(&mut self) {
+        let should_confirm = self.has_running_processes_in_window();
+        if !should_confirm || platform::confirm_window_close(&self.window) {
+            self.pending_requests.push(WindowRequest::CloseWindow);
+        }
+    }
+
     pub(in crate::gui) fn refresh_tab_bar_visibility(&mut self) {
         #[cfg(not(target_os = "macos"))]
         {
@@ -26,6 +47,10 @@ impl FerrumWindow {
         if index >= self.tabs.len() {
             return;
         }
+        if self.tabs.len() == 1 {
+            self.request_close_window();
+            return;
+        }
 
         // Keep title for reopen (Ctrl+Shift+T).
         let title = self.tabs[index].title.clone();
@@ -35,11 +60,6 @@ impl FerrumWindow {
         self.adjust_security_popup_after_tab_remove(index);
         self.tabs.remove(index);
         self.refresh_tab_bar_visibility();
-
-        if self.tabs.is_empty() {
-            self.pending_requests.push(WindowRequest::CloseWindow);
-            return;
-        }
 
         let len_before = self.tabs.len() + 1;
         self.active_tab =
@@ -92,7 +112,10 @@ impl FerrumWindow {
 
                     if let Some(ref session) = leaf.session {
                         if let Err(err) = session.resize(rows as u16, cols as u16) {
-                            eprintln!("Failed to resize PTY for tab {}, pane {}: {err}", tab.id, leaf_id);
+                            eprintln!(
+                                "Failed to resize PTY for tab {}, pane {}: {err}",
+                                tab.id, leaf_id
+                            );
                         }
                     }
                 }
@@ -207,7 +230,9 @@ impl FerrumWindow {
                 return;
             }
         };
-        let pty_writer = match session.writer().context("failed to acquire PTY writer for new pane")
+        let pty_writer = match session
+            .writer()
+            .context("failed to acquire PTY writer for new pane")
         {
             Ok(w) => w,
             Err(err) => {
@@ -368,10 +393,7 @@ impl FerrumWindow {
                 leaf.scroll_offset = leaf.scroll_offset.min(leaf.terminal.scrollback.len());
                 if let Some(ref session) = leaf.session {
                     if let Err(err) = session.resize(rows as u16, cols as u16) {
-                        eprintln!(
-                            "Failed to resize PTY for pane {}: {err}",
-                            pane_id
-                        );
+                        eprintln!("Failed to resize PTY for pane {}: {err}", pane_id);
                     }
                 }
             }

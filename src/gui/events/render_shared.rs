@@ -11,6 +11,11 @@ use crate::gui::*;
 #[cfg(not(target_os = "macos"))]
 use crate::gui::renderer::TabInfo;
 
+/// Opacity of the inactive-pane dim overlay.
+const INACTIVE_PANE_DIM_ALPHA: f32 = 0.18;
+/// Catppuccin Mocha Surface2 for split dividers.
+const SPLIT_DIVIDER_COLOR: u32 = 0xFF585B70;
+
 /// Pre-computed tab bar state needed by both CPU and GPU render paths.
 ///
 /// Built once per frame via `FerrumWindow::build_tab_bar_state`, then passed
@@ -193,8 +198,7 @@ impl FerrumWindow {
             .dragging_tab
             .as_ref()
             .is_some_and(|drag| drag.is_active);
-        let show_tooltip =
-            !dragging_active && self.security_popup.is_none();
+        let show_tooltip = !dragging_active && self.security_popup.is_none();
 
         let tab_bar_visible = self.backend.tab_bar_height_px() > 0;
 
@@ -277,10 +281,7 @@ pub(in crate::gui::events) fn draw_frame_content(
                     if leaf.scroll_offset == 0
                         && leaf.terminal.cursor_visible
                         && is_focused
-                        && should_show_cursor(
-                            params.cursor_blink_start,
-                            leaf.terminal.cursor_style,
-                        )
+                        && should_show_cursor(params.cursor_blink_start, leaf.terminal.cursor_style)
                     {
                         renderer.draw_cursor_in_rect(
                             buffer,
@@ -320,13 +321,21 @@ pub(in crate::gui::events) fn draw_frame_content(
 
                     // Dim inactive panes.
                     if !is_focused {
-                        draw_dim_overlay(buffer, bw, bh, rect, 0.3);
+                        if !buffer.is_empty() {
+                            draw_dim_overlay(buffer, bw, bh, rect, INACTIVE_PANE_DIM_ALPHA);
+                        } else {
+                            renderer.draw_pane_dim_overlay(rect, INACTIVE_PANE_DIM_ALPHA);
+                        }
                     }
                 }
             }
 
             // Draw dividers between panes.
-            draw_dividers(buffer, bw, bh, &tab.pane_tree, terminal_rect, divider_px);
+            if !buffer.is_empty() {
+                draw_dividers(buffer, bw, bh, &tab.pane_tree, terminal_rect, divider_px);
+            } else {
+                draw_dividers_with_renderer(renderer, &tab.pane_tree, terminal_rect, divider_px);
+            }
         } else {
             // Single-pane: use the original render path (faster, no rect clipping).
             if let Some(leaf) = tab.focused_leaf() {
@@ -476,9 +485,6 @@ fn draw_dividers(
     if let PaneNode::Split(split) = tree {
         let (first_rect, second_rect) = split_rect(rect, split.direction, split.ratio, divider_px);
 
-        // Catppuccin Mocha Surface2 for divider color.
-        let divider_color: u32 = 0xFF585B70;
-
         match split.direction {
             SplitDirection::Horizontal => {
                 let div_x = first_rect.x + first_rect.width;
@@ -488,7 +494,7 @@ fn draw_dividers(
                         if (px as usize) < bw {
                             let idx = py as usize * bw + px as usize;
                             if idx < buffer.len() {
-                                buffer[idx] = divider_color;
+                                buffer[idx] = SPLIT_DIVIDER_COLOR;
                             }
                         }
                     }
@@ -502,7 +508,7 @@ fn draw_dividers(
                         for px in rect.x..(rect.x + rect.width).min(bw as u32) {
                             let idx = py as usize * bw + px as usize;
                             if idx < buffer.len() {
-                                buffer[idx] = divider_color;
+                                buffer[idx] = SPLIT_DIVIDER_COLOR;
                             }
                         }
                     }
@@ -513,6 +519,37 @@ fn draw_dividers(
         // Recurse into children.
         draw_dividers(buffer, bw, bh, &split.first, first_rect, divider_px);
         draw_dividers(buffer, bw, bh, &split.second, second_rect, divider_px);
+    }
+}
+
+/// Recursively emits split divider rectangles to the renderer (GPU path).
+fn draw_dividers_with_renderer(
+    renderer: &mut dyn Renderer,
+    tree: &PaneNode,
+    rect: PaneRect,
+    divider_px: u32,
+) {
+    if let PaneNode::Split(split) = tree {
+        let (first_rect, second_rect) = split_rect(rect, split.direction, split.ratio, divider_px);
+
+        let divider_rect = match split.direction {
+            SplitDirection::Horizontal => PaneRect {
+                x: first_rect.x + first_rect.width,
+                y: rect.y,
+                width: divider_px,
+                height: rect.height,
+            },
+            SplitDirection::Vertical => PaneRect {
+                x: rect.x,
+                y: first_rect.y + first_rect.height,
+                width: rect.width,
+                height: divider_px,
+            },
+        };
+        renderer.draw_pane_divider(divider_rect);
+
+        draw_dividers_with_renderer(renderer, &split.first, first_rect, divider_px);
+        draw_dividers_with_renderer(renderer, &split.second, second_rect, divider_px);
     }
 }
 
