@@ -30,6 +30,12 @@ const SCRIPT_PS: &str = include_str!("scripts/ps.cmd");
 #[cfg(windows)]
 const SCRIPT_INIT: &str = include_str!("scripts/init.cmd");
 
+// Shell integration scripts (all platforms)
+const SHELL_INTEGRATION_ZSH: &str = include_str!("../shell-integration/zsh/ferrum-integration");
+const SHELL_INTEGRATION_BASH: &str = include_str!("../shell-integration/bash/ferrum.bash");
+const SHELL_INTEGRATION_FISH: &str =
+    include_str!("../shell-integration/fish/vendor_conf.d/ferrum-shell-integration.fish");
+
 /// Create Unix-style command wrapper scripts in temp directory
 #[cfg(windows)]
 fn create_unix_aliases_script() -> Option<PathBuf> {
@@ -75,6 +81,26 @@ fn create_unix_aliases_script() -> Option<PathBuf> {
 
     fs::write(&init_script, init_content).ok()?;
     Some(init_script)
+}
+
+/// Write shell integration scripts to a temp directory so they can be
+/// sourced by the spawned shell.  Returns the root temp dir on success.
+fn setup_shell_integration() -> Option<std::path::PathBuf> {
+    let temp_dir = std::env::temp_dir().join("ferrum_shell_integration");
+    let zsh_dir = temp_dir.join("zsh");
+    let bash_dir = temp_dir.join("bash");
+    let fish_dir = temp_dir.join("fish").join("vendor_conf.d");
+    std::fs::create_dir_all(&zsh_dir).ok()?;
+    std::fs::create_dir_all(&bash_dir).ok()?;
+    std::fs::create_dir_all(&fish_dir).ok()?;
+    std::fs::write(zsh_dir.join("ferrum-integration"), SHELL_INTEGRATION_ZSH).ok()?;
+    std::fs::write(bash_dir.join("ferrum.bash"), SHELL_INTEGRATION_BASH).ok()?;
+    std::fs::write(
+        fish_dir.join("ferrum-shell-integration.fish"),
+        SHELL_INTEGRATION_FISH,
+    )
+    .ok()?;
+    Some(temp_dir)
 }
 
 #[cfg(unix)]
@@ -142,6 +168,46 @@ impl Session {
         #[cfg(target_os = "macos")]
         cmd.arg("-l");
         cmd.env("TERM", "xterm-256color");
+
+        // Shell integration: set marker env and configure per-shell sourcing.
+        cmd.env("FERRUM_SHELL_INTEGRATION", "1");
+
+        if let Some(integration_dir) = setup_shell_integration() {
+            let shell_name = std::path::Path::new(shell)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or(shell);
+
+            match shell_name {
+                "zsh" => {
+                    let zdotdir = integration_dir.join("zsh");
+                    let user_zdotdir = std::env::var("ZDOTDIR").unwrap_or_else(|_| {
+                        std::env::var("HOME").unwrap_or_else(|_| String::from("/"))
+                    });
+                    let zshenv_content = format!(
+                        "ZDOTDIR=\"{user_zdotdir}\"\n\
+                         [[ -f \"$ZDOTDIR/.zshenv\" ]] && source \"$ZDOTDIR/.zshenv\"\n\
+                         source \"{}/ferrum-integration\"\n",
+                        zdotdir.display()
+                    );
+                    let _ = std::fs::write(zdotdir.join(".zshenv"), zshenv_content);
+                    cmd.env("ZDOTDIR", zdotdir.to_string_lossy().as_ref());
+                }
+                "bash" => {
+                    let bash_integration = integration_dir.join("bash").join("ferrum.bash");
+                    cmd.env("BASH_ENV", bash_integration.to_string_lossy().as_ref());
+                }
+                "fish" => {
+                    let fish_dir = integration_dir.join("fish");
+                    let existing = std::env::var("XDG_DATA_DIRS")
+                        .unwrap_or_else(|_| "/usr/local/share:/usr/share".to_string());
+                    let new_xdg = format!("{}:{}", fish_dir.display(), existing);
+                    cmd.env("XDG_DATA_DIRS", &new_xdg);
+                }
+                _ => {}
+            }
+        }
+
         let child = pair.slave.spawn_command(cmd)?;
 
         // Drop slave handle after spawn to avoid fd leaks and ensure EOF propagation.

@@ -1,0 +1,16 @@
+# Ferrum terminal shell integration for zsh.
+# Sends OSC 7 with the current working directory on every prompt.
+
+# Guard: only run inside Ferrum.
+[[ -n "$FERRUM_SHELL_INTEGRATION" ]] || return
+
+_ferrum_report_cwd() {
+  builtin printf '\e]7;file://%s%s\a' "$HOST" "$PWD"
+}
+
+# Report on every directory change.
+autoload -Uz add-zsh-hook
+add-zsh-hook chpwd _ferrum_report_cwd
+
+# Also report once at shell startup (initial prompt).
+_ferrum_report_cwd
