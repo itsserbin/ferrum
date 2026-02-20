@@ -17,6 +17,94 @@ pub(super) enum SplitDirection {
     Vertical,
 }
 
+/// A rectangle describing a pane's position and size in pixels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct PaneRect {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
+}
+
+impl PaneRect {
+    pub fn center_x(&self) -> u32 {
+        self.x + self.width / 2
+    }
+    pub fn center_y(&self) -> u32 {
+        self.y + self.height / 2
+    }
+}
+
+/// Direction for spatial navigation between panes.
+#[allow(dead_code)] // Up/Down used in later tasks
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum NavigateDirection {
+    Up,
+    Down,
+    Left,
+    Right,
+}
+
+/// Width of the visible divider between panes, in pixels.
+#[allow(dead_code)] // Used in later tasks for rendering
+pub(super) const DIVIDER_WIDTH: u32 = 1;
+
+/// Width of the hit zone around a divider for mouse interaction, in pixels.
+#[allow(dead_code)] // Used in later tasks for resize dragging
+pub(super) const DIVIDER_HIT_ZONE: u32 = 6;
+
+/// Splits a rectangle into two sub-rectangles along the given direction.
+///
+/// The first rectangle gets `ratio` of the available space (total minus divider),
+/// and the second rectangle gets the remainder.
+fn split_rect(
+    rect: PaneRect,
+    direction: SplitDirection,
+    ratio: f32,
+    divider_px: u32,
+) -> (PaneRect, PaneRect) {
+    match direction {
+        SplitDirection::Horizontal => {
+            let available = rect.width.saturating_sub(divider_px);
+            let first_w = (available as f32 * ratio) as u32;
+            let second_w = available - first_w;
+            (
+                PaneRect {
+                    x: rect.x,
+                    y: rect.y,
+                    width: first_w,
+                    height: rect.height,
+                },
+                PaneRect {
+                    x: rect.x + first_w + divider_px,
+                    y: rect.y,
+                    width: second_w,
+                    height: rect.height,
+                },
+            )
+        }
+        SplitDirection::Vertical => {
+            let available = rect.height.saturating_sub(divider_px);
+            let first_h = (available as f32 * ratio) as u32;
+            let second_h = available - first_h;
+            (
+                PaneRect {
+                    x: rect.x,
+                    y: rect.y,
+                    width: rect.width,
+                    height: first_h,
+                },
+                PaneRect {
+                    x: rect.x,
+                    y: rect.y + first_h + divider_px,
+                    width: rect.width,
+                    height: second_h,
+                },
+            )
+        }
+    }
+}
+
 /// A leaf node in the pane tree — a single terminal pane.
 #[allow(dead_code)] // Fields used in later tasks (Task 4+)
 pub(super) struct PaneLeaf {
@@ -107,6 +195,69 @@ impl PaneNode {
                 .find_leaf_mut(id)
                 .or_else(|| split.second.find_leaf_mut(id)),
         }
+    }
+
+    /// Recursively computes the layout of all leaf panes within the given rectangle.
+    ///
+    /// Returns a list of `(PaneId, PaneRect)` pairs, one for each leaf, describing
+    /// where each pane should be rendered.  `divider_px` is the pixel width of the
+    /// divider bar between split panes.
+    pub(super) fn layout(&self, rect: PaneRect, divider_px: u32) -> Vec<(PaneId, PaneRect)> {
+        match self {
+            PaneNode::Leaf(leaf) => vec![(leaf.id, rect)],
+            PaneNode::Split(split) => {
+                let (first_rect, second_rect) =
+                    split_rect(rect, split.direction, split.ratio, divider_px);
+                let mut result = split.first.layout(first_rect, divider_px);
+                result.extend(split.second.layout(second_rect, divider_px));
+                result
+            }
+        }
+    }
+
+    /// Finds the nearest pane in the given direction from `from_id` using spatial
+    /// proximity (Manhattan distance between pane centers).
+    ///
+    /// Only considers panes whose center is strictly in the requested direction
+    /// relative to the source pane's center.  Returns `None` if no neighbor
+    /// exists in that direction.  When multiple panes are equidistant, returns
+    /// the first one encountered in layout order (left-to-right depth-first).
+    pub(super) fn navigate_spatial(
+        layout: &[(PaneId, PaneRect)],
+        from_id: PaneId,
+        direction: NavigateDirection,
+    ) -> Option<PaneId> {
+        let from_rect = layout.iter().find(|(id, _)| *id == from_id)?.1;
+        let from_cx = from_rect.center_x() as i64;
+        let from_cy = from_rect.center_y() as i64;
+
+        let mut best: Option<(PaneId, i64)> = None;
+
+        for &(id, rect) in layout {
+            if id == from_id {
+                continue;
+            }
+            let cx = rect.center_x() as i64;
+            let cy = rect.center_y() as i64;
+
+            let in_direction = match direction {
+                NavigateDirection::Right => cx > from_cx,
+                NavigateDirection::Left => cx < from_cx,
+                NavigateDirection::Down => cy > from_cy,
+                NavigateDirection::Up => cy < from_cy,
+            };
+
+            if !in_direction {
+                continue;
+            }
+
+            let dist = (cx - from_cx).abs() + (cy - from_cy).abs();
+            if best.map_or(true, |(_, d)| dist < d) {
+                best = Some((id, dist));
+            }
+        }
+
+        best.map(|(id, _)| id)
     }
 
     /// Splits the leaf identified by `target_id` into two panes.
@@ -372,5 +523,104 @@ mod tests {
         let mut ids = tree.leaf_ids();
         ids.sort();
         assert_eq!(ids, vec![1, 2, 3]);
+    }
+
+    // --- Layout and navigation tests ---
+
+    #[test]
+    fn layout_single_pane() {
+        let tree = PaneNode::new_leaf(1);
+        let rect = PaneRect {
+            x: 0,
+            y: 0,
+            width: 800,
+            height: 600,
+        };
+        let layout = tree.layout(rect, 1);
+        assert_eq!(layout.len(), 1);
+        assert_eq!(layout[0].0, 1);
+        assert_eq!(layout[0].1, rect);
+    }
+
+    #[test]
+    fn layout_horizontal_split() {
+        let mut tree = PaneNode::new_leaf(1);
+        tree.split(1, SplitDirection::Horizontal, 2);
+        let rect = PaneRect {
+            x: 0,
+            y: 0,
+            width: 800,
+            height: 600,
+        };
+        let layout = tree.layout(rect, 1);
+        assert_eq!(layout.len(), 2);
+        assert_eq!(layout[0].0, 1);
+        assert!(layout[0].1.width < 400);
+        assert_eq!(layout[1].0, 2);
+        assert!(layout[1].1.x > 0);
+    }
+
+    #[test]
+    fn layout_vertical_split() {
+        let mut tree = PaneNode::new_leaf(1);
+        tree.split(1, SplitDirection::Vertical, 2);
+        let rect = PaneRect {
+            x: 0,
+            y: 0,
+            width: 800,
+            height: 600,
+        };
+        let layout = tree.layout(rect, 1);
+        assert_eq!(layout.len(), 2);
+        assert_eq!(layout[0].0, 1);
+        assert!(layout[0].1.height < 300);
+        assert_eq!(layout[1].0, 2);
+        assert!(layout[1].1.y > 0);
+    }
+
+    #[test]
+    fn navigate_horizontal_right() {
+        let mut tree = PaneNode::new_leaf(1);
+        tree.split(1, SplitDirection::Horizontal, 2);
+        let rect = PaneRect {
+            x: 0,
+            y: 0,
+            width: 800,
+            height: 600,
+        };
+        let layout = tree.layout(rect, 1);
+        let target = PaneNode::navigate_spatial(&layout, 1, NavigateDirection::Right);
+        assert_eq!(target, Some(2));
+    }
+
+    #[test]
+    fn navigate_horizontal_left() {
+        let mut tree = PaneNode::new_leaf(1);
+        tree.split(1, SplitDirection::Horizontal, 2);
+        let rect = PaneRect {
+            x: 0,
+            y: 0,
+            width: 800,
+            height: 600,
+        };
+        let layout = tree.layout(rect, 1);
+        let target = PaneNode::navigate_spatial(&layout, 2, NavigateDirection::Left);
+        assert_eq!(target, Some(1));
+    }
+
+    #[test]
+    fn navigate_no_neighbor() {
+        let tree = PaneNode::new_leaf(1);
+        let rect = PaneRect {
+            x: 0,
+            y: 0,
+            width: 800,
+            height: 600,
+        };
+        let layout = tree.layout(rect, 1);
+        assert_eq!(
+            PaneNode::navigate_spatial(&layout, 1, NavigateDirection::Right),
+            None
+        );
     }
 }
