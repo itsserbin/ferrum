@@ -163,7 +163,10 @@ impl FerrumWindow {
             })
             .unwrap_or_else(|| "Ferrum".to_string());
         match update {
-            Some(release) => format!("{base} - Update {} available", release.tag_name),
+            Some(release) => {
+                let tmpl = crate::i18n::t().update_available;
+                format!("{base} - {}", tmpl.replace("{}", &release.tag_name))
+            }
             None => base,
         }
     }

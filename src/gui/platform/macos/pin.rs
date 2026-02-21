@@ -10,7 +10,7 @@ use objc2_app_kit::{
     NSBezelStyle, NSButton, NSFloatingWindowLevel, NSImage, NSLayoutAttribute, NSNormalWindowLevel,
     NSTitlebarAccessoryViewController, NSWindow,
 };
-use objc2_foundation::ns_string;
+use objc2_foundation::{NSString, ns_string};
 use winit::window::Window;
 
 use super::ffi::*;
@@ -106,27 +106,28 @@ fn set_pin_button_state_for_window_ptr(window_ptr: usize, pinned: bool) {
         } else {
             ns_string!("pin")
         };
-        let accessibility_desc = if pinned {
-            ns_string!("Unpin Window")
+        let t = crate::i18n::t();
+        let accessibility_desc_str = if pinned {
+            NSString::from_str(t.macos_unpin_window)
         } else {
-            ns_string!("Pin Window")
+            NSString::from_str(t.macos_pin_window)
         };
 
         let image = NSImage::imageWithSystemSymbolName_accessibilityDescription(
             symbol_name,
-            Some(accessibility_desc),
+            Some(&accessibility_desc_str),
         );
 
         if let Some(image) = image {
             let _: () = msg_send![button as *const AnyObject, setImage: &*image];
         }
 
-        let tooltip = if pinned {
-            ns_string!("Unpin window")
+        let tooltip_str = if pinned {
+            NSString::from_str(t.macos_unpin_tooltip)
         } else {
-            ns_string!("Pin window on top")
+            NSString::from_str(t.macos_pin_tooltip)
         };
-        let _: () = msg_send![button as *const AnyObject, setToolTip: tooltip];
+        let _: () = msg_send![button as *const AnyObject, setToolTip: &*tooltip_str];
     }
 }
 
@@ -203,9 +204,10 @@ pub fn setup_toolbar(window: &Window) {
             class_replaceMethod(win_cls, sel_pin_action_ptr, imp, types);
         }
 
+        let t = crate::i18n::t();
         let Some(image) = NSImage::imageWithSystemSymbolName_accessibilityDescription(
             ns_string!("pin"),
-            Some(ns_string!("Pin Window")),
+            Some(&NSString::from_str(t.macos_pin_window)),
         ) else {
             eprintln!("[ferrum] Failed to create pin icon");
             return;
@@ -214,7 +216,7 @@ pub fn setup_toolbar(window: &Window) {
         let button = NSButton::buttonWithImage_target_action(&image, None, None, mtm_button);
         button.setBordered(false);
         button.setBezelStyle(NSBezelStyle::Toolbar);
-        button.setToolTip(Some(ns_string!("Pin window on top")));
+        button.setToolTip(Some(&NSString::from_str(t.macos_pin_tooltip)));
 
         let _: () = msg_send![&button, setTarget: &*ns_window];
         let _: () = msg_send![&button, setAction: sel_pin_action];
@@ -247,7 +249,7 @@ pub fn setup_toolbar(window: &Window) {
 
         let Some(gear_image) = NSImage::imageWithSystemSymbolName_accessibilityDescription(
             ns_string!("gearshape"),
-            Some(ns_string!("Settings")),
+            Some(&NSString::from_str(t.macos_settings)),
         ) else {
             eprintln!("[ferrum] Failed to create gear icon");
             return;
@@ -257,7 +259,7 @@ pub fn setup_toolbar(window: &Window) {
             NSButton::buttonWithImage_target_action(&gear_image, None, None, mtm_button);
         gear_button.setBordered(false);
         gear_button.setBezelStyle(NSBezelStyle::Toolbar);
-        gear_button.setToolTip(Some(ns_string!("Settings")));
+        gear_button.setToolTip(Some(&NSString::from_str(t.macos_settings)));
 
         let _: () = msg_send![&gear_button, setTarget: &*ns_window];
         let _: () = msg_send![&gear_button, setAction: sel_gear_action];

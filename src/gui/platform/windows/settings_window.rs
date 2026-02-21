@@ -334,7 +334,8 @@ fn run_win32_window(config: AppConfig, tx: mpsc::Sender<AppConfig>) {
         };
         RegisterClassExW(&wc);
 
-        let title = to_wide("Ferrum Settings");
+        let t = crate::i18n::t();
+        let title = to_wide(t.settings_title);
         let style = WS_OVERLAPPEDWINDOW & !WS_MAXIMIZEBOX & !WS_THICKFRAME;
 
         // Create window first to get its DPI, then resize.
@@ -550,7 +551,8 @@ unsafe fn create_controls(
     SendMessageW(tab_ctrl, WM_SETFONT, font as usize, 0);
 
     // Add tabs.
-    for (i, name) in ["Font", "Theme", "Terminal", "Layout", "Security"].iter().enumerate() {
+    let t = crate::i18n::t();
+    for (i, name) in [t.settings_tab_font, t.settings_tab_theme, t.settings_tab_terminal, t.settings_tab_layout, t.settings_tab_security].iter().enumerate() {
         let text = to_wide(name);
         let mut item: TCITEMW = std::mem::zeroed();
         item.mask = TCIF_TEXT;
@@ -571,7 +573,7 @@ unsafe fn create_controls(
     let font_size_initial = ((config.font.size - FontConfig::SIZE_MIN) / FontConfig::SIZE_STEP).round() as i32;
     let font_size_range_max = ((FontConfig::SIZE_MAX - FontConfig::SIZE_MIN) / FontConfig::SIZE_STEP).round() as i32;
     let (font_size_updown, font_size_edit, mut ctrls) = create_spin_row(&ctx, &SpinRowParams {
-        label_text: "Font Size:", x: x0, y: y0,
+        label_text: t.font_size_label, x: x0, y: y0,
         range_min: 0, range_max: font_size_range_max, initial: font_size_initial,
         updown_id: id::FONT_SIZE_UPDOWN, edit_id: id::FONT_SIZE_EDIT,
     });
@@ -579,7 +581,7 @@ unsafe fn create_controls(
 
     // Font Family combo
     let (font_family_combo, mut ctrls) = create_combo_row(&ctx, &ComboRowParams {
-        label_text: "Font Family:", x: x0, y: y0 + sp,
+        label_text: t.font_family_label, x: x0, y: y0 + sp,
         options: FontFamily::DISPLAY_NAMES, selected: config.font.family.index(),
         combo_id: id::FONT_FAMILY_COMBO,
     });
@@ -587,7 +589,7 @@ unsafe fn create_controls(
 
     // Line Padding (updown: 0..10)
     let (line_padding_updown, line_padding_edit, mut ctrls) = create_spin_row(&ctx, &SpinRowParams {
-        label_text: "Line Padding:", x: x0, y: y0 + sp * 2,
+        label_text: t.font_line_padding_label, x: x0, y: y0 + sp * 2,
         range_min: 0, range_max: 10, initial: config.font.line_padding as i32,
         updown_id: id::LINE_PADDING_UPDOWN, edit_id: id::LINE_PADDING_EDIT,
     });
@@ -599,7 +601,7 @@ unsafe fn create_controls(
         ThemeChoice::FerrumLight => 1,
     };
     let (theme_combo, theme_page) = create_combo_row(&ctx, &ComboRowParams {
-        label_text: "Theme:", x: x0, y: y0,
+        label_text: t.theme_label, x: x0, y: y0,
         options: &["Ferrum Dark", "Ferrum Light"], selected: theme_selected,
         combo_id: id::THEME_COMBO,
     });
@@ -610,7 +612,7 @@ unsafe fn create_controls(
     // Scrollback (updown: 0..500 → 0..50000, step 100)
     let scrollback_initial = config.terminal.max_scrollback as i32 / 100;
     let (scrollback_updown, scrollback_edit, mut ctrls) = create_spin_row(&ctx, &SpinRowParams {
-        label_text: "Max Scrollback:", x: x0, y: y0,
+        label_text: t.terminal_max_scrollback_label, x: x0, y: y0,
         range_min: 0, range_max: 500, initial: scrollback_initial,
         updown_id: id::SCROLLBACK_UPDOWN, edit_id: id::SCROLLBACK_EDIT,
     });
@@ -620,7 +622,7 @@ unsafe fn create_controls(
     let blink_initial = (config.terminal.cursor_blink_interval_ms as i64 - TerminalConfig::BLINK_MS_MIN as i64) / TerminalConfig::BLINK_MS_STEP as i64;
     let blink_range_max = ((TerminalConfig::BLINK_MS_MAX - TerminalConfig::BLINK_MS_MIN) / TerminalConfig::BLINK_MS_STEP) as i32;
     let (cursor_blink_updown, cursor_blink_edit, mut ctrls) = create_spin_row(&ctx, &SpinRowParams {
-        label_text: "Cursor Blink (ms):", x: x0, y: y0 + sp,
+        label_text: t.terminal_cursor_blink_label, x: x0, y: y0 + sp,
         range_min: 0, range_max: blink_range_max, initial: blink_initial as i32,
         updown_id: id::CURSOR_BLINK_UPDOWN, edit_id: id::CURSOR_BLINK_EDIT,
     });
@@ -630,28 +632,28 @@ unsafe fn create_controls(
     let mut layout_page = Vec::new();
 
     let (win_padding_updown, win_padding_edit, mut ctrls) = create_spin_row(&ctx, &SpinRowParams {
-        label_text: "Window Padding:", x: x0, y: y0,
+        label_text: t.layout_window_padding_label, x: x0, y: y0,
         range_min: 0, range_max: 32, initial: config.layout.window_padding as i32,
         updown_id: id::WIN_PADDING_UPDOWN, edit_id: id::WIN_PADDING_EDIT,
     });
     layout_page.append(&mut ctrls);
 
     let (pane_padding_updown, pane_padding_edit, mut ctrls) = create_spin_row(&ctx, &SpinRowParams {
-        label_text: "Pane Padding:", x: x0, y: y0 + sp,
+        label_text: t.layout_pane_padding_label, x: x0, y: y0 + sp,
         range_min: 0, range_max: 16, initial: config.layout.pane_inner_padding as i32,
         updown_id: id::PANE_PADDING_UPDOWN, edit_id: id::PANE_PADDING_EDIT,
     });
     layout_page.append(&mut ctrls);
 
     let (scrollbar_updown, scrollbar_edit, mut ctrls) = create_spin_row(&ctx, &SpinRowParams {
-        label_text: "Scrollbar Width:", x: x0, y: y0 + sp * 2,
+        label_text: t.layout_scrollbar_width_label, x: x0, y: y0 + sp * 2,
         range_min: 2, range_max: 16, initial: config.layout.scrollbar_width as i32,
         updown_id: id::SCROLLBAR_UPDOWN, edit_id: id::SCROLLBAR_EDIT,
     });
     layout_page.append(&mut ctrls);
 
     let (tab_bar_updown, tab_bar_edit, mut ctrls) = create_spin_row(&ctx, &SpinRowParams {
-        label_text: "Tab Bar Height:", x: x0, y: y0 + sp * 3,
+        label_text: t.layout_tab_bar_height_label, x: x0, y: y0 + sp * 3,
         range_min: 24, range_max: 48, initial: config.layout.tab_bar_height as i32,
         updown_id: id::TAB_BAR_UPDOWN, edit_id: id::TAB_BAR_EDIT,
     });
@@ -666,39 +668,39 @@ unsafe fn create_controls(
         SecurityMode::Custom => 2,
     };
     let (security_mode_combo, mut ctrls) = create_combo_row(&ctx, &ComboRowParams {
-        label_text: "Security Mode:", x: x0, y: y0,
-        options: &["Disabled", "Standard", "Custom"], selected: mode_index,
+        label_text: t.security_mode_label, x: x0, y: y0,
+        options: &[t.security_mode_disabled, t.security_mode_standard, t.security_mode_custom], selected: mode_index,
         combo_id: id::SECURITY_MODE_COMBO,
     });
     security_page.append(&mut ctrls);
 
     let enabled = !matches!(config.security.mode, SecurityMode::Disabled);
     let (paste_check, mut ctrls) = create_checkbox_row(&ctx, &CheckboxRowParams {
-        label_text: "Paste Protection", x: x0, y: y0 + sp,
+        label_text: t.security_paste_protection_label, x: x0, y: y0 + sp,
         checked: config.security.paste_protection, enabled, check_id: id::PASTE_CHECK,
     });
     security_page.append(&mut ctrls);
 
     let (block_title_check, mut ctrls) = create_checkbox_row(&ctx, &CheckboxRowParams {
-        label_text: "Block Title Query", x: x0, y: y0 + sp * 2,
+        label_text: t.security_block_title_query_label, x: x0, y: y0 + sp * 2,
         checked: config.security.block_title_query, enabled, check_id: id::BLOCK_TITLE_CHECK,
     });
     security_page.append(&mut ctrls);
 
     let (limit_cursor_check, mut ctrls) = create_checkbox_row(&ctx, &CheckboxRowParams {
-        label_text: "Limit Cursor Jumps", x: x0, y: y0 + sp * 3,
+        label_text: t.security_limit_cursor_jumps_label, x: x0, y: y0 + sp * 3,
         checked: config.security.limit_cursor_jumps, enabled, check_id: id::LIMIT_CURSOR_CHECK,
     });
     security_page.append(&mut ctrls);
 
     let (clear_mouse_check, mut ctrls) = create_checkbox_row(&ctx, &CheckboxRowParams {
-        label_text: "Clear Mouse on Reset", x: x0, y: y0 + sp * 4,
+        label_text: t.security_clear_mouse_on_reset_label, x: x0, y: y0 + sp * 4,
         checked: config.security.clear_mouse_on_reset, enabled, check_id: id::CLEAR_MOUSE_CHECK,
     });
     security_page.append(&mut ctrls);
 
     // ── Reset button (always visible, below tab control) ─────────────
-    let reset_text = to_wide("Reset to Defaults");
+    let reset_text = to_wide(t.settings_reset_to_defaults);
     let reset_btn = CreateWindowExW(
         0,
         to_wide("BUTTON").as_ptr(),
@@ -978,6 +980,7 @@ fn build_config(state: &Win32State) -> AppConfig {
                 limit_cursor_jumps: limit_cursor,
                 clear_mouse_on_reset: clear_mouse,
             },
+            language: AppConfig::default().language,
         }
     }
 }

@@ -82,8 +82,9 @@ pub fn open_settings_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>) {
 // ── GTK4 window ──────────────────────────────────────────────────────
 
 fn build_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>) {
+    let t = crate::i18n::t();
     let window = Window::builder()
-        .title("Ferrum Settings")
+        .title(t.settings_title)
         .default_width(500)
         .default_height(420)
         .resizable(false)
@@ -93,21 +94,21 @@ fn build_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>) {
 
     // ── Font tab ─────────────────────────────────────────────────────
     let (font_box, font_size_spin, font_family_combo, line_padding_spin) =
-        build_font_tab(config);
-    notebook.append_page(&font_box, Some(&Label::new(Some("Font"))));
+        build_font_tab(config, t);
+    notebook.append_page(&font_box, Some(&Label::new(Some(t.settings_tab_font))));
 
     // ── Theme tab ────────────────────────────────────────────────────
-    let (theme_box, theme_combo) = build_theme_tab(config);
-    notebook.append_page(&theme_box, Some(&Label::new(Some("Theme"))));
+    let (theme_box, theme_combo) = build_theme_tab(config, t);
+    notebook.append_page(&theme_box, Some(&Label::new(Some(t.settings_tab_theme))));
 
     // ── Terminal tab ─────────────────────────────────────────────────
-    let (terminal_box, scrollback_spin, cursor_blink_spin) = build_terminal_tab(config);
-    notebook.append_page(&terminal_box, Some(&Label::new(Some("Terminal"))));
+    let (terminal_box, scrollback_spin, cursor_blink_spin) = build_terminal_tab(config, t);
+    notebook.append_page(&terminal_box, Some(&Label::new(Some(t.settings_tab_terminal))));
 
     // ── Layout tab ───────────────────────────────────────────────────
     let (layout_box, win_padding_spin, pane_padding_spin, scrollbar_spin, tab_bar_spin) =
-        build_layout_tab(config);
-    notebook.append_page(&layout_box, Some(&Label::new(Some("Layout"))));
+        build_layout_tab(config, t);
+    notebook.append_page(&layout_box, Some(&Label::new(Some(t.settings_tab_layout))));
 
     // ── Security tab ─────────────────────────────────────────────────
     let (
@@ -117,11 +118,11 @@ fn build_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>) {
         block_title_switch,
         limit_cursor_switch,
         clear_mouse_switch,
-    ) = build_security_tab(config);
-    notebook.append_page(&security_box, Some(&Label::new(Some("Security"))));
+    ) = build_security_tab(config, t);
+    notebook.append_page(&security_box, Some(&Label::new(Some(t.settings_tab_security))));
 
     // ── Reset button ─────────────────────────────────────────────────
-    let reset_btn = gtk4::Button::with_label("Reset to Defaults");
+    let reset_btn = gtk4::Button::with_label(t.settings_reset_to_defaults);
 
     let main_box = gtk4::Box::new(Orientation::Vertical, 8);
     main_box.set_margin_top(8);
@@ -293,7 +294,7 @@ fn build_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>) {
 
 // ── Tab builders ─────────────────────────────────────────────────────
 
-fn build_font_tab(config: &AppConfig) -> (gtk4::Box, SpinButton, DropDown, SpinButton) {
+fn build_font_tab(config: &AppConfig, t: &crate::i18n::Translations) -> (gtk4::Box, SpinButton, DropDown, SpinButton) {
     let vbox = gtk4::Box::new(Orientation::Vertical, 12);
     vbox.set_margin_top(16);
     vbox.set_margin_start(16);
@@ -301,7 +302,7 @@ fn build_font_tab(config: &AppConfig) -> (gtk4::Box, SpinButton, DropDown, SpinB
 
     let font_size = labeled_spin(
         &vbox,
-        "Font Size",
+        t.font_size_label,
         config.font.size as f64,
         f64::from(FontConfig::SIZE_MIN),
         f64::from(FontConfig::SIZE_MAX),
@@ -310,17 +311,17 @@ fn build_font_tab(config: &AppConfig) -> (gtk4::Box, SpinButton, DropDown, SpinB
     );
     let font_family = labeled_combo(
         &vbox,
-        "Font Family",
+        t.font_family_label,
         FontFamily::DISPLAY_NAMES,
         config.font.family.index(),
     );
     let line_padding =
-        labeled_spin(&vbox, "Line Padding", config.font.line_padding as f64, 0.0, 10.0, 1.0, 0);
+        labeled_spin(&vbox, t.font_line_padding_label, config.font.line_padding as f64, 0.0, 10.0, 1.0, 0);
 
     (vbox, font_size, font_family, line_padding)
 }
 
-fn build_theme_tab(config: &AppConfig) -> (gtk4::Box, DropDown) {
+fn build_theme_tab(config: &AppConfig, t: &crate::i18n::Translations) -> (gtk4::Box, DropDown) {
     let vbox = gtk4::Box::new(Orientation::Vertical, 12);
     vbox.set_margin_top(16);
     vbox.set_margin_start(16);
@@ -330,12 +331,12 @@ fn build_theme_tab(config: &AppConfig) -> (gtk4::Box, DropDown) {
         ThemeChoice::FerrumDark => 0,
         ThemeChoice::FerrumLight => 1,
     };
-    let combo = labeled_combo(&vbox, "Theme", &["Ferrum Dark", "Ferrum Light"], selected);
+    let combo = labeled_combo(&vbox, t.theme_label, &["Ferrum Dark", "Ferrum Light"], selected);
 
     (vbox, combo)
 }
 
-fn build_terminal_tab(config: &AppConfig) -> (gtk4::Box, SpinButton, SpinButton) {
+fn build_terminal_tab(config: &AppConfig, t: &crate::i18n::Translations) -> (gtk4::Box, SpinButton, SpinButton) {
     let vbox = gtk4::Box::new(Orientation::Vertical, 12);
     vbox.set_margin_top(16);
     vbox.set_margin_start(16);
@@ -343,7 +344,7 @@ fn build_terminal_tab(config: &AppConfig) -> (gtk4::Box, SpinButton, SpinButton)
 
     let scrollback = labeled_spin(
         &vbox,
-        "Max Scrollback",
+        t.terminal_max_scrollback_label,
         config.terminal.max_scrollback as f64,
         0.0,
         50000.0,
@@ -352,7 +353,7 @@ fn build_terminal_tab(config: &AppConfig) -> (gtk4::Box, SpinButton, SpinButton)
     );
     let cursor_blink = labeled_spin(
         &vbox,
-        "Cursor Blink (ms)",
+        t.terminal_cursor_blink_label,
         config.terminal.cursor_blink_interval_ms as f64,
         TerminalConfig::BLINK_MS_MIN as f64,
         TerminalConfig::BLINK_MS_MAX as f64,
@@ -365,6 +366,7 @@ fn build_terminal_tab(config: &AppConfig) -> (gtk4::Box, SpinButton, SpinButton)
 
 fn build_layout_tab(
     config: &AppConfig,
+    t: &crate::i18n::Translations,
 ) -> (gtk4::Box, SpinButton, SpinButton, SpinButton, SpinButton) {
     let vbox = gtk4::Box::new(Orientation::Vertical, 12);
     vbox.set_margin_top(16);
@@ -373,7 +375,7 @@ fn build_layout_tab(
 
     let win_padding = labeled_spin(
         &vbox,
-        "Window Padding",
+        t.layout_window_padding_label,
         config.layout.window_padding as f64,
         0.0,
         32.0,
@@ -382,7 +384,7 @@ fn build_layout_tab(
     );
     let pane_padding = labeled_spin(
         &vbox,
-        "Pane Inner Padding",
+        t.layout_pane_padding_label,
         config.layout.pane_inner_padding as f64,
         0.0,
         16.0,
@@ -391,7 +393,7 @@ fn build_layout_tab(
     );
     let scrollbar = labeled_spin(
         &vbox,
-        "Scrollbar Width",
+        t.layout_scrollbar_width_label,
         config.layout.scrollbar_width as f64,
         2.0,
         16.0,
@@ -400,7 +402,7 @@ fn build_layout_tab(
     );
     let tab_bar = labeled_spin(
         &vbox,
-        "Tab Bar Height",
+        t.layout_tab_bar_height_label,
         config.layout.tab_bar_height as f64,
         24.0,
         48.0,
@@ -413,6 +415,7 @@ fn build_layout_tab(
 
 fn build_security_tab(
     config: &AppConfig,
+    t: &crate::i18n::Translations,
 ) -> (gtk4::Box, DropDown, Switch, Switch, Switch, Switch) {
     let vbox = gtk4::Box::new(Orientation::Vertical, 12);
     vbox.set_margin_top(16);
@@ -426,20 +429,20 @@ fn build_security_tab(
     };
     let mode_combo = labeled_combo(
         &vbox,
-        "Security Mode",
-        &["Disabled", "Standard", "Custom"],
+        t.security_mode_label,
+        &[t.security_mode_disabled, t.security_mode_standard, t.security_mode_custom],
         mode_index,
     );
 
     let enabled = !matches!(config.security.mode, SecurityMode::Disabled);
-    let paste = labeled_switch(&vbox, "Paste Protection", config.security.paste_protection, enabled);
+    let paste = labeled_switch(&vbox, t.security_paste_protection_label, config.security.paste_protection, enabled);
     let block_title =
-        labeled_switch(&vbox, "Block Title Query", config.security.block_title_query, enabled);
+        labeled_switch(&vbox, t.security_block_title_query_label, config.security.block_title_query, enabled);
     let limit_cursor =
-        labeled_switch(&vbox, "Limit Cursor Jumps", config.security.limit_cursor_jumps, enabled);
+        labeled_switch(&vbox, t.security_limit_cursor_jumps_label, config.security.limit_cursor_jumps, enabled);
     let clear_mouse = labeled_switch(
         &vbox,
-        "Clear Mouse on Reset",
+        t.security_clear_mouse_on_reset_label,
         config.security.clear_mouse_on_reset,
         enabled,
     );
@@ -576,6 +579,7 @@ fn build_config(c: &Controls) -> AppConfig {
             limit_cursor_jumps: c.limit_cursor.is_active(),
             clear_mouse_on_reset: c.clear_mouse.is_active(),
         },
+        language: AppConfig::default().language,
     }
 }
 
