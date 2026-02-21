@@ -1,6 +1,6 @@
 use crate::config::{FontFamily, ThemeChoice};
 use crate::gui::settings::layout::{compute_settings_layout, ItemControlLayout};
-use crate::gui::settings::{SettingItem, SettingsCategory};
+use crate::gui::settings::{SettingItem, SettingsCategory, StepperHalf};
 use crate::gui::*;
 
 impl FerrumWindow {
@@ -183,6 +183,9 @@ impl FerrumWindow {
         let mut new_hovered_cat: Option<usize> = None;
         let mut new_hovered_item: Option<usize> = None;
         let mut new_hovered_dropdown_opt: Option<usize> = None;
+        let mut new_hovered_stepper: Option<(usize, StepperHalf)> = None;
+        let mut new_hovered_dropdown: Option<usize> = None;
+        let mut new_hovered_close = false;
 
         // Check category hover.
         for (i, cat_layout) in layout.categories.iter().enumerate() {
@@ -197,13 +200,31 @@ impl FerrumWindow {
             }
         }
 
-        // Check item hover.
+        // Check item hover + control hover.
         for (i, item_layout) in layout.items.iter().enumerate() {
             let label_y = item_layout.label.y as f64;
             let row_bottom = label_y + self.backend.cell_height() as f64 * 2.5;
             if my >= label_y && my < row_bottom {
                 new_hovered_item = Some(i);
-                break;
+            }
+
+            match &item_layout.controls {
+                ItemControlLayout::Stepper {
+                    minus_btn,
+                    plus_btn,
+                    ..
+                } => {
+                    if hit_test_rounded_rect(minus_btn, mx, my) {
+                        new_hovered_stepper = Some((i, StepperHalf::Minus));
+                    } else if hit_test_rounded_rect(plus_btn, mx, my) {
+                        new_hovered_stepper = Some((i, StepperHalf::Plus));
+                    }
+                }
+                ItemControlLayout::Dropdown { button, .. } => {
+                    if hit_test_rounded_rect(button, mx, my) {
+                        new_hovered_dropdown = Some(i);
+                    }
+                }
             }
         }
 
@@ -223,13 +244,29 @@ impl FerrumWindow {
             }
         }
 
+        // Check close button hover.
+        let cb = &layout.close_button;
+        if mx >= cb.x as f64
+            && mx < (cb.x + cb.w) as f64
+            && my >= cb.y as f64
+            && my < (cb.y + cb.h) as f64
+        {
+            new_hovered_close = true;
+        }
+
         let overlay = self.settings_overlay.as_mut().unwrap();
         let changed = overlay.hovered_category != new_hovered_cat
             || overlay.hovered_item != new_hovered_item
-            || overlay.hovered_dropdown_option != new_hovered_dropdown_opt;
+            || overlay.hovered_dropdown_option != new_hovered_dropdown_opt
+            || overlay.hovered_stepper != new_hovered_stepper
+            || overlay.hovered_dropdown != new_hovered_dropdown
+            || overlay.hovered_close != new_hovered_close;
         overlay.hovered_category = new_hovered_cat;
         overlay.hovered_item = new_hovered_item;
         overlay.hovered_dropdown_option = new_hovered_dropdown_opt;
+        overlay.hovered_stepper = new_hovered_stepper;
+        overlay.hovered_dropdown = new_hovered_dropdown;
+        overlay.hovered_close = new_hovered_close;
 
         if changed {
             self.window.request_redraw();
