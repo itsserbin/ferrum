@@ -193,11 +193,6 @@ impl RendererBackend {
             .hit_test_tab_security_badge(x, y, tabs, buf_width)
     }
 
-    #[cfg(not(target_os = "macos"))]
-    pub fn gear_button_rect(&self) -> (u32, u32, u32, u32) {
-        self.as_renderer().gear_button_rect()
-    }
-
     pub fn security_badge_rect(
         &self,
         tab_index: usize,
