@@ -23,6 +23,9 @@ impl super::CpuRenderer {
         // Dim background.
         self.draw_flat_rect_cmd(target, &layout.dim_bg);
 
+        // Panel shadow.
+        self.draw_rounded_rect_cmd(target, &layout.panel_shadow);
+
         // Panel.
         self.draw_rounded_rect_cmd(target, &layout.panel_bg);
         self.draw_rounded_rect_cmd(target, &layout.panel_border);

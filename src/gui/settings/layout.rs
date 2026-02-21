@@ -8,6 +8,8 @@ use super::{SettingItem, SettingsCategory, SettingsOverlay};
 pub(in crate::gui) struct SettingsOverlayLayout {
     /// Full-screen semi-transparent dim overlay.
     pub dim_bg: FlatRectCmd,
+    /// Drop shadow behind the panel (drawn before panel_bg).
+    pub panel_shadow: RoundedRectCmd,
     /// Main panel background.
     pub panel_bg: RoundedRectCmd,
     /// Border overlay drawn on top of the panel background.
@@ -180,14 +182,25 @@ pub(in crate::gui) fn compute_settings_layout(
         opacity: 0.97,
     };
 
+    let shadow_offset = sp(2) as f32;
+    let panel_shadow = RoundedRectCmd {
+        x: px + shadow_offset,
+        y: py + shadow_offset,
+        w: pw,
+        h: ph,
+        radius,
+        color: 0x000000,
+        opacity: 0.24,
+    };
+
     let panel_border = RoundedRectCmd {
         x: px,
         y: py,
         w: pw,
         h: ph,
         radius,
-        color: 0xFFFFFF,
-        opacity: 0.078,
+        color: palette_active_accent,
+        opacity: 0.12,
     };
 
     // ── Title ──────────────────────────────────────────────────────
@@ -311,6 +324,7 @@ pub(in crate::gui) fn compute_settings_layout(
 
     SettingsOverlayLayout {
         dim_bg,
+        panel_shadow,
         panel_bg,
         panel_border,
         title,

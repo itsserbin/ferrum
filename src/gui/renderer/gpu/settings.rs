@@ -33,6 +33,9 @@ impl super::GpuRenderer {
             layout.dim_bg.opacity,
         );
 
+        // Panel shadow.
+        self.push_rounded_rect_cmd(&layout.panel_shadow);
+
         // Panel.
         self.push_rounded_rect_cmd(&layout.panel_bg);
         self.push_rounded_rect_cmd(&layout.panel_border);
