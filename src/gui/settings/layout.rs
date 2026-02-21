@@ -1,6 +1,6 @@
 use crate::gui::renderer::types::{scaled_px, FlatRectCmd, RoundedRectCmd, TextCmd};
 
-use super::{SettingItem, SettingsCategory, SettingsOverlay};
+use super::{SettingItem, SettingsCategory, SettingsOverlay, StepperHalf};
 
 // ── Layout structs ─────────────────────────────────────────────────
 
@@ -142,6 +142,7 @@ pub(in crate::gui) fn compute_settings_layout(
     palette_text_active: u32,
     palette_text_inactive: u32,
     palette_bar_bg: u32,
+    palette_close_hover_bg: u32,
 ) -> SettingsOverlayLayout {
     let sp = |base| scaled_px(base, ui_scale);
 
@@ -296,14 +297,20 @@ pub(in crate::gui) fn compute_settings_layout(
     let close_x = px + pw - close_size - pad;
     let close_y = py + pad;
 
+    let (close_color, close_opacity) = if overlay.hovered_close {
+        (palette_close_hover_bg, 0.8)
+    } else {
+        (palette_bar_bg, 0.6)
+    };
+
     let close_button = RoundedRectCmd {
         x: close_x,
         y: close_y,
         w: close_size,
         h: close_size,
         radius: sp(SMALL_PAD) as f32,
-        color: palette_bar_bg,
-        opacity: 0.6,
+        color: close_color,
+        opacity: close_opacity,
     };
 
     let close_cx = close_x + close_size / 2.0;
@@ -453,6 +460,8 @@ fn build_item_layouts(
                     accent,
                     text_inactive,
                     bar_bg,
+                    overlay,
+                    i,
                 ),
                 SettingItem::IntSlider { value, .. } => build_stepper_control(
                     control_x,
@@ -464,6 +473,8 @@ fn build_item_layouts(
                     accent,
                     text_inactive,
                     bar_bg,
+                    overlay,
+                    i,
                 ),
                 SettingItem::LargeIntSlider { value, .. } => build_stepper_control(
                     control_x,
@@ -475,6 +486,8 @@ fn build_item_layouts(
                     accent,
                     text_inactive,
                     bar_bg,
+                    overlay,
+                    i,
                 ),
                 SettingItem::EnumChoice {
                     options, selected, ..
@@ -533,6 +546,8 @@ fn build_stepper_control(
     accent: u32,
     text_inactive: u32,
     bar_bg: u32,
+    overlay: &SettingsOverlay,
+    item_index: usize,
 ) -> ItemControlLayout {
     let sp = |base| scaled_px(base, ui_scale);
     let btn_size = sp(STEPPER_BTN_SIZE) as f32;
@@ -542,6 +557,7 @@ fn build_stepper_control(
     let btn_y = row_center_y + (cell_height as f32 - btn_size) / 2.0;
 
     // Minus button.
+    let minus_hovered = overlay.hovered_stepper == Some((item_index, StepperHalf::Minus));
     let minus_btn = RoundedRectCmd {
         x,
         y: btn_y,
@@ -549,7 +565,7 @@ fn build_stepper_control(
         h: btn_size,
         radius: btn_radius,
         color: bar_bg,
-        opacity: 0.6,
+        opacity: if minus_hovered { 1.0 } else { 0.6 },
     };
 
     let minus_text = TextCmd {
@@ -574,6 +590,7 @@ fn build_stepper_control(
 
     // Plus button.
     let plus_x = value_x + value_text_w + gap;
+    let plus_hovered = overlay.hovered_stepper == Some((item_index, StepperHalf::Plus));
     let plus_btn = RoundedRectCmd {
         x: plus_x,
         y: btn_y,
@@ -581,7 +598,7 @@ fn build_stepper_control(
         h: btn_size,
         radius: btn_radius,
         color: bar_bg,
-        opacity: 0.6,
+        opacity: if plus_hovered { 1.0 } else { 0.6 },
     };
 
     let plus_text = TextCmd {
@@ -628,6 +645,7 @@ fn build_dropdown_control(
     let btn_y = row_center_y + (cell_height as f32 - dd_h) / 2.0;
     let btn_w = available_w.min(cell_width as f32 * 20.0);
 
+    let btn_hovered = overlay.hovered_dropdown == Some(item_index);
     let button = RoundedRectCmd {
         x,
         y: btn_y,
@@ -635,7 +653,7 @@ fn build_dropdown_control(
         h: dd_h,
         radius: btn_radius,
         color: bar_bg,
-        opacity: 0.6,
+        opacity: if btn_hovered { 0.85 } else { 0.6 },
     };
 
     let selected_text = options.get(selected).copied().unwrap_or("");
@@ -726,6 +744,7 @@ mod tests {
     const TEST_TEXT_ACTIVE: u32 = 0xD2DBEB;
     const TEST_TEXT_INACTIVE: u32 = 0x6C7480;
     const TEST_BAR_BG: u32 = 0x1E2127;
+    const TEST_CLOSE_HOVER_BG: u32 = 0x454B59;
 
     fn compute_test_layout(overlay: &SettingsOverlay) -> SettingsOverlayLayout {
         compute_settings_layout(
@@ -740,6 +759,7 @@ mod tests {
             TEST_TEXT_ACTIVE,
             TEST_TEXT_INACTIVE,
             TEST_BAR_BG,
+            TEST_CLOSE_HOVER_BG,
         )
     }
 
@@ -905,6 +925,7 @@ mod tests {
             TEST_TEXT_ACTIVE,
             TEST_TEXT_INACTIVE,
             TEST_BAR_BG,
+            TEST_CLOSE_HOVER_BG,
         );
         let layout_2x = compute_settings_layout(
             800,
@@ -918,6 +939,7 @@ mod tests {
             TEST_TEXT_ACTIVE,
             TEST_TEXT_INACTIVE,
             TEST_BAR_BG,
+            TEST_CLOSE_HOVER_BG,
         );
         assert!(layout_2x.panel_bg.radius > layout_1x.panel_bg.radius);
     }
@@ -937,6 +959,7 @@ mod tests {
             TEST_TEXT_ACTIVE,
             TEST_TEXT_INACTIVE,
             TEST_BAR_BG,
+            TEST_CLOSE_HOVER_BG,
         );
         assert!(layout.panel_bg.x + layout.panel_bg.w <= 200.0);
         assert!(layout.panel_bg.y + layout.panel_bg.h <= 200.0);

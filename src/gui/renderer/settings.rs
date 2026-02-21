@@ -18,6 +18,7 @@ impl super::CpuRenderer {
             self.palette.tab_text_active.to_pixel(),
             self.palette.tab_text_inactive.to_pixel(),
             self.palette.bar_bg.to_pixel(),
+            self.palette.close_hover_bg.to_pixel(),
         );
 
         // Dim background.

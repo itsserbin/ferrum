@@ -267,6 +267,14 @@ impl RendererBackend {
         }
     }
 
+    pub(in crate::gui) fn palette_close_hover_bg(&self) -> u32 {
+        match self {
+            Self::Cpu { renderer, .. } => renderer.palette.close_hover_bg.to_pixel(),
+            #[cfg(feature = "gpu")]
+            Self::Gpu(gpu) => gpu.palette.close_hover_bg.to_pixel(),
+        }
+    }
+
     pub(in crate::gui) fn palette(&self) -> &crate::config::ThemePalette {
         match self {
             Self::Cpu { renderer, .. } => &renderer.palette,

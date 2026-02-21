@@ -33,6 +33,7 @@ impl FerrumWindow {
             self.backend.palette_text_active(),
             self.backend.palette_text_inactive(),
             self.backend.palette_bar_bg(),
+            self.backend.palette_close_hover_bg(),
         );
 
         // Check if click is outside the panel -> close overlay.
@@ -178,6 +179,7 @@ impl FerrumWindow {
             self.backend.palette_text_active(),
             self.backend.palette_text_inactive(),
             self.backend.palette_bar_bg(),
+            self.backend.palette_close_hover_bg(),
         );
 
         let mut new_hovered_cat: Option<usize> = None;

@@ -64,7 +64,6 @@ pub(in crate::gui) enum SettingItem {
 
 /// Which half of a stepper control the mouse is over.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[allow(dead_code)] // Used by upcoming hover-highlight rendering.
 pub(in crate::gui) enum StepperHalf {
     Minus,
     Plus,
@@ -90,13 +89,10 @@ pub(in crate::gui) struct SettingsOverlay {
     /// Hovered option within an open dropdown.
     pub hovered_dropdown_option: Option<usize>,
     /// Hovered stepper button: (item_index, which half).
-    #[allow(dead_code)] // Used by upcoming hover-highlight rendering.
     pub hovered_stepper: Option<(usize, StepperHalf)>,
     /// Index of the item whose dropdown button is hovered.
-    #[allow(dead_code)] // Used by upcoming hover-highlight rendering.
     pub hovered_dropdown: Option<usize>,
     /// Whether the close (X) button is hovered.
-    #[allow(dead_code)] // Used by upcoming hover-highlight rendering.
     pub hovered_close: bool,
 }
 
