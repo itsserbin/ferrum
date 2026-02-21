@@ -27,6 +27,7 @@ pub fn check_window_closed() -> bool {
 }
 
 pub fn close_settings_window() {
+    WINDOW_OPEN.store(false, Ordering::Relaxed);
     CLOSE_REQUESTED.store(true, Ordering::Relaxed);
 }
 
@@ -239,10 +240,13 @@ fn build_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>) {
         });
     }
 
-    // On close request, save config. Let GTK proceed to destroy the window.
+    // On close request, save config and immediately mark window as closed
+    // so the gear icon resets without waiting for the destroy signal.
     {
         let controls = Rc::clone(&controls);
         window.connect_close_request(move |_| {
+            WINDOW_OPEN.store(false, Ordering::Relaxed);
+            JUST_CLOSED.store(true, Ordering::Relaxed);
             let config = build_config(&controls);
             crate::config::save_config(&config);
             gtk4::glib::Propagation::Proceed
