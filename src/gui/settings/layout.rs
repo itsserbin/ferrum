@@ -1013,4 +1013,86 @@ mod tests {
         let expected_w = layout.panel_bg.w - pad * 2.0;
         assert!((layout.title_separator.w - expected_w).abs() < 1.0);
     }
+
+    #[test]
+    fn panel_shadow_has_offset() {
+        let overlay = default_overlay();
+        let layout = compute_test_layout(&overlay);
+        let offset = layout.panel_shadow.x - layout.panel_bg.x;
+        assert!(offset > 0.0, "shadow should be offset to the right");
+        assert_eq!(
+            layout.panel_shadow.x - layout.panel_bg.x,
+            layout.panel_shadow.y - layout.panel_bg.y,
+            "shadow X and Y offsets should be equal"
+        );
+        assert_eq!(layout.panel_shadow.color, 0x000000);
+        assert!((layout.panel_shadow.opacity - 0.24).abs() < 0.01);
+    }
+
+    #[test]
+    fn panel_border_uses_accent_color() {
+        let overlay = default_overlay();
+        let layout = compute_test_layout(&overlay);
+        assert_eq!(layout.panel_border.color, TEST_ACCENT);
+        assert!((layout.panel_border.opacity - 0.12).abs() < 0.01);
+    }
+
+    #[test]
+    fn active_category_has_indicator() {
+        let overlay = default_overlay();
+        let layout = compute_test_layout(&overlay);
+        assert!(layout.categories[0].indicator.is_some());
+        let ind = layout.categories[0].indicator.as_ref().unwrap();
+        assert_eq!(ind.w, 2.0);
+        assert_eq!(ind.color, TEST_ACCENT);
+        assert!(layout.categories[1].indicator.is_none());
+    }
+
+    #[test]
+    fn close_button_hover_changes_opacity() {
+        let config = AppConfig::default();
+        let mut overlay = SettingsOverlay::new(&config);
+        let layout_normal = compute_test_layout(&overlay);
+        overlay.hovered_close = true;
+        let layout_hovered = compute_test_layout(&overlay);
+        assert!(layout_hovered.close_button.opacity > layout_normal.close_button.opacity);
+    }
+
+    #[test]
+    fn stepper_hover_changes_opacity() {
+        let config = AppConfig::default();
+        let mut overlay = SettingsOverlay::new(&config);
+        let layout_normal = compute_test_layout(&overlay);
+        overlay.hovered_stepper = Some((0, StepperHalf::Minus));
+        let layout_hovered = compute_test_layout(&overlay);
+        match (
+            &layout_normal.items[0].controls,
+            &layout_hovered.items[0].controls,
+        ) {
+            (
+                ItemControlLayout::Stepper {
+                    minus_btn: normal, ..
+                },
+                ItemControlLayout::Stepper {
+                    minus_btn: hovered, ..
+                },
+            ) => {
+                assert!(hovered.opacity > normal.opacity);
+            }
+            _ => panic!("expected Stepper"),
+        }
+    }
+
+    #[test]
+    fn item_row_hover_produces_background() {
+        let config = AppConfig::default();
+        let mut overlay = SettingsOverlay::new(&config);
+        assert!(compute_test_layout(&overlay).items[0].row_bg.is_none());
+        overlay.hovered_item = Some(0);
+        let layout = compute_test_layout(&overlay);
+        assert!(layout.items[0].row_bg.is_some());
+        let bg = layout.items[0].row_bg.as_ref().unwrap();
+        assert_eq!(bg.color, TEST_BAR_BG);
+        assert!((bg.opacity - 0.2).abs() < 0.01);
+    }
 }
