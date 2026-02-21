@@ -51,6 +51,11 @@ impl CpuRenderer {
                     fg = fg.bold_bright_with_palette(&self.palette.ansi);
                 }
 
+                // Dim: reduce foreground brightness
+                if cell.dim {
+                    fg = fg.dimmed(0.4);
+                }
+
                 if selected {
                     bg = Color::from_pixel(super::blend_rgb(
                         bg.to_pixel(),
@@ -74,6 +79,23 @@ impl CpuRenderer {
                             let px = x as usize + dx;
                             if px < buf_width {
                                 let idx = underline_y as usize * buf_width + px;
+                                if idx < target.buffer.len() {
+                                    target.buffer[idx] = pixel;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Strikethrough
+                if cell.strikethrough {
+                    let strike_y = y + self.metrics.cell_height / 2;
+                    if (strike_y as usize) < buf_height {
+                        let pixel = fg.to_pixel();
+                        for dx in 0..self.metrics.cell_width as usize {
+                            let px = x as usize + dx;
+                            if px < buf_width {
+                                let idx = strike_y as usize * buf_width + px;
                                 if idx < target.buffer.len() {
                                     target.buffer[idx] = pixel;
                                 }
@@ -132,6 +154,10 @@ impl CpuRenderer {
                     fg = fg.bold_bright_with_palette(&self.palette.ansi);
                 }
 
+                if cell.dim {
+                    fg = fg.dimmed(0.4);
+                }
+
                 if fg_dim > 0.0 {
                     fg = fg.dimmed(fg_dim);
                 }
@@ -158,6 +184,23 @@ impl CpuRenderer {
                             let px = x as usize + dx;
                             if px < buf_width && px < rect_right {
                                 let idx = underline_y as usize * buf_width + px;
+                                if idx < target.buffer.len() {
+                                    target.buffer[idx] = pixel;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Strikethrough
+                if cell.strikethrough {
+                    let strike_y = y + self.metrics.cell_height / 2;
+                    if (strike_y as usize) < buf_height && (strike_y as usize) < rect_bottom {
+                        let pixel = fg.to_pixel();
+                        for dx in 0..self.metrics.cell_width as usize {
+                            let px = x as usize + dx;
+                            if px < buf_width && px < rect_right {
+                                let idx = strike_y as usize * buf_width + px;
                                 if idx < target.buffer.len() {
                                     target.buffer[idx] = pixel;
                                 }
