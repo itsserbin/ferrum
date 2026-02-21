@@ -7,7 +7,8 @@ use std::sync::mpsc;
 
 use gtk4::prelude::*;
 use gtk4::{
-    Adjustment, Align, CheckButton, Label, Notebook, Orientation, SpinButton, Switch, Window,
+    Adjustment, Align, DropDown, Label, Notebook, Orientation, SpinButton, StringList, Switch,
+    Window,
 };
 
 static WINDOW_OPEN: AtomicBool = AtomicBool::new(false);
@@ -173,27 +174,30 @@ fn build_window(app: &gtk4::Application, config: &AppConfig, tx: mpsc::Sender<Ap
         spin.connect_value_changed(move |_| send());
     }
 
-    // Connect RadioGroup changed for font family and theme.
+    // Connect DropDown selection-changed for font family and theme.
     {
         let send = build_and_send.clone();
-        controls.font_family.connect_changed(send);
+        controls.font_family.connect_selected_notify(move |_| send());
     }
     {
         let send = build_and_send.clone();
-        controls.theme.connect_changed(send);
+        controls.theme.connect_selected_notify(move |_| send());
     }
 
-    // Security mode radio group — apply presets, then send.
+    // Security mode combo — apply presets, then send.
     {
         let controls = Rc::clone(&controls);
         let suppress = Rc::clone(&suppress);
         let send = build_and_send.clone();
-        controls.security_mode.connect_changed(move || {
+        let security_combo = controls.security_mode.clone();
+        security_combo.connect_selected_notify(move |combo| {
             if *suppress.borrow() {
                 return;
             }
             *suppress.borrow_mut() = true;
-            apply_security_preset(&controls, Some(controls.security_mode.selected() as usize));
+            let sel = combo.selected();
+            let active = if sel == gtk4::INVALID_LIST_POSITION { None } else { Some(sel as usize) };
+            apply_security_preset(&controls, active);
             *suppress.borrow_mut() = false;
             send();
         });
@@ -269,7 +273,7 @@ fn build_window(app: &gtk4::Application, config: &AppConfig, tx: mpsc::Sender<Ap
 
 // ── Tab builders ─────────────────────────────────────────────────────
 
-fn build_font_tab(config: &AppConfig) -> (gtk4::Box, SpinButton, RadioGroup, SpinButton) {
+fn build_font_tab(config: &AppConfig) -> (gtk4::Box, SpinButton, DropDown, SpinButton) {
     let vbox = gtk4::Box::new(Orientation::Vertical, 12);
     vbox.set_margin_top(16);
     vbox.set_margin_start(16);
@@ -288,7 +292,7 @@ fn build_font_tab(config: &AppConfig) -> (gtk4::Box, SpinButton, RadioGroup, Spi
     (vbox, font_size, font_family, line_padding)
 }
 
-fn build_theme_tab(config: &AppConfig) -> (gtk4::Box, RadioGroup) {
+fn build_theme_tab(config: &AppConfig) -> (gtk4::Box, DropDown) {
     let vbox = gtk4::Box::new(Orientation::Vertical, 12);
     vbox.set_margin_top(16);
     vbox.set_margin_start(16);
@@ -381,7 +385,7 @@ fn build_layout_tab(
 
 fn build_security_tab(
     config: &AppConfig,
-) -> (gtk4::Box, RadioGroup, Switch, Switch, Switch, Switch) {
+) -> (gtk4::Box, DropDown, Switch, Switch, Switch, Switch) {
     let vbox = gtk4::Box::new(Orientation::Vertical, 12);
     vbox.set_margin_top(16);
     vbox.set_margin_start(16);
@@ -443,72 +447,27 @@ fn labeled_spin(
     spin
 }
 
-/// A group of radio buttons that replaces DropDown/ComboBoxText.
-/// GTK4 popover-based widgets (DropDown, ComboBoxText) break on X11/XWayland;
-/// CheckButton radio groups avoid popup windows entirely.
-struct RadioGroup {
-    buttons: Vec<CheckButton>,
-}
-
-impl RadioGroup {
-    fn selected(&self) -> u32 {
-        self.buttons.iter().position(|b| b.is_active()).unwrap_or(0) as u32
-    }
-
-    fn set_selected(&self, index: u32) {
-        if let Some(btn) = self.buttons.get(index as usize) {
-            btn.set_active(true);
-        }
-    }
-
-    fn connect_changed<F: Fn() + Clone + 'static>(&self, f: F) {
-        for btn in &self.buttons {
-            let f = f.clone();
-            btn.connect_toggled(move |b| {
-                if b.is_active() {
-                    f();
-                }
-            });
-        }
-    }
-}
-
 fn labeled_combo(
     parent: &gtk4::Box,
     label: &str,
     options: &[&str],
     selected: usize,
-) -> RadioGroup {
+) -> DropDown {
     let row = gtk4::Box::new(Orientation::Horizontal, 12);
     let lbl = Label::new(Some(label));
     lbl.set_halign(Align::Start);
     lbl.set_width_chars(20);
 
-    let btn_box = gtk4::Box::new(Orientation::Horizontal, 4);
-    btn_box.set_halign(Align::End);
-    btn_box.set_hexpand(true);
-
-    let buttons: Vec<CheckButton> = options
-        .iter()
-        .map(|&s| {
-            let btn = CheckButton::with_label(s);
-            btn_box.append(&btn);
-            btn
-        })
-        .collect();
-
-    for btn in buttons.iter().skip(1) {
-        btn.set_group(Some(&buttons[0]));
-    }
-    if selected < buttons.len() {
-        buttons[selected].set_active(true);
-    }
+    let dropdown = DropDown::from_strings(options);
+    dropdown.set_selected(selected as u32);
+    dropdown.set_halign(Align::End);
+    dropdown.set_hexpand(true);
 
     row.append(&lbl);
-    row.append(&btn_box);
+    row.append(&dropdown);
     parent.append(&row);
 
-    RadioGroup { buttons }
+    dropdown
 }
 
 fn labeled_switch(
@@ -539,16 +498,16 @@ fn labeled_switch(
 
 struct Controls {
     font_size: SpinButton,
-    font_family: RadioGroup,
+    font_family: DropDown,
     line_padding: SpinButton,
-    theme: RadioGroup,
+    theme: DropDown,
     scrollback: SpinButton,
     cursor_blink: SpinButton,
     win_padding: SpinButton,
     pane_padding: SpinButton,
     scrollbar: SpinButton,
     tab_bar: SpinButton,
-    security_mode: RadioGroup,
+    security_mode: DropDown,
     paste: Switch,
     block_title: Switch,
     limit_cursor: Switch,
