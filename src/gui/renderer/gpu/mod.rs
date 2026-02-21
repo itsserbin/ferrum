@@ -86,7 +86,7 @@ pub struct GpuRenderer {
 
     // Font & metrics
     font: Font,
-    fallback_font: Font,
+    fallback_fonts: Vec<Font>,
     metrics: FontMetrics,
     pub(in crate::gui::renderer) palette: ThemePalette,
 

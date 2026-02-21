@@ -39,7 +39,10 @@ impl CpuRenderer {
             let font = if self.font.has_glyph(character) {
                 &self.font
             } else {
-                &self.fallback_font
+                self.fallback_fonts
+                    .iter()
+                    .find(|f| f.has_glyph(character))
+                    .unwrap_or(&self.font)
             };
             let (metrics, bitmap) = font.rasterize(character, self.metrics.font_size);
             let cached = super::super::types::GlyphBitmap {

@@ -75,9 +75,10 @@ impl super::GpuRenderer {
         let font =
             Font::from_bytes(font_data, FontSettings::default()).expect("font load fail");
 
-        let fallback_data = crate::config::fallback_font_data();
-        let fallback_font =
-            Font::from_bytes(fallback_data, FontSettings::default()).expect("fallback font load fail");
+        let fallback_fonts: Vec<Font> = crate::config::fallback_fonts_data()
+            .iter()
+            .map(|d| Font::from_bytes(*d, FontSettings::default()).expect("fallback font load fail"))
+            .collect();
 
         let mut metrics = FontMetrics {
             cell_width: 1,
@@ -98,7 +99,7 @@ impl super::GpuRenderer {
         let palette = config.theme.resolve();
 
         // Create glyph atlas.
-        let atlas = GlyphAtlas::new(&device, &queue, &font, &fallback_font, metrics.font_size, metrics.ascent);
+        let atlas = GlyphAtlas::new(&device, &queue, &font, &fallback_fonts, metrics.font_size, metrics.ascent);
 
         // Create pipelines.
         let (grid_pipeline, grid_bind_group_layout) = pipelines::create_grid_pipeline(&device);
@@ -175,7 +176,7 @@ impl super::GpuRenderer {
             sampler,
             atlas,
             font,
-            fallback_font,
+            fallback_fonts,
             metrics,
             palette,
             commands: Vec::with_capacity(MAX_UI_COMMANDS),
@@ -298,7 +299,7 @@ impl super::GpuRenderer {
             &self.device,
             &self.queue,
             &self.font,
-            &self.fallback_font,
+            &self.fallback_fonts,
             self.metrics.font_size,
             self.metrics.ascent,
         );

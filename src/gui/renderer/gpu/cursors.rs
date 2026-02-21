@@ -28,7 +28,7 @@ impl super::GpuRenderer {
                     let info = self.atlas.get_or_insert(
                         cp,
                         &self.font,
-                        &self.fallback_font,
+                        &self.fallback_fonts,
                         self.metrics.font_size,
                         &self.queue,
                     );

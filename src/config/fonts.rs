@@ -38,12 +38,21 @@ pub(crate) fn font_data(family: FontFamily) -> &'static [u8] {
     }
 }
 
-/// Returns the embedded Symbols Nerd Font Mono bytes (fallback for missing glyphs).
-pub(crate) fn fallback_font_data() -> &'static [u8] {
-    include_bytes!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/assets/fonts/SymbolsNerdFontMono-Regular.ttf"
-    ))
+/// Returns embedded fallback font data in priority order.
+///
+/// 1. Symbols Nerd Font Mono — Nerd Font icons (Powerline, devicons, etc.)
+/// 2. Noto Sans Symbols 2 — standard Unicode symbols (Misc Technical, Braille, etc.)
+pub(crate) fn fallback_fonts_data() -> &'static [&'static [u8]] {
+    &[
+        include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/fonts/SymbolsNerdFontMono-Regular.ttf"
+        )),
+        include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/fonts/NotoSansSymbols2-Regular.ttf"
+        )),
+    ]
 }
 
 #[cfg(test)]
@@ -68,30 +77,30 @@ mod tests {
     }
 
     #[test]
-    fn fallback_font_loads_as_valid() {
-        let data = super::fallback_font_data();
-        let font = fontdue::Font::from_bytes(data, fontdue::FontSettings::default());
-        assert!(font.is_ok(), "fallback font should be a valid font");
+    fn fallback_fonts_load_as_valid() {
+        for (i, data) in fallback_fonts_data().iter().enumerate() {
+            let font = fontdue::Font::from_bytes(*data, fontdue::FontSettings::default());
+            assert!(font.is_ok(), "fallback font {i} should be valid");
+        }
     }
 
     #[test]
-    fn fallback_covers_nerd_font_symbols() {
+    fn fallback_chain_covers_missing_glyphs() {
         let primary_data = font_data(FontFamily::JetBrainsMono);
         let primary =
             fontdue::Font::from_bytes(primary_data, fontdue::FontSettings::default()).unwrap();
 
-        let fallback_data = fallback_font_data();
-        let fallback =
-            fontdue::Font::from_bytes(fallback_data, fontdue::FontSettings::default()).unwrap();
+        let fallbacks: Vec<_> = fallback_fonts_data()
+            .iter()
+            .map(|d| fontdue::Font::from_bytes(*d, fontdue::FontSettings::default()).unwrap())
+            .collect();
 
-        // U+E700 is a Nerd Font dev icon — not in JetBrains Mono but present in Symbols Nerd Font Mono.
-        assert!(
-            !primary.has_glyph('\u{E700}'),
-            "primary should lack U+E700"
-        );
-        assert!(
-            fallback.has_glyph('\u{E700}'),
-            "fallback should have U+E700"
-        );
+        // U+E700 (Nerd Font devicon) — covered by fallback[0] (Symbols Nerd Font Mono).
+        assert!(!primary.has_glyph('\u{E700}'));
+        assert!(fallbacks[0].has_glyph('\u{E700}'));
+
+        // U+23FA (⏺) — covered by fallback[1] (Noto Sans Symbols 2).
+        assert!(!primary.has_glyph('\u{23FA}'));
+        assert!(fallbacks[1].has_glyph('\u{23FA}'));
     }
 }
