@@ -28,6 +28,12 @@ impl Default for FontConfig {
     }
 }
 
+impl FontConfig {
+    pub const SIZE_MIN: f32 = 8.0;
+    pub const SIZE_MAX: f32 = 32.0;
+    pub const SIZE_STEP: f32 = 0.5;
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub(crate) struct TerminalConfig {
@@ -42,6 +48,12 @@ impl Default for TerminalConfig {
             cursor_blink_interval_ms: 500,
         }
     }
+}
+
+impl TerminalConfig {
+    pub const BLINK_MS_MIN: u64 = 100;
+    pub const BLINK_MS_MAX: u64 = 2000;
+    pub const BLINK_MS_STEP: u64 = 50;
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

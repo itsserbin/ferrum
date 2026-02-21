@@ -1,5 +1,6 @@
-mod create;
+pub(in crate::gui) mod create;
 mod manage;
+mod pty_reader;
 
 pub(in crate::gui) fn normalized_active_index_after_remove(
     active: usize,

@@ -273,6 +273,20 @@ pub struct ScrollbarState {
     pub hover: bool,
 }
 
+/// Bundled parameters for tab bar drawing.
+///
+/// Groups the arguments that `draw_tab_bar` / `draw_tab_bar_impl` need
+/// beyond `&mut self` and `target`, keeping both renderers under the
+/// clippy argument limit.
+pub struct TabBarDrawParams<'a> {
+    pub tabs: &'a [TabInfo<'a>],
+    pub hovered_tab: Option<usize>,
+    pub mouse_pos: (f64, f64),
+    pub tab_offsets: Option<&'a [f32]>,
+    pub pinned: bool,
+    pub settings_open: bool,
+}
+
 /// Tab drag position data passed to overlay layout computation.
 ///
 /// Replaces the raw `(f64, f32)` tuple, giving names to the cursor

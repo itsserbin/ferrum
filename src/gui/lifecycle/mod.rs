@@ -1,3 +1,4 @@
+use crate::gui::tabs::create::NewTabParams;
 use crate::gui::*;
 
 mod pty_events;
@@ -33,7 +34,15 @@ impl ApplicationHandler for App {
 
             let size = win.window.inner_size();
             let (rows, cols) = win.calc_grid_size(size.width, size.height);
-            win.new_tab(rows, cols, &mut self.next_tab_id, &self.tx, None, &self.config);
+            win.new_tab(NewTabParams {
+                rows,
+                cols,
+                title: None,
+                next_tab_id: &mut self.next_tab_id,
+                tx: &self.tx,
+                cwd: None,
+                config: &self.config,
+            });
             #[cfg(target_os = "macos")]
             if let Some(tab) = win.tabs.first() {
                 win.window.set_title(&tab.title);
@@ -91,8 +100,7 @@ impl ApplicationHandler for App {
                     && leaf.terminal.focus_reporting
                 {
                     let seq = if focused { b"\x1b[I" } else { b"\x1b[O" };
-                    let _ = leaf.pty_writer.write_all(seq);
-                    let _ = leaf.pty_writer.flush();
+                    leaf.write_pty(seq);
                 }
                 should_redraw = true;
             }

@@ -115,7 +115,7 @@ impl CpuRenderer {
             for px in cursor_x as usize..(cursor_x + cursor_w) as usize {
                 if px < target.width && py * target.width + px < target.buffer.len() {
                     let idx = py * target.width + px;
-                    target.buffer[idx] = Self::blend_pixel(target.buffer[idx], self.palette.tab_text_active.to_pixel(), 220);
+                    target.buffer[idx] = crate::gui::renderer::blend_rgb(target.buffer[idx], self.palette.tab_text_active.to_pixel(), 220);
                 }
             }
         }

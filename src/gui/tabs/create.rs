@@ -1,35 +1,24 @@
 use crate::config::AppConfig;
 use crate::gui::pane::{PaneLeaf, PaneNode};
+use crate::gui::tabs::pty_reader::spawn_pty_reader;
 use crate::gui::*;
 use anyhow::Context;
 
+/// Bundles the parameters needed to create a new tab, avoiding long argument lists.
+pub(in crate::gui) struct NewTabParams<'a> {
+    pub rows: usize,
+    pub cols: usize,
+    pub title: Option<String>,
+    pub next_tab_id: &'a mut u64,
+    pub tx: &'a mpsc::Sender<PtyEvent>,
+    pub cwd: Option<String>,
+    pub config: &'a AppConfig,
+}
+
 impl FerrumWindow {
     /// Creates a new tab with default title.
-    pub(in crate::gui) fn new_tab(
-        &mut self,
-        rows: usize,
-        cols: usize,
-        next_tab_id: &mut u64,
-        tx: &mpsc::Sender<PtyEvent>,
-        cwd: Option<String>,
-        config: &AppConfig,
-    ) {
-        self.new_tab_with_title(rows, cols, None, next_tab_id, tx, cwd, config);
-    }
-
-    /// Creates a new tab with an optional custom title.
-    #[allow(clippy::too_many_arguments)]
-    pub(in crate::gui) fn new_tab_with_title(
-        &mut self,
-        rows: usize,
-        cols: usize,
-        title: Option<String>,
-        next_tab_id: &mut u64,
-        tx: &mpsc::Sender<PtyEvent>,
-        cwd: Option<String>,
-        config: &AppConfig,
-    ) {
-        match self.build_tab_state(rows, cols, title, next_tab_id, tx, cwd, config) {
+    pub(in crate::gui) fn new_tab(&mut self, mut params: NewTabParams<'_>) {
+        match self.build_tab_state(&mut params) {
             Ok(tab) => {
                 self.tabs.push(tab);
                 self.active_tab = self.tabs.len() - 1;
@@ -41,81 +30,38 @@ impl FerrumWindow {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn build_tab_state(
-        &self,
-        rows: usize,
-        cols: usize,
-        title: Option<String>,
-        next_tab_id: &mut u64,
-        tx: &mpsc::Sender<PtyEvent>,
-        cwd: Option<String>,
-        config: &AppConfig,
-    ) -> anyhow::Result<TabState> {
-        let id = *next_tab_id;
-        *next_tab_id += 1;
+    fn build_tab_state(&self, params: &mut NewTabParams<'_>) -> anyhow::Result<TabState> {
+        let id = *params.next_tab_id;
+        *params.next_tab_id += 1;
 
         let pane_id: u64 = 0;
 
         let shell = pty::default_shell();
-        let session = pty::Session::spawn(&shell, rows as u16, cols as u16, cwd.as_deref())
-            .context("failed to spawn PTY session")?;
+        let session = pty::Session::spawn(
+            &shell,
+            params.rows as u16,
+            params.cols as u16,
+            params.cwd.as_deref(),
+        )
+        .context("failed to spawn PTY session")?;
         let pty_writer = session.writer().context("failed to acquire PTY writer")?;
 
         // Spawn a dedicated PTY reader thread for this tab/pane.
-        let tx = tx.clone();
-        let proxy = self.event_proxy.clone();
-        let mut reader = session.reader().context("failed to clone PTY reader")?;
-        let tab_id = id;
-        let reader_pane_id = pane_id;
-        std::thread::Builder::new()
-            .name(format!("pty-reader-{}-{}", tab_id, reader_pane_id))
-            .spawn(move || {
-                use std::io::Read;
-                let mut buf = [0u8; 4096];
-                loop {
-                    match reader.read(&mut buf) {
-                        Ok(0) => {
-                            let _ = tx.send(PtyEvent::Exited {
-                                tab_id,
-                                pane_id: reader_pane_id,
-                            });
-                            let _ = proxy.send_event(());
-                            break;
-                        }
-                        Err(err) => {
-                            eprintln!("PTY read error for tab {tab_id}: {err}");
-                            let _ = tx.send(PtyEvent::Exited {
-                                tab_id,
-                                pane_id: reader_pane_id,
-                            });
-                            let _ = proxy.send_event(());
-                            break;
-                        }
-                        Ok(n) => {
-                            if tx
-                                .send(PtyEvent::Data {
-                                    tab_id,
-                                    pane_id: reader_pane_id,
-                                    bytes: buf[..n].to_vec(),
-                                })
-                                .is_err()
-                            {
-                                eprintln!("PTY reader {}: channel disconnected", tab_id);
-                                break;
-                            }
-                            let _ = proxy.send_event(());
-                        }
-                    }
-                }
-            })
-            .context("failed to spawn PTY reader thread")?;
+        let reader = session.reader().context("failed to clone PTY reader")?;
+        spawn_pty_reader(
+            reader,
+            params.tx.clone(),
+            self.event_proxy.clone(),
+            id,
+            pane_id,
+        )
+        .context("failed to spawn PTY reader thread")?;
 
-        let palette = config.theme.resolve();
+        let palette = params.config.theme.resolve();
         let mut terminal = Terminal::with_config(
-            rows,
-            cols,
-            config.terminal.max_scrollback,
+            params.rows,
+            params.cols,
+            params.config.terminal.max_scrollback,
             palette.default_fg,
             palette.default_bg,
             palette.ansi,
@@ -144,8 +90,12 @@ impl FerrumWindow {
             .unwrap_or("shell")
             .to_string();
 
-        let is_renamed = title.is_some();
-        let tab_title = title.unwrap_or(shell_name);
+        let is_renamed = params.title.is_some();
+        let tab_title = params
+            .title
+            .as_ref()
+            .cloned()
+            .unwrap_or(shell_name);
 
         Ok(TabState {
             id,

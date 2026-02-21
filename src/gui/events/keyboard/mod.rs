@@ -16,8 +16,7 @@ impl FerrumWindow {
         if let Some(leaf) = self.active_leaf_mut() {
             leaf.scroll_offset = 0;
             leaf.selection = None;
-            let _ = leaf.pty_writer.write_all(bytes);
-            let _ = leaf.pty_writer.flush();
+            leaf.write_pty(bytes);
         }
         self.keyboard_selection_anchor = None;
     }

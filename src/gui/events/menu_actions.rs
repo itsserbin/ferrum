@@ -1,5 +1,3 @@
-use std::io::Write;
-
 use crate::config::AppConfig;
 use crate::core::{Grid, Selection, SelectionPoint};
 use crate::gui::menus::MenuAction;
@@ -89,8 +87,7 @@ impl FerrumWindow {
                     leaf.terminal.reset_scroll_region();
                     leaf.scroll_offset = 0;
                     leaf.selection = None;
-                    let _ = leaf.pty_writer.write_all(Self::CLEAR_PTY_SEQUENCE);
-                    let _ = leaf.pty_writer.flush();
+                    leaf.write_pty(Self::CLEAR_PTY_SEQUENCE);
                 }
                 self.selection_anchor = None;
                 self.keyboard_selection_anchor = None;
@@ -100,8 +97,7 @@ impl FerrumWindow {
                     leaf.terminal.full_reset();
                     leaf.scroll_offset = 0;
                     leaf.selection = None;
-                    let _ = leaf.pty_writer.write_all(Self::CLEAR_PTY_SEQUENCE);
-                    let _ = leaf.pty_writer.flush();
+                    leaf.write_pty(Self::CLEAR_PTY_SEQUENCE);
                 }
                 self.selection_anchor = None;
                 self.keyboard_selection_anchor = None;

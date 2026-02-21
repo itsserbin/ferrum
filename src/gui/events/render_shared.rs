@@ -422,14 +422,17 @@ pub(in crate::gui::events) fn draw_frame_content(
     #[cfg(not(target_os = "macos"))]
     {
         if tab_bar.tab_bar_visible {
+            let tab_bar_params = crate::gui::renderer::TabBarDrawParams {
+                tabs: frame_tab_infos,
+                hovered_tab: params.hovered_tab,
+                mouse_pos: params.mouse_pos,
+                tab_offsets: tab_bar.tab_offsets.as_deref(),
+                pinned: params.pinned,
+                settings_open: crate::gui::platform::is_settings_window_open(),
+            };
             renderer.draw_tab_bar(
                 &mut target,
-                frame_tab_infos,
-                params.hovered_tab,
-                params.mouse_pos,
-                tab_bar.tab_offsets.as_deref(),
-                params.pinned,
-                crate::gui::platform::is_settings_window_open(),
+                &tab_bar_params,
             );
 
             // 5) Draw drag overlay.

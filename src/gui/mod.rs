@@ -9,7 +9,6 @@ mod renderer;
 mod state;
 mod tabs;
 
-use std::io::Write;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::sync::mpsc;

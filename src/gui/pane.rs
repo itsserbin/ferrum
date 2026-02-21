@@ -141,6 +141,17 @@ impl PaneLeaf {
                 .and_then(crate::pty::cwd::get_process_cwd)
         })
     }
+
+    /// Writes bytes to this pane's PTY, logging errors instead of silently discarding them.
+    pub(super) fn write_pty(&mut self, bytes: &[u8]) {
+        if let Err(e) = self.pty_writer.write_all(bytes) {
+            eprintln!("[ferrum] PTY write failed for pane {}: {e}", self.id);
+            return;
+        }
+        if let Err(e) = self.pty_writer.flush() {
+            eprintln!("[ferrum] PTY flush failed for pane {}: {e}", self.id);
+        }
+    }
 }
 
 /// An internal split node holding two children.

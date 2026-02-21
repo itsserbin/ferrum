@@ -1,14 +1,12 @@
 use crate::core::SelectionPoint;
 use crate::gui::*;
 
-const MULTI_CLICK_TIMEOUT_MS: u128 = 400;
-
 impl FerrumWindow {
     fn update_terminal_click_streak(&mut self, pos: Position) -> u8 {
         let now = std::time::Instant::now();
         let elapsed = now.duration_since(self.last_click_time);
         if self.click_streak > 0
-            && elapsed.as_millis() < MULTI_CLICK_TIMEOUT_MS
+            && elapsed.as_millis() < super::MULTI_CLICK_TIMEOUT_MS
             && self.last_click_pos == pos
         {
             self.click_streak = (self.click_streak % 3) + 1;
@@ -26,11 +24,17 @@ impl FerrumWindow {
         mx: f64,
         my: f64,
     ) {
+        // Consume focus-click before any mouse-reporting or selection logic.
+        if state == ElementState::Pressed && self.suppress_click_to_cursor_once {
+            self.suppress_click_to_cursor_once = false;
+            return;
+        }
+
         // Terminal area click
         let (row, col) = self.pixel_to_grid(mx, my);
 
         // Mouse reporting mode (Shift overrides to selection)
-        if self.is_mouse_reporting() {
+        if self.is_mouse_reporting() && !self.modifiers.shift_key() {
             match state {
                 ElementState::Pressed => {
                     self.is_selecting = true; // track for drag reporting
@@ -60,12 +64,6 @@ impl FerrumWindow {
 
         match state {
             ElementState::Pressed => {
-                let is_focus_click = self.suppress_click_to_cursor_once;
-                self.suppress_click_to_cursor_once = false;
-                if is_focus_click {
-                    return;
-                }
-
                 self.is_selecting = true;
                 self.keyboard_selection_anchor = None;
 

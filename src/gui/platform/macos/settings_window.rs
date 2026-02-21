@@ -56,8 +56,7 @@ struct NativeSettingsState {
     limit_cursor_jumps_check: Retained<NSButton>,
     clear_mouse_on_reset_check: Retained<NSButton>,
     // Reset (kept alive so ObjC retains the button; never read from Rust).
-    #[allow(dead_code)]
-    reset_button: Retained<NSButton>,
+    _reset_button: Retained<NSButton>,
 }
 
 // SAFETY: NativeSettingsState is only created and accessed on the main thread.
@@ -253,7 +252,7 @@ fn sync_security_controls(state: &NativeSettingsState) {
 
 /// Reads all control values and sends the resulting config through the channel.
 pub fn send_current_config() {
-    let guard = SETTINGS_STATE.lock().unwrap();
+    let guard = SETTINGS_STATE.lock().unwrap_or_else(|e| e.into_inner());
     let Some(state) = guard.as_ref() else {
         return;
     };
@@ -265,7 +264,7 @@ pub fn send_current_config() {
 /// Parses editable text field values and updates the corresponding steppers.
 /// Called before reading stepper values so manual text input is reflected.
 pub fn sync_text_fields_to_steppers() {
-    let guard = SETTINGS_STATE.lock().unwrap();
+    let guard = SETTINGS_STATE.lock().unwrap_or_else(|e| e.into_inner());
     let Some(state) = guard.as_ref() else {
         return;
     };
@@ -297,7 +296,7 @@ pub fn sync_text_fields_to_steppers() {
 
 /// Updates all text fields to match the current stepper values.
 pub fn update_text_fields() {
-    let guard = SETTINGS_STATE.lock().unwrap();
+    let guard = SETTINGS_STATE.lock().unwrap_or_else(|e| e.into_inner());
     let Some(state) = guard.as_ref() else {
         return;
     };
@@ -339,7 +338,7 @@ pub fn update_text_fields() {
 
 /// Resets all controls to their default values and updates text fields.
 pub fn reset_controls_to_defaults() {
-    let guard = SETTINGS_STATE.lock().unwrap();
+    let guard = SETTINGS_STATE.lock().unwrap_or_else(|e| e.into_inner());
     let Some(state) = guard.as_ref() else {
         return;
     };
@@ -391,57 +390,60 @@ fn set_checkbox(button: &NSButton, on: bool) {
 
 /// Returns true if the settings window exists but is no longer visible.
 pub fn check_window_closed() -> bool {
-    let guard = SETTINGS_STATE.lock().unwrap();
+    let guard = SETTINGS_STATE.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(ref state) = *guard {
         return !state.window.isVisible();
     }
     false
 }
 
-/// Creates a label + NSTextField (value display) + NSStepper row.
-/// Returns (value_field, stepper). The label is added to the parent view.
-#[allow(clippy::too_many_arguments)]
-fn create_stepper_row(
-    mtm: MainThreadMarker,
-    parent: &NSView,
-    label_text: &str,
+struct StepperRowParams<'a> {
+    parent: &'a NSView,
+    label_text: &'a str,
     value: f64,
     min: f64,
     max: f64,
     step: f64,
     y_offset: f64,
+}
+
+/// Creates a label + NSTextField (value display) + NSStepper row.
+/// Returns (value_field, stepper). The label is added to the parent view.
+fn create_stepper_row(
+    mtm: MainThreadMarker,
+    params: &StepperRowParams<'_>,
 ) -> (Retained<NSTextField>, Retained<NSStepper>) {
-    let label = NSTextField::labelWithString(&NSString::from_str(label_text), mtm);
+    let label = NSTextField::labelWithString(&NSString::from_str(params.label_text), mtm);
     label.setFrame(NSRect::new(
-        NSPoint::new(20.0, y_offset),
+        NSPoint::new(20.0, params.y_offset),
         NSSize::new(160.0, 24.0),
     ));
-    parent.addSubview(&label);
+    params.parent.addSubview(&label);
 
-    let value_str = if step < 1.0 {
-        format!("{:.1}", value)
+    let value_str = if params.step < 1.0 {
+        format!("{:.1}", params.value)
     } else {
-        format!("{}", value as i64)
+        format!("{}", params.value as i64)
     };
     let value_field = NSTextField::textFieldWithString(&NSString::from_str(&value_str), mtm);
     value_field.setFrame(NSRect::new(
-        NSPoint::new(200.0, y_offset),
+        NSPoint::new(200.0, params.y_offset),
         NSSize::new(80.0, 24.0),
     ));
     value_field.setEditable(true);
     value_field.setBezeled(true);
-    parent.addSubview(&value_field);
+    params.parent.addSubview(&value_field);
 
     let stepper = NSStepper::initWithFrame(
         mtm.alloc(),
-        NSRect::new(NSPoint::new(290.0, y_offset), NSSize::new(20.0, 24.0)),
+        NSRect::new(NSPoint::new(290.0, params.y_offset), NSSize::new(20.0, 24.0)),
     );
-    stepper.setMinValue(min);
-    stepper.setMaxValue(max);
-    stepper.setIncrement(step);
-    stepper.setDoubleValue(value);
+    stepper.setMinValue(params.min);
+    stepper.setMaxValue(params.max);
+    stepper.setIncrement(params.step);
+    stepper.setDoubleValue(params.value);
     stepper.setValueWraps(false);
-    parent.addSubview(&stepper);
+    params.parent.addSubview(&stepper);
 
     (value_field, stepper)
 }
@@ -522,14 +524,14 @@ fn create_checkbox_row(
 
 /// Returns true if the native settings window is currently open.
 pub fn is_settings_window_open() -> bool {
-    SETTINGS_STATE.lock().unwrap().is_some()
+    SETTINGS_STATE.lock().unwrap_or_else(|e| e.into_inner()).is_some()
 }
 
 /// Opens the native macOS settings window. No-op if already open.
 pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>) {
     if is_settings_window_open() {
         // Bring existing window to front.
-        if let Some(ref state) = *SETTINGS_STATE.lock().unwrap() {
+        if let Some(ref state) = *SETTINGS_STATE.lock().unwrap_or_else(|e| e.into_inner()) {
             state.window.makeKeyAndOrderFront(None);
         }
         return;
@@ -584,13 +586,15 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
 
     let (font_size_field, font_size_stepper) = create_stepper_row(
         mtm,
-        &font_view,
-        "Font Size:",
-        f64::from(config.font.size),
-        8.0,
-        32.0,
-        0.5,
-        280.0,
+        &StepperRowParams {
+            parent: &font_view,
+            label_text: "Font Size:",
+            value: f64::from(config.font.size),
+            min: f64::from(FontConfig::SIZE_MIN),
+            max: f64::from(FontConfig::SIZE_MAX),
+            step: f64::from(FontConfig::SIZE_STEP),
+            y_offset: 280.0,
+        },
     );
 
     let font_family_popup = create_popup_row(
@@ -604,13 +608,15 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
 
     let (line_padding_field, line_padding_stepper) = create_stepper_row(
         mtm,
-        &font_view,
-        "Line Padding:",
-        f64::from(config.font.line_padding),
-        0.0,
-        10.0,
-        1.0,
-        180.0,
+        &StepperRowParams {
+            parent: &font_view,
+            label_text: "Line Padding:",
+            value: f64::from(config.font.line_padding),
+            min: 0.0,
+            max: 10.0,
+            step: 1.0,
+            y_offset: 180.0,
+        },
     );
 
     font_tab.setView(Some(&font_view));
@@ -652,24 +658,28 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
 
     let (scrollback_field, scrollback_stepper) = create_stepper_row(
         mtm,
-        &terminal_view,
-        "Max Scrollback:",
-        config.terminal.max_scrollback as f64,
-        0.0,
-        50000.0,
-        100.0,
-        280.0,
+        &StepperRowParams {
+            parent: &terminal_view,
+            label_text: "Max Scrollback:",
+            value: config.terminal.max_scrollback as f64,
+            min: 0.0,
+            max: 50000.0,
+            step: 100.0,
+            y_offset: 280.0,
+        },
     );
 
     let (cursor_blink_field, cursor_blink_stepper) = create_stepper_row(
         mtm,
-        &terminal_view,
-        "Cursor Blink (ms):",
-        config.terminal.cursor_blink_interval_ms as f64,
-        100.0,
-        2000.0,
-        50.0,
-        230.0,
+        &StepperRowParams {
+            parent: &terminal_view,
+            label_text: "Cursor Blink (ms):",
+            value: config.terminal.cursor_blink_interval_ms as f64,
+            min: TerminalConfig::BLINK_MS_MIN as f64,
+            max: TerminalConfig::BLINK_MS_MAX as f64,
+            step: TerminalConfig::BLINK_MS_STEP as f64,
+            y_offset: 230.0,
+        },
     );
 
     terminal_tab.setView(Some(&terminal_view));
@@ -687,35 +697,41 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
 
     let (window_padding_field, window_padding_stepper) = create_stepper_row(
         mtm,
-        &layout_view,
-        "Window Padding:",
-        f64::from(config.layout.window_padding),
-        0.0,
-        32.0,
-        1.0,
-        280.0,
+        &StepperRowParams {
+            parent: &layout_view,
+            label_text: "Window Padding:",
+            value: f64::from(config.layout.window_padding),
+            min: 0.0,
+            max: 32.0,
+            step: 1.0,
+            y_offset: 280.0,
+        },
     );
 
     let (pane_padding_field, pane_padding_stepper) = create_stepper_row(
         mtm,
-        &layout_view,
-        "Pane Padding:",
-        f64::from(config.layout.pane_inner_padding),
-        0.0,
-        16.0,
-        1.0,
-        230.0,
+        &StepperRowParams {
+            parent: &layout_view,
+            label_text: "Pane Padding:",
+            value: f64::from(config.layout.pane_inner_padding),
+            min: 0.0,
+            max: 16.0,
+            step: 1.0,
+            y_offset: 230.0,
+        },
     );
 
     let (scrollbar_width_field, scrollbar_width_stepper) = create_stepper_row(
         mtm,
-        &layout_view,
-        "Scrollbar Width:",
-        f64::from(config.layout.scrollbar_width),
-        2.0,
-        16.0,
-        1.0,
-        180.0,
+        &StepperRowParams {
+            parent: &layout_view,
+            label_text: "Scrollbar Width:",
+            value: f64::from(config.layout.scrollbar_width),
+            min: 2.0,
+            max: 16.0,
+            step: 1.0,
+            y_offset: 180.0,
+        },
     );
 
     layout_tab.setView(Some(&layout_view));
@@ -936,14 +952,14 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
         block_title_query_check,
         limit_cursor_jumps_check,
         clear_mouse_on_reset_check,
-        reset_button,
+        _reset_button: reset_button,
     };
-    *SETTINGS_STATE.lock().unwrap() = Some(state);
+    *SETTINGS_STATE.lock().unwrap_or_else(|e| e.into_inner()) = Some(state);
 }
 
 /// Closes the native settings window, saves the final config, and cleans up state.
 pub fn close_settings_window() {
-    if let Some(state) = SETTINGS_STATE.lock().unwrap().take() {
+    if let Some(state) = SETTINGS_STATE.lock().unwrap_or_else(|e| e.into_inner()).take() {
         let config = build_config_from_controls(&state);
         crate::config::save_config(&config);
         state.window.close();

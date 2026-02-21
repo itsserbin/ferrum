@@ -28,8 +28,7 @@ impl FerrumWindow {
 
                     let responses = leaf.terminal.drain_responses();
                     if !responses.is_empty() {
-                        let _ = leaf.pty_writer.write_all(&responses);
-                        let _ = leaf.pty_writer.flush();
+                        leaf.write_pty(&responses);
                     }
                 }
             }

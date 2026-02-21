@@ -4,23 +4,17 @@
 
 use super::super::shared::tab_math;
 use super::super::traits::Renderer;
-use super::super::types::TabSlot;
-use super::super::TabInfo;
+use super::super::types::{TabBarDrawParams, TabSlot};
 
 impl super::GpuRenderer {
     // ── Tab bar rendering: orchestrator ─────────────────────────────────
 
-    #[allow(clippy::too_many_arguments)]
     pub(super) fn draw_tab_bar_impl(
         &mut self,
         buf_width: usize,
-        tabs: &[TabInfo],
-        hovered_tab: Option<usize>,
-        mouse_pos: (f64, f64),
-        tab_offsets: Option<&[f32]>,
-        pinned: bool,
-        settings_open: bool,
+        params: &TabBarDrawParams<'_>,
     ) {
+        let tabs = params.tabs;
         let bw = buf_width as u32;
         let tw = self.tab_width(tabs.len(), bw);
         let m = self.tab_layout_metrics();
@@ -30,9 +24,9 @@ impl super::GpuRenderer {
         self.tab_bar_background_commands(bw);
 
         for (i, tab) in tabs.iter().enumerate() {
-            let anim_offset = tab_offsets.and_then(|o| o.get(i)).copied().unwrap_or(0.0);
+            let anim_offset = params.tab_offsets.and_then(|o| o.get(i)).copied().unwrap_or(0.0);
             let tab_x = self.tab_origin_x(i, tw) as f32 + anim_offset;
-            let is_hovered = hovered_tab == Some(i);
+            let is_hovered = params.hovered_tab == Some(i);
 
             let slot = TabSlot {
                 index: i,
@@ -53,22 +47,22 @@ impl super::GpuRenderer {
             }
         }
 
-        self.plus_button_commands(tabs.len(), tw, mouse_pos);
+        self.plus_button_commands(tabs.len(), tw, params.mouse_pos);
 
         #[cfg(not(target_os = "macos"))]
-        self.draw_pin_button_commands(mouse_pos, pinned);
+        self.draw_pin_button_commands(params.mouse_pos, params.pinned);
 
         #[cfg(not(target_os = "macos"))]
-        self.draw_gear_button_commands(mouse_pos, settings_open);
+        self.draw_gear_button_commands(params.mouse_pos, params.settings_open);
 
         #[cfg(target_os = "macos")]
-        let _ = pinned;
+        let _ = params.pinned;
 
         #[cfg(target_os = "macos")]
-        let _ = settings_open;
+        let _ = params.settings_open;
 
         #[cfg(not(target_os = "macos"))]
-        self.draw_window_buttons_commands(bw, mouse_pos);
+        self.draw_window_buttons_commands(bw, params.mouse_pos);
 
         // Bottom separator line.
         let tab_bar_h = self.metrics.tab_bar_height_px() as f32;

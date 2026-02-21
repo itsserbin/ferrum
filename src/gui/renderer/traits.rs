@@ -152,12 +152,7 @@ pub trait Renderer {
     fn draw_tab_bar(
         &mut self,
         target: &mut RenderTarget<'_>,
-        tabs: &[TabInfo],
-        hovered_tab: Option<usize>,
-        mouse_pos: (f64, f64),
-        tab_offsets: Option<&[f32]>,
-        pinned: bool,
-        settings_open: bool,
+        params: &super::TabBarDrawParams<'_>,
     );
 
     #[cfg(not(target_os = "macos"))]

@@ -2,9 +2,12 @@ use anyhow::Context;
 
 use crate::config::AppConfig;
 use crate::gui::pane::{
-    DIVIDER_WIDTH, NavigateDirection, PaneLeaf, PaneNode, PaneRect, SplitDirection,
+    DIVIDER_WIDTH, NavigateDirection, PaneLeaf, PaneNode, SplitDirection,
 };
+#[cfg(not(target_os = "linux"))]
+use crate::gui::tabs::create::NewTabParams;
 use crate::gui::tabs::normalized_active_index_after_remove;
+use crate::gui::tabs::pty_reader::spawn_pty_reader;
 use crate::gui::*;
 
 impl FerrumWindow {
@@ -68,6 +71,7 @@ impl FerrumWindow {
     }
 
     /// Duplicates a tab by creating a new session with copied title.
+    #[cfg(not(target_os = "linux"))]
     pub(in crate::gui) fn duplicate_tab(
         &mut self,
         index: usize,
@@ -84,7 +88,15 @@ impl FerrumWindow {
             .and_then(|l| l.cwd());
         let size = self.window.inner_size();
         let (rows, cols) = self.calc_grid_size(size.width, size.height);
-        self.new_tab_with_title(rows, cols, Some(title), next_tab_id, tx, cwd, config);
+        self.new_tab(NewTabParams {
+            rows,
+            cols,
+            title: Some(title),
+            next_tab_id,
+            tx,
+            cwd,
+            config,
+        });
     }
 
     /// Switches active tab.
@@ -254,11 +266,9 @@ impl FerrumWindow {
             }
         };
 
-        // Spawn PTY reader thread (same pattern as tabs/create.rs).
+        // Spawn PTY reader thread using shared helper.
         {
-            let tx = tx.clone();
-            let proxy = self.event_proxy.clone();
-            let mut reader = match session
+            let reader = match session
                 .reader()
                 .context("failed to clone PTY reader for new pane")
             {
@@ -268,54 +278,15 @@ impl FerrumWindow {
                     return;
                 }
             };
-            let reader_pane_id = pane_id;
-            std::thread::Builder::new()
-                .name(format!("pty-reader-{}-{}", tab_id, reader_pane_id))
-                .spawn(move || {
-                    use std::io::Read;
-                    let mut buf = [0u8; 4096];
-                    loop {
-                        match reader.read(&mut buf) {
-                            Ok(0) => {
-                                let _ = tx.send(PtyEvent::Exited {
-                                    tab_id,
-                                    pane_id: reader_pane_id,
-                                });
-                                let _ = proxy.send_event(());
-                                break;
-                            }
-                            Err(err) => {
-                                eprintln!(
-                                    "PTY read error for tab {tab_id} pane {reader_pane_id}: {err}"
-                                );
-                                let _ = tx.send(PtyEvent::Exited {
-                                    tab_id,
-                                    pane_id: reader_pane_id,
-                                });
-                                let _ = proxy.send_event(());
-                                break;
-                            }
-                            Ok(n) => {
-                                if tx
-                                    .send(PtyEvent::Data {
-                                        tab_id,
-                                        pane_id: reader_pane_id,
-                                        bytes: buf[..n].to_vec(),
-                                    })
-                                    .is_err()
-                                {
-                                    eprintln!(
-                                        "PTY reader {}-{}: channel disconnected",
-                                        tab_id, reader_pane_id
-                                    );
-                                    break;
-                                }
-                                let _ = proxy.send_event(());
-                            }
-                        }
-                    }
-                })
-                .ok();
+            if let Err(err) = spawn_pty_reader(
+                reader,
+                tx.clone(),
+                self.event_proxy.clone(),
+                tab_id,
+                pane_id,
+            ) {
+                eprintln!("Failed to spawn PTY reader for pane: {err}");
+            }
         }
 
         let palette = config.theme.resolve();
@@ -369,15 +340,7 @@ impl FerrumWindow {
     /// Navigates focus to the nearest pane in the given direction from the currently
     /// focused pane, using spatial proximity of pane centers.
     pub(in crate::gui) fn navigate_pane(&mut self, direction: NavigateDirection) {
-        let size = self.window.inner_size();
-        let tab_bar_h = self.backend.tab_bar_height_px();
-        let padding = self.backend.window_padding_px();
-        let terminal_rect = PaneRect {
-            x: padding,
-            y: tab_bar_h + padding,
-            width: size.width.saturating_sub(padding * 2),
-            height: size.height.saturating_sub(tab_bar_h + padding * 2),
-        };
+        let terminal_rect = self.terminal_content_rect();
         let divider_px = DIVIDER_WIDTH;
         let Some(tab) = self.active_tab_mut() else {
             return;
@@ -391,18 +354,9 @@ impl FerrumWindow {
     /// Recalculates pane dimensions for the active tab based on current window size,
     /// resizing each pane's terminal and PTY session accordingly.
     pub(in crate::gui) fn resize_all_panes(&mut self) {
-        let size = self.window.inner_size();
-        let tab_bar_h = self.backend.tab_bar_height_px();
-        let padding = self.backend.window_padding_px();
         let cw = self.backend.cell_width();
         let ch = self.backend.cell_height();
-
-        let terminal_rect = PaneRect {
-            x: padding,
-            y: tab_bar_h + padding,
-            width: size.width.saturating_sub(padding * 2),
-            height: size.height.saturating_sub(tab_bar_h + padding * 2),
-        };
+        let terminal_rect = self.terminal_content_rect();
 
         let divider_px = DIVIDER_WIDTH;
         let scaled_pane_pad = self.backend.pane_inner_padding_px();

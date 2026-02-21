@@ -4,7 +4,9 @@ use crate::gui::pane::PaneRect;
 use super::super::traits;
 use super::super::types::SecurityPopup;
 #[cfg(not(target_os = "macos"))]
-use super::super::types::TabInfo;
+use super::super::types::TabBarDrawParams;
+#[cfg(not(target_os = "macos"))]
+use super::super::TabInfo;
 use super::super::{RenderTarget, ScrollbarState};
 use super::CpuRenderer;
 
@@ -123,14 +125,9 @@ impl traits::Renderer for CpuRenderer {
     fn draw_tab_bar(
         &mut self,
         target: &mut RenderTarget<'_>,
-        tabs: &[TabInfo],
-        hovered_tab: Option<usize>,
-        mouse_pos: (f64, f64),
-        tab_offsets: Option<&[f32]>,
-        pinned: bool,
-        settings_open: bool,
+        params: &TabBarDrawParams<'_>,
     ) {
-        CpuRenderer::draw_tab_bar(self, target, tabs, hovered_tab, mouse_pos, tab_offsets, pinned, settings_open);
+        CpuRenderer::draw_tab_bar(self, target, params);
     }
 
     #[cfg(not(target_os = "macos"))]

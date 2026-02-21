@@ -136,8 +136,9 @@ impl FerrumWindow {
             });
         }
 
-        // Always restore cursor after drag ends.
+        // Always restore cursor and redraw after drag ends.
         self.window.set_cursor(CursorIcon::Default);
+        self.window.request_redraw();
     }
 
     /// Cancels any in-progress drag without performing a reorder.

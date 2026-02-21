@@ -38,6 +38,23 @@ pub(crate) fn font_data(family: FontFamily) -> &'static [u8] {
     }
 }
 
+/// Loads the primary font and fallback fonts for the given family.
+pub(crate) fn load_fonts(family: FontFamily) -> (fontdue::Font, Vec<fontdue::Font>) {
+    let font_data = font_data(family);
+    let font = fontdue::Font::from_bytes(font_data, fontdue::FontSettings::default())
+        .expect("font load failed");
+
+    let fallback_fonts: Vec<fontdue::Font> = fallback_fonts_data()
+        .iter()
+        .map(|d| {
+            fontdue::Font::from_bytes(*d, fontdue::FontSettings::default())
+                .expect("fallback font load failed")
+        })
+        .collect();
+
+    (font, fallback_fonts)
+}
+
 /// Returns embedded fallback font data in priority order.
 ///
 /// 1. Noto Sans Symbols — Arrows, Misc Technical, Dingbats, Misc Symbols

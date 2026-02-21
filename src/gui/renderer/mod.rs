@@ -28,10 +28,6 @@ pub const SCROLLBAR_HIT_ZONE: u32 = 14;
 /// Margin between the thumb right edge and the window right edge.
 pub const SCROLLBAR_MARGIN: u32 = 2;
 
-/// Tab bar height in pixels.
-#[cfg(not(target_os = "macos"))]
-pub const TAB_BAR_HEIGHT: u32 = 36;
-
 /// Minimum scrollbar thumb height in base UI pixels.
 pub(super) const SCROLLBAR_MIN_THUMB: u32 = 20;
 
@@ -52,7 +48,7 @@ pub(super) fn scale_changed(old: f64, new: f64) -> bool {
 }
 
 /// Blends `src` over `dst` with `alpha` in 0..=255 (both colors are 0xRRGGBB).
-pub(super) fn blend_rgb(dst: u32, src: u32, alpha: u8) -> u32 {
+pub(crate) fn blend_rgb(dst: u32, src: u32, alpha: u8) -> u32 {
     if alpha == 255 {
         return src;
     }

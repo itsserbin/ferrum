@@ -12,7 +12,7 @@ use super::shared::tab_math;
 use super::*;
 use super::RenderTarget;
 use super::RoundedShape;
-use super::types::TabSlot;
+use super::types::{TabBarDrawParams, TabSlot};
 
 // Tab-bar palette constants (BAR_BG, TAB_TEXT_ACTIVE, INSERTION_COLOR, etc.)
 // are centralized in the parent `renderer/mod.rs` and imported via `use super::*`.
@@ -20,17 +20,12 @@ use super::types::TabSlot;
 
 impl CpuRenderer {
     /// Draws top tab bar including tabs, controls, and separators.
-    #[allow(clippy::too_many_arguments)]
     pub fn draw_tab_bar(
         &mut self,
         target: &mut RenderTarget<'_>,
-        tabs: &[TabInfo],
-        hovered_tab: Option<usize>,
-        mouse_pos: (f64, f64),
-        tab_offsets: Option<&[f32]>,
-        pinned: bool,
-        settings_open: bool,
+        params: &TabBarDrawParams<'_>,
     ) {
+        let tabs = params.tabs;
         let tab_bar_height = self.tab_bar_height_px();
         let bar_h = tab_bar_height as usize;
         let buf_width = target.width;
@@ -55,9 +50,9 @@ impl CpuRenderer {
         }
 
         for (i, tab) in tabs.iter().enumerate() {
-            let anim_offset = tab_offsets.and_then(|o| o.get(i)).copied().unwrap_or(0.0);
+            let anim_offset = params.tab_offsets.and_then(|o| o.get(i)).copied().unwrap_or(0.0);
             let tab_x = (self.tab_origin_x(i, tw) as f32 + anim_offset).round() as u32;
-            let is_hovered = hovered_tab == Some(i);
+            let is_hovered = params.hovered_tab == Some(i);
 
             let slot = TabSlot {
                 index: i,
@@ -81,7 +76,7 @@ impl CpuRenderer {
         // Plus button.
         {
             let plus_rect = self.plus_button_rect(tabs.len(), tw);
-            let plus_hover = tab_math::point_in_rect(mouse_pos.0, mouse_pos.1, plus_rect);
+            let plus_hover = tab_math::point_in_rect(params.mouse_pos.0, params.mouse_pos.1, plus_rect);
             if plus_hover {
                 let (px, py, pw, ph) = plus_rect;
                 self.draw_rounded_rect(
@@ -106,19 +101,19 @@ impl CpuRenderer {
         }
 
         #[cfg(not(target_os = "macos"))]
-        self.draw_pin_button(target, mouse_pos, pinned);
+        self.draw_pin_button(target, params.mouse_pos, params.pinned);
 
         #[cfg(not(target_os = "macos"))]
-        self.draw_gear_button(target, mouse_pos, settings_open);
+        self.draw_gear_button(target, params.mouse_pos, params.settings_open);
 
         #[cfg(target_os = "macos")]
-        let _ = pinned;
+        let _ = params.pinned;
 
         #[cfg(target_os = "macos")]
-        let _ = settings_open;
+        let _ = params.settings_open;
 
         #[cfg(not(target_os = "macos"))]
-        self.draw_window_buttons(target, mouse_pos);
+        self.draw_window_buttons(target, params.mouse_pos);
 
         // Bottom separator.
         if bar_h > 0 {
@@ -127,7 +122,7 @@ impl CpuRenderer {
                 let idx = py * target.width + px;
                 if idx < target.buffer.len() {
                     target.buffer[idx] =
-                        Self::blend_pixel(target.buffer[idx], self.palette.tab_border.to_pixel(), 180);
+                        crate::gui::renderer::blend_rgb(target.buffer[idx], self.palette.tab_border.to_pixel(), 180);
                 }
             }
         }
@@ -174,7 +169,7 @@ impl CpuRenderer {
                     if px < buf_width {
                         let idx = py * buf_width + px;
                         if idx < target.buffer.len() {
-                            target.buffer[idx] = Self::blend_pixel(target.buffer[idx], fill_bg, alpha);
+                            target.buffer[idx] = crate::gui::renderer::blend_rgb(target.buffer[idx], fill_bg, alpha);
                         }
                     }
                 }

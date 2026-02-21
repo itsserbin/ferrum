@@ -6,6 +6,14 @@ use crate::gui::pane::PaneRect;
 use super::GridBatch;
 use super::buffers::{GridUniforms, PackedCell};
 
+/// Attribute bit flags for GPU packed cell format.
+const ATTR_BOLD: u32 = 1 << 0;
+const ATTR_ITALIC: u32 = 1 << 1;
+const ATTR_UNDERLINE: u32 = 1 << 2;
+const ATTR_REVERSE: u32 = 1 << 3;
+const ATTR_DIM: u32 = 1 << 4;
+const ATTR_STRIKETHROUGH: u32 = 1 << 5;
+
 impl super::GpuRenderer {
     pub(super) fn terminal_texture_extent(&self) -> (u32, u32) {
         let padding = self.metrics.window_padding_px();
@@ -86,12 +94,12 @@ impl super::GpuRenderer {
                 }
 
                 let mut attrs = 0u32;
-                if cell.bold { attrs |= 1; }
-                if cell.italic { attrs |= 2; }
-                if cell.underline_style != UnderlineStyle::None { attrs |= 4; }
-                if cell.reverse { attrs |= 8; }
-                if cell.dim { attrs |= 16; }
-                if cell.strikethrough { attrs |= 32; }
+                if cell.bold { attrs |= ATTR_BOLD; }
+                if cell.italic { attrs |= ATTR_ITALIC; }
+                if cell.underline_style != UnderlineStyle::None { attrs |= ATTR_UNDERLINE; }
+                if cell.reverse { attrs |= ATTR_REVERSE; }
+                if cell.dim { attrs |= ATTR_DIM; }
+                if cell.strikethrough { attrs |= ATTR_STRIKETHROUGH; }
                 // Encode underline style in bits 6-7
                 attrs |= (cell.underline_style as u32 & 3) << 6;
 
