@@ -111,13 +111,39 @@ fn to_wide(text: &str) -> Vec<u16> {
 fn confirm_window_close_linux(window: &Window) -> bool {
     let _ = window;
 
-    rfd::MessageDialog::new()
-        .set_title("Close Ferrum")
-        .set_description(
-            "Closing this terminal window will stop all running processes in its tabs.",
-        )
-        .set_level(rfd::MessageLevel::Warning)
-        .set_buttons(rfd::MessageButtons::OkCancel)
-        .show()
-        == rfd::MessageDialogResult::Ok
+    // Use zenity for a blocking close-confirmation dialog.
+    // GTK4 only provides async dialogs, which cannot block the winit event loop.
+    // zenity is available on virtually all Linux desktops.
+    match std::process::Command::new("zenity")
+        .args([
+            "--question",
+            "--title=Close Ferrum",
+            "--text=Closing this terminal window will stop all running processes in its tabs.",
+            "--ok-label=Close",
+            "--cancel-label=Cancel",
+            "--icon-name=dialog-warning",
+        ])
+        .status()
+    {
+        Ok(status) => status.success(),
+        Err(_) => {
+            // zenity unavailable — try kdialog (KDE).
+            match std::process::Command::new("kdialog")
+                .args([
+                    "--warningyesno",
+                    "Closing this terminal window will stop all running processes in its tabs.",
+                    "--title",
+                    "Close Ferrum",
+                    "--yes-label",
+                    "Close",
+                    "--no-label",
+                    "Cancel",
+                ])
+                .status()
+            {
+                Ok(status) => status.success(),
+                Err(_) => true, // No dialog tool found — allow close.
+            }
+        }
+    }
 }

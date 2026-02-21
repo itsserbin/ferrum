@@ -429,7 +429,7 @@ pub(in crate::gui::events) fn draw_frame_content(
                 params.mouse_pos,
                 tab_bar.tab_offsets.as_deref(),
                 params.pinned,
-                false, // TODO: check is_settings_window_open() per platform
+                crate::gui::platform::is_settings_window_open(),
             );
 
             // 5) Draw drag overlay.
