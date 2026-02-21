@@ -45,10 +45,14 @@ pub(in crate::gui) struct CategoryLayout {
     /// Whether this category is the currently active one.
     #[allow(dead_code)] // Read in tests; will be used for rendering differentiation.
     pub is_active: bool,
+    /// Left accent bar for the active category (None if not active).
+    pub indicator: Option<FlatRectCmd>,
 }
 
 /// Layout for a single setting item row in the content area.
 pub(in crate::gui) struct ItemLayout {
+    /// Optional hover background for this item row.
+    pub row_bg: Option<FlatRectCmd>,
     /// Setting label text.
     pub label: TextCmd,
     /// Control-specific layout (stepper, dropdown).
@@ -402,10 +406,24 @@ fn build_category_layouts(
                 opacity: 1.0,
             };
 
+            let indicator = if is_active {
+                Some(FlatRectCmd {
+                    x: panel_x,
+                    y: row_y,
+                    w: 2.0,
+                    h: row_h as f32,
+                    color: accent,
+                    opacity: 1.0,
+                })
+            } else {
+                None
+            };
+
             CategoryLayout {
                 bg,
                 text,
                 is_active,
+                indicator,
             }
         })
         .collect()
@@ -435,6 +453,20 @@ fn build_item_layouts(
         .map(|(i, item)| {
             let row_y = area_y + (i as u32 * row_h) as f32;
             let label_y = row_y + (row_h as f32 - cell_height as f32) / 2.0;
+
+            let is_hovered = overlay.hovered_item == Some(i);
+            let row_bg = if is_hovered {
+                Some(FlatRectCmd {
+                    x: area_x,
+                    y: row_y,
+                    w: area_w,
+                    h: row_h as f32,
+                    color: bar_bg,
+                    opacity: 0.2,
+                })
+            } else {
+                None
+            };
 
             let label_text = item_label(item);
             let label = TextCmd {
@@ -509,7 +541,7 @@ fn build_item_layouts(
                 ),
             };
 
-            ItemLayout { label, controls }
+            ItemLayout { row_bg, label, controls }
         })
         .collect()
 }

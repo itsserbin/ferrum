@@ -66,11 +66,17 @@ impl super::GpuRenderer {
             if cat.bg.opacity > 0.0 {
                 self.push_rect(cat.bg.x, cat.bg.y, cat.bg.w, cat.bg.h, cat.bg.color, cat.bg.opacity);
             }
+            if let Some(ref ind) = cat.indicator {
+                self.push_rect(ind.x, ind.y, ind.w, ind.h, ind.color, ind.opacity);
+            }
             self.push_text(cat.text.x, cat.text.y, &cat.text.text, cat.text.color, cat.text.opacity);
         }
 
         // Items (non-dropdown parts first).
         for item in &layout.items {
+            if let Some(ref bg) = item.row_bg {
+                self.push_rect(bg.x, bg.y, bg.w, bg.h, bg.color, bg.opacity);
+            }
             self.push_text(
                 item.label.x, item.label.y,
                 &item.label.text, item.label.color, item.label.opacity,

@@ -45,11 +45,17 @@ impl super::CpuRenderer {
             if cat.bg.opacity > 0.0 {
                 self.draw_flat_rect_cmd(target, &cat.bg);
             }
+            if let Some(ref ind) = cat.indicator {
+                self.draw_flat_rect_cmd(target, ind);
+            }
             self.draw_text_cmd(target, &cat.text);
         }
 
         // Items (non-dropdown parts first).
         for item in &layout.items {
+            if let Some(ref bg) = item.row_bg {
+                self.draw_flat_rect_cmd(target, bg);
+            }
             self.draw_text_cmd(target, &item.label);
             match &item.controls {
                 ItemControlLayout::Stepper {
