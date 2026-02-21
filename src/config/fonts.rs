@@ -73,4 +73,25 @@ mod tests {
         let font = fontdue::Font::from_bytes(data, fontdue::FontSettings::default());
         assert!(font.is_ok(), "fallback font should be a valid font");
     }
+
+    #[test]
+    fn fallback_covers_nerd_font_symbols() {
+        let primary_data = font_data(FontFamily::JetBrainsMono);
+        let primary =
+            fontdue::Font::from_bytes(primary_data, fontdue::FontSettings::default()).unwrap();
+
+        let fallback_data = fallback_font_data();
+        let fallback =
+            fontdue::Font::from_bytes(fallback_data, fontdue::FontSettings::default()).unwrap();
+
+        // U+E700 is a Nerd Font dev icon — not in JetBrains Mono but present in Symbols Nerd Font Mono.
+        assert!(
+            !primary.has_glyph('\u{E700}'),
+            "primary should lack U+E700"
+        );
+        assert!(
+            fallback.has_glyph('\u{E700}'),
+            "fallback should have U+E700"
+        );
+    }
 }
