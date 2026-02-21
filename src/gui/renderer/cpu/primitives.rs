@@ -36,7 +36,12 @@ impl CpuRenderer {
         fg: Color,
     ) {
         if !self.glyph_cache.contains_key(&character) {
-            let (metrics, bitmap) = self.font.rasterize(character, self.metrics.font_size);
+            let font = if self.font.has_glyph(character) {
+                &self.font
+            } else {
+                &self.fallback_font
+            };
+            let (metrics, bitmap) = font.rasterize(character, self.metrics.font_size);
             let cached = super::super::types::GlyphBitmap {
                 data: bitmap,
                 width: metrics.width,
