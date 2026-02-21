@@ -73,6 +73,7 @@ const UDM_SETRANGE32: u32 = 0x046F;
 const UDM_SETPOS32: u32 = 0x0471;
 const UDM_GETPOS32: u32 = 0x0472;
 const UDM_SETBUDDY: u32 = 0x0469;
+const UDN_DELTAPOS: u32 = (-722i32) as u32;
 
 // Control styles
 const SS_LEFT: u32 = 0x0000_0000;
@@ -84,6 +85,26 @@ const BST_CHECKED: usize = 0x0001;
 const BST_UNCHECKED: usize = 0x0000;
 const ES_READONLY: u32 = 0x0800;
 const ES_RIGHT: u32 = 0x0002;
+
+// ── Window layout — all positions derived from these constants ────────
+mod layout {
+    pub const MARGIN: i32 = 5;
+    pub const TAB_HEADER_H: i32 = 35;
+    pub const ROW_SPACING: i32 = 38;
+    pub const MAX_ROWS: i32 = 5; // Security tab has the most: combo + 4 checkboxes
+    pub const CONTENT_X: i32 = 20;
+    pub const CONTENT_Y: i32 = MARGIN + TAB_HEADER_H;
+
+    pub const CLIENT_W: i32 = 470;
+    pub const TAB_W: i32 = CLIENT_W - 2 * MARGIN;
+    pub const TAB_H: i32 = TAB_HEADER_H + MAX_ROWS * ROW_SPACING + 15;
+
+    pub const BTN_W: i32 = 150;
+    pub const BTN_H: i32 = 30;
+    pub const RESET_X: i32 = (CLIENT_W - BTN_W) / 2;
+    pub const RESET_Y: i32 = MARGIN + TAB_H + 10;
+    pub const CLIENT_H: i32 = RESET_Y + BTN_H + MARGIN;
+}
 
 static WINDOW_OPEN: AtomicBool = AtomicBool::new(false);
 static JUST_CLOSED: AtomicBool = AtomicBool::new(false);
@@ -238,15 +259,24 @@ fn run_win32_window(config: AppConfig, tx: mpsc::Sender<AppConfig>) {
         RegisterClassExW(&wc);
 
         let title = to_wide("Ferrum Settings");
+        let style = WS_OVERLAPPEDWINDOW & !WS_MAXIMIZEBOX & !WS_THICKFRAME;
+        let mut rect = RECT {
+            left: 0,
+            top: 0,
+            right: layout::CLIENT_W,
+            bottom: layout::CLIENT_H,
+        };
+        AdjustWindowRectEx(&mut rect, style, 0, 0);
+
         let hwnd = CreateWindowExW(
             0,
             class_name.as_ptr(),
             title.as_ptr(),
-            WS_OVERLAPPEDWINDOW & !WS_MAXIMIZEBOX & !WS_THICKFRAME,
+            style,
             CW_USEDEFAULT,
             CW_USEDEFAULT,
-            480,
-            480,
+            rect.right - rect.left,
+            rect.bottom - rect.top,
             std::ptr::null_mut(),
             std::ptr::null_mut(),
             hinstance,
@@ -297,11 +327,14 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             let nmhdr = &*(lparam as *const NMHDR);
             if nmhdr.idFrom == id::TAB_CONTROL as usize && nmhdr.code == TCN_SELCHANGE {
                 on_tab_change();
+            } else if nmhdr.code == UDN_DELTAPOS {
+                // UDN_DELTAPOS fires before position change — defer reading
+                // values until the UpDown has updated its position.
+                PostMessageW(hwnd, WM_APP, 0, 0);
             }
             0
         }
-        WM_VSCROLL => {
-            // UpDown controls send WM_VSCROLL *after* updating position.
+        WM_APP => {
             on_value_changed();
             0
         }
@@ -328,7 +361,12 @@ fn on_value_changed() {
     let mutex = SETTINGS_STATE.get_or_init(|| Mutex::new(None));
     let guard = mutex.lock().unwrap();
     if let Some(ref state) = *guard {
+        // SUPPRESS prevents deadlock: update_all_displays calls SetWindowTextW
+        // which synchronously sends WM_COMMAND(EN_CHANGE) back to this thread.
+        // Without SUPPRESS, on_command would try to lock the same mutex → deadlock.
+        SUPPRESS.store(true, Ordering::Relaxed);
         update_all_displays(state);
+        SUPPRESS.store(false, Ordering::Relaxed);
         let config = build_config(state);
         let _ = state.tx.send(config);
     }
@@ -406,7 +444,7 @@ unsafe fn create_controls(
         tab_ctrl_class.as_ptr(),
         to_wide("").as_ptr(),
         WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS,
-        5, 5, 460, 370,
+        layout::MARGIN, layout::MARGIN, layout::TAB_W, layout::TAB_H,
         hwnd,
         id::TAB_CONTROL as isize as HMENU,
         hinstance,
@@ -423,9 +461,9 @@ unsafe fn create_controls(
         SendMessageW(tab_ctrl, TCM_INSERTITEMW, i, &item as *const _ as LPARAM);
     }
 
-    let x0 = 20;  // Left margin inside tab control
-    let y0 = 40;  // Top margin (below tab headers)
-    let sp = 38;   // Vertical spacing between rows
+    let x0 = layout::CONTENT_X;
+    let y0 = layout::CONTENT_Y;
+    let sp = layout::ROW_SPACING;
 
     // ── Font tab controls ────────────────────────────────────────────
     let mut font_page = Vec::new();
@@ -562,7 +600,7 @@ unsafe fn create_controls(
         to_wide("BUTTON").as_ptr(),
         reset_text.as_ptr(),
         WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-        160, 385, 150, 30,
+        layout::RESET_X, layout::RESET_Y, layout::BTN_W, layout::BTN_H,
         hwnd,
         id::RESET_BUTTON as isize as HMENU,
         hinstance,
