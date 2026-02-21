@@ -29,7 +29,7 @@ pub fn confirm_window_close(window: &Window) -> bool {
 fn confirm_window_close_macos(window: &Window) -> bool {
     use objc2::MainThreadMarker;
     use objc2_app_kit::{NSAlert, NSAlertFirstButtonReturn, NSAlertStyle};
-    use objc2_foundation::ns_string;
+    use objc2_foundation::NSString;
 
     let _ = window;
 
@@ -38,14 +38,13 @@ fn confirm_window_close_macos(window: &Window) -> bool {
         return false;
     };
 
+    let t = crate::i18n::t();
     let alert = NSAlert::new(mtm);
     alert.setAlertStyle(NSAlertStyle::Warning);
-    alert.setMessageText(ns_string!("Close Ferrum?"));
-    alert.setInformativeText(ns_string!(
-        "Closing this terminal window will stop all running processes in its tabs."
-    ));
-    alert.addButtonWithTitle(ns_string!("Close"));
-    alert.addButtonWithTitle(ns_string!("Cancel"));
+    alert.setMessageText(&NSString::from_str(t.close_dialog_title));
+    alert.setInformativeText(&NSString::from_str(t.close_dialog_body));
+    alert.addButtonWithTitle(&NSString::from_str(t.close_dialog_confirm));
+    alert.addButtonWithTitle(&NSString::from_str(t.close_dialog_cancel));
     alert.runModal() == NSAlertFirstButtonReturn
 }
 
@@ -80,10 +79,10 @@ fn confirm_window_close_windows(window: &Window) -> bool {
         })
         .unwrap_or(ptr::null_mut());
 
-    let caption = to_wide("Close Ferrum");
-    let text = to_wide(
-        "Closing this terminal window will stop all running processes in its tabs.\n\nClose Ferrum?",
-    );
+    let t = crate::i18n::t();
+    let caption = to_wide(t.close_dialog_title);
+    let body = format!("{}\n\n{}", t.close_dialog_body, t.close_dialog_title);
+    let text = to_wide(&body);
 
     // SAFETY: Arguments are valid and null-terminated UTF-16 pointers. Parent handle may
     // be null, which MessageBoxW accepts.
@@ -111,16 +110,22 @@ fn to_wide(text: &str) -> Vec<u16> {
 fn confirm_window_close_linux(window: &Window) -> bool {
     let _ = window;
 
+    let t = crate::i18n::t();
+    let title_arg = format!("--title={}", t.close_dialog_title);
+    let text_arg = format!("--text={}", t.close_dialog_body);
+    let ok_arg = format!("--ok-label={}", t.close_dialog_confirm);
+    let cancel_arg = format!("--cancel-label={}", t.close_dialog_cancel);
+
     // Use zenity for a blocking close-confirmation dialog.
     // GTK4 only provides async dialogs, which cannot block the winit event loop.
     // zenity is available on virtually all Linux desktops.
     match std::process::Command::new("zenity")
         .args([
             "--question",
-            "--title=Close Ferrum",
-            "--text=Closing this terminal window will stop all running processes in its tabs.",
-            "--ok-label=Close",
-            "--cancel-label=Cancel",
+            &title_arg,
+            &text_arg,
+            &ok_arg,
+            &cancel_arg,
             "--icon-name=dialog-warning",
         ])
         .status()
@@ -131,13 +136,13 @@ fn confirm_window_close_linux(window: &Window) -> bool {
             match std::process::Command::new("kdialog")
                 .args([
                     "--warningyesno",
-                    "Closing this terminal window will stop all running processes in its tabs.",
+                    t.close_dialog_body,
                     "--title",
-                    "Close Ferrum",
+                    t.close_dialog_title,
                     "--yes-label",
-                    "Close",
+                    t.close_dialog_confirm,
                     "--no-label",
-                    "Cancel",
+                    t.close_dialog_cancel,
                 ])
                 .status()
             {
