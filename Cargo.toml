@@ -53,6 +53,7 @@ windows-sys = { version = "0.59", features = [
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", features = [
     "NSButton",
+    "NSColor",
     "NSControl",
     "NSFont",
     "NSGraphics",

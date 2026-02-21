@@ -7,8 +7,8 @@ use objc2::msg_send;
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, Sel};
 use objc2_app_kit::{
-    NSBackingStoreType, NSButton, NSPopUpButton, NSStepper, NSTabView, NSTabViewItem, NSTextField,
-    NSView, NSWindow, NSWindowStyleMask,
+    NSBackingStoreType, NSButton, NSPopUpButton, NSStepper, NSTabView, NSTabViewItem,
+    NSTextField, NSView, NSWindow, NSWindowStyleMask,
 };
 use objc2_foundation::{NSPoint, NSRect, NSSize, NSString, ns_string};
 
@@ -149,10 +149,9 @@ fn build_config_from_controls(state: &NativeSettingsState) -> AppConfig {
     AppConfig {
         font: FontConfig {
             size: state.font_size_stepper.doubleValue() as f32,
-            family: match state.font_family_popup.indexOfSelectedItem() {
-                0 => FontFamily::JetBrainsMono,
-                _ => FontFamily::FiraCode,
-            },
+            family: FontFamily::from_index(
+                state.font_family_popup.indexOfSelectedItem() as usize,
+            ),
             line_padding: state.line_padding_stepper.integerValue() as u32,
         },
         theme: match state.theme_popup.indexOfSelectedItem() {
@@ -478,16 +477,16 @@ fn create_popup_row(
     popup
 }
 
-/// Creates a label + checkbox (`NSButton` with switch/checkbox type) row.
-/// Returns the checkbox button. The label is built into the button title.
+/// Creates a checkbox with a small description label underneath.
+/// Returns the checkbox button.
 fn create_checkbox_row(
     mtm: MainThreadMarker,
     parent: &NSView,
     label_text: &str,
+    description: &str,
     checked: bool,
     y_offset: f64,
 ) -> Retained<NSButton> {
-    // SAFETY: checkboxWithTitle is a safe AppKit class method.
     let checkbox = unsafe {
         NSButton::checkboxWithTitle_target_action(
             &NSString::from_str(label_text),
@@ -498,10 +497,26 @@ fn create_checkbox_row(
     };
     checkbox.setFrame(NSRect::new(
         NSPoint::new(20.0, y_offset),
-        NSSize::new(300.0, 24.0),
+        NSSize::new(400.0, 18.0),
     ));
     set_checkbox(&checkbox, checked);
     parent.addSubview(&checkbox);
+
+    // Small description label below the checkbox.
+    let desc_label = NSTextField::wrappingLabelWithString(
+        &NSString::from_str(description),
+        mtm,
+    );
+    // x=40 aligns with the checkbox label text (checkbox indicator is ~18px wide).
+    desc_label.setFrame(NSRect::new(
+        NSPoint::new(40.0, y_offset - 16.0),
+        NSSize::new(380.0, 14.0),
+    ));
+    use objc2_app_kit::{NSColor, NSFont};
+    desc_label.setFont(Some(&NSFont::systemFontOfSize(11.0)));
+    desc_label.setTextColor(Some(&NSColor::secondaryLabelColor()));
+    parent.addSubview(&desc_label);
+
     checkbox
 }
 
@@ -578,16 +593,12 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
         280.0,
     );
 
-    let family_selected = match config.font.family {
-        FontFamily::JetBrainsMono => 0,
-        FontFamily::FiraCode => 1,
-    };
     let font_family_popup = create_popup_row(
         mtm,
         &font_view,
         "Font Family:",
-        &["JetBrains Mono", "Fira Code"],
-        family_selected,
+        FontFamily::DISPLAY_NAMES,
+        config.font.family.index(),
         230.0,
     );
 
@@ -737,6 +748,7 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
         mtm,
         &security_view,
         "Paste Protection",
+        "Warn before pasting text with suspicious control characters",
         config.security.paste_protection,
         240.0,
     );
@@ -744,22 +756,25 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
         mtm,
         &security_view,
         "Block Title Query",
+        "Block programs from reading the terminal window title",
         config.security.block_title_query,
-        210.0,
+        194.0,
     );
     let limit_cursor_jumps_check = create_checkbox_row(
         mtm,
         &security_view,
         "Limit Cursor Jumps",
+        "Restrict how far escape sequences can move the cursor",
         config.security.limit_cursor_jumps,
-        180.0,
+        148.0,
     );
     let clear_mouse_on_reset_check = create_checkbox_row(
         mtm,
         &security_view,
         "Clear Mouse on Reset",
+        "Disable mouse tracking modes when the terminal resets",
         config.security.clear_mouse_on_reset,
-        150.0,
+        102.0,
     );
 
     security_tab.setView(Some(&security_view));

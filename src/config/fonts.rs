@@ -2,7 +2,7 @@ use super::FontFamily;
 
 /// Returns the embedded font bytes for the given font family.
 ///
-/// Both fonts are compiled into the binary via `include_bytes!`.
+/// All fonts are compiled into the binary via `include_bytes!`.
 pub(crate) fn font_data(family: FontFamily) -> &'static [u8] {
     match family {
         FontFamily::JetBrainsMono => {
@@ -17,6 +17,24 @@ pub(crate) fn font_data(family: FontFamily) -> &'static [u8] {
                 "/assets/fonts/FiraCode-Regular.ttf"
             ))
         }
+        FontFamily::CascadiaCode => {
+            include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/assets/fonts/CascadiaCode-Regular.ttf"
+            ))
+        }
+        FontFamily::UbuntuMono => {
+            include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/assets/fonts/UbuntuMono-Regular.ttf"
+            ))
+        }
+        FontFamily::SourceCodePro => {
+            include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/assets/fonts/SourceCodePro-Regular.ttf"
+            ))
+        }
     }
 }
 
@@ -24,17 +42,20 @@ pub(crate) fn font_data(family: FontFamily) -> &'static [u8] {
 mod tests {
     use super::*;
 
+    /// Validates that every `FontFamily` variant loads as a valid font.
     #[test]
-    fn jetbrains_mono_loads_as_valid_font() {
-        let data = font_data(FontFamily::JetBrainsMono);
-        let font = fontdue::Font::from_bytes(data, fontdue::FontSettings::default());
-        assert!(font.is_ok(), "JetBrainsMono should be a valid font");
-    }
-
-    #[test]
-    fn fira_code_loads_as_valid_font() {
-        let data = font_data(FontFamily::FiraCode);
-        let font = fontdue::Font::from_bytes(data, fontdue::FontSettings::default());
-        assert!(font.is_ok(), "FiraCode should be a valid font");
+    fn all_fonts_load_as_valid() {
+        let families = [
+            FontFamily::JetBrainsMono,
+            FontFamily::FiraCode,
+            FontFamily::CascadiaCode,
+            FontFamily::UbuntuMono,
+            FontFamily::SourceCodePro,
+        ];
+        for family in families {
+            let data = font_data(family);
+            let font = fontdue::Font::from_bytes(data, fontdue::FontSettings::default());
+            assert!(font.is_ok(), "{family:?} should be a valid font");
+        }
     }
 }

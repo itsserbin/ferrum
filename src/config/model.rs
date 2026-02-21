@@ -69,6 +69,39 @@ pub(crate) enum FontFamily {
     #[default]
     JetBrainsMono,
     FiraCode,
+    CascadiaCode,
+    UbuntuMono,
+    SourceCodePro,
+}
+
+impl FontFamily {
+    /// Display names for UI dropdowns — order matches variant order.
+    pub(crate) const DISPLAY_NAMES: &'static [&'static str] = &[
+        "JetBrains Mono",
+        "Fira Code",
+        "Cascadia Code",
+        "Ubuntu Mono",
+        "Source Code Pro",
+    ];
+
+    /// All variants in declaration order.
+    pub(crate) const ALL: &'static [FontFamily] = &[
+        FontFamily::JetBrainsMono,
+        FontFamily::FiraCode,
+        FontFamily::CascadiaCode,
+        FontFamily::UbuntuMono,
+        FontFamily::SourceCodePro,
+    ];
+
+    /// Returns the index of this variant (matches `DISPLAY_NAMES` and `ALL`).
+    pub(crate) fn index(self) -> usize {
+        Self::ALL.iter().position(|&v| v == self).unwrap_or(0)
+    }
+
+    /// Returns the variant at the given index, or the default if out of range.
+    pub(crate) fn from_index(i: usize) -> Self {
+        Self::ALL.get(i).copied().unwrap_or_default()
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]

@@ -145,11 +145,8 @@ impl SettingsOverlay {
             },
             SettingItem::EnumChoice {
                 label: "Font Family",
-                options: &["JetBrains Mono", "Fira Code"],
-                selected: match font.family {
-                    FontFamily::JetBrainsMono => 0,
-                    FontFamily::FiraCode => 1,
-                },
+                options: FontFamily::DISPLAY_NAMES,
+                selected: font.family.index(),
             },
             SettingItem::IntSlider {
                 label: "Line Padding",

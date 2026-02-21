@@ -312,10 +312,8 @@ impl FerrumWindow {
         if let SettingItem::EnumChoice { label, .. } = item {
             match *label {
                 "Font Family" => {
-                    overlay.editing_config.font.family = match option_index {
-                        0 => FontFamily::JetBrainsMono,
-                        _ => FontFamily::FiraCode,
-                    };
+                    overlay.editing_config.font.family =
+                        FontFamily::from_index(option_index);
                 }
                 "Theme" => {
                     overlay.editing_config.theme = match option_index {

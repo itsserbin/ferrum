@@ -844,7 +844,7 @@ fn build_dropdown_control(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::AppConfig;
+    use crate::config::{AppConfig, FontFamily};
 
     fn default_overlay() -> SettingsOverlay {
         SettingsOverlay::new(&AppConfig::default())
@@ -1005,7 +1005,7 @@ mod tests {
         let layout = compute_test_layout(&overlay);
         match &layout.items[1].controls {
             ItemControlLayout::Dropdown { options, .. } => {
-                assert_eq!(options.len(), 2);
+                assert_eq!(options.len(), FontFamily::DISPLAY_NAMES.len());
             }
             _ => panic!("expected Dropdown control for font family"),
         }
