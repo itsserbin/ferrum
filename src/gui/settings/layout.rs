@@ -1084,6 +1084,31 @@ mod tests {
     }
 
     #[test]
+    fn dropdown_hover_changes_opacity() {
+        let config = AppConfig::default();
+        let mut overlay = SettingsOverlay::new(&config);
+        let layout_normal = compute_test_layout(&overlay);
+        overlay.hovered_dropdown = Some(1); // Font Family dropdown
+        let layout_hovered = compute_test_layout(&overlay);
+        match (
+            &layout_normal.items[1].controls,
+            &layout_hovered.items[1].controls,
+        ) {
+            (
+                ItemControlLayout::Dropdown {
+                    button: normal, ..
+                },
+                ItemControlLayout::Dropdown {
+                    button: hovered, ..
+                },
+            ) => {
+                assert!(hovered.opacity > normal.opacity);
+            }
+            _ => panic!("expected Dropdown"),
+        }
+    }
+
+    #[test]
     fn item_row_hover_produces_background() {
         let config = AppConfig::default();
         let mut overlay = SettingsOverlay::new(&config);

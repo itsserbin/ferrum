@@ -203,10 +203,13 @@ impl FerrumWindow {
         }
 
         // Check item hover + control hover.
+        let ch = self.backend.cell_height() as f64;
+        let row_h = ch * 2.5;
         for (i, item_layout) in layout.items.iter().enumerate() {
+            // Derive row_y from label_y by reversing the vertical centering offset.
             let label_y = item_layout.label.y as f64;
-            let row_bottom = label_y + self.backend.cell_height() as f64 * 2.5;
-            if my >= label_y && my < row_bottom {
+            let row_y = label_y - (row_h - ch) / 2.0;
+            if my >= row_y && my < row_y + row_h {
                 new_hovered_item = Some(i);
             }
 
