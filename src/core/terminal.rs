@@ -69,6 +69,7 @@ pub struct Terminal {
     pub pending_responses: Vec<u8>, // Bytes queued for PTY replies.
     pub mouse_mode: MouseMode,
     pub sgr_mouse: bool,
+    pub bracketed_paste: bool,
     pub security_config: SecurityConfig,
     pending_security_events: Vec<SecurityEventKind>,
     pub cursor_style: CursorStyle,
@@ -121,6 +122,7 @@ impl Terminal {
             pending_responses: Vec::new(),
             mouse_mode: MouseMode::Off,
             sgr_mouse: false,
+            bracketed_paste: false,
             security_config: SecurityConfig::default(),
             pending_security_events: Vec::new(),
             cursor_style: CursorStyle::default(),
@@ -248,6 +250,10 @@ impl Terminal {
         self.sgr_mouse = enabled;
     }
 
+    fn set_bracketed_paste(&mut self, enabled: bool) {
+        self.bracketed_paste = enabled;
+    }
+
     fn set_cursor_style(&mut self, style: CursorStyle) {
         self.cursor_style = style;
     }
@@ -366,6 +372,7 @@ impl Terminal {
         self.cursor_visible = true;
         self.cursor_style = CursorStyle::default();
         self.pending_responses.clear();
+        self.bracketed_paste = false;
         if self.security_config.clear_mouse_on_reset {
             self.clear_mouse_tracking(true);
         }

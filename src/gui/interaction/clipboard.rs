@@ -119,7 +119,7 @@ impl FerrumWindow {
                 return;
             };
             leaf.security.check_paste_payload(&text);
-            if leaf.security.should_wrap_paste() {
+            if leaf.terminal.bracketed_paste {
                 Self::wrap_bracketed_paste(&text)
             } else {
                 text.as_bytes().to_vec()
