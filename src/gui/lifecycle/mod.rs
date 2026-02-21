@@ -261,11 +261,13 @@ impl ApplicationHandler for App {
             if language_changed
                 && platform::macos::settings_window::is_settings_window_open()
             {
+                let tab_idx = platform::macos::settings_window::selected_tab_index();
                 platform::macos::settings_window::close_settings_window();
                 platform::macos::settings_window::open_settings_window(
                     &self.config,
                     self.settings_tx.clone(),
                 );
+                platform::macos::settings_window::select_tab(tab_idx);
             }
         }
 

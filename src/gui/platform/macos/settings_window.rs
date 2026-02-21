@@ -29,6 +29,7 @@ use crate::config::{
 struct NativeSettingsState {
     window: Retained<NSWindow>,
     sender: mpsc::Sender<AppConfig>,
+    tab_view: Retained<NSTabView>,
     // Font
     font_size_stepper: Retained<NSStepper>,
     font_size_field: Retained<NSTextField>,
@@ -532,6 +533,29 @@ pub fn is_settings_window_open() -> bool {
     SETTINGS_STATE.lock().unwrap_or_else(|e| e.into_inner()).is_some()
 }
 
+/// Returns the index of the currently selected tab, or 0 if the window is closed.
+pub fn selected_tab_index() -> usize {
+    let guard = SETTINGS_STATE.lock().unwrap();
+    match guard.as_ref() {
+        Some(state) => {
+            let idx = state.tab_view.indexOfTabViewItem(state.tab_view.selectedTabViewItem().as_deref().unwrap());
+            idx as usize
+        }
+        None => 0,
+    }
+}
+
+/// Selects the tab at the given index. No-op if the window is closed or index is out of range.
+pub fn select_tab(index: usize) {
+    let guard = SETTINGS_STATE.lock().unwrap();
+    if let Some(state) = guard.as_ref() {
+        let count = state.tab_view.numberOfTabViewItems();
+        if (index as isize) < count {
+            state.tab_view.selectTabViewItemAtIndex(index as isize);
+        }
+    }
+}
+
 /// Opens the native macOS settings window. No-op if already open.
 pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>) {
     if is_settings_window_open() {
@@ -948,6 +972,7 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
     let state = NativeSettingsState {
         window: window.clone(),
         sender,
+        tab_view,
         font_size_stepper,
         font_size_field,
         font_family_popup,
