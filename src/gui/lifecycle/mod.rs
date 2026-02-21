@@ -200,6 +200,23 @@ impl ApplicationHandler for App {
             }
         }
 
+        // Poll atomic flags from native settings window ObjC callbacks.
+        #[cfg(target_os = "macos")]
+        {
+            if platform::macos::settings_window::take_settings_changed() {
+                platform::macos::settings_window::update_text_fields();
+                platform::macos::settings_window::send_current_config();
+            }
+            if platform::macos::settings_window::take_reset_requested() {
+                platform::macos::settings_window::reset_controls_to_defaults();
+                platform::macos::settings_window::send_current_config();
+            }
+            if platform::macos::settings_window::check_window_closed() {
+                platform::macos::settings_window::send_current_config();
+                platform::macos::settings_window::close_settings_window();
+            }
+        }
+
         // Apply config changes from native settings window.
         #[cfg(target_os = "macos")]
         while let Ok(new_config) = self.settings_rx.try_recv() {

@@ -1,16 +1,21 @@
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 
 use objc2::MainThreadMarker;
+use objc2::msg_send;
 use objc2::rc::Retained;
-use objc2::runtime::AnyObject;
+use objc2::runtime::{AnyObject, Sel};
 use objc2_app_kit::{
     NSBackingStoreType, NSButton, NSPopUpButton, NSStepper, NSTabView, NSTabViewItem, NSTextField,
     NSView, NSWindow, NSWindowStyleMask,
 };
 use objc2_foundation::{NSPoint, NSRect, NSSize, NSString, ns_string};
 
-use crate::config::{AppConfig, FontFamily, ThemeChoice};
+use super::ffi::{class_addMethod, class_replaceMethod, object_getClass, sel_registerName};
+use crate::config::{
+    AppConfig, FontConfig, FontFamily, LayoutConfig, TerminalConfig, ThemeChoice,
+};
 
 /// Holds references to the native settings window and all its controls.
 ///
@@ -56,6 +61,184 @@ struct NativeSettingsState {
 unsafe impl Send for NativeSettingsState {}
 
 static SETTINGS_STATE: Mutex<Option<NativeSettingsState>> = Mutex::new(None);
+
+/// Atomic flag: a control value changed in the settings window.
+static SETTINGS_CHANGED: AtomicBool = AtomicBool::new(false);
+
+/// Atomic flag: Reset to Defaults was clicked.
+static RESET_REQUESTED: AtomicBool = AtomicBool::new(false);
+
+/// ObjC action handler for all settings controls (steppers, popups).
+///
+/// # Safety
+///
+/// Called by the Objective-C runtime as a method implementation.
+/// Signature matches the type encoding "v@:@".
+unsafe extern "C" fn handle_settings_control_changed(
+    _this: *mut core::ffi::c_void,
+    _cmd: *const core::ffi::c_void,
+    _sender: *mut core::ffi::c_void,
+) {
+    SETTINGS_CHANGED.store(true, Ordering::SeqCst);
+}
+
+/// ObjC action handler for the Reset to Defaults button.
+///
+/// # Safety
+///
+/// Called by the Objective-C runtime as a method implementation.
+/// Signature matches the type encoding "v@:@".
+unsafe extern "C" fn handle_reset_clicked(
+    _this: *mut core::ffi::c_void,
+    _cmd: *const core::ffi::c_void,
+    _sender: *mut core::ffi::c_void,
+) {
+    RESET_REQUESTED.store(true, Ordering::SeqCst);
+}
+
+/// Returns and resets the settings-changed flag.
+pub fn take_settings_changed() -> bool {
+    SETTINGS_CHANGED.swap(false, Ordering::SeqCst)
+}
+
+/// Returns and resets the reset-requested flag.
+pub fn take_reset_requested() -> bool {
+    RESET_REQUESTED.swap(false, Ordering::SeqCst)
+}
+
+/// Builds an `AppConfig` from the current control values.
+fn build_config_from_controls(state: &NativeSettingsState) -> AppConfig {
+    AppConfig {
+        font: FontConfig {
+            size: state.font_size_stepper.doubleValue() as f32,
+            family: match state.font_family_popup.indexOfSelectedItem() {
+                0 => FontFamily::JetBrainsMono,
+                _ => FontFamily::FiraCode,
+            },
+            line_padding: state.line_padding_stepper.integerValue() as u32,
+        },
+        theme: match state.theme_popup.indexOfSelectedItem() {
+            0 => ThemeChoice::FerrumDark,
+            _ => ThemeChoice::CatppuccinLatte,
+        },
+        terminal: TerminalConfig {
+            max_scrollback: state.scrollback_stepper.integerValue() as usize,
+            cursor_blink_interval_ms: state.cursor_blink_stepper.integerValue() as u64,
+        },
+        layout: LayoutConfig {
+            window_padding: state.window_padding_stepper.integerValue() as u32,
+            tab_bar_height: state.tab_bar_height_stepper.integerValue() as u32,
+            pane_inner_padding: state.pane_padding_stepper.integerValue() as u32,
+            scrollbar_width: state.scrollbar_width_stepper.integerValue() as u32,
+        },
+    }
+}
+
+/// Reads all control values and sends the resulting config through the channel.
+pub fn send_current_config() {
+    let guard = SETTINGS_STATE.lock().unwrap();
+    let Some(state) = guard.as_ref() else {
+        return;
+    };
+    let config = build_config_from_controls(state);
+    let _ = state.sender.send(config);
+}
+
+/// Updates all text fields to match the current stepper values.
+pub fn update_text_fields() {
+    let guard = SETTINGS_STATE.lock().unwrap();
+    let Some(state) = guard.as_ref() else {
+        return;
+    };
+
+    state.font_size_field.setStringValue(&NSString::from_str(
+        &format!("{:.1}", state.font_size_stepper.doubleValue()),
+    ));
+    state.line_padding_field.setStringValue(&NSString::from_str(
+        &format!("{}", state.line_padding_stepper.integerValue()),
+    ));
+    state.scrollback_field.setStringValue(&NSString::from_str(
+        &format!("{}", state.scrollback_stepper.integerValue()),
+    ));
+    state
+        .cursor_blink_field
+        .setStringValue(&NSString::from_str(&format!(
+            "{}",
+            state.cursor_blink_stepper.integerValue()
+        )));
+    state
+        .window_padding_field
+        .setStringValue(&NSString::from_str(&format!(
+            "{}",
+            state.window_padding_stepper.integerValue()
+        )));
+    state
+        .tab_bar_height_field
+        .setStringValue(&NSString::from_str(&format!(
+            "{}",
+            state.tab_bar_height_stepper.integerValue()
+        )));
+    state
+        .pane_padding_field
+        .setStringValue(&NSString::from_str(&format!(
+            "{}",
+            state.pane_padding_stepper.integerValue()
+        )));
+    state
+        .scrollbar_width_field
+        .setStringValue(&NSString::from_str(&format!(
+            "{}",
+            state.scrollbar_width_stepper.integerValue()
+        )));
+}
+
+/// Resets all controls to their default values and updates text fields.
+pub fn reset_controls_to_defaults() {
+    let guard = SETTINGS_STATE.lock().unwrap();
+    let Some(state) = guard.as_ref() else {
+        return;
+    };
+    let defaults = AppConfig::default();
+
+    state
+        .font_size_stepper
+        .setDoubleValue(f64::from(defaults.font.size));
+    state
+        .line_padding_stepper
+        .setIntegerValue(defaults.font.line_padding as isize);
+    state.font_family_popup.selectItemAtIndex(0); // JetBrainsMono = default
+    state.theme_popup.selectItemAtIndex(0); // FerrumDark = default
+    state
+        .scrollback_stepper
+        .setIntegerValue(defaults.terminal.max_scrollback as isize);
+    state
+        .cursor_blink_stepper
+        .setIntegerValue(defaults.terminal.cursor_blink_interval_ms as isize);
+    state
+        .window_padding_stepper
+        .setIntegerValue(defaults.layout.window_padding as isize);
+    state
+        .tab_bar_height_stepper
+        .setIntegerValue(defaults.layout.tab_bar_height as isize);
+    state
+        .pane_padding_stepper
+        .setIntegerValue(defaults.layout.pane_inner_padding as isize);
+    state
+        .scrollbar_width_stepper
+        .setIntegerValue(defaults.layout.scrollbar_width as isize);
+
+    drop(guard);
+    update_text_fields();
+}
+
+/// Returns true if the settings window exists but is no longer visible.
+pub fn check_window_closed() -> bool {
+    let guard = SETTINGS_STATE.lock().unwrap();
+    if let Some(ref state) = *guard {
+        return !state.window.isVisible();
+    }
+    false
+}
 
 /// Creates a label + NSTextField (value display) + NSStepper row.
 /// Returns (value_field, stepper). The label is added to the parent view.
@@ -347,8 +530,8 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
 
     // ── Reset button ──────────────────────────────────────────────────
 
-    // SAFETY: Passing `None` for target and action is valid; the button
-    // simply won't send any action until wired in a later task.
+    // SAFETY: Passing `None` for target and action is valid; we wire the
+    // action below via class_addMethod + msg_send.
     let reset_button = unsafe {
         NSButton::buttonWithTitle_target_action(
             ns_string!("Reset to Defaults"),
@@ -361,6 +544,65 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
         NSPoint::new(20.0, 8.0),
         NSSize::new(150.0, 28.0),
     ));
+
+    // ── Register ObjC action methods on the window class ──────────────
+
+    // SAFETY: We register two custom selectors on the NSWindow's runtime class
+    // and wire them as target/action pairs. This follows the same pattern used
+    // in pin.rs for the pin and gear buttons. The imp transmutes are required
+    // because class_addMethod expects `unsafe extern "C" fn()` but our handlers
+    // have the standard ObjC action signature (self, cmd, sender).
+    unsafe {
+        let types = c"v@:@".as_ptr();
+        let win_cls = object_getClass(Retained::as_ptr(&window).cast());
+
+        // Settings-changed action (for steppers and popups).
+        let sel_changed_ptr = sel_registerName(c"ferrumSettingsChanged:".as_ptr());
+        let sel_changed = Sel::register(c"ferrumSettingsChanged:");
+        let imp_changed: unsafe extern "C" fn() = core::mem::transmute(
+            handle_settings_control_changed as unsafe extern "C" fn(_, _, _),
+        );
+        if !win_cls.is_null()
+            && !class_addMethod(win_cls, sel_changed_ptr, imp_changed, types)
+        {
+            class_replaceMethod(win_cls, sel_changed_ptr, imp_changed, types);
+        }
+
+        // Reset action (for the reset button).
+        let sel_reset_ptr = sel_registerName(c"ferrumResetClicked:".as_ptr());
+        let sel_reset = Sel::register(c"ferrumResetClicked:");
+        let imp_reset: unsafe extern "C" fn() =
+            core::mem::transmute(handle_reset_clicked as unsafe extern "C" fn(_, _, _));
+        if !win_cls.is_null() && !class_addMethod(win_cls, sel_reset_ptr, imp_reset, types) {
+            class_replaceMethod(win_cls, sel_reset_ptr, imp_reset, types);
+        }
+
+        // Wire all steppers and popups to the settings-changed action.
+        let _: () = msg_send![&font_size_stepper, setTarget: &*window];
+        let _: () = msg_send![&font_size_stepper, setAction: sel_changed];
+        let _: () = msg_send![&font_family_popup, setTarget: &*window];
+        let _: () = msg_send![&font_family_popup, setAction: sel_changed];
+        let _: () = msg_send![&line_padding_stepper, setTarget: &*window];
+        let _: () = msg_send![&line_padding_stepper, setAction: sel_changed];
+        let _: () = msg_send![&theme_popup, setTarget: &*window];
+        let _: () = msg_send![&theme_popup, setAction: sel_changed];
+        let _: () = msg_send![&scrollback_stepper, setTarget: &*window];
+        let _: () = msg_send![&scrollback_stepper, setAction: sel_changed];
+        let _: () = msg_send![&cursor_blink_stepper, setTarget: &*window];
+        let _: () = msg_send![&cursor_blink_stepper, setAction: sel_changed];
+        let _: () = msg_send![&window_padding_stepper, setTarget: &*window];
+        let _: () = msg_send![&window_padding_stepper, setAction: sel_changed];
+        let _: () = msg_send![&tab_bar_height_stepper, setTarget: &*window];
+        let _: () = msg_send![&tab_bar_height_stepper, setAction: sel_changed];
+        let _: () = msg_send![&pane_padding_stepper, setTarget: &*window];
+        let _: () = msg_send![&pane_padding_stepper, setAction: sel_changed];
+        let _: () = msg_send![&scrollbar_width_stepper, setTarget: &*window];
+        let _: () = msg_send![&scrollbar_width_stepper, setAction: sel_changed];
+
+        // Wire reset button.
+        let _: () = msg_send![&reset_button, setTarget: &*window];
+        let _: () = msg_send![&reset_button, setAction: sel_reset];
+    }
 
     // ── Assemble content view ─────────────────────────────────────────
 
@@ -404,9 +646,11 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
     *SETTINGS_STATE.lock().unwrap() = Some(state);
 }
 
-/// Closes the native settings window and cleans up state.
+/// Closes the native settings window, saves the final config, and cleans up state.
 pub fn close_settings_window() {
     if let Some(state) = SETTINGS_STATE.lock().unwrap().take() {
+        let config = build_config_from_controls(&state);
+        crate::config::save_config(&config);
         state.window.close();
     }
 }
