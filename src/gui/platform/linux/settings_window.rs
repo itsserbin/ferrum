@@ -30,6 +30,11 @@ pub fn close_settings_window() {
     CLOSE_REQUESTED.store(true, Ordering::Relaxed);
 }
 
+/// Ensures GTK4 is initialized exactly once on a dedicated thread.
+/// That thread runs a `glib::MainLoop` forever; subsequent windows are
+/// dispatched onto it via `MainContext::default().invoke()`.
+static GTK_INIT: std::sync::Once = std::sync::Once::new();
+
 pub fn open_settings_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>) {
     if WINDOW_OPEN.load(Ordering::Relaxed) {
         return;
@@ -37,25 +42,25 @@ pub fn open_settings_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>) {
     WINDOW_OPEN.store(true, Ordering::Relaxed);
 
     let config = config.clone();
-    std::thread::spawn(move || {
-        run_gtk_window(config, tx);
+
+    GTK_INIT.call_once(|| {
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            gtk4::init().expect("Failed to initialize GTK4");
+            let _ = ready_tx.send(());
+            gtk4::glib::MainLoop::new(None, false).run();
+        });
+        ready_rx.recv().expect("GTK thread failed to initialize");
+    });
+
+    gtk4::glib::MainContext::default().invoke(move || {
+        build_window(&config, tx);
     });
 }
 
 // ── GTK4 window ──────────────────────────────────────────────────────
 
-fn run_gtk_window(config: AppConfig, tx: mpsc::Sender<AppConfig>) {
-    gtk4::init().expect("Failed to initialize GTK4");
-
-    let main_loop = gtk4::glib::MainLoop::new(None, false);
-    build_window(&config, tx, &main_loop);
-    main_loop.run();
-
-    WINDOW_OPEN.store(false, Ordering::Relaxed);
-    JUST_CLOSED.store(true, Ordering::Relaxed);
-}
-
-fn build_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>, main_loop: &gtk4::glib::MainLoop) {
+fn build_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>) {
     let window = Window::builder()
         .title("Ferrum Settings")
         .default_width(500)
@@ -244,13 +249,11 @@ fn build_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>, main_loop: &gtk
         });
     }
 
-    // Quit the main loop after GTK has destroyed the window.
-    {
-        let ml = main_loop.clone();
-        window.connect_destroy(move |_| {
-            ml.quit();
-        });
-    }
+    // Signal lifecycle after GTK has destroyed the window.
+    window.connect_destroy(|_| {
+        WINDOW_OPEN.store(false, Ordering::Relaxed);
+        JUST_CLOSED.store(true, Ordering::Relaxed);
+    });
 
     // Poll CLOSE_REQUESTED so the main thread can close us.
     {
