@@ -220,9 +220,13 @@ impl ApplicationHandler for App {
         // Windows/Linux: config changes are sent directly through the channel
         // from the settings window thread. We only need to detect window close
         // for bookkeeping (the window thread already saved config on close).
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "windows")]
         {
-            platform::settings_window::check_window_closed();
+            platform::windows::settings_window::check_window_closed();
+        }
+        #[cfg(target_os = "linux")]
+        {
+            platform::linux::settings_window::check_window_closed();
         }
 
         // Apply config changes from native settings window.
