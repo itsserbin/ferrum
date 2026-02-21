@@ -39,15 +39,15 @@ pub fn configure_native_tabs(window: &Window) {
         let _: () = msg_send![&ns_window, setTabbingIdentifier: identifier];
     }
 
-    // Diagnostic: print window properties to find what differs between
-    // `cargo run` and bundled .app.
-    {
+    // Diagnostic: print window/app properties.
+    unsafe {
         let mask = ns_window.styleMask();
         let toolbar_style = ns_window.toolbarStyle();
         let title_vis = ns_window.titleVisibility();
         let transparent = ns_window.titlebarAppearsTransparent();
         let has_toolbar = ns_window.toolbar().is_some();
         let tabbing_mode = ns_window.tabbingMode();
+        let full_size = mask.0 & (1 << 15) != 0;
 
         eprintln!("[ferrum-diag] styleMask: {:?}", mask);
         eprintln!("[ferrum-diag] toolbarStyle: {:?}", toolbar_style.0);
@@ -55,10 +55,41 @@ pub fn configure_native_tabs(window: &Window) {
         eprintln!("[ferrum-diag] titlebarAppearsTransparent: {}", transparent);
         eprintln!("[ferrum-diag] hasToolbar: {}", has_toolbar);
         eprintln!("[ferrum-diag] tabbingMode: {:?}", tabbing_mode.0);
-
-        // Check fullSizeContentView bit (1 << 15 = 32768)
-        let full_size = mask.0 & (1 << 15) != 0;
         eprintln!("[ferrum-diag] fullSizeContentView: {}", full_size);
+
+        // NSApp-level diagnostics
+        let sel_shared = sel_registerName(c"sharedApplication".as_ptr());
+        let ns_app_cls = {
+            unsafe extern "C" {
+                fn objc_getClass(name: *const core::ffi::c_char) -> *const core::ffi::c_void;
+            }
+            unsafe { objc_getClass(c"NSApplication".as_ptr()) }
+        };
+        if !ns_app_cls.is_null() {
+            let ns_app = unsafe { objc_msgSend(ns_app_cls, sel_shared) };
+            if !ns_app.is_null() {
+                let sel_policy = sel_registerName(c"activationPolicy".as_ptr());
+                let policy: isize = unsafe { core::mem::transmute(objc_msgSend(ns_app, sel_policy)) };
+                eprintln!("[ferrum-diag] activationPolicy: {}", policy);
+            }
+        }
+
+        // Check if running from a bundle
+        unsafe extern "C" {
+            fn CFBundleGetMainBundle() -> *const core::ffi::c_void;
+            fn CFBundleGetIdentifier(bundle: *const core::ffi::c_void) -> *const core::ffi::c_void;
+        }
+        let bundle = unsafe { CFBundleGetMainBundle() };
+        let has_bundle_id = if bundle.is_null() {
+            false
+        } else {
+            !unsafe { CFBundleGetIdentifier(bundle) }.is_null()
+        };
+        eprintln!("[ferrum-diag] hasMainBundle: {}", !bundle.is_null());
+        eprintln!("[ferrum-diag] hasBundleIdentifier: {}", has_bundle_id);
+
+        // Binary path
+        eprintln!("[ferrum-diag] exe: {:?}", std::env::current_exe().ok());
     }
 }
 
