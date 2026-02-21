@@ -44,6 +44,7 @@ impl GlyphAtlas {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         font: &fontdue::Font,
+        fallback_font: &fontdue::Font,
         font_size: f32,
         ascent: i32,
     ) -> Self {
@@ -82,7 +83,7 @@ impl GlyphAtlas {
         // Pre-populate ASCII 32..127.
         for cp in 32u32..127 {
             if let Some(ch) = char::from_u32(cp) {
-                atlas.insert_glyph(queue, font, font_size, cp, ch);
+                atlas.insert_glyph(queue, font, fallback_font, font_size, cp, ch);
             }
         }
 
@@ -94,6 +95,7 @@ impl GlyphAtlas {
         &mut self,
         codepoint: u32,
         font: &fontdue::Font,
+        fallback_font: &fontdue::Font,
         font_size: f32,
         queue: &wgpu::Queue,
     ) -> GlyphInfo {
@@ -101,7 +103,7 @@ impl GlyphAtlas {
             return *info;
         }
         if let Some(ch) = char::from_u32(codepoint) {
-            self.insert_glyph(queue, font, font_size, codepoint, ch);
+            self.insert_glyph(queue, font, fallback_font, font_size, codepoint, ch);
         }
         self.glyphs.get(&codepoint).copied().unwrap_or(GlyphInfo {
             x: 0.0,
@@ -120,11 +122,17 @@ impl GlyphAtlas {
         &mut self,
         queue: &wgpu::Queue,
         font: &fontdue::Font,
+        fallback_font: &fontdue::Font,
         font_size: f32,
         codepoint: u32,
         ch: char,
     ) {
-        let (metrics, bitmap) = font.rasterize(ch, font_size);
+        let raster_font = if font.has_glyph(ch) {
+            font
+        } else {
+            fallback_font
+        };
+        let (metrics, bitmap) = raster_font.rasterize(ch, font_size);
         let gw = metrics.width as u32;
         let gh = metrics.height as u32;
 
