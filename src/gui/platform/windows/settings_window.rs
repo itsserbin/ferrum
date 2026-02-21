@@ -2,8 +2,8 @@ use crate::config::{
     AppConfig, FontConfig, FontFamily, LayoutConfig, SecurityMode, SecuritySettings,
     TerminalConfig, ThemeChoice,
 };
-use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
-use std::sync::mpsc;
+use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicPtr, Ordering};
+use std::sync::{mpsc, Mutex};
 
 use windows_sys::Win32::Foundation::*;
 use windows_sys::Win32::Graphics::Dwm::*;
@@ -115,6 +115,7 @@ const TCIF_TEXT: u32 = 0x0001;
 const TCM_FIRST: u32 = 0x1300;
 const TCM_INSERTITEMW: u32 = TCM_FIRST + 62;
 const TCM_GETCURSEL: u32 = TCM_FIRST + 11;
+const TCM_SETCURSEL: u32 = TCM_FIRST + 12;
 const TCN_SELCHANGE: u32 = (-551i32) as u32;
 
 // UpDown control
@@ -196,6 +197,12 @@ static SETTINGS_HWND: AtomicPtr<core::ffi::c_void> = AtomicPtr::new(std::ptr::nu
 /// Tracks whether we are in a programmatic update (e.g. reset, display refresh).
 /// Prevents reentrant WM_COMMAND handlers from sending intermediate configs.
 static SUPPRESS: AtomicBool = AtomicBool::new(false);
+/// Tracks the currently selected tab (updated in on_tab_change).
+static CURRENT_TAB: AtomicIsize = AtomicIsize::new(0);
+/// When >= 0, the settings window should reopen at this tab after closing.
+static REOPEN_WITH_TAB: AtomicIsize = AtomicIsize::new(-1);
+/// Config + sender for the reopened window.
+static REOPEN_DATA: Mutex<Option<(AppConfig, mpsc::Sender<AppConfig>)>> = Mutex::new(None);
 
 pub fn is_settings_window_open() -> bool {
     WINDOW_OPEN.load(Ordering::Relaxed)
@@ -210,6 +217,18 @@ pub fn close_settings_window() {
     if !hwnd.is_null() {
         unsafe { PostMessageW(hwnd, WM_CLOSE, 0, 0) };
     }
+}
+
+/// Returns the index of the currently selected settings tab.
+pub fn selected_tab_index() -> usize {
+    CURRENT_TAB.load(Ordering::Relaxed).max(0) as usize
+}
+
+/// Closes the settings window and reopens it at the given tab with fresh translations.
+pub fn request_reopen(config: &AppConfig, tx: mpsc::Sender<AppConfig>, tab_index: usize) {
+    *REOPEN_DATA.lock().unwrap() = Some((config.clone(), tx));
+    REOPEN_WITH_TAB.store(tab_index as isize, Ordering::Relaxed);
+    close_settings_window();
 }
 
 pub fn open_settings_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>) {
@@ -336,77 +355,105 @@ fn run_win32_window(config: AppConfig, tx: mpsc::Sender<AppConfig>) {
         };
         RegisterClassExW(&wc);
 
-        let t = crate::i18n::t();
-        let title = to_wide(t.settings_title);
-        let style = WS_OVERLAPPEDWINDOW & !WS_MAXIMIZEBOX & !WS_THICKFRAME;
+        let mut config = config;
+        let mut tx = tx;
+        let mut initial_tab: usize = 0;
 
-        // Create window first to get its DPI, then resize.
-        let hwnd = CreateWindowExW(
-            0,
-            class_name.as_ptr(),
-            title.as_ptr(),
-            style,
-            CW_USEDEFAULT,
-            CW_USEDEFAULT,
-            CW_USEDEFAULT,
-            CW_USEDEFAULT,
-            std::ptr::null_mut(),
-            std::ptr::null_mut(),
-            hinstance,
-            std::ptr::null(),
-        );
+        loop {
+            let t = crate::i18n::t();
+            let title = to_wide(t.settings_title);
+            let style = WS_OVERLAPPEDWINDOW & !WS_MAXIMIZEBOX & !WS_THICKFRAME;
 
-        let dpi = if !hwnd.is_null() { GetDpiForWindow(hwnd) } else { 96 };
-        let dpi = if dpi == 0 { 96 } else { dpi };
+            // Create window first to get its DPI, then resize.
+            let hwnd = CreateWindowExW(
+                0,
+                class_name.as_ptr(),
+                title.as_ptr(),
+                style,
+                CW_USEDEFAULT,
+                CW_USEDEFAULT,
+                CW_USEDEFAULT,
+                CW_USEDEFAULT,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                hinstance,
+                std::ptr::null(),
+            );
 
-        // Resize to DPI-scaled client area.
-        let mut rect = RECT {
-            left: 0,
-            top: 0,
-            right: dpi_scale(layout::CLIENT_W, dpi),
-            bottom: dpi_scale(layout::CLIENT_H, dpi),
-        };
-        AdjustWindowRectEx(&mut rect, style, 0, 0);
-        SetWindowPos(
-            hwnd,
-            std::ptr::null_mut(),
-            0, 0,
-            rect.right - rect.left,
-            rect.bottom - rect.top,
-            SWP_NOMOVE | SWP_NOZORDER,
-        );
+            let dpi = if !hwnd.is_null() { GetDpiForWindow(hwnd) } else { 96 };
+            let dpi = if dpi == 0 { 96 } else { dpi };
 
-        if hwnd.is_null() {
-            WINDOW_OPEN.store(false, Ordering::Relaxed);
-            return;
+            // Resize to DPI-scaled client area.
+            let mut rect = RECT {
+                left: 0,
+                top: 0,
+                right: dpi_scale(layout::CLIENT_W, dpi),
+                bottom: dpi_scale(layout::CLIENT_H, dpi),
+            };
+            AdjustWindowRectEx(&mut rect, style, 0, 0);
+            SetWindowPos(
+                hwnd,
+                std::ptr::null_mut(),
+                0, 0,
+                rect.right - rect.left,
+                rect.bottom - rect.top,
+                SWP_NOMOVE | SWP_NOZORDER,
+            );
+
+            if hwnd.is_null() {
+                WINDOW_OPEN.store(false, Ordering::Relaxed);
+                return;
+            }
+
+            // Apply dark title bar.
+            let dark: i32 = 1;
+            let _ = DwmSetWindowAttribute(
+                hwnd,
+                DWMWA_USE_IMMERSIVE_DARK_MODE as u32,
+                &dark as *const _ as *const _,
+                std::mem::size_of::<i32>() as u32,
+            );
+
+            let state = create_controls(hwnd, hinstance, &config, tx.clone(), dpi);
+
+            // Select the requested tab (non-zero after a language-change reopen).
+            if initial_tab > 0 {
+                SendMessageW(state.tab_ctrl, TCM_SETCURSEL, initial_tab, 0);
+                on_tab_change(&state);
+            }
+
+            // Store state on the window — accessible from wndproc without any mutex.
+            let state_ptr = Box::into_raw(Box::new(state));
+            SetWindowLongPtrW(hwnd, GWLP_USERDATA, state_ptr as isize);
+            SETTINGS_HWND.store(hwnd, Ordering::Release);
+
+            ShowWindow(hwnd, SW_SHOW);
+            UpdateWindow(hwnd);
+
+            // Message loop.
+            let mut msg: MSG = std::mem::zeroed();
+            while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+            // Cleanup done in WM_NCDESTROY handler.
+
+            // Check if a language change requested a reopen.
+            let tab = REOPEN_WITH_TAB.swap(-1, Ordering::Relaxed);
+            if tab < 0 {
+                break; // Normal close — exit thread.
+            }
+            if let Some((new_config, new_tx)) = REOPEN_DATA.lock().unwrap().take() {
+                config = new_config;
+                tx = new_tx;
+                initial_tab = tab as usize;
+                WINDOW_OPEN.store(true, Ordering::Relaxed);
+                JUST_CLOSED.store(false, Ordering::Relaxed);
+                // Loop back to create a new window with fresh translations.
+            } else {
+                break;
+            }
         }
-
-        // Apply dark title bar.
-        let dark: i32 = 1;
-        let _ = DwmSetWindowAttribute(
-            hwnd,
-            DWMWA_USE_IMMERSIVE_DARK_MODE as u32,
-            &dark as *const _ as *const _,
-            std::mem::size_of::<i32>() as u32,
-        );
-
-        let state = create_controls(hwnd, hinstance, &config, tx, dpi);
-
-        // Store state on the window — accessible from wndproc without any mutex.
-        let state_ptr = Box::into_raw(Box::new(state));
-        SetWindowLongPtrW(hwnd, GWLP_USERDATA, state_ptr as isize);
-        SETTINGS_HWND.store(hwnd, Ordering::Release);
-
-        ShowWindow(hwnd, SW_SHOW);
-        UpdateWindow(hwnd);
-
-        // Message loop.
-        let mut msg: MSG = std::mem::zeroed();
-        while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
-        }
-        // Cleanup done in WM_NCDESTROY handler.
     }
 }
 
@@ -516,6 +563,7 @@ fn on_command(state: &Win32State, wparam: WPARAM) {
 
 fn on_tab_change(state: &Win32State) {
     let active = unsafe { SendMessageW(state.tab_ctrl, TCM_GETCURSEL, 0, 0) } as usize;
+    CURRENT_TAB.store(active as isize, Ordering::Relaxed);
     for (i, page) in state.tab_pages.iter().enumerate() {
         let show = if i == active { SW_SHOW } else { SW_HIDE };
         for &hwnd in page {

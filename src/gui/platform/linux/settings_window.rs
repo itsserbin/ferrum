@@ -2,8 +2,8 @@ use crate::config::{
     AppConfig, FontConfig, FontFamily, LayoutConfig, SecurityMode, SecuritySettings,
     TerminalConfig, ThemeChoice,
 };
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc;
+use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
+use std::sync::{mpsc, Mutex};
 
 use gtk4::prelude::*;
 use gtk4::{
@@ -19,6 +19,12 @@ static CLOSE_REQUESTED: AtomicBool = AtomicBool::new(false);
 static PRESENT_REQUESTED: AtomicBool = AtomicBool::new(false);
 /// Set to true only if GTK4 initialised successfully.
 static GTK_READY: AtomicBool = AtomicBool::new(false);
+/// Tracks the currently selected notebook tab (updated on switch-page signal).
+static NOTEBOOK_PAGE: AtomicIsize = AtomicIsize::new(0);
+/// When >= 0, the settings window should reopen at this tab after closing.
+static REOPEN_WITH_TAB: AtomicIsize = AtomicIsize::new(-1);
+/// Config + sender for the reopened window.
+static REOPEN_DATA: Mutex<Option<(AppConfig, mpsc::Sender<AppConfig>)>> = Mutex::new(None);
 
 pub fn is_settings_window_open() -> bool {
     WINDOW_OPEN.load(Ordering::Relaxed)
@@ -32,6 +38,18 @@ pub fn check_window_closed() -> bool {
 pub fn close_settings_window() {
     WINDOW_OPEN.store(false, Ordering::Relaxed);
     CLOSE_REQUESTED.store(true, Ordering::Relaxed);
+}
+
+/// Returns the index of the currently selected settings tab.
+pub fn selected_tab_index() -> usize {
+    NOTEBOOK_PAGE.load(Ordering::Relaxed).max(0) as usize
+}
+
+/// Closes the settings window and reopens it at the given tab with fresh translations.
+pub fn request_reopen(config: &AppConfig, tx: mpsc::Sender<AppConfig>, tab_index: usize) {
+    *REOPEN_DATA.lock().unwrap() = Some((config.clone(), tx));
+    REOPEN_WITH_TAB.store(tab_index as isize, Ordering::Relaxed);
+    close_settings_window();
 }
 
 /// Ensures GTK4 is initialized exactly once on a dedicated thread.
@@ -75,13 +93,13 @@ pub fn open_settings_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>) {
     }
 
     gtk4::glib::MainContext::default().invoke(move || {
-        build_window(&config, tx);
+        build_window(&config, tx, 0);
     });
 }
 
 // ── GTK4 window ──────────────────────────────────────────────────────
 
-fn build_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>) {
+fn build_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>, initial_tab: usize) {
     let t = crate::i18n::t();
     let window = Window::builder()
         .title(t.settings_title)
@@ -120,6 +138,14 @@ fn build_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>) {
         clear_mouse_switch,
     ) = build_security_tab(config, t);
     notebook.append_page(&security_box, Some(&Label::new(Some(t.settings_tab_security))));
+
+    // Track selected tab for cross-thread queries.
+    notebook.connect_switch_page(|_, _, page| {
+        NOTEBOOK_PAGE.store(page as isize, Ordering::Relaxed);
+    });
+    if initial_tab > 0 {
+        notebook.set_current_page(Some(initial_tab as u32));
+    }
 
     // ── Reset button ─────────────────────────────────────────────────
     let reset_btn = gtk4::Button::with_label(t.settings_reset_to_defaults);
@@ -285,6 +311,15 @@ fn build_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>) {
         gtk4::glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
             if CLOSE_REQUESTED.swap(false, Ordering::Relaxed) {
                 w.close();
+                // If a language change requested a reopen, rebuild with fresh translations.
+                let tab = REOPEN_WITH_TAB.swap(-1, Ordering::Relaxed);
+                if tab >= 0 {
+                    if let Some((config, tx)) = REOPEN_DATA.lock().unwrap().take() {
+                        WINDOW_OPEN.store(true, Ordering::Relaxed);
+                        JUST_CLOSED.store(false, Ordering::Relaxed);
+                        build_window(&config, tx, tab as usize);
+                    }
+                }
                 return gtk4::glib::ControlFlow::Break;
             }
             if PRESENT_REQUESTED.swap(false, Ordering::Relaxed) {

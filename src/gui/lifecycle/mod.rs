@@ -269,6 +269,28 @@ impl ApplicationHandler for App {
                 );
                 platform::macos::settings_window::select_tab(tab_idx);
             }
+            #[cfg(target_os = "windows")]
+            if language_changed
+                && platform::windows::settings_window::is_settings_window_open()
+            {
+                let tab_idx = platform::windows::settings_window::selected_tab_index();
+                platform::windows::settings_window::request_reopen(
+                    &self.config,
+                    self.settings_tx.clone(),
+                    tab_idx,
+                );
+            }
+            #[cfg(target_os = "linux")]
+            if language_changed
+                && platform::linux::settings_window::is_settings_window_open()
+            {
+                let tab_idx = platform::linux::settings_window::selected_tab_index();
+                platform::linux::settings_window::request_reopen(
+                    &self.config,
+                    self.settings_tx.clone(),
+                    tab_idx,
+                );
+            }
         }
 
         let now = std::time::Instant::now();
