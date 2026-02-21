@@ -248,6 +248,7 @@ impl ApplicationHandler for App {
 
         // Apply config changes from native settings window.
         while let Ok(new_config) = self.settings_rx.try_recv() {
+            crate::i18n::set_locale(new_config.language);
             for win in self.windows.values_mut() {
                 win.apply_config_change(&new_config);
                 win.window.request_redraw();

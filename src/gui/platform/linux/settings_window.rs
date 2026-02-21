@@ -102,7 +102,7 @@ fn build_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>) {
     notebook.append_page(&theme_box, Some(&Label::new(Some(t.settings_tab_theme))));
 
     // ── Terminal tab ─────────────────────────────────────────────────
-    let (terminal_box, scrollback_spin, cursor_blink_spin) = build_terminal_tab(config, t);
+    let (terminal_box, language_combo, scrollback_spin, cursor_blink_spin) = build_terminal_tab(config, t);
     notebook.append_page(&terminal_box, Some(&Label::new(Some(t.settings_tab_terminal))));
 
     // ── Layout tab ───────────────────────────────────────────────────
@@ -143,6 +143,7 @@ fn build_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>) {
         font_family: font_family_combo,
         line_padding: line_padding_spin,
         theme: theme_combo,
+        language: language_combo,
         scrollback: scrollback_spin,
         cursor_blink: cursor_blink_spin,
         win_padding: win_padding_spin,
@@ -190,7 +191,7 @@ fn build_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>) {
         spin.connect_value_changed(move |_| send());
     }
 
-    // Connect DropDown selection-changed for font family and theme.
+    // Connect DropDown selection-changed for font family, theme, and language.
     {
         let send = build_and_send.clone();
         controls.font_family.connect_selected_notify(move |_| send());
@@ -198,6 +199,10 @@ fn build_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>) {
     {
         let send = build_and_send.clone();
         controls.theme.connect_selected_notify(move |_| send());
+    }
+    {
+        let send = build_and_send.clone();
+        controls.language.connect_selected_notify(move |_| send());
     }
 
     // Security mode combo — apply presets, then send.
@@ -336,12 +341,18 @@ fn build_theme_tab(config: &AppConfig, t: &crate::i18n::Translations) -> (gtk4::
     (vbox, combo)
 }
 
-fn build_terminal_tab(config: &AppConfig, t: &crate::i18n::Translations) -> (gtk4::Box, SpinButton, SpinButton) {
+fn build_terminal_tab(config: &AppConfig, t: &crate::i18n::Translations) -> (gtk4::Box, DropDown, SpinButton, SpinButton) {
     let vbox = gtk4::Box::new(Orientation::Vertical, 12);
     vbox.set_margin_top(16);
     vbox.set_margin_start(16);
     vbox.set_margin_end(16);
 
+    let language = labeled_combo(
+        &vbox,
+        t.terminal_language_label,
+        crate::i18n::Locale::DISPLAY_NAMES,
+        config.language.index(),
+    );
     let scrollback = labeled_spin(
         &vbox,
         t.terminal_max_scrollback_label,
@@ -361,7 +372,7 @@ fn build_terminal_tab(config: &AppConfig, t: &crate::i18n::Translations) -> (gtk
         0,
     );
 
-    (vbox, scrollback, cursor_blink)
+    (vbox, language, scrollback, cursor_blink)
 }
 
 fn build_layout_tab(
@@ -532,6 +543,7 @@ struct Controls {
     font_family: DropDown,
     line_padding: SpinButton,
     theme: DropDown,
+    language: DropDown,
     scrollback: SpinButton,
     cursor_blink: SpinButton,
     win_padding: SpinButton,
@@ -579,7 +591,7 @@ fn build_config(c: &Controls) -> AppConfig {
             limit_cursor_jumps: c.limit_cursor.is_active(),
             clear_mouse_on_reset: c.clear_mouse.is_active(),
         },
-        language: AppConfig::default().language,
+        language: crate::i18n::Locale::from_index(c.language.selected() as usize),
     }
 }
 
@@ -647,6 +659,7 @@ fn reset_controls(c: &Controls) {
     };
     c.theme.set_selected(theme_idx);
 
+    c.language.set_selected(crate::i18n::Locale::default().index() as u32);
     c.scrollback.set_value(d.terminal.max_scrollback as f64);
     c.cursor_blink.set_value(d.terminal.cursor_blink_interval_ms as f64);
 

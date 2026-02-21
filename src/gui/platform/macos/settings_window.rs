@@ -38,6 +38,7 @@ struct NativeSettingsState {
     // Theme
     theme_popup: Retained<NSPopUpButton>,
     // Terminal
+    language_popup: Retained<NSPopUpButton>,
     scrollback_stepper: Retained<NSStepper>,
     scrollback_field: Retained<NSTextField>,
     cursor_blink_stepper: Retained<NSStepper>,
@@ -174,7 +175,9 @@ fn build_config_from_controls(state: &NativeSettingsState) -> AppConfig {
             limit_cursor_jumps: is_checkbox_on(&state.limit_cursor_jumps_check),
             clear_mouse_on_reset: is_checkbox_on(&state.clear_mouse_on_reset_check),
         },
-        language: AppConfig::default().language,
+        language: crate::i18n::Locale::from_index(
+            state.language_popup.indexOfSelectedItem() as usize,
+        ),
     }
 }
 
@@ -353,6 +356,7 @@ pub fn reset_controls_to_defaults() {
         .setIntegerValue(defaults.font.line_padding as isize);
     state.font_family_popup.selectItemAtIndex(0); // JetBrainsMono = default
     state.theme_popup.selectItemAtIndex(0); // FerrumDark = default
+    state.language_popup.selectItemAtIndex(crate::i18n::Locale::default().index() as isize);
     state
         .scrollback_stepper
         .setIntegerValue(defaults.terminal.max_scrollback as isize);
@@ -658,6 +662,15 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
         NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(500.0, 320.0)),
     );
 
+    let language_popup = create_popup_row(
+        mtm,
+        &terminal_view,
+        t.terminal_language_label,
+        crate::i18n::Locale::DISPLAY_NAMES,
+        config.language.index(),
+        280.0,
+    );
+
     let (scrollback_field, scrollback_stepper) = create_stepper_row(
         mtm,
         &StepperRowParams {
@@ -667,7 +680,7 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
             min: 0.0,
             max: 50000.0,
             step: 100.0,
-            y_offset: 280.0,
+            y_offset: 230.0,
         },
     );
 
@@ -680,7 +693,7 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
             min: TerminalConfig::BLINK_MS_MIN as f64,
             max: TerminalConfig::BLINK_MS_MAX as f64,
             step: TerminalConfig::BLINK_MS_STEP as f64,
-            y_offset: 230.0,
+            y_offset: 180.0,
         },
     );
 
@@ -868,6 +881,8 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
         let _: () = msg_send![&line_padding_stepper, setAction: sel_stepper];
         let _: () = msg_send![&theme_popup, setTarget: &*window];
         let _: () = msg_send![&theme_popup, setAction: sel_stepper];
+        let _: () = msg_send![&language_popup, setTarget: &*window];
+        let _: () = msg_send![&language_popup, setAction: sel_stepper];
         let _: () = msg_send![&scrollback_stepper, setTarget: &*window];
         let _: () = msg_send![&scrollback_stepper, setAction: sel_stepper];
         let _: () = msg_send![&cursor_blink_stepper, setTarget: &*window];
@@ -939,6 +954,7 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
         line_padding_stepper,
         line_padding_field,
         theme_popup,
+        language_popup,
         scrollback_stepper,
         scrollback_field,
         cursor_blink_stepper,

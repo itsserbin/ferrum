@@ -245,6 +245,7 @@ mod id {
     // Theme
     pub const THEME_COMBO: i32 = 300;
     // Terminal
+    pub const LANGUAGE_COMBO: i32 = 408;
     pub const SCROLLBACK_UPDOWN: i32 = 400;
     pub const SCROLLBACK_EDIT: i32 = 401;
     pub const CURSOR_BLINK_UPDOWN: i32 = 402;
@@ -281,6 +282,7 @@ struct Win32State {
     // Theme tab
     theme_combo: HWND,
     // Terminal tab
+    language_combo: HWND,
     scrollback_updown: HWND,
     scrollback_edit: HWND,
     cursor_blink_updown: HWND,
@@ -504,7 +506,7 @@ fn on_command(state: &Win32State, wparam: WPARAM) {
             let config = build_config(state);
             let _ = state.tx.send(config);
         }
-        (id::FONT_FAMILY_COMBO | id::THEME_COMBO, CBN_SELCHANGE) => {
+        (id::FONT_FAMILY_COMBO | id::THEME_COMBO | id::LANGUAGE_COMBO, CBN_SELCHANGE) => {
             let config = build_config(state);
             let _ = state.tx.send(config);
         }
@@ -609,10 +611,21 @@ unsafe fn create_controls(
     // ── Terminal tab controls ────────────────────────────────────────
     let mut terminal_page = Vec::new();
 
+    // Language combo
+    let (language_combo, mut ctrls) = create_combo_row(&ctx, &ComboRowParams {
+        label_text: t.terminal_language_label,
+        x: x0,
+        y: y0,
+        options: crate::i18n::Locale::DISPLAY_NAMES,
+        selected: config.language.index(),
+        combo_id: id::LANGUAGE_COMBO,
+    });
+    terminal_page.append(&mut ctrls);
+
     // Scrollback (updown: 0..500 → 0..50000, step 100)
     let scrollback_initial = config.terminal.max_scrollback as i32 / 100;
     let (scrollback_updown, scrollback_edit, mut ctrls) = create_spin_row(&ctx, &SpinRowParams {
-        label_text: t.terminal_max_scrollback_label, x: x0, y: y0,
+        label_text: t.terminal_max_scrollback_label, x: x0, y: y0 + sp,
         range_min: 0, range_max: 500, initial: scrollback_initial,
         updown_id: id::SCROLLBACK_UPDOWN, edit_id: id::SCROLLBACK_EDIT,
     });
@@ -622,7 +635,7 @@ unsafe fn create_controls(
     let blink_initial = (config.terminal.cursor_blink_interval_ms as i64 - TerminalConfig::BLINK_MS_MIN as i64) / TerminalConfig::BLINK_MS_STEP as i64;
     let blink_range_max = ((TerminalConfig::BLINK_MS_MAX - TerminalConfig::BLINK_MS_MIN) / TerminalConfig::BLINK_MS_STEP) as i32;
     let (cursor_blink_updown, cursor_blink_edit, mut ctrls) = create_spin_row(&ctx, &SpinRowParams {
-        label_text: t.terminal_cursor_blink_label, x: x0, y: y0 + sp,
+        label_text: t.terminal_cursor_blink_label, x: x0, y: y0 + sp * 2,
         range_min: 0, range_max: blink_range_max, initial: blink_initial as i32,
         updown_id: id::CURSOR_BLINK_UPDOWN, edit_id: id::CURSOR_BLINK_EDIT,
     });
@@ -730,6 +743,7 @@ unsafe fn create_controls(
         line_padding_updown,
         line_padding_edit,
         theme_combo,
+        language_combo,
         scrollback_updown,
         scrollback_edit,
         cursor_blink_updown,
@@ -980,7 +994,9 @@ fn build_config(state: &Win32State) -> AppConfig {
                 limit_cursor_jumps: limit_cursor,
                 clear_mouse_on_reset: clear_mouse,
             },
-            language: AppConfig::default().language,
+            language: crate::i18n::Locale::from_index(
+                SendMessageW(state.language_combo, CB_GETCURSEL, 0, 0) as usize,
+            ),
         }
     }
 }
@@ -1106,6 +1122,7 @@ fn reset_controls(state: &Win32State) {
         SendMessageW(state.theme_combo, CB_SETCURSEL, theme_idx, 0);
 
         // Terminal
+        SendMessageW(state.language_combo, CB_SETCURSEL, crate::i18n::Locale::default().index(), 0);
         SendMessageW(state.scrollback_updown, UDM_SETPOS32, 0, (d.terminal.max_scrollback / 100) as LPARAM);
         let blink_pos = (d.terminal.cursor_blink_interval_ms as i64 - TerminalConfig::BLINK_MS_MIN as i64) / TerminalConfig::BLINK_MS_STEP as i64;
         SendMessageW(state.cursor_blink_updown, UDM_SETPOS32, 0, blink_pos as LPARAM);
