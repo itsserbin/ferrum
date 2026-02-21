@@ -234,26 +234,30 @@ fn build_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>, main_loop: &gtk
         });
     }
 
-    // On close, save config to disk and quit the main loop.
+    // On close request, save config. Let GTK proceed to destroy the window.
     {
         let controls = Rc::clone(&controls);
-        let ml = main_loop.clone();
         window.connect_close_request(move |_| {
             let config = build_config(&controls);
             crate::config::save_config(&config);
-            ml.quit();
             gtk4::glib::Propagation::Proceed
+        });
+    }
+
+    // Quit the main loop after GTK has destroyed the window.
+    {
+        let ml = main_loop.clone();
+        window.connect_destroy(move |_| {
+            ml.quit();
         });
     }
 
     // Poll CLOSE_REQUESTED so the main thread can close us.
     {
         let w = window.clone();
-        let ml = main_loop.clone();
         gtk4::glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
             if CLOSE_REQUESTED.swap(false, Ordering::Relaxed) {
                 w.close();
-                ml.quit();
                 gtk4::glib::ControlFlow::Break
             } else {
                 gtk4::glib::ControlFlow::Continue
