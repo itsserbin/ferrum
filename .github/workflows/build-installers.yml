@@ -162,6 +162,32 @@ jobs:
         with:
           key: x86_64-pc-windows-msvc
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Cache GTK4 build
+        id: cache-gtk
+        uses: actions/cache@v4
+        with:
+          path: C:\gtk-build
+          key: gtk4-gvsbuild-${{ runner.os }}
+
+      - name: Build GTK4 with gvsbuild
+        if: steps.cache-gtk.outputs.cache-hit != 'true'
+        run: |
+          pip install gvsbuild
+          gvsbuild build gtk4
+
+      - name: Set GTK4 environment
+        shell: pwsh
+        run: |
+          $gtkRoot = "C:\gtk-build\gtk\x64\release"
+          "$gtkRoot\bin" >> $env:GITHUB_PATH
+          "PKG_CONFIG_PATH=$gtkRoot\lib\pkgconfig" >> $env:GITHUB_ENV
+          "LIB=$gtkRoot\lib" >> $env:GITHUB_ENV
+
       - name: Build release binary
         run: cargo build --release --locked
 
