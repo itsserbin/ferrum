@@ -52,14 +52,19 @@ windows-sys = { version = "0.59", features = [
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", features = [
+    "NSButton",
     "NSControl",
     "NSFont",
+    "NSGraphics",
     "NSPopUpButton",
+    "NSResponder",
     "NSStackView",
     "NSStepper",
     "NSTabView",
     "NSTabViewItem",
     "NSTextField",
+    "NSView",
+    "NSWindow",
 ] }
 objc2-foundation = "0.3"
 
