@@ -165,26 +165,28 @@ fn dpi_scale(value: i32, dpi: u32) -> i32 {
 }
 
 /// Creates a DPI-aware font from NONCLIENTMETRICS, or falls back to DEFAULT_GUI_FONT.
-unsafe fn create_dpi_font(dpi: u32) -> *mut core::ffi::c_void { unsafe {
-    let mut ncm: NONCLIENTMETRICSW = std::mem::zeroed();
-    ncm.cbSize = std::mem::size_of::<NONCLIENTMETRICSW>() as u32;
-    let ok = SystemParametersInfoW(
-        SPI_GETNONCLIENTMETRICS,
-        ncm.cbSize,
-        &mut ncm as *mut _ as *mut core::ffi::c_void,
-        0,
-    );
-    if ok != 0 {
-        // Scale the message font height for our DPI.
-        let base_height = ncm.lfMessageFont.lfHeight;
-        ncm.lfMessageFont.lfHeight = dpi_scale(base_height, dpi);
-        let hfont = CreateFontIndirectW(&ncm.lfMessageFont);
-        if !hfont.is_null() {
-            return hfont;
+unsafe fn create_dpi_font(dpi: u32) -> *mut core::ffi::c_void {
+    unsafe {
+        let mut ncm: NONCLIENTMETRICSW = std::mem::zeroed();
+        ncm.cbSize = std::mem::size_of::<NONCLIENTMETRICSW>() as u32;
+        let ok = SystemParametersInfoW(
+            SPI_GETNONCLIENTMETRICS,
+            ncm.cbSize,
+            &mut ncm as *mut _ as *mut core::ffi::c_void,
+            0,
+        );
+        if ok != 0 {
+            // Scale the message font height for our DPI.
+            let base_height = ncm.lfMessageFont.lfHeight;
+            ncm.lfMessageFont.lfHeight = dpi_scale(base_height, dpi);
+            let hfont = CreateFontIndirectW(&ncm.lfMessageFont);
+            if !hfont.is_null() {
+                return hfont;
+            }
         }
+        GetStockObject(DEFAULT_GUI_FONT) as *mut core::ffi::c_void
     }
-    GetStockObject(DEFAULT_GUI_FONT) as *mut core::ffi::c_void
-} }
+}
 
 static WINDOW_OPEN: AtomicBool = AtomicBool::new(false);
 static JUST_CLOSED: AtomicBool = AtomicBool::new(false);
@@ -407,55 +409,57 @@ fn run_win32_window(config: AppConfig, tx: mpsc::Sender<AppConfig>) {
 
 // ── Window procedure ─────────────────────────────────────────────────
 
-unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT { unsafe {
-    let state_ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut Win32State;
+unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    unsafe {
+        let state_ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut Win32State;
 
-    match msg {
-        WM_NOTIFY if !state_ptr.is_null() => {
-            let nmhdr = &*(lparam as *const NMHDR);
-            if nmhdr.idFrom == id::TAB_CONTROL as usize && nmhdr.code == TCN_SELCHANGE {
-                on_tab_change(&*state_ptr);
-            } else if nmhdr.code == UDN_DELTAPOS {
-                // UDN_DELTAPOS fires before position change — defer reading
-                // values until the UpDown has updated its position.
-                PostMessageW(hwnd, WM_APP, 0, 0);
+        match msg {
+            WM_NOTIFY if !state_ptr.is_null() => {
+                let nmhdr = &*(lparam as *const NMHDR);
+                if nmhdr.idFrom == id::TAB_CONTROL as usize && nmhdr.code == TCN_SELCHANGE {
+                    on_tab_change(&*state_ptr);
+                } else if nmhdr.code == UDN_DELTAPOS {
+                    // UDN_DELTAPOS fires before position change — defer reading
+                    // values until the UpDown has updated its position.
+                    PostMessageW(hwnd, WM_APP, 0, 0);
+                }
+                0
             }
-            0
-        }
-        WM_APP if !state_ptr.is_null() => {
-            on_value_changed(&*state_ptr);
-            0
-        }
-        WM_COMMAND if !state_ptr.is_null() => {
-            on_command(&*state_ptr, wparam);
-            0
-        }
-        WM_CLOSE => {
-            DestroyWindow(hwnd);
-            0
-        }
-        WM_DESTROY if !state_ptr.is_null() => {
-            // Save config while child controls still exist (they respond
-            // to SendMessageW). In WM_NCDESTROY they're already gone.
-            let config = build_config(&*state_ptr);
-            crate::config::save_config(&config);
-            0
-        }
-        WM_NCDESTROY => {
-            // Last message — free state, clean up statics.
-            if !state_ptr.is_null() {
-                SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
-                drop(Box::from_raw(state_ptr));
+            WM_APP if !state_ptr.is_null() => {
+                on_value_changed(&*state_ptr);
+                0
             }
-            SETTINGS_HWND.store(std::ptr::null_mut(), Ordering::Release);
-            WINDOW_OPEN.store(false, Ordering::Relaxed);
-            JUST_CLOSED.store(true, Ordering::Relaxed);
-            PostQuitMessage(0);
-            0
+            WM_COMMAND if !state_ptr.is_null() => {
+                on_command(&*state_ptr, wparam);
+                0
+            }
+            WM_CLOSE => {
+                DestroyWindow(hwnd);
+                0
+            }
+            WM_DESTROY if !state_ptr.is_null() => {
+                // Save config while child controls still exist (they respond
+                // to SendMessageW). In WM_NCDESTROY they're already gone.
+                let config = build_config(&*state_ptr);
+                crate::config::save_config(&config);
+                0
+            }
+            WM_NCDESTROY => {
+                // Last message — free state, clean up statics.
+                if !state_ptr.is_null() {
+                    SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
+                    drop(Box::from_raw(state_ptr));
+                }
+                SETTINGS_HWND.store(std::ptr::null_mut(), Ordering::Release);
+                WINDOW_OPEN.store(false, Ordering::Relaxed);
+                JUST_CLOSED.store(true, Ordering::Relaxed);
+                PostQuitMessage(0);
+                0
+            }
+            _ => DefWindowProcW(hwnd, msg, wparam, lparam),
         }
-        _ => DefWindowProcW(hwnd, msg, wparam, lparam),
     }
-} }
+}
 
 fn on_value_changed(state: &Win32State) {
     if SUPPRESS.load(Ordering::Relaxed) {
@@ -525,7 +529,8 @@ unsafe fn create_controls(
     config: &AppConfig,
     tx: mpsc::Sender<AppConfig>,
     dpi: u32,
-) -> Win32State { unsafe {
+) -> Win32State {
+    unsafe {
     let font = create_dpi_font(dpi);
     let s = |v: i32| dpi_scale(v, dpi);
 
@@ -743,9 +748,10 @@ unsafe fn create_controls(
         tab_pages: [font_page, theme_page, terminal_page, layout_page, security_page],
     };
 
-    update_all_displays(&state);
-    state
-} }
+        update_all_displays(&state);
+        state
+    }
+}
 
 // ── Control builder helpers ──────────────────────────────────────────
 
@@ -788,7 +794,8 @@ struct CheckboxRowParams<'a> {
 
 /// Creates a row with: static label | read-only edit | updown (spin box).
 /// Returns (updown_hwnd, edit_hwnd, vec_of_all_hwnds_for_page).
-unsafe fn create_spin_row(ctx: &RowContext, p: &SpinRowParams) -> (HWND, HWND, Vec<HWND>) { unsafe {
+unsafe fn create_spin_row(ctx: &RowContext, p: &SpinRowParams) -> (HWND, HWND, Vec<HWND>) {
+    unsafe {
     let s = |v: i32| dpi_scale(v, ctx.dpi);
     let label_wide = to_wide(p.label_text);
     let lbl = CreateWindowExW(
@@ -833,12 +840,14 @@ unsafe fn create_spin_row(ctx: &RowContext, p: &SpinRowParams) -> (HWND, HWND, V
     SendMessageW(updown, UDM_SETRANGE32, p.range_min as WPARAM, p.range_max as LPARAM);
     SendMessageW(updown, UDM_SETPOS32, 0, p.initial as LPARAM);
 
-    (updown, edit, vec![lbl, edit, updown])
-} }
+        (updown, edit, vec![lbl, edit, updown])
+    }
+}
 
 /// Creates a row with: static label | combobox.
 /// Returns (combo_hwnd, vec_of_all_hwnds_for_page).
-unsafe fn create_combo_row(ctx: &RowContext, p: &ComboRowParams) -> (HWND, Vec<HWND>) { unsafe {
+unsafe fn create_combo_row(ctx: &RowContext, p: &ComboRowParams) -> (HWND, Vec<HWND>) {
+    unsafe {
     let s = |v: i32| dpi_scale(v, ctx.dpi);
     let label_wide = to_wide(p.label_text);
     let lbl = CreateWindowExW(
@@ -873,12 +882,14 @@ unsafe fn create_combo_row(ctx: &RowContext, p: &ComboRowParams) -> (HWND, Vec<H
     }
     SendMessageW(combo, CB_SETCURSEL, p.selected, 0);
 
-    (combo, vec![lbl, combo])
-} }
+        (combo, vec![lbl, combo])
+    }
+}
 
 /// Creates a row with: checkbox.
 /// Returns (checkbox_hwnd, vec_of_all_hwnds_for_page).
-unsafe fn create_checkbox_row(ctx: &RowContext, p: &CheckboxRowParams) -> (HWND, Vec<HWND>) { unsafe {
+unsafe fn create_checkbox_row(ctx: &RowContext, p: &CheckboxRowParams) -> (HWND, Vec<HWND>) {
+    unsafe {
     let s = |v: i32| dpi_scale(v, ctx.dpi);
     let text = to_wide(p.label_text);
     let check = CreateWindowExW(
@@ -901,8 +912,9 @@ unsafe fn create_checkbox_row(ctx: &RowContext, p: &CheckboxRowParams) -> (HWND,
         EnableWindow(check, 0);
     }
 
-    (check, vec![check])
-} }
+        (check, vec![check])
+    }
+}
 
 // ── Config building ──────────────────────────────────────────────────
 
@@ -1000,10 +1012,12 @@ fn update_all_displays(state: &Win32State) {
     }
 }
 
-unsafe fn set_edit_text(hwnd: HWND, text: &str) { unsafe {
-    let wide = to_wide(text);
-    SetWindowTextW(hwnd, wide.as_ptr());
-} }
+unsafe fn set_edit_text(hwnd: HWND, text: &str) {
+    unsafe {
+        let wide = to_wide(text);
+        SetWindowTextW(hwnd, wide.as_ptr());
+    }
+}
 
 // ── Security sync ────────────────────────────────────────────────────
 

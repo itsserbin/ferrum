@@ -35,7 +35,7 @@ struct Cell {
                          // bit 3: reverse video
                          // bit 4: dim
                          // bit 5: strikethrough
-                         // bits 6-7: underline style (0=none, 1=single, 2=double, 3=curly)
+                         // bits 6-7: underline style (0=none, 1=single, 2=double, 3=reserved)
 }
 
 // ---- Glyph lookup entry (32 bytes, 16-byte aligned) ----
@@ -163,16 +163,8 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     } else if underline_style == 2u && (cell_y == uniforms.cell_height - 1u || cell_y == uniforms.cell_height - 3u) {
         // Double underline: two 1px lines
         color = vec4<f32>(decor_fg, 1.0);
-    } else if underline_style == 3u && cell_y >= uniforms.cell_height - 3u {
-        // Curly underline: approximate with 3px band
-        let wave_phase = f32(cell_x) * 6.28318 / f32(uniforms.cell_width);
-        let wave_center = f32(uniforms.cell_height) - 2.0;
-        let wave_y = wave_center + sin(wave_phase);
-        let dist = abs(f32(cell_y) - wave_y);
-        if dist < 1.0 {
-            color = vec4<f32>(decor_fg, 1.0);
-        }
     }
+    // value 3 reserved for future use
 
     // Strikethrough: 1px line at vertical center
     let is_strikethrough = (cell.attrs & 32u) != 0u;
