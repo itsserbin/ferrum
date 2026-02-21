@@ -246,4 +246,9 @@ pub(super) struct App {
     pub(super) update_rx: mpsc::Receiver<crate::update::AvailableRelease>,
     pub(super) available_release: Option<crate::update::AvailableRelease>,
     pub(super) config: crate::config::AppConfig,
+    #[cfg(target_os = "macos")]
+    #[allow(dead_code)] // Used when opening the native settings window (upcoming task).
+    pub(super) settings_tx: std::sync::mpsc::Sender<crate::config::AppConfig>,
+    #[cfg(target_os = "macos")]
+    pub(super) settings_rx: std::sync::mpsc::Receiver<crate::config::AppConfig>,
 }

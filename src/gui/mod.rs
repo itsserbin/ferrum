@@ -231,6 +231,8 @@ impl App {
         let (update_tx, update_rx) = mpsc::channel::<update::AvailableRelease>();
         update::spawn_update_checker(update_tx);
         let config = crate::config::load_config();
+        #[cfg(target_os = "macos")]
+        let (settings_tx, settings_rx) = std::sync::mpsc::channel();
         App {
             windows: std::collections::HashMap::new(),
             context: None,
@@ -240,6 +242,10 @@ impl App {
             update_rx,
             available_release: None,
             config,
+            #[cfg(target_os = "macos")]
+            settings_tx,
+            #[cfg(target_os = "macos")]
+            settings_rx,
         }
     }
 

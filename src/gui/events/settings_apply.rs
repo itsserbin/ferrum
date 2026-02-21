@@ -5,7 +5,7 @@ impl FerrumWindow {
     /// Applies config changes from the settings overlay to the renderer and terminals.
     ///
     /// Called after every slider/enum interaction for live preview.
-    pub(super) fn apply_config_change(&mut self, config: &AppConfig) {
+    pub(crate) fn apply_config_change(&mut self, config: &AppConfig) {
         // Snapshot old palette for recoloring.
         let old_fg = self.backend.palette().default_fg;
         let old_bg = self.backend.palette().default_bg;

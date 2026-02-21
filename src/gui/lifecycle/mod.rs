@@ -200,6 +200,16 @@ impl ApplicationHandler for App {
             }
         }
 
+        // Apply config changes from native settings window.
+        #[cfg(target_os = "macos")]
+        while let Ok(new_config) = self.settings_rx.try_recv() {
+            if let Some((_id, win)) = self.windows.iter_mut().find(|(_, w)| w.window.has_focus()) {
+                win.apply_config_change(&new_config);
+                win.window.request_redraw();
+            }
+            self.config = new_config;
+        }
+
         let now = std::time::Instant::now();
         let mut next_wakeup: Option<std::time::Instant> = None;
 
