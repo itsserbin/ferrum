@@ -187,7 +187,8 @@ fn build_window(app: &gtk4::Application, config: &AppConfig, tx: mpsc::Sender<Ap
         let controls = Rc::clone(&controls);
         let suppress = Rc::clone(&suppress);
         let send = build_and_send.clone();
-        controls.security_mode.connect_changed(move |combo| {
+        let security_combo = controls.security_mode.clone();
+        security_combo.connect_changed(move |combo| {
             if *suppress.borrow() {
                 return;
             }
