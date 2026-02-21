@@ -64,6 +64,8 @@ objc2-app-kit = { version = "0.3", features = [
     "NSTabView",
     "NSTabViewItem",
     "NSTextField",
+    "NSToolbar",
+    "NSToolbarItem",
     "NSView",
     "NSWindow",
 ] }

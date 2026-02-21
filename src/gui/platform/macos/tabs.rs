@@ -3,7 +3,8 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use objc2::msg_send;
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
-use objc2_app_kit::{NSWindow, NSWindowTabbingMode, NSWindowTitleVisibility};
+use objc2::MainThreadOnly;
+use objc2_app_kit::{NSToolbar, NSWindow, NSWindowTabbingMode, NSWindowToolbarStyle};
 use objc2_foundation::ns_string;
 use winit::window::Window;
 
@@ -28,6 +29,11 @@ unsafe extern "C" fn handle_new_window_for_tab(
 }
 
 /// Configures a window for native macOS tab grouping.
+///
+/// An empty toolbar with `Expanded` style is attached so that macOS renders
+/// the native tab bar as a separate row below the titlebar (the "standard"
+/// look).  Without an explicit toolbar, bundled `.app` may default to the
+/// compact/unified style where tabs are embedded inside the titlebar.
 pub fn configure_native_tabs(window: &Window) {
     let Some(ns_window) = get_ns_window(window) else {
         return;
@@ -35,9 +41,22 @@ pub fn configure_native_tabs(window: &Window) {
     // SAFETY: `ns_window` is valid; all selectors exist on supported macOS and signatures match.
     unsafe {
         ns_window.setTabbingMode(NSWindowTabbingMode::Preferred);
-        // Force standard tab bar rendering (not document-style titlebar tabs)
-        // that bundled .app may otherwise default to.
-        ns_window.setTitleVisibility(NSWindowTitleVisibility::Visible);
+
+        // Attach an empty toolbar with Expanded style so the tab bar gets its
+        // own row instead of being merged into the titlebar (unified style).
+        let Some(mtm) = objc2::MainThreadMarker::new() else {
+            return;
+        };
+        let toolbar = NSToolbar::initWithIdentifier(
+            NSToolbar::alloc(mtm),
+            ns_string!("com.ferrum.toolbar"),
+        );
+        ns_window.setToolbar(Some(&toolbar));
+        ns_window.setToolbarStyle(NSWindowToolbarStyle::Expanded);
+        // Hide the toolbar itself — we only need its presence to force the
+        // expanded layout for the tab bar.
+        toolbar.setVisible(false);
+
         let identifier = ns_string!("com.ferrum.terminal");
         let _: () = msg_send![&ns_window, setTabbingIdentifier: identifier];
     }
