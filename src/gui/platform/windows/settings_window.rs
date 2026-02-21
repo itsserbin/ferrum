@@ -45,13 +45,13 @@ struct NMHDR {
 
 #[allow(non_snake_case)]
 #[link(name = "comctl32")]
-extern "system" {
+unsafe extern "system" {
     fn InitCommonControlsEx(picce: *const INITCOMMONCONTROLSEX) -> i32;
 }
 
 #[allow(non_snake_case)]
 #[link(name = "user32")]
-extern "system" {
+unsafe extern "system" {
     fn EnableWindow(hwnd: HWND, enable: i32) -> i32;
 }
 
