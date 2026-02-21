@@ -77,12 +77,12 @@ fn check_for_update() -> Option<AvailableRelease> {
 
 fn fetch_latest_release(now_unix: u64) -> Option<UpdateCache> {
     let user_agent = format!("ferrum/{}", env!("CARGO_PKG_VERSION"));
-    let response = ureq::get(GITHUB_LATEST_RELEASE_URL)
-        .set("Accept", "application/vnd.github+json")
-        .set("User-Agent", &user_agent)
+    let mut response = ureq::get(GITHUB_LATEST_RELEASE_URL)
+        .header("Accept", "application/vnd.github+json")
+        .header("User-Agent", &user_agent)
         .call()
         .ok()?;
-    let release: GithubRelease = response.into_json().ok()?;
+    let release: GithubRelease = response.body_mut().read_json().ok()?;
     Some(UpdateCache {
         checked_at_unix: now_unix,
         tag_name: release.tag_name,

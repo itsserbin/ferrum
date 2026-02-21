@@ -26,7 +26,7 @@ anyhow = "1"
 vte = "0.15"
 unicode-width = "0.2"
 arboard = "3"
-ron = "0.8"
+ron = "0.12"
 wgpu = { version = "28", optional = true }
 pollster = { version = "0.4", optional = true }
 bytemuck = { version = "1", features = ["derive"], optional = true }
@@ -34,15 +34,15 @@ libc = "0.2.182"
 semver = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-ureq = { version = "2", features = ["json"] }
-muda = "0.15"
+ureq = { version = "3.2", features = ["json"] }
+muda = "0.17"
 gethostname = "1.1.0"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows-sys = { version = "0.59", features = [
+windows-sys = { version = "0.61", features = [
     "Win32_System_Diagnostics_ToolHelp",
     "Win32_System_Console",
     "Win32_System_Threading",
@@ -68,48 +68,6 @@ objc2-app-kit = { version = "0.3", features = [
     "NSWindow",
 ] }
 objc2-foundation = "0.3"
-
-[profile.dist]
-inherits = "release"
-lto = "thin"
-
-# Config for 'dist'
-[workspace.metadata.dist]
-# The preferred dist version to use in CI (Cargo.toml SemVer syntax)
-cargo-dist-version = "0.30.4"
-# CI backends to support
-ci = ["github"]
-# The installers to generate for each app
-installers = ["homebrew"]
-# Target platforms to build apps for (Rust target-triple syntax)
-targets = ["x86_64-unknown-linux-gnu", "x86_64-apple-darwin", "aarch64-apple-darwin", "x86_64-pc-windows-msvc"]
-# The archive format to use for non-windows builds (defaults .tar.xz)
-unix-archive = ".zip"
-# A GitHub repo to push Homebrew formulas to
-tap = "itsserbin/homebrew-tap"
-# Publish jobs to run in CI
-publish-jobs = ["homebrew"]
-# PR behavior for dist CI: build/upload artifacts for validation without publishing a release
-pr-run-mode = "upload"
-# Path that installers should place binaries in
-install-path = "CARGO_HOME"
-# Whether to install an updater program
-install-updater = false
-
-[workspace.metadata.dist.github-custom-runners]
-x86_64-apple-darwin = "macos-15-intel"
-aarch64-apple-darwin = "macos-14"
-
-[workspace.metadata.dist.dependencies.apt]
-pkg-config = "*"
-libx11-dev = "*"
-libxkbcommon-dev = "*"
-libwayland-dev = "*"
-libxkbcommon-x11-0 = "*"
-libudev-dev = "*"
-libgtk-3-dev = "*"
-libxdo-dev = "*"
-libvulkan-dev = { stage = ["build"] }
 
 [package.metadata.deb]
 maintainer = "itsserbin"

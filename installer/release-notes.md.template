@@ -1,0 +1,33 @@
+## Installation
+
+### macOS
+
+| File | Architecture |
+|------|--------------|
+| [${DMG_ARM}](${BASE}/${DMG_ARM}) | Apple Silicon |
+| [${DMG_INTEL}](${BASE}/${DMG_INTEL}) | Intel |
+
+> After downloading, open the DMG and drag Ferrum to Applications.
+
+Or install via Homebrew:
+
+```bash
+brew install itsserbin/tap/ferrum
+```
+
+### Windows
+
+| File | Type |
+|------|------|
+| [${WIN_SETUP}](${BASE}/${WIN_SETUP}) | Installer (x64) |
+
+### Linux
+
+| File | Format |
+|------|--------|
+| [${DEB}](${BASE}/${DEB}) | Debian / Ubuntu |
+| [${RPM}](${BASE}/${RPM}) | Fedora / RHEL |
+
+---
+
+${EXISTING}
