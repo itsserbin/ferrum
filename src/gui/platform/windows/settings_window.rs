@@ -73,7 +73,6 @@ const UDM_SETRANGE32: u32 = 0x046F;
 const UDM_SETPOS32: u32 = 0x0471;
 const UDM_GETPOS32: u32 = 0x0472;
 const UDM_SETBUDDY: u32 = 0x0469;
-const UDN_DELTAPOS: u32 = (-722i32) as u32;
 
 // Control styles
 const SS_LEFT: u32 = 0x0000_0000;
@@ -247,7 +246,7 @@ fn run_win32_window(config: AppConfig, tx: mpsc::Sender<AppConfig>) {
             CW_USEDEFAULT,
             CW_USEDEFAULT,
             480,
-            440,
+            480,
             std::ptr::null_mut(),
             std::ptr::null_mut(),
             hinstance,
@@ -298,13 +297,11 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             let nmhdr = &*(lparam as *const NMHDR);
             if nmhdr.idFrom == id::TAB_CONTROL as usize && nmhdr.code == TCN_SELCHANGE {
                 on_tab_change();
-            } else if nmhdr.code == UDN_DELTAPOS {
-                // UpDown value changed — defer update to after position is set.
-                PostMessageW(hwnd, WM_APP, 0, 0);
             }
             0
         }
-        WM_APP => {
+        WM_VSCROLL => {
+            // UpDown controls send WM_VSCROLL *after* updating position.
             on_value_changed();
             0
         }
