@@ -52,7 +52,60 @@ unsafe extern "system" {
 #[link(name = "user32")]
 unsafe extern "system" {
     fn EnableWindow(hwnd: HWND, enable: i32) -> i32;
+    fn GetDpiForWindow(hwnd: HWND) -> u32;
+    fn SystemParametersInfoW(uiAction: u32, uiParam: u32, pvParam: *mut core::ffi::c_void, fWinIni: u32) -> i32;
 }
+
+#[allow(non_snake_case)]
+#[link(name = "gdi32")]
+unsafe extern "system" {
+    fn CreateFontIndirectW(lplf: *const LOGFONTW) -> HFONT;
+    fn DeleteObject(ho: *mut core::ffi::c_void) -> i32;
+}
+
+const SPI_GETNONCLIENTMETRICS: u32 = 0x0029;
+
+#[allow(non_camel_case_types, non_snake_case)]
+#[repr(C)]
+struct LOGFONTW {
+    lfHeight: i32,
+    lfWidth: i32,
+    lfEscapement: i32,
+    lfOrientation: i32,
+    lfWeight: i32,
+    lfItalic: u8,
+    lfUnderline: u8,
+    lfStrikeOut: u8,
+    lfCharSet: u8,
+    lfOutPrecision: u8,
+    lfClipPrecision: u8,
+    lfQuality: u8,
+    lfPitchAndFamily: u8,
+    lfFaceName: [u16; 32],
+}
+
+#[allow(non_camel_case_types, non_snake_case)]
+#[repr(C)]
+struct NONCLIENTMETRICSW {
+    cbSize: u32,
+    iBorderWidth: i32,
+    iScrollWidth: i32,
+    iScrollHeight: i32,
+    iCaptionWidth: i32,
+    iCaptionHeight: i32,
+    lfCaptionFont: LOGFONTW,
+    iSmCaptionWidth: i32,
+    iSmCaptionHeight: i32,
+    lfSmCaptionFont: LOGFONTW,
+    iMenuWidth: i32,
+    iMenuHeight: i32,
+    lfMenuFont: LOGFONTW,
+    lfStatusFont: LOGFONTW,
+    lfMessageFont: LOGFONTW,
+    iPaddedBorderWidth: i32,
+}
+
+type HFONT = *mut core::ffi::c_void;
 
 const ICC_TAB_CLASSES: u32 = 0x0008;
 const ICC_UPDOWN_CLASS: u32 = 0x0010;
@@ -86,12 +139,13 @@ const BST_UNCHECKED: usize = 0x0000;
 const ES_READONLY: u32 = 0x0800;
 const ES_RIGHT: u32 = 0x0002;
 
-// ── Window layout — all positions derived from these constants ────────
+// ── Window layout — base values at 96 DPI, scaled at runtime ─────────
 mod layout {
+    pub const BASE_DPI: i32 = 96;
     pub const MARGIN: i32 = 5;
     pub const TAB_HEADER_H: i32 = 35;
     pub const ROW_SPACING: i32 = 38;
-    pub const MAX_ROWS: i32 = 5; // Security tab has the most: combo + 4 checkboxes
+    pub const MAX_ROWS: i32 = 5;
     pub const CONTENT_X: i32 = 20;
     pub const CONTENT_Y: i32 = MARGIN + TAB_HEADER_H;
 
@@ -104,6 +158,33 @@ mod layout {
     pub const RESET_X: i32 = (CLIENT_W - BTN_W) / 2;
     pub const RESET_Y: i32 = MARGIN + TAB_H + 10;
     pub const CLIENT_H: i32 = RESET_Y + BTN_H + MARGIN;
+}
+
+/// Scales a base-96-DPI value to the actual DPI.
+fn dpi_scale(value: i32, dpi: u32) -> i32 {
+    (value as i64 * dpi as i64 / layout::BASE_DPI as i64) as i32
+}
+
+/// Creates a DPI-aware font from NONCLIENTMETRICS, or falls back to DEFAULT_GUI_FONT.
+unsafe fn create_dpi_font(dpi: u32) -> *mut core::ffi::c_void {
+    let mut ncm: NONCLIENTMETRICSW = std::mem::zeroed();
+    ncm.cbSize = std::mem::size_of::<NONCLIENTMETRICSW>() as u32;
+    let ok = SystemParametersInfoW(
+        SPI_GETNONCLIENTMETRICS,
+        ncm.cbSize,
+        &mut ncm as *mut _ as *mut core::ffi::c_void,
+        0,
+    );
+    if ok != 0 {
+        // Scale the message font height for our DPI.
+        let base_height = ncm.lfMessageFont.lfHeight;
+        ncm.lfMessageFont.lfHeight = dpi_scale(base_height, dpi);
+        let hfont = CreateFontIndirectW(&ncm.lfMessageFont);
+        if !hfont.is_null() {
+            return hfont;
+        }
+    }
+    GetStockObject(DEFAULT_GUI_FONT) as *mut core::ffi::c_void
 }
 
 static WINDOW_OPEN: AtomicBool = AtomicBool::new(false);
@@ -252,14 +333,8 @@ fn run_win32_window(config: AppConfig, tx: mpsc::Sender<AppConfig>) {
 
         let title = to_wide("Ferrum Settings");
         let style = WS_OVERLAPPEDWINDOW & !WS_MAXIMIZEBOX & !WS_THICKFRAME;
-        let mut rect = RECT {
-            left: 0,
-            top: 0,
-            right: layout::CLIENT_W,
-            bottom: layout::CLIENT_H,
-        };
-        AdjustWindowRectEx(&mut rect, style, 0, 0);
 
+        // Create window first to get its DPI, then resize.
         let hwnd = CreateWindowExW(
             0,
             class_name.as_ptr(),
@@ -267,12 +342,32 @@ fn run_win32_window(config: AppConfig, tx: mpsc::Sender<AppConfig>) {
             style,
             CW_USEDEFAULT,
             CW_USEDEFAULT,
-            rect.right - rect.left,
-            rect.bottom - rect.top,
+            CW_USEDEFAULT,
+            CW_USEDEFAULT,
             std::ptr::null_mut(),
             std::ptr::null_mut(),
             hinstance,
             std::ptr::null(),
+        );
+
+        let dpi = if !hwnd.is_null() { GetDpiForWindow(hwnd) } else { 96 };
+        let dpi = if dpi == 0 { 96 } else { dpi };
+
+        // Resize to DPI-scaled client area.
+        let mut rect = RECT {
+            left: 0,
+            top: 0,
+            right: dpi_scale(layout::CLIENT_W, dpi),
+            bottom: dpi_scale(layout::CLIENT_H, dpi),
+        };
+        AdjustWindowRectEx(&mut rect, style, 0, 0);
+        SetWindowPos(
+            hwnd,
+            std::ptr::null_mut(),
+            0, 0,
+            rect.right - rect.left,
+            rect.bottom - rect.top,
+            SWP_NOMOVE | SWP_NOZORDER,
         );
 
         if hwnd.is_null() {
@@ -289,7 +384,7 @@ fn run_win32_window(config: AppConfig, tx: mpsc::Sender<AppConfig>) {
             std::mem::size_of::<i32>() as u32,
         );
 
-        let state = create_controls(hwnd, hinstance, &config, tx);
+        let state = create_controls(hwnd, hinstance, &config, tx, dpi);
 
         // Store state on the window — accessible from wndproc without any mutex.
         let state_ptr = Box::into_raw(Box::new(state));
@@ -428,9 +523,10 @@ unsafe fn create_controls(
     hinstance: HINSTANCE,
     config: &AppConfig,
     tx: mpsc::Sender<AppConfig>,
+    dpi: u32,
 ) -> Win32State { unsafe {
-    // System default GUI font (Segoe UI on modern Windows).
-    let font = GetStockObject(DEFAULT_GUI_FONT);
+    let font = create_dpi_font(dpi);
+    let s = |v: i32| dpi_scale(v, dpi);
 
     // Create tab control.
     let tab_ctrl_class = to_wide("SysTabControl32");
@@ -439,7 +535,7 @@ unsafe fn create_controls(
         tab_ctrl_class.as_ptr(),
         to_wide("").as_ptr(),
         WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS,
-        layout::MARGIN, layout::MARGIN, layout::TAB_W, layout::TAB_H,
+        s(layout::MARGIN), s(layout::MARGIN), s(layout::TAB_W), s(layout::TAB_H),
         hwnd,
         id::TAB_CONTROL as isize as HMENU,
         hinstance,
@@ -456,9 +552,9 @@ unsafe fn create_controls(
         SendMessageW(tab_ctrl, TCM_INSERTITEMW, i, &item as *const _ as LPARAM);
     }
 
-    let x0 = layout::CONTENT_X;
-    let y0 = layout::CONTENT_Y;
-    let sp = layout::ROW_SPACING;
+    let x0 = s(layout::CONTENT_X);
+    let y0 = s(layout::CONTENT_Y);
+    let sp = s(layout::ROW_SPACING);
 
     // ── Font tab controls ────────────────────────────────────────────
     let mut font_page = Vec::new();
@@ -467,7 +563,7 @@ unsafe fn create_controls(
     let font_size_initial = ((config.font.size - 8.0) / 0.5).round() as i32;
     let (font_size_updown, font_size_edit, mut ctrls) = create_spin_row(
         hwnd, hinstance, font, "Font Size:", x0, y0, 0, 48, font_size_initial,
-        id::FONT_SIZE_UPDOWN, id::FONT_SIZE_EDIT,
+        id::FONT_SIZE_UPDOWN, id::FONT_SIZE_EDIT, dpi,
     );
     font_page.append(&mut ctrls);
 
@@ -475,7 +571,7 @@ unsafe fn create_controls(
     let (font_family_combo, mut ctrls) = create_combo_row(
         hwnd, hinstance, font, "Font Family:", x0, y0 + sp,
         FontFamily::DISPLAY_NAMES, config.font.family.index(),
-        id::FONT_FAMILY_COMBO,
+        id::FONT_FAMILY_COMBO, dpi,
     );
     font_page.append(&mut ctrls);
 
@@ -483,7 +579,7 @@ unsafe fn create_controls(
     let (line_padding_updown, line_padding_edit, mut ctrls) = create_spin_row(
         hwnd, hinstance, font, "Line Padding:", x0, y0 + sp * 2, 0, 10,
         config.font.line_padding as i32,
-        id::LINE_PADDING_UPDOWN, id::LINE_PADDING_EDIT,
+        id::LINE_PADDING_UPDOWN, id::LINE_PADDING_EDIT, dpi,
     );
     font_page.append(&mut ctrls);
 
@@ -495,7 +591,7 @@ unsafe fn create_controls(
     let (theme_combo, theme_page) = create_combo_row(
         hwnd, hinstance, font, "Theme:", x0, y0,
         &["Ferrum Dark", "Ferrum Light"], theme_selected,
-        id::THEME_COMBO,
+        id::THEME_COMBO, dpi,
     );
 
     // ── Terminal tab controls ────────────────────────────────────────
@@ -505,7 +601,7 @@ unsafe fn create_controls(
     let scrollback_initial = config.terminal.max_scrollback as i32 / 100;
     let (scrollback_updown, scrollback_edit, mut ctrls) = create_spin_row(
         hwnd, hinstance, font, "Max Scrollback:", x0, y0, 0, 500, scrollback_initial,
-        id::SCROLLBACK_UPDOWN, id::SCROLLBACK_EDIT,
+        id::SCROLLBACK_UPDOWN, id::SCROLLBACK_EDIT, dpi,
     );
     terminal_page.append(&mut ctrls);
 
@@ -513,7 +609,7 @@ unsafe fn create_controls(
     let blink_initial = (config.terminal.cursor_blink_interval_ms as i32 - 100) / 50;
     let (cursor_blink_updown, cursor_blink_edit, mut ctrls) = create_spin_row(
         hwnd, hinstance, font, "Cursor Blink (ms):", x0, y0 + sp, 0, 38, blink_initial,
-        id::CURSOR_BLINK_UPDOWN, id::CURSOR_BLINK_EDIT,
+        id::CURSOR_BLINK_UPDOWN, id::CURSOR_BLINK_EDIT, dpi,
     );
     terminal_page.append(&mut ctrls);
 
@@ -523,28 +619,28 @@ unsafe fn create_controls(
     let (win_padding_updown, win_padding_edit, mut ctrls) = create_spin_row(
         hwnd, hinstance, font, "Window Padding:", x0, y0, 0, 32,
         config.layout.window_padding as i32,
-        id::WIN_PADDING_UPDOWN, id::WIN_PADDING_EDIT,
+        id::WIN_PADDING_UPDOWN, id::WIN_PADDING_EDIT, dpi,
     );
     layout_page.append(&mut ctrls);
 
     let (pane_padding_updown, pane_padding_edit, mut ctrls) = create_spin_row(
         hwnd, hinstance, font, "Pane Padding:", x0, y0 + sp, 0, 16,
         config.layout.pane_inner_padding as i32,
-        id::PANE_PADDING_UPDOWN, id::PANE_PADDING_EDIT,
+        id::PANE_PADDING_UPDOWN, id::PANE_PADDING_EDIT, dpi,
     );
     layout_page.append(&mut ctrls);
 
     let (scrollbar_updown, scrollbar_edit, mut ctrls) = create_spin_row(
         hwnd, hinstance, font, "Scrollbar Width:", x0, y0 + sp * 2, 2, 16,
         config.layout.scrollbar_width as i32,
-        id::SCROLLBAR_UPDOWN, id::SCROLLBAR_EDIT,
+        id::SCROLLBAR_UPDOWN, id::SCROLLBAR_EDIT, dpi,
     );
     layout_page.append(&mut ctrls);
 
     let (tab_bar_updown, tab_bar_edit, mut ctrls) = create_spin_row(
         hwnd, hinstance, font, "Tab Bar Height:", x0, y0 + sp * 3, 24, 48,
         config.layout.tab_bar_height as i32,
-        id::TAB_BAR_UPDOWN, id::TAB_BAR_EDIT,
+        id::TAB_BAR_UPDOWN, id::TAB_BAR_EDIT, dpi,
     );
     layout_page.append(&mut ctrls);
 
@@ -559,32 +655,32 @@ unsafe fn create_controls(
     let (security_mode_combo, mut ctrls) = create_combo_row(
         hwnd, hinstance, font, "Security Mode:", x0, y0,
         &["Disabled", "Standard", "Custom"], mode_index,
-        id::SECURITY_MODE_COMBO,
+        id::SECURITY_MODE_COMBO, dpi,
     );
     security_page.append(&mut ctrls);
 
     let enabled = !matches!(config.security.mode, SecurityMode::Disabled);
     let (paste_check, mut ctrls) = create_checkbox_row(
         hwnd, hinstance, font, "Paste Protection", x0, y0 + sp,
-        config.security.paste_protection, enabled, id::PASTE_CHECK,
+        config.security.paste_protection, enabled, id::PASTE_CHECK, dpi,
     );
     security_page.append(&mut ctrls);
 
     let (block_title_check, mut ctrls) = create_checkbox_row(
         hwnd, hinstance, font, "Block Title Query", x0, y0 + sp * 2,
-        config.security.block_title_query, enabled, id::BLOCK_TITLE_CHECK,
+        config.security.block_title_query, enabled, id::BLOCK_TITLE_CHECK, dpi,
     );
     security_page.append(&mut ctrls);
 
     let (limit_cursor_check, mut ctrls) = create_checkbox_row(
         hwnd, hinstance, font, "Limit Cursor Jumps", x0, y0 + sp * 3,
-        config.security.limit_cursor_jumps, enabled, id::LIMIT_CURSOR_CHECK,
+        config.security.limit_cursor_jumps, enabled, id::LIMIT_CURSOR_CHECK, dpi,
     );
     security_page.append(&mut ctrls);
 
     let (clear_mouse_check, mut ctrls) = create_checkbox_row(
         hwnd, hinstance, font, "Clear Mouse on Reset", x0, y0 + sp * 4,
-        config.security.clear_mouse_on_reset, enabled, id::CLEAR_MOUSE_CHECK,
+        config.security.clear_mouse_on_reset, enabled, id::CLEAR_MOUSE_CHECK, dpi,
     );
     security_page.append(&mut ctrls);
 
@@ -595,7 +691,7 @@ unsafe fn create_controls(
         to_wide("BUTTON").as_ptr(),
         reset_text.as_ptr(),
         WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-        layout::RESET_X, layout::RESET_Y, layout::BTN_W, layout::BTN_H,
+        s(layout::RESET_X), s(layout::RESET_Y), s(layout::BTN_W), s(layout::BTN_H),
         hwnd,
         id::RESET_BUTTON as isize as HMENU,
         hinstance,
@@ -648,6 +744,7 @@ unsafe fn create_controls(
 
 /// Creates a row with: static label | read-only edit | updown (spin box).
 /// Returns (updown_hwnd, edit_hwnd, vec_of_all_hwnds_for_page).
+#[allow(clippy::too_many_arguments)]
 unsafe fn create_spin_row(
     parent: HWND,
     hinstance: HINSTANCE,
@@ -660,14 +757,16 @@ unsafe fn create_spin_row(
     initial: i32,
     updown_id: i32,
     edit_id: i32,
+    dpi: u32,
 ) -> (HWND, HWND, Vec<HWND>) { unsafe {
+    let s = |v: i32| dpi_scale(v, dpi);
     let label_wide = to_wide(label_text);
     let lbl = CreateWindowExW(
         0,
         to_wide("STATIC").as_ptr(),
         label_wide.as_ptr(),
         WS_CHILD | WS_VISIBLE | SS_LEFT,
-        x, y + 3, 150, 20,
+        x, y + s(3), s(150), s(20),
         parent,
         std::ptr::null_mut(),
         hinstance,
@@ -680,7 +779,7 @@ unsafe fn create_spin_row(
         to_wide("EDIT").as_ptr(),
         to_wide("").as_ptr(),
         WS_CHILD | WS_VISIBLE | ES_READONLY | ES_RIGHT,
-        x + 160, y, 100, 24,
+        x + s(160), y, s(100), s(24),
         parent,
         edit_id as isize as HMENU,
         hinstance,
@@ -709,6 +808,7 @@ unsafe fn create_spin_row(
 
 /// Creates a row with: static label | combobox.
 /// Returns (combo_hwnd, vec_of_all_hwnds_for_page).
+#[allow(clippy::too_many_arguments)]
 unsafe fn create_combo_row(
     parent: HWND,
     hinstance: HINSTANCE,
@@ -719,14 +819,16 @@ unsafe fn create_combo_row(
     options: &[&str],
     selected: usize,
     combo_id: i32,
+    dpi: u32,
 ) -> (HWND, Vec<HWND>) { unsafe {
+    let s = |v: i32| dpi_scale(v, dpi);
     let label_wide = to_wide(label_text);
     let lbl = CreateWindowExW(
         0,
         to_wide("STATIC").as_ptr(),
         label_wide.as_ptr(),
         WS_CHILD | WS_VISIBLE | SS_LEFT,
-        x, y + 5, 150, 20,
+        x, y + s(5), s(150), s(20),
         parent,
         std::ptr::null_mut(),
         hinstance,
@@ -739,7 +841,7 @@ unsafe fn create_combo_row(
         to_wide("COMBOBOX").as_ptr(),
         std::ptr::null(),
         WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | CBS_HASSTRINGS,
-        x + 160, y, 200, 200,
+        x + s(160), y, s(200), s(200),
         parent,
         combo_id as isize as HMENU,
         hinstance,
@@ -758,6 +860,7 @@ unsafe fn create_combo_row(
 
 /// Creates a row with: checkbox.
 /// Returns (checkbox_hwnd, vec_of_all_hwnds_for_page).
+#[allow(clippy::too_many_arguments)]
 unsafe fn create_checkbox_row(
     parent: HWND,
     hinstance: HINSTANCE,
@@ -768,14 +871,16 @@ unsafe fn create_checkbox_row(
     checked: bool,
     enabled: bool,
     check_id: i32,
+    dpi: u32,
 ) -> (HWND, Vec<HWND>) { unsafe {
+    let s = |v: i32| dpi_scale(v, dpi);
     let text = to_wide(label_text);
     let check = CreateWindowExW(
         0,
         to_wide("BUTTON").as_ptr(),
         text.as_ptr(),
         WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
-        x + 160, y + 5, 250, 20,
+        x + s(160), y + s(5), s(250), s(20),
         parent,
         check_id as isize as HMENU,
         hinstance,
