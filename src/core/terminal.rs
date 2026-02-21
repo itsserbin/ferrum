@@ -159,6 +159,17 @@ impl Terminal {
         self.pending_responses.extend_from_slice(data);
     }
 
+    /// Creates a blank cell that inherits the current foreground and background colors.
+    /// Per xterm spec, erase operations fill with the current SGR background.
+    pub(crate) fn make_blank_cell(&self) -> Cell {
+        Cell {
+            character: ' ',
+            fg: self.current_fg,
+            bg: self.current_bg,
+            ..Cell::DEFAULT
+        }
+    }
+
     /// Drains all pending PTY response bytes.
     pub fn drain_responses(&mut self) -> Vec<u8> {
         std::mem::take(&mut self.pending_responses)
