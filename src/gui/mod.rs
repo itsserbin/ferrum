@@ -28,8 +28,6 @@ use winit::window::{CursorIcon, ResizeDirection, Window, WindowId};
 
 use crate::core::terminal::Terminal;
 use crate::core::{MouseMode, Position, SecurityGuard, Selection};
-#[cfg(not(target_os = "macos"))]
-use crate::gui::renderer::TAB_BAR_HEIGHT;
 use crate::gui::renderer::{CpuRenderer, Renderer as _, RendererBackend, SecurityPopup};
 use crate::pty;
 use crate::update;
