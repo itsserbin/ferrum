@@ -174,6 +174,7 @@ fn build_config_from_controls(state: &NativeSettingsState) -> AppConfig {
             limit_cursor_jumps: is_checkbox_on(&state.limit_cursor_jumps_check),
             clear_mouse_on_reset: is_checkbox_on(&state.clear_mouse_on_reset_check),
         },
+        language: AppConfig::default().language,
     }
 }
 

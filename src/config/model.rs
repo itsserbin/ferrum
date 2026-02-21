@@ -8,6 +8,7 @@ pub(crate) struct AppConfig {
     pub terminal: TerminalConfig,
     pub layout: LayoutConfig,
     pub security: SecuritySettings,
+    pub language: crate::i18n::Locale,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

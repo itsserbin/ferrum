@@ -2,6 +2,7 @@
 
 mod config;
 mod core;
+mod i18n;
 mod gui;
 mod pty;
 mod update;

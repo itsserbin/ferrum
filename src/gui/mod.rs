@@ -231,6 +231,7 @@ impl App {
         let (update_tx, update_rx) = mpsc::channel::<update::AvailableRelease>();
         update::spawn_update_checker(update_tx);
         let config = crate::config::load_config();
+        crate::i18n::set_locale(config.language);
         let (settings_tx, settings_rx) = std::sync::mpsc::channel();
         App {
             windows: std::collections::HashMap::new(),
