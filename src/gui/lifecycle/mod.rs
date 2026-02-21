@@ -217,6 +217,18 @@ impl ApplicationHandler for App {
             }
         }
 
+        // Windows/Linux: config changes are sent directly through the channel
+        // from the settings window thread. We only need to detect window close
+        // for bookkeeping (the window thread already saved config on close).
+        #[cfg(target_os = "windows")]
+        {
+            platform::windows::settings_window::check_window_closed();
+        }
+        #[cfg(target_os = "linux")]
+        {
+            platform::linux::settings_window::check_window_closed();
+        }
+
         // Apply config changes from native settings window.
         while let Ok(new_config) = self.settings_rx.try_recv() {
             for win in self.windows.values_mut() {
