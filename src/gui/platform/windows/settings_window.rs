@@ -46,13 +46,13 @@ struct NMHDR {
 #[allow(non_snake_case)]
 #[link(name = "comctl32")]
 extern "system" {
-    fn InitCommonControlsEx(picce: *const INITCOMMONCONTROLSEX) -> BOOL;
+    fn InitCommonControlsEx(picce: *const INITCOMMONCONTROLSEX) -> i32;
 }
 
 #[allow(non_snake_case)]
 #[link(name = "user32")]
 extern "system" {
-    fn EnableWindow(hwnd: HWND, enable: BOOL) -> BOOL;
+    fn EnableWindow(hwnd: HWND, enable: i32) -> i32;
 }
 
 const ICC_TAB_CLASSES: u32 = 0x0008;
@@ -80,6 +80,8 @@ const CBS_DROPDOWNLIST: u32 = 0x0003;
 const CBS_HASSTRINGS: u32 = 0x0200;
 const BS_AUTOCHECKBOX: u32 = 0x0003;
 const BS_PUSHBUTTON: u32 = 0x0000_0000;
+const BST_CHECKED: usize = 0x0001;
+const BST_UNCHECKED: usize = 0x0000;
 
 static WINDOW_OPEN: AtomicBool = AtomicBool::new(false);
 static JUST_CLOSED: AtomicBool = AtomicBool::new(false);
@@ -223,12 +225,12 @@ fn run_win32_window(config: AppConfig, tx: mpsc::Sender<AppConfig>) {
             cbClsExtra: 0,
             cbWndExtra: 0,
             hInstance: hinstance,
-            hIcon: 0,
-            hCursor: LoadCursorW(0, IDC_ARROW),
-            hbrBackground: (COLOR_WINDOW + 1) as HBRUSH,
+            hIcon: std::ptr::null_mut(),
+            hCursor: LoadCursorW(std::ptr::null_mut(), IDC_ARROW),
+            hbrBackground: (COLOR_WINDOW + 1) as usize as HBRUSH,
             lpszMenuName: std::ptr::null(),
             lpszClassName: class_name.as_ptr(),
-            hIconSm: 0,
+            hIconSm: std::ptr::null_mut(),
         };
         RegisterClassExW(&wc);
 
@@ -242,8 +244,8 @@ fn run_win32_window(config: AppConfig, tx: mpsc::Sender<AppConfig>) {
             CW_USEDEFAULT,
             520,
             480,
-            0,
-            0,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
             hinstance,
             std::ptr::null(),
         );
@@ -252,7 +254,7 @@ fn run_win32_window(config: AppConfig, tx: mpsc::Sender<AppConfig>) {
         let dark: i32 = 1;
         let _ = DwmSetWindowAttribute(
             hwnd,
-            DWMWA_USE_IMMERSIVE_DARK_MODE,
+            DWMWA_USE_IMMERSIVE_DARK_MODE as u32,
             &dark as *const _ as *const _,
             std::mem::size_of::<i32>() as u32,
         );
@@ -268,7 +270,7 @@ fn run_win32_window(config: AppConfig, tx: mpsc::Sender<AppConfig>) {
 
         // Message loop.
         let mut msg: MSG = std::mem::zeroed();
-        while GetMessageW(&mut msg, 0, 0, 0) > 0 {
+        while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }
@@ -559,7 +561,7 @@ unsafe fn create_controls(
         150,
         30,
         hwnd,
-        id::RESET_BUTTON as HMENU,
+        id::RESET_BUTTON as isize as HMENU,
         hinstance,
         std::ptr::null(),
     );
@@ -636,7 +638,7 @@ unsafe fn create_window(
         w,
         h,
         parent,
-        ctrl_id as HMENU,
+        ctrl_id as isize as HMENU,
         hinstance,
         std::ptr::null(),
     )
@@ -667,7 +669,7 @@ unsafe fn create_trackbar_row(
         130,
         20,
         parent,
-        0,
+        std::ptr::null_mut(),
         hinstance,
         std::ptr::null(),
     );
@@ -683,7 +685,7 @@ unsafe fn create_trackbar_row(
         250,
         35,
         parent,
-        track_id as HMENU,
+        track_id as isize as HMENU,
         hinstance,
         std::ptr::null(),
     );
@@ -702,7 +704,7 @@ unsafe fn create_trackbar_row(
         60,
         20,
         parent,
-        label_id as HMENU,
+        label_id as isize as HMENU,
         hinstance,
         std::ptr::null(),
     );
@@ -733,7 +735,7 @@ unsafe fn create_combo_row(
         130,
         20,
         parent,
-        0,
+        std::ptr::null_mut(),
         hinstance,
         std::ptr::null(),
     );
@@ -748,7 +750,7 @@ unsafe fn create_combo_row(
         250,
         200, // Drop-down height
         parent,
-        combo_id as HMENU,
+        combo_id as isize as HMENU,
         hinstance,
         std::ptr::null(),
     );
@@ -785,7 +787,7 @@ unsafe fn create_checkbox_row(
         250,
         20,
         parent,
-        check_id as HMENU,
+        check_id as isize as HMENU,
         hinstance,
         std::ptr::null(),
     );
