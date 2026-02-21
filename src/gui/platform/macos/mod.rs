@@ -1,5 +1,6 @@
 mod ffi;
 mod pin;
+pub mod settings_window;
 mod tabs;
 
 use objc2::rc::Retained;
@@ -12,6 +13,7 @@ pub use pin::{
     is_window_pinned, remove_toolbar_item, set_native_tab_group_pin_state, set_pin_button_state,
     setup_toolbar, take_gear_button_requests, take_pin_button_requests,
 };
+pub use settings_window::{close_settings_window, is_settings_window_open, open_settings_window};
 pub use tabs::{
     add_as_tab, configure_native_tabs, install_new_tab_handler, select_next_tab,
     select_previous_tab, select_tab, sync_native_tab_bar_visibility, take_new_tab_requests,
