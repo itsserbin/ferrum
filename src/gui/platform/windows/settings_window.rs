@@ -333,13 +333,18 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             DestroyWindow(hwnd);
             0
         }
+        WM_DESTROY if !state_ptr.is_null() => {
+            // Save config while child controls still exist (they respond
+            // to SendMessageW). In WM_NCDESTROY they're already gone.
+            let config = build_config(&*state_ptr);
+            crate::config::save_config(&config);
+            0
+        }
         WM_NCDESTROY => {
-            // Last message — save config, free state, clean up statics.
+            // Last message — free state, clean up statics.
             if !state_ptr.is_null() {
                 SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
-                let state = Box::from_raw(state_ptr);
-                let config = build_config(&state);
-                crate::config::save_config(&config);
+                drop(Box::from_raw(state_ptr));
             }
             SETTINGS_HWND.store(std::ptr::null_mut(), Ordering::Release);
             WINDOW_OPEN.store(false, Ordering::Relaxed);
