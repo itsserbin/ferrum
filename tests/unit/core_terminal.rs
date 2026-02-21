@@ -344,8 +344,8 @@ fn osc7_with_st_terminator() {
 fn recolor_remaps_default_fg_bg() {
     let old_fg = Color::DEFAULT_FG;
     let old_bg = Color::DEFAULT_BG;
-    let new_fg = Color { r: 76, g: 79, b: 105 }; // Catppuccin Latte text
-    let new_bg = Color { r: 239, g: 241, b: 245 }; // Catppuccin Latte base
+    let new_fg = Color { r: 46, g: 52, b: 64 };    // Ferrum Light fg
+    let new_bg = Color { r: 245, g: 240, b: 235 };  // Ferrum Light bg
 
     let mut term = Terminal::new(4, 4);
     // Default cells have DEFAULT_FG/DEFAULT_BG.
@@ -364,8 +364,8 @@ fn recolor_remaps_default_fg_bg() {
 fn recolor_leaves_custom_sgr_colors_untouched() {
     let old_fg = Color::DEFAULT_FG;
     let old_bg = Color::DEFAULT_BG;
-    let new_fg = Color { r: 76, g: 79, b: 105 };
-    let new_bg = Color { r: 239, g: 241, b: 245 };
+    let new_fg = Color { r: 46, g: 52, b: 64 };
+    let new_bg = Color { r: 245, g: 240, b: 235 };
 
     let mut term = Terminal::new(4, 10);
     // Write text with a custom RGB color: ESC[38;2;255;128;0m (orange foreground)
@@ -387,10 +387,10 @@ fn recolor_remaps_ansi_palette_colors() {
     let old_fg = Color::DEFAULT_FG;
     let old_bg = Color::DEFAULT_BG;
     let old_ansi = Color::ANSI;
-    // Catppuccin Latte ANSI (different from Ferrum Dark)
+    // Ferrum Light ANSI (different from Ferrum Dark)
     let new_ansi: [Color; 16] = {
         let mut a = Color::ANSI;
-        a[1] = Color { r: 210, g: 15, b: 57 }; // Catppuccin Latte red
+        a[1] = Color { r: 191, g: 59, b: 59 }; // Ferrum Light red
         a
     };
 

@@ -1,8 +1,19 @@
 use super::*;
 use super::RenderTarget;
+use crate::core::Color;
 use crate::gui::pane::PaneRect;
 
 impl CpuRenderer {
+    /// Maps hardcoded default colors to the current theme palette.
+    ///
+    /// Cells created by `Cell::default()` carry compile-time `Color::DEFAULT_FG/BG`.
+    /// When the active theme differs from those constants, we remap them so
+    /// empty cells render with the theme's actual defaults.
+    fn remap_defaults(&self, fg: Color, bg: Color) -> (Color, Color) {
+        let fg = if fg == Color::DEFAULT_FG { self.palette.default_fg } else { fg };
+        let bg = if bg == Color::DEFAULT_BG { self.palette.default_bg } else { bg };
+        (fg, bg)
+    }
     /// Renders terminal cells with top/left offsets for tab bar and padding.
     pub fn render(
         &mut self,
@@ -29,7 +40,7 @@ impl CpuRenderer {
                 }
 
                 let selected = selection.is_some_and(|s| s.contains(abs_row, col));
-                let (mut fg, mut bg) = (cell.fg, cell.bg);
+                let (mut fg, mut bg) = self.remap_defaults(cell.fg, cell.bg);
 
                 // Reverse video
                 if cell.reverse {
@@ -112,7 +123,7 @@ impl CpuRenderer {
                 }
 
                 let selected = selection.is_some_and(|s| s.contains(abs_row, col));
-                let (mut fg, mut bg) = (cell.fg, cell.bg);
+                let (mut fg, mut bg) = self.remap_defaults(cell.fg, cell.bg);
 
                 if cell.reverse {
                     std::mem::swap(&mut fg, &mut bg);

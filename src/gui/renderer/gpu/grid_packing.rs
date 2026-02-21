@@ -1,6 +1,6 @@
 //! Packs terminal grid cells into GPU buffer format.
 
-use crate::core::{Grid, Selection};
+use crate::core::{Color, Grid, Selection};
 use crate::gui::pane::PaneRect;
 
 use super::GridBatch;
@@ -95,14 +95,15 @@ impl super::GpuRenderer {
                     attrs |= 8;
                 }
 
-                let mut fg = cell.fg;
+                let mut fg = if cell.fg == Color::DEFAULT_FG { self.palette.default_fg } else { cell.fg };
+                let bg_color = if cell.bg == Color::DEFAULT_BG { self.palette.default_bg } else { cell.bg };
                 if cell.bold {
                     fg = fg.bold_bright_with_palette(&self.palette.ansi);
                 }
                 if fg_dim > 0.0 {
                     fg = fg.dimmed(fg_dim);
                 }
-                let mut bg = cell.bg.to_pixel();
+                let mut bg = bg_color.to_pixel();
                 if selected {
                     bg = super::super::blend_rgb(
                         bg,

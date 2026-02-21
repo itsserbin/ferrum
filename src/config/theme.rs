@@ -54,7 +54,7 @@ impl ThemeChoice {
     pub fn resolve(&self) -> ThemePalette {
         match self {
             ThemeChoice::FerrumDark => ThemePalette::ferrum_dark(),
-            ThemeChoice::CatppuccinLatte => ThemePalette::catppuccin_latte(),
+            ThemeChoice::FerrumLight => ThemePalette::ferrum_light(),
         }
     }
 }
@@ -108,51 +108,51 @@ impl ThemePalette {
         }
     }
 
-    /// Catppuccin Latte — official light theme palette.
-    fn catppuccin_latte() -> Self {
+    /// Ferrum Light — original warm light palette.
+    fn ferrum_light() -> Self {
         Self {
-            default_fg: Color::from_pixel(0x4C4F69),  // Text
-            default_bg: Color::from_pixel(0xEFF1F5),  // Base
+            default_fg: Color { r: 46, g: 52, b: 64 },    // #2E3440
+            default_bg: Color { r: 245, g: 240, b: 235 },  // #F5F0EB
             ansi: [
-                Color::from_pixel(0x5C5F77),  //  0 black    Subtext1
-                Color::from_pixel(0xD20F39),  //  1 red      Red
-                Color::from_pixel(0x40A02B),  //  2 green    Green
-                Color::from_pixel(0xDF8E1D),  //  3 yellow   Yellow
-                Color::from_pixel(0x1E66F5),  //  4 blue     Blue
-                Color::from_pixel(0xEA76CB),  //  5 magenta  Pink
-                Color::from_pixel(0x179299),  //  6 cyan     Teal
-                Color::from_pixel(0xACB0BE),  //  7 white    Surface2
-                Color::from_pixel(0x6C6F85),  //  8 br black Subtext0
-                Color::from_pixel(0xD20F39),  //  9 br red   Red
-                Color::from_pixel(0x40A02B),  // 10 br green Green
-                Color::from_pixel(0xDF8E1D),  // 11 br yello Yellow
-                Color::from_pixel(0x1E66F5),  // 12 br blue  Blue
-                Color::from_pixel(0xEA76CB),  // 13 br magen Pink
-                Color::from_pixel(0x179299),  // 14 br cyan  Teal
-                Color::from_pixel(0xBCC0CC),  // 15 br white Surface1
+                Color { r: 59, g: 66, b: 82 },     //  0 black    #3B4252
+                Color { r: 191, g: 59, b: 59 },     //  1 red      #BF3B3B
+                Color { r: 58, g: 140, b: 46 },     //  2 green    #3A8C2E
+                Color { r: 166, g: 113, b: 10 },    //  3 yellow   #A6710A
+                Color { r: 43, g: 108, b: 179 },    //  4 blue     #2B6CB3
+                Color { r: 155, g: 59, b: 181 },    //  5 magenta  #9B3BB5
+                Color { r: 26, g: 138, b: 138 },    //  6 cyan     #1A8A8A
+                Color { r: 184, g: 178, b: 172 },   //  7 white    #B8B2AC
+                Color { r: 107, g: 115, b: 133 },   //  8 br black #6B7385
+                Color { r: 217, g: 96, b: 96 },     //  9 br red   #D96060
+                Color { r: 90, g: 175, b: 69 },     // 10 br green #5AAF45
+                Color { r: 196, g: 139, b: 30 },    // 11 br yello #C48B1E
+                Color { r: 74, g: 144, b: 217 },    // 12 br blue  #4A90D9
+                Color { r: 184, g: 95, b: 209 },    // 13 br magen #B85FD1
+                Color { r: 55, g: 168, b: 168 },    // 14 br cyan  #37A8A8
+                Color { r: 213, g: 207, b: 201 },   // 15 br white #D5CFC9
             ],
-            selection_overlay_color: Color::from_pixel(0x7287FD), // Lavender
-            selection_overlay_alpha: 96,
-            scrollbar_color: Color::from_pixel(0x9CA0B0),        // Overlay0
-            scrollbar_hover_color: Color::from_pixel(0x8C8FA1),  // Overlay1
-            scrollbar_base_alpha: 180,
-            active_accent: Color::from_pixel(0x7287FD),          // Lavender
-            pin_active_color: Color::from_pixel(0x7287FD),       // Lavender
-            security_accent: Color::from_pixel(0xDF8E1D),        // Yellow
-            menu_bg: Color::from_pixel(0xE6E9EF),               // Mantle
-            bar_bg: Color::from_pixel(0xDCE0E8),                // Crust
-            active_tab_bg: Color::from_pixel(0xEFF1F5),         // Base
-            inactive_tab_hover: Color::from_pixel(0xE6E9EF),    // Mantle
-            tab_text_active: Color::from_pixel(0x4C4F69),       // Text
-            tab_text_inactive: Color::from_pixel(0x9CA0B0),     // Overlay0
-            tab_border: Color::from_pixel(0xCCD0DA),            // Surface0
-            close_hover_bg: Color::from_pixel(0xBCC0CC),        // Surface1
-            rename_field_bg: Color::from_pixel(0xDCE0E8),       // Crust
-            rename_field_border: Color::from_pixel(0x9CA0B0),   // Overlay0
-            rename_selection_bg: Color::from_pixel(0x7287FD),   // Lavender
-            insertion_color: Color::from_pixel(0x8839EF),       // Mauve
-            win_btn_close_hover: Color::from_pixel(0xD20F39),   // Red
-            split_divider_color: Color::from_pixel(0xACB0BE),   // Surface2
+            selection_overlay_color: Color::from_pixel(0x6B8EB5), // Steel blue
+            selection_overlay_alpha: 80,
+            scrollbar_color: Color::from_pixel(0xA8A2A0),
+            scrollbar_hover_color: Color::from_pixel(0x8F8985),
+            scrollbar_base_alpha: 160,
+            active_accent: Color::from_pixel(0x4A6FA5),          // Deep steel blue
+            pin_active_color: Color::from_pixel(0x4A6FA5),
+            security_accent: Color::from_pixel(0xA6710A),        // Amber
+            menu_bg: Color::from_pixel(0xEBE6E1),
+            bar_bg: Color::from_pixel(0xE5DFD9),
+            active_tab_bg: Color::from_pixel(0xF5F0EB),         // = default_bg
+            inactive_tab_hover: Color::from_pixel(0xECE7E2),
+            tab_text_active: Color::from_pixel(0x2E3440),       // = default_fg
+            tab_text_inactive: Color::from_pixel(0x8A8480),
+            tab_border: Color::from_pixel(0xDDD7D1),
+            close_hover_bg: Color::from_pixel(0xDDD7D1),
+            rename_field_bg: Color::from_pixel(0xFFFFFF),
+            rename_field_border: Color::from_pixel(0xA8A2A0),
+            rename_selection_bg: Color::from_pixel(0x4A6FA5),
+            insertion_color: Color::from_pixel(0x9B3BB5),        // Magenta hue
+            win_btn_close_hover: Color::from_pixel(0xD93B3B),
+            split_divider_color: Color::from_pixel(0xC8C2BC),
         }
     }
 }
@@ -172,8 +172,8 @@ mod tests {
     }
 
     #[test]
-    fn catppuccin_latte_is_light_theme() {
-        let palette = ThemeChoice::CatppuccinLatte.resolve();
+    fn ferrum_light_is_light_theme() {
+        let palette = ThemeChoice::FerrumLight.resolve();
         // Light theme: background should be brighter than foreground
         let bg_brightness =
             palette.default_bg.r as u32 + palette.default_bg.g as u32 + palette.default_bg.b as u32;
@@ -181,13 +181,13 @@ mod tests {
             palette.default_fg.r as u32 + palette.default_fg.g as u32 + palette.default_fg.b as u32;
         assert!(
             bg_brightness > fg_brightness,
-            "Latte bg ({bg_brightness}) should be brighter than fg ({fg_brightness})"
+            "Ferrum Light bg ({bg_brightness}) should be brighter than fg ({fg_brightness})"
         );
     }
 
     #[test]
     fn each_theme_has_16_ansi_colors() {
-        for theme in [ThemeChoice::FerrumDark, ThemeChoice::CatppuccinLatte] {
+        for theme in [ThemeChoice::FerrumDark, ThemeChoice::FerrumLight] {
             let palette = theme.resolve();
             assert_eq!(palette.ansi.len(), 16);
         }

@@ -74,7 +74,8 @@ pub(crate) enum FontFamily {
 pub(crate) enum ThemeChoice {
     #[default]
     FerrumDark,
-    CatppuccinLatte,
+    #[serde(alias = "CatppuccinLatte")]
+    FerrumLight,
 }
 
 #[cfg(test)]
@@ -94,9 +95,9 @@ mod tests {
 
     #[test]
     fn partial_config_uses_defaults() {
-        let partial = "(theme: CatppuccinLatte)";
+        let partial = "(theme: FerrumLight)";
         let config: AppConfig = ron::from_str(partial).expect("deserialize partial");
-        assert_eq!(config.theme, ThemeChoice::CatppuccinLatte);
+        assert_eq!(config.theme, ThemeChoice::FerrumLight);
         assert_eq!(config.font.size, 14.0);
         assert_eq!(config.terminal.max_scrollback, 1000);
     }

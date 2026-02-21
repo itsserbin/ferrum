@@ -155,10 +155,10 @@ impl SettingsOverlay {
     fn theme_items(&self) -> Vec<SettingItem> {
         vec![SettingItem::EnumChoice {
             label: "Theme",
-            options: &["Ferrum Dark", "Catppuccin Latte"],
+            options: &["Ferrum Dark", "Ferrum Light"],
             selected: match self.editing_config.theme {
                 ThemeChoice::FerrumDark => 0,
-                ThemeChoice::CatppuccinLatte => 1,
+                ThemeChoice::FerrumLight => 1,
             },
         }]
     }
@@ -287,7 +287,7 @@ mod tests {
     #[test]
     fn theme_enum_choice_maps_correctly() {
         let mut config = AppConfig::default();
-        config.theme = ThemeChoice::CatppuccinLatte;
+        config.theme = ThemeChoice::FerrumLight;
         let mut overlay = SettingsOverlay::new(&config);
         overlay.active_category = SettingsCategory::Theme;
         let items = overlay.items();

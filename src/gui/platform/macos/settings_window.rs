@@ -142,7 +142,7 @@ fn build_config_from_controls(state: &NativeSettingsState) -> AppConfig {
         },
         theme: match state.theme_popup.indexOfSelectedItem() {
             0 => ThemeChoice::FerrumDark,
-            _ => ThemeChoice::CatppuccinLatte,
+            _ => ThemeChoice::FerrumLight,
         },
         terminal: TerminalConfig {
             max_scrollback: state.scrollback_stepper.integerValue() as usize,
@@ -486,13 +486,13 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
 
     let theme_selected = match config.theme {
         ThemeChoice::FerrumDark => 0,
-        ThemeChoice::CatppuccinLatte => 1,
+        ThemeChoice::FerrumLight => 1,
     };
     let theme_popup = create_popup_row(
         mtm,
         &theme_view,
         "Theme:",
-        &["Ferrum Dark", "Catppuccin Latte"],
+        &["Ferrum Dark", "Ferrum Light"],
         theme_selected,
         280.0,
     );

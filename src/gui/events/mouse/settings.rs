@@ -303,7 +303,7 @@ impl FerrumWindow {
                 "Theme" => {
                     overlay.editing_config.theme = match option_index {
                         0 => ThemeChoice::FerrumDark,
-                        _ => ThemeChoice::CatppuccinLatte,
+                        _ => ThemeChoice::FerrumLight,
                     };
                 }
                 _ => {}
