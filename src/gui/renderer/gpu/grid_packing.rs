@@ -85,15 +85,14 @@ impl super::GpuRenderer {
                 }
 
                 let mut attrs = 0u32;
-                if cell.bold {
-                    attrs |= 1;
-                }
-                if cell.underline_style != UnderlineStyle::None {
-                    attrs |= 4;
-                }
-                if cell.reverse {
-                    attrs |= 8;
-                }
+                if cell.bold { attrs |= 1; }
+                if cell.italic { attrs |= 2; }
+                if cell.underline_style != UnderlineStyle::None { attrs |= 4; }
+                if cell.reverse { attrs |= 8; }
+                if cell.dim { attrs |= 16; }
+                if cell.strikethrough { attrs |= 32; }
+                // Encode underline style in bits 6-7
+                attrs |= (cell.underline_style as u32 & 3) << 6;
 
                 let mut fg = if cell.fg == Color::SENTINEL_FG { self.palette.default_fg } else { cell.fg };
                 let bg_color = if cell.bg == Color::SENTINEL_BG { self.palette.default_bg } else { cell.bg };

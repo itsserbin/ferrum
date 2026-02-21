@@ -31,8 +31,11 @@ struct Cell {
     bg:        u32,      // background  0xRRGGBB
     attrs:     u32,      // bit 0: bold
                          // bit 1: italic
-                         // bit 2: underline
+                         // bit 2: underline (any style)
                          // bit 3: reverse video
+                         // bit 4: dim
+                         // bit 5: strikethrough
+                         // bits 6-7: underline style (0=none, 1=single, 2=double, 3=curly)
 }
 
 // ---- Glyph lookup entry (32 bytes, 16-byte aligned) ----
@@ -108,6 +111,9 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
         bg = tmp;
     }
 
+    // Dim: reduce foreground intensity by 40%
+    let is_dim = (cell.attrs & 16u) != 0u;
+
     // Start with background color.
     var color = vec4<f32>(unpack_rgb(bg), 1.0);
 
@@ -131,7 +137,10 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
                 let alpha = textureLoad(atlas, vec2<i32>(tex_x, tex_y), 0).r;
 
                 // Blend foreground over background using glyph alpha.
-                let fg_color = unpack_rgb(fg);
+                var fg_color = unpack_rgb(fg);
+                if is_dim {
+                    fg_color = fg_color * 0.6;
+                }
                 color = vec4<f32>(
                     mix(color.rgb, fg_color, alpha),
                     1.0,
@@ -140,10 +149,35 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
         }
     }
 
-    // Underline: 2 px line at the bottom of the cell.
-    let is_underline = (cell.attrs & 4u) != 0u;
-    if is_underline && cell_y >= uniforms.cell_height - 2u {
-        color = vec4<f32>(unpack_rgb(fg), 1.0);
+    // Compute potentially dimmed foreground for decorations.
+    var decor_fg = unpack_rgb(fg);
+    if is_dim {
+        decor_fg = decor_fg * 0.6;
+    }
+
+    // Underline styles (bits 6-7)
+    let underline_style = (cell.attrs >> 6u) & 3u;
+    if underline_style == 1u && cell_y >= uniforms.cell_height - 2u {
+        // Single underline: 2px at bottom
+        color = vec4<f32>(decor_fg, 1.0);
+    } else if underline_style == 2u && (cell_y == uniforms.cell_height - 1u || cell_y == uniforms.cell_height - 3u) {
+        // Double underline: two 1px lines
+        color = vec4<f32>(decor_fg, 1.0);
+    } else if underline_style == 3u && cell_y >= uniforms.cell_height - 3u {
+        // Curly underline: approximate with 3px band
+        let wave_phase = f32(cell_x) * 6.28318 / f32(uniforms.cell_width);
+        let wave_center = f32(uniforms.cell_height) - 2.0;
+        let wave_y = wave_center + sin(wave_phase);
+        let dist = abs(f32(cell_y) - wave_y);
+        if dist < 1.0 {
+            color = vec4<f32>(decor_fg, 1.0);
+        }
+    }
+
+    // Strikethrough: 1px line at vertical center
+    let is_strikethrough = (cell.attrs & 32u) != 0u;
+    if is_strikethrough && cell_y == uniforms.cell_height / 2u {
+        color = vec4<f32>(decor_fg, 1.0);
     }
 
     textureStore(output, vec2<i32>(i32(pixel_x), i32(pixel_y)), color);
