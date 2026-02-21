@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::time::Instant;
 
+#[cfg(not(target_os = "linux"))]
 use muda::MenuId;
 
 use crate::gui::*;
@@ -167,6 +168,7 @@ pub(super) enum WindowRequest {
 }
 
 /// Tracks which context menu is currently open and what actions it maps to.
+#[cfg(not(target_os = "linux"))]
 pub(super) enum MenuContext {
     Tab {
         tab_index: usize,
@@ -197,6 +199,7 @@ pub(super) struct FerrumWindow {
     pub(super) keyboard_selection_anchor: Option<crate::core::SelectionPoint>,
     pub(super) selection_drag_mode: SelectionDragMode,
     pub(super) hovered_tab: Option<usize>,
+    #[cfg(not(target_os = "linux"))]
     pub(super) pending_menu_context: Option<MenuContext>,
     pub(super) security_popup: Option<SecurityPopup>,
     #[cfg(not(target_os = "macos"))]

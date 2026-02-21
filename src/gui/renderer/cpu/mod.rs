@@ -11,6 +11,7 @@ use super::types::GlyphBitmap;
 /// CPU-based software renderer using softbuffer pixel buffers.
 pub struct CpuRenderer {
     pub(in crate::gui::renderer) font: Font,
+    pub(in crate::gui::renderer) fallback_fonts: Vec<Font>,
     pub(in crate::gui::renderer) metrics: FontMetrics,
     pub(in crate::gui::renderer) glyph_cache: HashMap<char, GlyphBitmap>,
     pub(in crate::gui::renderer) palette: ThemePalette,
@@ -21,6 +22,11 @@ impl CpuRenderer {
         let font_data = crate::config::font_data(config.font.family);
         let font = Font::from_bytes(font_data, FontSettings::default())
             .expect("font load failed");
+
+        let fallback_fonts: Vec<Font> = crate::config::fallback_fonts_data()
+            .iter()
+            .map(|d| Font::from_bytes(*d, FontSettings::default()).expect("fallback font load failed"))
+            .collect();
 
         let mut metrics = FontMetrics {
             cell_width: 1,
@@ -42,6 +48,7 @@ impl CpuRenderer {
 
         CpuRenderer {
             font,
+            fallback_fonts,
             metrics,
             glyph_cache: HashMap::new(),
             palette,

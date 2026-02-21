@@ -1,6 +1,5 @@
-#[cfg(any(target_os = "macos", target_os = "windows"))]
-use muda::ContextMenu;
-use muda::{Menu, MenuId, MenuItem, PredefinedMenuItem};
+#[cfg(not(target_os = "linux"))]
+use muda::{ContextMenu, Menu, MenuId, MenuItem, PredefinedMenuItem};
 
 /// Identifiers for context menu actions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -26,6 +25,7 @@ pub(super) enum MenuAction {
 /// Builds the terminal area context menu.
 /// `has_selection`: whether text is currently selected
 /// `has_multiple_panes`: whether this tab has >1 pane
+#[cfg(not(target_os = "linux"))]
 pub(super) fn build_terminal_context_menu(
     has_selection: bool,
     has_multiple_panes: bool,
@@ -84,6 +84,7 @@ pub(super) fn build_terminal_context_menu(
 }
 
 /// Builds the tab bar context menu.
+#[cfg(not(target_os = "linux"))]
 pub(super) fn build_tab_context_menu() -> (Menu, Vec<(MenuId, MenuAction)>) {
     let menu = Menu::new();
     let mut action_map = Vec::new();
@@ -107,6 +108,7 @@ pub(super) fn build_tab_context_menu() -> (Menu, Vec<(MenuId, MenuAction)>) {
 }
 
 /// Shows a context menu natively for the given window.
+#[cfg(not(target_os = "linux"))]
 pub(super) fn show_context_menu(
     window: &winit::window::Window,
     menu: &Menu,
@@ -137,11 +139,5 @@ pub(super) fn show_context_menu(
                 );
             }
         }
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        let _ = (window, menu, position);
-        eprintln!("Native context menus not yet supported on Linux");
     }
 }

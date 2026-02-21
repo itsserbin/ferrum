@@ -7,13 +7,15 @@ use std::sync::mpsc;
 
 use gtk4::prelude::*;
 use gtk4::{
-    Adjustment, Align, ComboBoxText, Label, Notebook, Orientation, SpinButton, Switch, Widget,
+    Adjustment, Align, DropDown, Label, Notebook, Orientation, SpinButton, StringList, Switch,
     Window,
 };
 
 static WINDOW_OPEN: AtomicBool = AtomicBool::new(false);
 /// Set to true when the GTK window closes; cleared by `check_window_closed()`.
 static JUST_CLOSED: AtomicBool = AtomicBool::new(false);
+/// Set by `close_settings_window()` from the main thread; polled by GTK timer.
+static CLOSE_REQUESTED: AtomicBool = AtomicBool::new(false);
 
 pub fn is_settings_window_open() -> bool {
     WINDOW_OPEN.load(Ordering::Relaxed)
@@ -26,7 +28,13 @@ pub fn check_window_closed() -> bool {
 
 pub fn close_settings_window() {
     WINDOW_OPEN.store(false, Ordering::Relaxed);
+    CLOSE_REQUESTED.store(true, Ordering::Relaxed);
 }
+
+/// Ensures GTK4 is initialized exactly once on a dedicated thread.
+/// That thread runs a `glib::MainLoop` forever; subsequent windows are
+/// dispatched onto it via `MainContext::default().invoke()`.
+static GTK_INIT: std::sync::Once = std::sync::Once::new();
 
 pub fn open_settings_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>) {
     if WINDOW_OPEN.load(Ordering::Relaxed) {
@@ -35,37 +43,26 @@ pub fn open_settings_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>) {
     WINDOW_OPEN.store(true, Ordering::Relaxed);
 
     let config = config.clone();
-    std::thread::spawn(move || {
-        run_gtk_window(config, tx);
+
+    GTK_INIT.call_once(|| {
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            gtk4::init().expect("Failed to initialize GTK4");
+            let _ = ready_tx.send(());
+            gtk4::glib::MainLoop::new(None, false).run();
+        });
+        ready_rx.recv().expect("GTK thread failed to initialize");
+    });
+
+    gtk4::glib::MainContext::default().invoke(move || {
+        build_window(&config, tx);
     });
 }
 
 // ── GTK4 window ──────────────────────────────────────────────────────
 
-fn run_gtk_window(config: AppConfig, tx: mpsc::Sender<AppConfig>) {
-    let app = gtk4::Application::builder()
-        .application_id("io.github.itsserbin.ferrum.settings")
-        .build();
-
-    let tx_close = tx.clone();
-    let config_clone = config.clone();
-
-    app.connect_activate(move |app| {
-        build_window(app, &config_clone, tx_close.clone());
-    });
-
-    // GTK4 Application::run() processes command-line args; pass empty to avoid
-    // interfering with the main application's args.
-    app.run_with_args::<&str>(&[]);
-
-    // Window closed — persist config and signal lifecycle.
-    WINDOW_OPEN.store(false, Ordering::Relaxed);
-    JUST_CLOSED.store(true, Ordering::Relaxed);
-}
-
-fn build_window(app: &gtk4::Application, config: &AppConfig, tx: mpsc::Sender<AppConfig>) {
+fn build_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>) {
     let window = Window::builder()
-        .application(app)
         .title("Ferrum Settings")
         .default_width(500)
         .default_height(420)
@@ -172,14 +169,14 @@ fn build_window(app: &gtk4::Application, config: &AppConfig, tx: mpsc::Sender<Ap
         spin.connect_value_changed(move |_| send());
     }
 
-    // Connect ComboBoxText changed for font family and theme.
+    // Connect DropDown selection-changed for font family and theme.
     {
         let send = build_and_send.clone();
-        controls.font_family.connect_changed(move |_| send());
+        controls.font_family.connect_selected_notify(move |_| send());
     }
     {
         let send = build_and_send.clone();
-        controls.theme.connect_changed(move |_| send());
+        controls.theme.connect_selected_notify(move |_| send());
     }
 
     // Security mode combo — apply presets, then send.
@@ -188,12 +185,14 @@ fn build_window(app: &gtk4::Application, config: &AppConfig, tx: mpsc::Sender<Ap
         let suppress = Rc::clone(&suppress);
         let send = build_and_send.clone();
         let security_combo = controls.security_mode.clone();
-        security_combo.connect_changed(move |combo| {
+        security_combo.connect_selected_notify(move |combo| {
             if *suppress.borrow() {
                 return;
             }
             *suppress.borrow_mut() = true;
-            apply_security_preset(&controls, combo.active().map(|a| a as usize));
+            let sel = combo.selected();
+            let active = if sel == gtk4::INVALID_LIST_POSITION { None } else { Some(sel as usize) };
+            apply_security_preset(&controls, active);
             *suppress.borrow_mut() = false;
             send();
         });
@@ -241,13 +240,35 @@ fn build_window(app: &gtk4::Application, config: &AppConfig, tx: mpsc::Sender<Ap
         });
     }
 
-    // On close, save config to disk.
+    // On close request, save config and immediately mark window as closed
+    // so the gear icon resets without waiting for the destroy signal.
     {
         let controls = Rc::clone(&controls);
         window.connect_close_request(move |_| {
+            WINDOW_OPEN.store(false, Ordering::Relaxed);
+            JUST_CLOSED.store(true, Ordering::Relaxed);
             let config = build_config(&controls);
             crate::config::save_config(&config);
             gtk4::glib::Propagation::Proceed
+        });
+    }
+
+    // Signal lifecycle after GTK has destroyed the window.
+    window.connect_destroy(|_| {
+        WINDOW_OPEN.store(false, Ordering::Relaxed);
+        JUST_CLOSED.store(true, Ordering::Relaxed);
+    });
+
+    // Poll CLOSE_REQUESTED so the main thread can close us.
+    {
+        let w = window.clone();
+        gtk4::glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
+            if CLOSE_REQUESTED.swap(false, Ordering::Relaxed) {
+                w.close();
+                gtk4::glib::ControlFlow::Break
+            } else {
+                gtk4::glib::ControlFlow::Continue
+            }
         });
     }
 
@@ -256,7 +277,7 @@ fn build_window(app: &gtk4::Application, config: &AppConfig, tx: mpsc::Sender<Ap
 
 // ── Tab builders ─────────────────────────────────────────────────────
 
-fn build_font_tab(config: &AppConfig) -> (gtk4::Box, SpinButton, ComboBoxText, SpinButton) {
+fn build_font_tab(config: &AppConfig) -> (gtk4::Box, SpinButton, DropDown, SpinButton) {
     let vbox = gtk4::Box::new(Orientation::Vertical, 12);
     vbox.set_margin_top(16);
     vbox.set_margin_start(16);
@@ -275,7 +296,7 @@ fn build_font_tab(config: &AppConfig) -> (gtk4::Box, SpinButton, ComboBoxText, S
     (vbox, font_size, font_family, line_padding)
 }
 
-fn build_theme_tab(config: &AppConfig) -> (gtk4::Box, ComboBoxText) {
+fn build_theme_tab(config: &AppConfig) -> (gtk4::Box, DropDown) {
     let vbox = gtk4::Box::new(Orientation::Vertical, 12);
     vbox.set_margin_top(16);
     vbox.set_margin_start(16);
@@ -368,7 +389,7 @@ fn build_layout_tab(
 
 fn build_security_tab(
     config: &AppConfig,
-) -> (gtk4::Box, ComboBoxText, Switch, Switch, Switch, Switch) {
+) -> (gtk4::Box, DropDown, Switch, Switch, Switch, Switch) {
     let vbox = gtk4::Box::new(Orientation::Vertical, 12);
     vbox.set_margin_top(16);
     vbox.set_margin_start(16);
@@ -435,25 +456,22 @@ fn labeled_combo(
     label: &str,
     options: &[&str],
     selected: usize,
-) -> ComboBoxText {
+) -> DropDown {
     let row = gtk4::Box::new(Orientation::Horizontal, 12);
     let lbl = Label::new(Some(label));
     lbl.set_halign(Align::Start);
     lbl.set_width_chars(20);
 
-    let combo = ComboBoxText::new();
-    for opt in options {
-        combo.append_text(opt);
-    }
-    combo.set_active(Some(selected as u32));
-    combo.set_halign(Align::End);
-    combo.set_hexpand(true);
+    let dropdown = DropDown::from_strings(options);
+    dropdown.set_selected(selected as u32);
+    dropdown.set_halign(Align::End);
+    dropdown.set_hexpand(true);
 
     row.append(&lbl);
-    row.append(&combo);
+    row.append(&dropdown);
     parent.append(&row);
 
-    combo
+    dropdown
 }
 
 fn labeled_switch(
@@ -484,16 +502,16 @@ fn labeled_switch(
 
 struct Controls {
     font_size: SpinButton,
-    font_family: ComboBoxText,
+    font_family: DropDown,
     line_padding: SpinButton,
-    theme: ComboBoxText,
+    theme: DropDown,
     scrollback: SpinButton,
     cursor_blink: SpinButton,
     win_padding: SpinButton,
     pane_padding: SpinButton,
     scrollbar: SpinButton,
     tab_bar: SpinButton,
-    security_mode: ComboBoxText,
+    security_mode: DropDown,
     paste: Switch,
     block_title: Switch,
     limit_cursor: Switch,
@@ -501,19 +519,19 @@ struct Controls {
 }
 
 fn build_config(c: &Controls) -> AppConfig {
-    let security_mode = match c.security_mode.active().map(|a| a as usize) {
-        Some(0) => SecurityMode::Disabled,
-        Some(1) => SecurityMode::Standard,
+    let security_mode = match c.security_mode.selected() {
+        0 => SecurityMode::Disabled,
+        1 => SecurityMode::Standard,
         _ => SecurityMode::Custom,
     };
 
     AppConfig {
         font: FontConfig {
             size: c.font_size.value() as f32,
-            family: FontFamily::from_index(c.font_family.active().unwrap_or(0) as usize),
+            family: FontFamily::from_index(c.font_family.selected() as usize),
             line_padding: c.line_padding.value() as u32,
         },
-        theme: match c.theme.active().unwrap_or(0) {
+        theme: match c.theme.selected() {
             0 => ThemeChoice::FerrumDark,
             _ => ThemeChoice::FerrumLight,
         },
@@ -579,7 +597,7 @@ fn infer_security_mode(c: &Controls) {
         SecurityMode::Standard => 1,
         SecurityMode::Custom => 2,
     };
-    c.security_mode.set_active(Some(new_index as u32));
+    c.security_mode.set_selected(new_index as u32);
 
     if matches!(inferred, SecurityMode::Disabled) {
         let switches = [&c.paste, &c.block_title, &c.limit_cursor, &c.clear_mouse];
@@ -592,14 +610,14 @@ fn infer_security_mode(c: &Controls) {
 fn reset_controls(c: &Controls) {
     let d = AppConfig::default();
     c.font_size.set_value(d.font.size as f64);
-    c.font_family.set_active(Some(d.font.family.index() as u32));
+    c.font_family.set_selected(d.font.family.index() as u32);
     c.line_padding.set_value(d.font.line_padding as f64);
 
     let theme_idx = match d.theme {
         ThemeChoice::FerrumDark => 0,
         ThemeChoice::FerrumLight => 1,
     };
-    c.theme.set_active(Some(theme_idx));
+    c.theme.set_selected(theme_idx);
 
     c.scrollback.set_value(d.terminal.max_scrollback as f64);
     c.cursor_blink.set_value(d.terminal.cursor_blink_interval_ms as f64);
@@ -614,6 +632,6 @@ fn reset_controls(c: &Controls) {
         SecurityMode::Standard => 1,
         SecurityMode::Custom => 2,
     };
-    c.security_mode.set_active(Some(mode_idx));
+    c.security_mode.set_selected(mode_idx);
     apply_security_preset(c, Some(mode_idx as usize));
 }

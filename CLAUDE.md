@@ -2,6 +2,12 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+# Rules
+
+- Never use #[allow(clippy::too_many_arguments)]
+- Never use #[allow(clippy::too_many_lines)]
+- Never use #[allow(dead_code)]
+
 ## Project Overview
 
 Ferrum is a GPU-accelerated terminal emulator written in Rust. Cross-platform (Linux, macOS, Windows) with tab support, pane splitting, detachable windows, and dual CPU/GPU rendering backends.

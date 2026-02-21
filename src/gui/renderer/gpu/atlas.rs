@@ -44,6 +44,7 @@ impl GlyphAtlas {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         font: &fontdue::Font,
+        fallback_fonts: &[fontdue::Font],
         font_size: f32,
         ascent: i32,
     ) -> Self {
@@ -82,7 +83,7 @@ impl GlyphAtlas {
         // Pre-populate ASCII 32..127.
         for cp in 32u32..127 {
             if let Some(ch) = char::from_u32(cp) {
-                atlas.insert_glyph(queue, font, font_size, cp, ch);
+                atlas.insert_glyph(queue, font, fallback_fonts, font_size, cp, ch);
             }
         }
 
@@ -94,6 +95,7 @@ impl GlyphAtlas {
         &mut self,
         codepoint: u32,
         font: &fontdue::Font,
+        fallback_fonts: &[fontdue::Font],
         font_size: f32,
         queue: &wgpu::Queue,
     ) -> GlyphInfo {
@@ -101,7 +103,7 @@ impl GlyphAtlas {
             return *info;
         }
         if let Some(ch) = char::from_u32(codepoint) {
-            self.insert_glyph(queue, font, font_size, codepoint, ch);
+            self.insert_glyph(queue, font, fallback_fonts, font_size, codepoint, ch);
         }
         self.glyphs.get(&codepoint).copied().unwrap_or(GlyphInfo {
             x: 0.0,
@@ -120,11 +122,35 @@ impl GlyphAtlas {
         &mut self,
         queue: &wgpu::Queue,
         font: &fontdue::Font,
+        fallback_fonts: &[fontdue::Font],
         font_size: f32,
         codepoint: u32,
         ch: char,
     ) {
-        let (metrics, bitmap) = font.rasterize(ch, font_size);
+        let is_primary = font.has_glyph(ch);
+        let raster_font = if is_primary {
+            font
+        } else {
+            fallback_fonts
+                .iter()
+                .find(|f| f.has_glyph(ch))
+                .unwrap_or(font)
+        };
+        // Scale down fallback glyphs that exceed cell width.
+        let actual_size = if is_primary {
+            font_size
+        } else {
+            let m = raster_font.metrics(ch, font_size);
+            let cell_w = font
+                .metrics('M', font_size)
+                .advance_width;
+            if m.advance_width > cell_w {
+                font_size * (cell_w / m.advance_width)
+            } else {
+                font_size
+            }
+        };
+        let (metrics, bitmap) = raster_font.rasterize(ch, actual_size);
         let gw = metrics.width as u32;
         let gh = metrics.height as u32;
 

@@ -36,8 +36,10 @@ const MIN_WINDOW_COLS: u32 = 40;
 /// Minimum number of rows for the terminal window.
 const MIN_WINDOW_ROWS: u32 = 10;
 
+#[cfg(not(target_os = "linux"))]
+use self::state::MenuContext;
 use self::state::{
-    App, ClosedTabInfo, DividerDragState, DragState, FerrumWindow, MenuContext, PtyEvent,
+    App, ClosedTabInfo, DividerDragState, DragState, FerrumWindow, PtyEvent,
     RenameState, ScrollbarState, SelectionDragMode, TabReorderAnimation, TabState, WindowRequest,
 };
 
@@ -70,6 +72,7 @@ impl FerrumWindow {
             keyboard_selection_anchor: None,
             selection_drag_mode: SelectionDragMode::Character,
             hovered_tab: None,
+            #[cfg(not(target_os = "linux"))]
             pending_menu_context: None,
             security_popup: None,
             #[cfg(not(target_os = "macos"))]

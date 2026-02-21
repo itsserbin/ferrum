@@ -76,7 +76,8 @@ impl ApplicationHandler for App {
                     }
                     win.divider_drag = None;
                     win.commit_rename();
-                    win.pending_menu_context = None;
+                    #[cfg(not(target_os = "linux"))]
+                    { win.pending_menu_context = None; }
                 } else {
                     win.suppress_click_to_cursor_once = true;
                     #[cfg(target_os = "macos")]
@@ -284,6 +285,7 @@ impl ApplicationHandler for App {
 }
 
 impl App {
+    #[cfg(not(target_os = "linux"))]
     fn drain_menu_events(&mut self) {
         while let Ok(event) = muda::MenuEvent::receiver().try_recv() {
             for win in self.windows.values_mut() {
@@ -316,6 +318,9 @@ impl App {
             }
         }
     }
+
+    #[cfg(target_os = "linux")]
+    fn drain_menu_events(&mut self) {}
 
     fn drain_update_events(&mut self) {
         while let Ok(release) = self.update_rx.try_recv() {
