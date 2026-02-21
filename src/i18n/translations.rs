@@ -85,3 +85,75 @@ pub struct Translations {
     /// Format string — use `{}` as placeholder for the version tag.
     pub update_available: &'static str,
 }
+
+impl Translations {
+    /// Returns `true` when every field contains a non-empty string.
+    ///
+    /// This also ensures platform-specific fields (macOS pin button labels,
+    /// tab-bar height label) are referenced on all targets, preventing
+    /// dead-code warnings.
+    pub fn all_non_empty(&self) -> bool {
+        let fields: &[&str] = &[
+            self.menu_copy,
+            self.menu_paste,
+            self.menu_select_all,
+            self.menu_clear_selection,
+            self.menu_split_right,
+            self.menu_split_down,
+            self.menu_split_left,
+            self.menu_split_up,
+            self.menu_close_pane,
+            self.menu_clear_terminal,
+            self.menu_reset_terminal,
+            self.menu_rename,
+            self.menu_duplicate,
+            self.menu_close,
+            self.close_dialog_title,
+            self.close_dialog_body,
+            self.close_dialog_confirm,
+            self.close_dialog_cancel,
+            self.settings_title,
+            self.settings_tab_font,
+            self.settings_tab_theme,
+            self.settings_tab_terminal,
+            self.settings_tab_layout,
+            self.settings_tab_security,
+            self.settings_reset_to_defaults,
+            self.font_size_label,
+            self.font_family_label,
+            self.font_line_padding_label,
+            self.theme_label,
+            self.terminal_language_label,
+            self.terminal_max_scrollback_label,
+            self.terminal_cursor_blink_label,
+            self.layout_window_padding_label,
+            self.layout_pane_padding_label,
+            self.layout_scrollbar_width_label,
+            self.layout_tab_bar_height_label,
+            self.security_mode_label,
+            self.security_mode_disabled,
+            self.security_mode_standard,
+            self.security_mode_custom,
+            self.security_paste_protection_label,
+            self.security_paste_protection_desc,
+            self.security_block_title_query_label,
+            self.security_block_title_query_desc,
+            self.security_limit_cursor_jumps_label,
+            self.security_limit_cursor_jumps_desc,
+            self.security_clear_mouse_on_reset_label,
+            self.security_clear_mouse_on_reset_desc,
+            self.security_popup_title,
+            self.security_event_paste_newlines,
+            self.security_event_title_query_blocked,
+            self.security_event_cursor_rewrite,
+            self.security_event_mouse_leak_prevented,
+            self.macos_pin_window,
+            self.macos_unpin_window,
+            self.macos_pin_tooltip,
+            self.macos_unpin_tooltip,
+            self.macos_settings,
+            self.update_available,
+        ];
+        fields.iter().all(|s| !s.is_empty())
+    }
+}

@@ -67,8 +67,10 @@ pub fn t() -> &'static Translations {
 
 /// Switches the active locale. Subsequent calls to `t()` return the new locale's strings.
 pub fn set_locale(locale: Locale) {
+    let translations = locale.translations();
+    debug_assert!(translations.all_non_empty());
     let mut guard = current_lock().write().expect("i18n RwLock poisoned");
-    *guard = locale.translations();
+    *guard = translations;
 }
 
 #[cfg(test)]
@@ -129,18 +131,7 @@ mod tests {
     fn translations_fields_all_set() {
         for &locale in Locale::ALL {
             let tr = locale.translations();
-            // Spot-check a field from each group to ensure no empty string slipped in.
-            assert!(!tr.menu_copy.is_empty(), "menu_copy empty for {:?}", locale);
-            assert!(!tr.close_dialog_title.is_empty(), "close_dialog_title empty for {:?}", locale);
-            assert!(!tr.settings_title.is_empty(), "settings_title empty for {:?}", locale);
-            assert!(!tr.font_size_label.is_empty(), "font_size_label empty for {:?}", locale);
-            assert!(!tr.theme_label.is_empty(), "theme_label empty for {:?}", locale);
-            assert!(!tr.terminal_language_label.is_empty(), "terminal_language_label empty for {:?}", locale);
-            assert!(!tr.layout_window_padding_label.is_empty(), "layout_window_padding_label empty for {:?}", locale);
-            assert!(!tr.security_mode_label.is_empty(), "security_mode_label empty for {:?}", locale);
-            assert!(!tr.security_popup_title.is_empty(), "security_popup_title empty for {:?}", locale);
-            assert!(!tr.macos_pin_window.is_empty(), "macos_pin_window empty for {:?}", locale);
-            assert!(!tr.update_available.is_empty(), "update_available empty for {:?}", locale);
+            assert!(tr.all_non_empty(), "empty field found for {:?}", locale);
         }
     }
 }
