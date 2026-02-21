@@ -203,7 +203,13 @@ impl ApplicationHandler for App {
         // Poll atomic flags from native settings window ObjC callbacks.
         #[cfg(target_os = "macos")]
         {
-            if platform::macos::settings_window::take_settings_changed() {
+            if platform::macos::settings_window::take_stepper_changed() {
+                // Stepper/popup changed → update text fields to match, send config.
+                platform::macos::settings_window::update_text_fields();
+                platform::macos::settings_window::send_current_config();
+            }
+            if platform::macos::settings_window::take_text_field_changed() {
+                // Text field edited → parse values into steppers, normalize, send config.
                 platform::macos::settings_window::sync_text_fields_to_steppers();
                 platform::macos::settings_window::update_text_fields();
                 platform::macos::settings_window::send_current_config();

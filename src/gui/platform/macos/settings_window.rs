@@ -63,24 +63,41 @@ unsafe impl Send for NativeSettingsState {}
 
 static SETTINGS_STATE: Mutex<Option<NativeSettingsState>> = Mutex::new(None);
 
-/// Atomic flag: a control value changed in the settings window.
-static SETTINGS_CHANGED: AtomicBool = AtomicBool::new(false);
+/// Atomic flag: a stepper or popup value changed.
+static STEPPER_CHANGED: AtomicBool = AtomicBool::new(false);
+
+/// Atomic flag: a text field value was committed (Enter or focus lost).
+static TEXT_FIELD_CHANGED: AtomicBool = AtomicBool::new(false);
 
 /// Atomic flag: Reset to Defaults was clicked.
 static RESET_REQUESTED: AtomicBool = AtomicBool::new(false);
 
-/// ObjC action handler for all settings controls (steppers, popups).
+/// ObjC action handler for steppers and popups.
 ///
 /// # Safety
 ///
 /// Called by the Objective-C runtime as a method implementation.
 /// Signature matches the type encoding "v@:@".
-unsafe extern "C" fn handle_settings_control_changed(
+unsafe extern "C" fn handle_stepper_changed(
     _this: *mut core::ffi::c_void,
     _cmd: *const core::ffi::c_void,
     _sender: *mut core::ffi::c_void,
 ) {
-    SETTINGS_CHANGED.store(true, Ordering::SeqCst);
+    STEPPER_CHANGED.store(true, Ordering::SeqCst);
+}
+
+/// ObjC action handler for editable text fields.
+///
+/// # Safety
+///
+/// Called by the Objective-C runtime as a method implementation.
+/// Signature matches the type encoding "v@:@".
+unsafe extern "C" fn handle_text_field_changed(
+    _this: *mut core::ffi::c_void,
+    _cmd: *const core::ffi::c_void,
+    _sender: *mut core::ffi::c_void,
+) {
+    TEXT_FIELD_CHANGED.store(true, Ordering::SeqCst);
 }
 
 /// ObjC action handler for the Reset to Defaults button.
@@ -97,9 +114,14 @@ unsafe extern "C" fn handle_reset_clicked(
     RESET_REQUESTED.store(true, Ordering::SeqCst);
 }
 
-/// Returns and resets the settings-changed flag.
-pub fn take_settings_changed() -> bool {
-    SETTINGS_CHANGED.swap(false, Ordering::SeqCst)
+/// Returns and resets the stepper-changed flag.
+pub fn take_stepper_changed() -> bool {
+    STEPPER_CHANGED.swap(false, Ordering::SeqCst)
+}
+
+/// Returns and resets the text-field-changed flag.
+pub fn take_text_field_changed() -> bool {
+    TEXT_FIELD_CHANGED.swap(false, Ordering::SeqCst)
 }
 
 /// Returns and resets the reset-requested flag.
@@ -596,16 +618,28 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
         let types = c"v@:@".as_ptr();
         let win_cls = object_getClass(Retained::as_ptr(&window).cast());
 
-        // Settings-changed action (for steppers and popups).
-        let sel_changed_ptr = sel_registerName(c"ferrumSettingsChanged:".as_ptr());
-        let sel_changed = Sel::register(c"ferrumSettingsChanged:");
-        let imp_changed: unsafe extern "C" fn() = core::mem::transmute(
-            handle_settings_control_changed as unsafe extern "C" fn(_, _, _),
+        // Stepper/popup changed action.
+        let sel_stepper_ptr = sel_registerName(c"ferrumStepperChanged:".as_ptr());
+        let sel_stepper = Sel::register(c"ferrumStepperChanged:");
+        let imp_stepper: unsafe extern "C" fn() = core::mem::transmute(
+            handle_stepper_changed as unsafe extern "C" fn(_, _, _),
         );
         if !win_cls.is_null()
-            && !class_addMethod(win_cls, sel_changed_ptr, imp_changed, types)
+            && !class_addMethod(win_cls, sel_stepper_ptr, imp_stepper, types)
         {
-            class_replaceMethod(win_cls, sel_changed_ptr, imp_changed, types);
+            class_replaceMethod(win_cls, sel_stepper_ptr, imp_stepper, types);
+        }
+
+        // Text field changed action.
+        let sel_text_ptr = sel_registerName(c"ferrumTextFieldChanged:".as_ptr());
+        let sel_text = Sel::register(c"ferrumTextFieldChanged:");
+        let imp_text: unsafe extern "C" fn() = core::mem::transmute(
+            handle_text_field_changed as unsafe extern "C" fn(_, _, _),
+        );
+        if !win_cls.is_null()
+            && !class_addMethod(win_cls, sel_text_ptr, imp_text, types)
+        {
+            class_replaceMethod(win_cls, sel_text_ptr, imp_text, types);
         }
 
         // Reset action (for the reset button).
@@ -617,45 +651,45 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
             class_replaceMethod(win_cls, sel_reset_ptr, imp_reset, types);
         }
 
-        // Wire all steppers and popups to the settings-changed action.
+        // Wire all steppers and popups to the stepper-changed action.
         let _: () = msg_send![&font_size_stepper, setTarget: &*window];
-        let _: () = msg_send![&font_size_stepper, setAction: sel_changed];
+        let _: () = msg_send![&font_size_stepper, setAction: sel_stepper];
         let _: () = msg_send![&font_family_popup, setTarget: &*window];
-        let _: () = msg_send![&font_family_popup, setAction: sel_changed];
+        let _: () = msg_send![&font_family_popup, setAction: sel_stepper];
         let _: () = msg_send![&line_padding_stepper, setTarget: &*window];
-        let _: () = msg_send![&line_padding_stepper, setAction: sel_changed];
+        let _: () = msg_send![&line_padding_stepper, setAction: sel_stepper];
         let _: () = msg_send![&theme_popup, setTarget: &*window];
-        let _: () = msg_send![&theme_popup, setAction: sel_changed];
+        let _: () = msg_send![&theme_popup, setAction: sel_stepper];
         let _: () = msg_send![&scrollback_stepper, setTarget: &*window];
-        let _: () = msg_send![&scrollback_stepper, setAction: sel_changed];
+        let _: () = msg_send![&scrollback_stepper, setAction: sel_stepper];
         let _: () = msg_send![&cursor_blink_stepper, setTarget: &*window];
-        let _: () = msg_send![&cursor_blink_stepper, setAction: sel_changed];
+        let _: () = msg_send![&cursor_blink_stepper, setAction: sel_stepper];
         let _: () = msg_send![&window_padding_stepper, setTarget: &*window];
-        let _: () = msg_send![&window_padding_stepper, setAction: sel_changed];
+        let _: () = msg_send![&window_padding_stepper, setAction: sel_stepper];
         let _: () = msg_send![&tab_bar_height_stepper, setTarget: &*window];
-        let _: () = msg_send![&tab_bar_height_stepper, setAction: sel_changed];
+        let _: () = msg_send![&tab_bar_height_stepper, setAction: sel_stepper];
         let _: () = msg_send![&pane_padding_stepper, setTarget: &*window];
-        let _: () = msg_send![&pane_padding_stepper, setAction: sel_changed];
+        let _: () = msg_send![&pane_padding_stepper, setAction: sel_stepper];
         let _: () = msg_send![&scrollbar_width_stepper, setTarget: &*window];
-        let _: () = msg_send![&scrollbar_width_stepper, setAction: sel_changed];
+        let _: () = msg_send![&scrollbar_width_stepper, setAction: sel_stepper];
 
-        // Wire all editable text fields to the settings-changed action.
+        // Wire all editable text fields to the text-field-changed action.
         let _: () = msg_send![&font_size_field, setTarget: &*window];
-        let _: () = msg_send![&font_size_field, setAction: sel_changed];
+        let _: () = msg_send![&font_size_field, setAction: sel_text];
         let _: () = msg_send![&line_padding_field, setTarget: &*window];
-        let _: () = msg_send![&line_padding_field, setAction: sel_changed];
+        let _: () = msg_send![&line_padding_field, setAction: sel_text];
         let _: () = msg_send![&scrollback_field, setTarget: &*window];
-        let _: () = msg_send![&scrollback_field, setAction: sel_changed];
+        let _: () = msg_send![&scrollback_field, setAction: sel_text];
         let _: () = msg_send![&cursor_blink_field, setTarget: &*window];
-        let _: () = msg_send![&cursor_blink_field, setAction: sel_changed];
+        let _: () = msg_send![&cursor_blink_field, setAction: sel_text];
         let _: () = msg_send![&window_padding_field, setTarget: &*window];
-        let _: () = msg_send![&window_padding_field, setAction: sel_changed];
+        let _: () = msg_send![&window_padding_field, setAction: sel_text];
         let _: () = msg_send![&tab_bar_height_field, setTarget: &*window];
-        let _: () = msg_send![&tab_bar_height_field, setAction: sel_changed];
+        let _: () = msg_send![&tab_bar_height_field, setAction: sel_text];
         let _: () = msg_send![&pane_padding_field, setTarget: &*window];
-        let _: () = msg_send![&pane_padding_field, setAction: sel_changed];
+        let _: () = msg_send![&pane_padding_field, setAction: sel_text];
         let _: () = msg_send![&scrollbar_width_field, setTarget: &*window];
-        let _: () = msg_send![&scrollbar_width_field, setAction: sel_changed];
+        let _: () = msg_send![&scrollbar_width_field, setAction: sel_text];
 
         // Wire reset button.
         let _: () = msg_send![&reset_button, setTarget: &*window];
