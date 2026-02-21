@@ -2,8 +2,8 @@ use crate::config::{
     AppConfig, FontConfig, FontFamily, LayoutConfig, SecurityMode, SecuritySettings,
     TerminalConfig, ThemeChoice,
 };
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{mpsc, Mutex, OnceLock};
+use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
+use std::sync::mpsc;
 
 use windows_sys::Win32::Foundation::*;
 use windows_sys::Win32::Graphics::Dwm::*;
@@ -108,9 +108,11 @@ mod layout {
 
 static WINDOW_OPEN: AtomicBool = AtomicBool::new(false);
 static JUST_CLOSED: AtomicBool = AtomicBool::new(false);
-static SETTINGS_STATE: OnceLock<Mutex<Option<Win32State>>> = OnceLock::new();
+/// HWND stored atomically for cross-thread access (close / bring-to-front).
+static SETTINGS_HWND: AtomicPtr<core::ffi::c_void> = AtomicPtr::new(std::ptr::null_mut());
 
-/// Tracks whether we are in a programmatic update (e.g. reset, security sync).
+/// Tracks whether we are in a programmatic update (e.g. reset, display refresh).
+/// Prevents reentrant WM_COMMAND handlers from sending intermediate configs.
 static SUPPRESS: AtomicBool = AtomicBool::new(false);
 
 pub fn is_settings_window_open() -> bool {
@@ -122,24 +124,17 @@ pub fn check_window_closed() -> bool {
 }
 
 pub fn close_settings_window() {
-    let mutex = SETTINGS_STATE.get_or_init(|| Mutex::new(None));
-    let guard = mutex.lock().unwrap();
-    if let Some(ref state) = *guard {
-        // Post WM_CLOSE to the window thread — DestroyWindow must run on
-        // the thread that created the window to avoid crashes.
-        unsafe { PostMessageW(state.hwnd, WM_CLOSE, 0, 0) };
+    let hwnd = SETTINGS_HWND.load(Ordering::Acquire);
+    if !hwnd.is_null() {
+        unsafe { PostMessageW(hwnd, WM_CLOSE, 0, 0) };
     }
-    // State cleanup happens in run_win32_window after the message loop exits.
 }
 
 pub fn open_settings_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>) {
     if WINDOW_OPEN.load(Ordering::Relaxed) {
-        // Bring existing window to front.
-        let mutex = SETTINGS_STATE.get_or_init(|| Mutex::new(None));
-        if let Some(ref state) = *mutex.lock().unwrap() {
-            unsafe {
-                SetForegroundWindow(state.hwnd);
-            }
+        let hwnd = SETTINGS_HWND.load(Ordering::Acquire);
+        if !hwnd.is_null() {
+            unsafe { SetForegroundWindow(hwnd) };
         }
         return;
     }
@@ -225,9 +220,6 @@ struct Win32State {
     tab_pages: [Vec<HWND>; 5],
 }
 
-// SAFETY: Win32 HWNDs are opaque handles safe to use across threads.
-unsafe impl Send for Win32State {}
-
 // ── Win32 window ─────────────────────────────────────────────────────
 
 fn run_win32_window(config: AppConfig, tx: mpsc::Sender<AppConfig>) {
@@ -294,9 +286,10 @@ fn run_win32_window(config: AppConfig, tx: mpsc::Sender<AppConfig>) {
 
         let state = create_controls(hwnd, hinstance, &config, tx);
 
-        // Store state.
-        let mutex = SETTINGS_STATE.get_or_init(|| Mutex::new(None));
-        *mutex.lock().unwrap() = Some(state);
+        // Store state on the window — accessible from wndproc without any mutex.
+        let state_ptr = Box::into_raw(Box::new(state));
+        SetWindowLongPtrW(hwnd, GWLP_USERDATA, state_ptr as isize);
+        SETTINGS_HWND.store(hwnd, Ordering::Release);
 
         ShowWindow(hwnd, SW_SHOW);
         UpdateWindow(hwnd);
@@ -307,26 +300,20 @@ fn run_win32_window(config: AppConfig, tx: mpsc::Sender<AppConfig>) {
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }
+        // Cleanup done in WM_NCDESTROY handler.
     }
-
-    // Cleanup after window closed.
-    let mutex = SETTINGS_STATE.get_or_init(|| Mutex::new(None));
-    if let Some(state) = mutex.lock().unwrap().take() {
-        let config = build_config(&state);
-        crate::config::save_config(&config);
-    }
-    WINDOW_OPEN.store(false, Ordering::Relaxed);
-    JUST_CLOSED.store(true, Ordering::Relaxed);
 }
 
 // ── Window procedure ─────────────────────────────────────────────────
 
 unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    let state_ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut Win32State;
+
     match msg {
-        WM_NOTIFY => {
+        WM_NOTIFY if !state_ptr.is_null() => {
             let nmhdr = &*(lparam as *const NMHDR);
             if nmhdr.idFrom == id::TAB_CONTROL as usize && nmhdr.code == TCN_SELCHANGE {
-                on_tab_change();
+                on_tab_change(&*state_ptr);
             } else if nmhdr.code == UDN_DELTAPOS {
                 // UDN_DELTAPOS fires before position change — defer reading
                 // values until the UpDown has updated its position.
@@ -334,19 +321,29 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             }
             0
         }
-        WM_APP => {
-            on_value_changed();
+        WM_APP if !state_ptr.is_null() => {
+            on_value_changed(&*state_ptr);
             0
         }
-        WM_COMMAND => {
-            on_command(wparam);
+        WM_COMMAND if !state_ptr.is_null() => {
+            on_command(&*state_ptr, wparam);
             0
         }
         WM_CLOSE => {
             DestroyWindow(hwnd);
             0
         }
-        WM_DESTROY => {
+        WM_NCDESTROY => {
+            // Last message — save config, free state, clean up statics.
+            if !state_ptr.is_null() {
+                SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
+                let state = Box::from_raw(state_ptr);
+                let config = build_config(&state);
+                crate::config::save_config(&config);
+            }
+            SETTINGS_HWND.store(std::ptr::null_mut(), Ordering::Release);
+            WINDOW_OPEN.store(false, Ordering::Relaxed);
+            JUST_CLOSED.store(true, Ordering::Relaxed);
             PostQuitMessage(0);
             0
         }
@@ -354,34 +351,25 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
     }
 }
 
-fn on_value_changed() {
+fn on_value_changed(state: &Win32State) {
     if SUPPRESS.load(Ordering::Relaxed) {
         return;
     }
-    let mutex = SETTINGS_STATE.get_or_init(|| Mutex::new(None));
-    let guard = mutex.lock().unwrap();
-    if let Some(ref state) = *guard {
-        // SUPPRESS prevents deadlock: update_all_displays calls SetWindowTextW
-        // which synchronously sends WM_COMMAND(EN_CHANGE) back to this thread.
-        // Without SUPPRESS, on_command would try to lock the same mutex → deadlock.
-        SUPPRESS.store(true, Ordering::Relaxed);
-        update_all_displays(state);
-        SUPPRESS.store(false, Ordering::Relaxed);
-        let config = build_config(state);
-        let _ = state.tx.send(config);
-    }
+    // SUPPRESS prevents reentrant handlers from sending intermediate configs:
+    // update_all_displays → SetWindowTextW → WM_COMMAND(EN_CHANGE) → on_command.
+    SUPPRESS.store(true, Ordering::Relaxed);
+    update_all_displays(state);
+    SUPPRESS.store(false, Ordering::Relaxed);
+    let config = build_config(state);
+    let _ = state.tx.send(config);
 }
 
-fn on_command(wparam: WPARAM) {
+fn on_command(state: &Win32State, wparam: WPARAM) {
     if SUPPRESS.load(Ordering::Relaxed) {
         return;
     }
     let notification = ((wparam >> 16) & 0xFFFF) as u32;
     let ctrl_id = (wparam & 0xFFFF) as i32;
-
-    let mutex = SETTINGS_STATE.get_or_init(|| Mutex::new(None));
-    let guard = mutex.lock().unwrap();
-    let Some(ref state) = *guard else { return };
 
     match (ctrl_id, notification) {
         (id::RESET_BUTTON, BN_CLICKED) => {
@@ -413,10 +401,7 @@ fn on_command(wparam: WPARAM) {
     }
 }
 
-fn on_tab_change() {
-    let mutex = SETTINGS_STATE.get_or_init(|| Mutex::new(None));
-    let guard = mutex.lock().unwrap();
-    let Some(ref state) = *guard else { return };
+fn on_tab_change(state: &Win32State) {
     let active = unsafe { SendMessageW(state.tab_ctrl, TCM_GETCURSEL, 0, 0) } as usize;
     for (i, page) in state.tab_pages.iter().enumerate() {
         let show = if i == active { SW_SHOW } else { SW_HIDE };
