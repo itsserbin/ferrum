@@ -1,4 +1,4 @@
-use crate::core::{Cell, Color, Grid, Row, SecurityConfig, SecurityEventKind};
+use crate::core::{Cell, Color, Grid, Row, SecurityConfig, SecurityEventKind, UnderlineStyle};
 use std::collections::VecDeque;
 use unicode_width::UnicodeWidthChar;
 use vte::{Params, Parser, Perform};
@@ -53,8 +53,11 @@ pub struct Terminal {
     pub default_bg: Color,
     pub ansi_palette: [Color; 16],
     current_bold: bool,
+    current_dim: bool,
+    current_italic: bool,
     current_reverse: bool,
-    current_underline: bool,
+    current_underline_style: UnderlineStyle,
+    current_strikethrough: bool,
     scroll_top: usize,
     scroll_bottom: usize,
     saved_scroll_top: usize,
@@ -66,6 +69,8 @@ pub struct Terminal {
     pub pending_responses: Vec<u8>, // Bytes queued for PTY replies.
     pub mouse_mode: MouseMode,
     pub sgr_mouse: bool,
+    pub bracketed_paste: bool,
+    pub focus_reporting: bool,
     pub security_config: SecurityConfig,
     pending_security_events: Vec<SecurityEventKind>,
     pub cursor_style: CursorStyle,
@@ -73,6 +78,8 @@ pub struct Terminal {
     scrollback_popped: usize,
     parser: Parser,
     pub cwd: Option<String>,
+    /// Window/icon title set by OSC 0/1/2.
+    pub title: Option<String>,
 }
 
 impl Terminal {
@@ -102,8 +109,11 @@ impl Terminal {
             default_bg,
             ansi_palette,
             current_bold: false,
+            current_dim: false,
+            current_italic: false,
             current_reverse: false,
-            current_underline: false,
+            current_underline_style: UnderlineStyle::None,
+            current_strikethrough: false,
             scroll_top: 0,
             scroll_bottom: rows - 1,
             saved_scroll_top: 0,
@@ -115,6 +125,8 @@ impl Terminal {
             pending_responses: Vec::new(),
             mouse_mode: MouseMode::Off,
             sgr_mouse: false,
+            bracketed_paste: false,
+            focus_reporting: false,
             security_config: SecurityConfig::default(),
             pending_security_events: Vec::new(),
             cursor_style: CursorStyle::default(),
@@ -122,6 +134,7 @@ impl Terminal {
             scrollback_popped: 0,
             parser: Parser::new(),
             cwd: None,
+            title: None,
         }
     }
 
@@ -153,6 +166,17 @@ impl Terminal {
         self.pending_responses.extend_from_slice(data);
     }
 
+    /// Creates a blank cell that inherits the current foreground and background colors.
+    /// Per xterm spec, erase operations fill with the current SGR background.
+    pub(crate) fn make_blank_cell(&self) -> Cell {
+        Cell {
+            character: ' ',
+            fg: self.current_fg,
+            bg: self.current_bg,
+            ..Cell::DEFAULT
+        }
+    }
+
     /// Drains all pending PTY response bytes.
     pub fn drain_responses(&mut self) -> Vec<u8> {
         std::mem::take(&mut self.pending_responses)
@@ -177,6 +201,8 @@ impl Terminal {
     /// Clears transient mouse-tracking state when the PTY process exits.
     pub fn cleanup_after_process_exit(&mut self) {
         self.clear_mouse_tracking(self.security_config.clear_mouse_on_reset);
+        self.focus_reporting = false;
+        self.bracketed_paste = false;
     }
 
     fn reset_attributes(&mut self) {
@@ -199,8 +225,20 @@ impl Terminal {
         self.current_reverse = value;
     }
 
-    fn set_underline(&mut self, value: bool) {
-        self.current_underline = value;
+    fn set_underline_style(&mut self, style: UnderlineStyle) {
+        self.current_underline_style = style;
+    }
+
+    fn set_dim(&mut self, value: bool) {
+        self.current_dim = value;
+    }
+
+    fn set_italic(&mut self, value: bool) {
+        self.current_italic = value;
+    }
+
+    fn set_strikethrough(&mut self, value: bool) {
+        self.current_strikethrough = value;
     }
 
     fn set_decckm(&mut self, enabled: bool) {
@@ -217,6 +255,14 @@ impl Terminal {
 
     fn set_sgr_mouse(&mut self, enabled: bool) {
         self.sgr_mouse = enabled;
+    }
+
+    fn set_bracketed_paste(&mut self, enabled: bool) {
+        self.bracketed_paste = enabled;
+    }
+
+    fn set_focus_reporting(&mut self, enabled: bool) {
+        self.focus_reporting = enabled;
     }
 
     fn set_cursor_style(&mut self, style: CursorStyle) {
@@ -337,6 +383,7 @@ impl Terminal {
         self.cursor_visible = true;
         self.cursor_style = CursorStyle::default();
         self.pending_responses.clear();
+        self.bracketed_paste = false;
         if self.security_config.clear_mouse_on_reset {
             self.clear_mouse_tracking(true);
         }
@@ -415,8 +462,11 @@ impl Perform for Terminal {
                 fg: self.current_fg,
                 bg: self.current_bg,
                 bold: self.current_bold,
+                dim: self.current_dim,
+                italic: self.current_italic,
                 reverse: self.current_reverse,
-                underline: self.current_underline,
+                underline_style: self.current_underline_style,
+                strikethrough: self.current_strikethrough,
             },
         );
 
@@ -430,8 +480,11 @@ impl Perform for Terminal {
                     fg: self.current_fg,
                     bg: self.current_bg,
                     bold: self.current_bold,
+                    dim: self.current_dim,
+                    italic: self.current_italic,
                     reverse: self.current_reverse,
-                    underline: self.current_underline,
+                    underline_style: self.current_underline_style,
+                    strikethrough: self.current_strikethrough,
                 },
             );
         }
@@ -478,13 +531,30 @@ impl Perform for Terminal {
         if params.is_empty() {
             return;
         }
-        if params[0] == b"7" {
-            if params.len() < 2 || params[1].is_empty() {
-                self.cwd = None;
-                return;
+        match params[0] {
+            // OSC 0: set window title + icon name
+            // OSC 2: set window title
+            b"0" | b"2" => {
+                if params.len() >= 2 {
+                    self.title = Some(String::from_utf8_lossy(params[1]).into_owned());
+                }
             }
-            let uri = String::from_utf8_lossy(params[1]);
-            self.cwd = parse_osc7_uri(&uri);
+            // OSC 1: set icon name (treat as title)
+            b"1" => {
+                if params.len() >= 2 {
+                    self.title = Some(String::from_utf8_lossy(params[1]).into_owned());
+                }
+            }
+            // OSC 7: CWD notification
+            b"7" => {
+                if params.len() < 2 || params[1].is_empty() {
+                    self.cwd = None;
+                    return;
+                }
+                let uri = String::from_utf8_lossy(params[1]);
+                self.cwd = parse_osc7_uri(&uri);
+            }
+            _ => {}
         }
     }
     fn csi_dispatch(&mut self, params: &Params, intermediates: &[u8], _ignore: bool, action: char) {

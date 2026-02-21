@@ -235,6 +235,8 @@ pub(super) struct FerrumWindow {
     pub(super) cursor_blink_interval_ms: u64,
     /// Sender for native settings window config updates.
     pub(super) settings_tx: std::sync::mpsc::Sender<crate::config::AppConfig>,
+    /// Proxy to wake the event loop from PTY reader threads.
+    pub(super) event_proxy: winit::event_loop::EventLoopProxy<()>,
 }
 
 /// App is now a window manager holding multiple FerrumWindows.
@@ -244,6 +246,8 @@ pub(super) struct App {
     pub(super) next_tab_id: u64,
     pub(super) tx: mpsc::Sender<PtyEvent>,
     pub(super) rx: mpsc::Receiver<PtyEvent>,
+    /// Proxy used by PTY reader threads to wake the event loop.
+    pub(super) proxy: winit::event_loop::EventLoopProxy<()>,
     pub(super) update_rx: mpsc::Receiver<crate::update::AvailableRelease>,
     pub(super) available_release: Option<crate::update::AvailableRelease>,
     pub(super) config: crate::config::AppConfig,

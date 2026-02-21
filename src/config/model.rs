@@ -23,7 +23,7 @@ impl Default for FontConfig {
         Self {
             size: 14.0,
             family: FontFamily::default(),
-            line_padding: 2,
+            line_padding: 0,
         }
     }
 }
@@ -212,7 +212,7 @@ mod tests {
         let config = AppConfig::default();
         assert_eq!(config.font.size, 14.0);
         assert_eq!(config.font.family, FontFamily::JetBrainsMono);
-        assert_eq!(config.font.line_padding, 2);
+        assert_eq!(config.font.line_padding, 0);
         assert_eq!(config.terminal.max_scrollback, 1000);
         assert_eq!(config.terminal.cursor_blink_interval_ms, 500);
         assert_eq!(config.layout.window_padding, 8);

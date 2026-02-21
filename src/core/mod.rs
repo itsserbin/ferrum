@@ -7,7 +7,7 @@ mod selection;
 
 pub mod terminal;
 
-pub use cell::Cell;
+pub use cell::{Cell, UnderlineStyle};
 pub use color::Color;
 pub use grid::{Grid, Row};
 pub use position::Position;

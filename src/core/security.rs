@@ -110,11 +110,6 @@ impl SecurityGuard {
         });
     }
 
-    /// Returns true when bracketed-paste wrapping should be applied.
-    pub fn should_wrap_paste(&self) -> bool {
-        self.config.paste_protection
-    }
-
     /// Records paste-injection event when payload contains line breaks.
     pub fn check_paste_payload(&mut self, text: &str) {
         if text.contains('\n') || text.contains('\r') {

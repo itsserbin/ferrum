@@ -14,7 +14,6 @@ impl FerrumWindow {
                     && let Some(leaf) = tab.pane_tree.find_leaf_mut(*pane_id)
                 {
                     leaf.terminal.process(bytes);
-                    leaf.scroll_offset = 0;
 
                     let popped = leaf.terminal.drain_scrollback_popped();
                     if popped > 0 {

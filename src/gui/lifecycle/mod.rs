@@ -86,6 +86,14 @@ impl ApplicationHandler for App {
                         platform::macos::set_pin_button_state(&win.window, win.pinned);
                     }
                 }
+                // DECSET 1004 focus reporting: send CSI I (focus) or CSI O (blur).
+                if let Some(leaf) = win.active_leaf_mut()
+                    && leaf.terminal.focus_reporting
+                {
+                    let seq = if focused { b"\x1b[I" } else { b"\x1b[O" };
+                    let _ = leaf.pty_writer.write_all(seq);
+                    let _ = leaf.pty_writer.flush();
+                }
                 should_redraw = true;
             }
             WindowEvent::ModifiersChanged(modifiers) => {

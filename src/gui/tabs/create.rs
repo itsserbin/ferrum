@@ -29,7 +29,7 @@ impl FerrumWindow {
         cwd: Option<String>,
         config: &AppConfig,
     ) {
-        match Self::build_tab_state(rows, cols, title, next_tab_id, tx, cwd, config) {
+        match self.build_tab_state(rows, cols, title, next_tab_id, tx, cwd, config) {
             Ok(tab) => {
                 self.tabs.push(tab);
                 self.active_tab = self.tabs.len() - 1;
@@ -41,7 +41,9 @@ impl FerrumWindow {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn build_tab_state(
+        &self,
         rows: usize,
         cols: usize,
         title: Option<String>,
@@ -62,6 +64,7 @@ impl FerrumWindow {
 
         // Spawn a dedicated PTY reader thread for this tab/pane.
         let tx = tx.clone();
+        let proxy = self.event_proxy.clone();
         let mut reader = session.reader().context("failed to clone PTY reader")?;
         let tab_id = id;
         let reader_pane_id = pane_id;
@@ -77,6 +80,7 @@ impl FerrumWindow {
                                 tab_id,
                                 pane_id: reader_pane_id,
                             });
+                            let _ = proxy.send_event(());
                             break;
                         }
                         Err(err) => {
@@ -85,6 +89,7 @@ impl FerrumWindow {
                                 tab_id,
                                 pane_id: reader_pane_id,
                             });
+                            let _ = proxy.send_event(());
                             break;
                         }
                         Ok(n) => {
@@ -99,6 +104,7 @@ impl FerrumWindow {
                                 eprintln!("PTY reader {}: channel disconnected", tab_id);
                                 break;
                             }
+                            let _ = proxy.send_event(());
                         }
                     }
                 }

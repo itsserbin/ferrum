@@ -15,9 +15,12 @@ pub struct PackedCell {
     pub bg: u32,
     /// Attribute bitfield:
     ///   bit 0: bold
-    ///   bit 1: italic (reserved)
-    ///   bit 2: underline
+    ///   bit 1: italic
+    ///   bit 2: underline (any style)
     ///   bit 3: reverse video
+    ///   bit 4: dim
+    ///   bit 5: strikethrough
+    ///   bits 6-7: underline style (0=none, 1=single, 2=double, 3=curly)
     pub attrs: u32,
 }
 
