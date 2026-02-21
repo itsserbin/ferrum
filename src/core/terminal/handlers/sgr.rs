@@ -1,4 +1,4 @@
-use crate::core::Color;
+use crate::core::{Color, UnderlineStyle};
 use crate::core::terminal::Terminal;
 use vte::Params;
 
@@ -15,10 +15,10 @@ pub(in super::super) fn handle_sgr(term: &mut Terminal, params: &Params) {
         match code {
             0 => term.reset_attributes(),
             1 => term.set_bold(true),
-            4 => term.set_underline(true),
+            4 => term.set_underline_style(UnderlineStyle::Single),
             7 => term.set_reverse(true),
             22 => term.set_bold(false),
-            24 => term.set_underline(false),
+            24 => term.set_underline_style(UnderlineStyle::None),
             27 => term.set_reverse(false),
             30..=37 => term.set_fg(term.ansi_palette[(code - 30) as usize]),
             38 => {
@@ -72,7 +72,7 @@ pub(in super::super) fn handle_sgr(term: &mut Terminal, params: &Params) {
 #[cfg(test)]
 mod tests {
     use crate::core::terminal::Terminal;
-    use crate::core::{Cell, Color};
+    use crate::core::{Cell, Color, UnderlineStyle};
 
     fn write_colored(seq: &[u8]) -> Terminal {
         let mut term = Terminal::new(4, 20);
@@ -107,7 +107,7 @@ mod tests {
     #[test]
     fn sgr_underline() {
         let term = write_colored(b"\x1b[4m");
-        assert!(cell_at(&term, 0, 0).underline);
+        assert_eq!(cell_at(&term, 0, 0).underline_style, UnderlineStyle::Single);
     }
 
     #[test]
@@ -125,7 +125,7 @@ mod tests {
     #[test]
     fn sgr_underline_off() {
         let term = write_colored(b"\x1b[4m\x1b[24m");
-        assert!(!cell_at(&term, 0, 0).underline);
+        assert_eq!(cell_at(&term, 0, 0).underline_style, UnderlineStyle::None);
     }
 
     #[test]
@@ -249,7 +249,7 @@ mod tests {
         let term = write_colored(b"\x1b[1;4;31m");
         let cell = cell_at(&term, 0, 0);
         assert!(cell.bold);
-        assert!(cell.underline);
+        assert_eq!(cell.underline_style, UnderlineStyle::Single);
         assert_eq!(cell.fg, term.ansi_palette[1]);
     }
 

@@ -1,6 +1,6 @@
 use super::*;
 use super::RenderTarget;
-use crate::core::Color;
+use crate::core::{Color, UnderlineStyle};
 use crate::gui::pane::PaneRect;
 
 impl CpuRenderer {
@@ -66,7 +66,7 @@ impl CpuRenderer {
                 }
 
                 // Underline
-                if cell.underline {
+                if cell.underline_style != UnderlineStyle::None {
                     let underline_y = y + self.metrics.cell_height - 2;
                     if (underline_y as usize) < buf_height {
                         let pixel = fg.to_pixel();
@@ -150,7 +150,7 @@ impl CpuRenderer {
                     self.draw_char(target, x, y, cell.character, fg);
                 }
 
-                if cell.underline {
+                if cell.underline_style != UnderlineStyle::None {
                     let underline_y = y + self.metrics.cell_height - 2;
                     if (underline_y as usize) < buf_height && (underline_y as usize) < rect_bottom {
                         let pixel = fg.to_pixel();

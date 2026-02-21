@@ -1,6 +1,6 @@
 //! Packs terminal grid cells into GPU buffer format.
 
-use crate::core::{Color, Grid, Selection};
+use crate::core::{Color, Grid, Selection, UnderlineStyle};
 use crate::gui::pane::PaneRect;
 
 use super::GridBatch;
@@ -88,7 +88,7 @@ impl super::GpuRenderer {
                 if cell.bold {
                     attrs |= 1;
                 }
-                if cell.underline {
+                if cell.underline_style != UnderlineStyle::None {
                     attrs |= 4;
                 }
                 if cell.reverse {

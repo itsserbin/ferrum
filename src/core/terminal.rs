@@ -1,4 +1,4 @@
-use crate::core::{Cell, Color, Grid, Row, SecurityConfig, SecurityEventKind};
+use crate::core::{Cell, Color, Grid, Row, SecurityConfig, SecurityEventKind, UnderlineStyle};
 use std::collections::VecDeque;
 use unicode_width::UnicodeWidthChar;
 use vte::{Params, Parser, Perform};
@@ -53,8 +53,11 @@ pub struct Terminal {
     pub default_bg: Color,
     pub ansi_palette: [Color; 16],
     current_bold: bool,
+    current_dim: bool,
+    current_italic: bool,
     current_reverse: bool,
-    current_underline: bool,
+    current_underline_style: UnderlineStyle,
+    current_strikethrough: bool,
     scroll_top: usize,
     scroll_bottom: usize,
     saved_scroll_top: usize,
@@ -102,8 +105,11 @@ impl Terminal {
             default_bg,
             ansi_palette,
             current_bold: false,
+            current_dim: false,
+            current_italic: false,
             current_reverse: false,
-            current_underline: false,
+            current_underline_style: UnderlineStyle::None,
+            current_strikethrough: false,
             scroll_top: 0,
             scroll_bottom: rows - 1,
             saved_scroll_top: 0,
@@ -199,8 +205,20 @@ impl Terminal {
         self.current_reverse = value;
     }
 
-    fn set_underline(&mut self, value: bool) {
-        self.current_underline = value;
+    fn set_underline_style(&mut self, style: UnderlineStyle) {
+        self.current_underline_style = style;
+    }
+
+    fn set_dim(&mut self, value: bool) {
+        self.current_dim = value;
+    }
+
+    fn set_italic(&mut self, value: bool) {
+        self.current_italic = value;
+    }
+
+    fn set_strikethrough(&mut self, value: bool) {
+        self.current_strikethrough = value;
     }
 
     fn set_decckm(&mut self, enabled: bool) {
@@ -415,8 +433,11 @@ impl Perform for Terminal {
                 fg: self.current_fg,
                 bg: self.current_bg,
                 bold: self.current_bold,
+                dim: self.current_dim,
+                italic: self.current_italic,
                 reverse: self.current_reverse,
-                underline: self.current_underline,
+                underline_style: self.current_underline_style,
+                strikethrough: self.current_strikethrough,
             },
         );
 
@@ -430,8 +451,11 @@ impl Perform for Terminal {
                     fg: self.current_fg,
                     bg: self.current_bg,
                     bold: self.current_bold,
+                    dim: self.current_dim,
+                    italic: self.current_italic,
                     reverse: self.current_reverse,
-                    underline: self.current_underline,
+                    underline_style: self.current_underline_style,
+                    strikethrough: self.current_strikethrough,
                 },
             );
         }
