@@ -31,16 +31,17 @@ pub(super) fn build_terminal_context_menu(
     has_selection: bool,
     has_multiple_panes: bool,
 ) -> (Menu, Vec<(MenuId, MenuAction)>) {
+    let t = crate::i18n::t();
     let menu = Menu::new();
     let mut action_map = Vec::new();
 
-    let copy_item = MenuItem::new("Copy", has_selection, None);
+    let copy_item = MenuItem::new(t.menu_copy, has_selection, None);
     action_map.push((copy_item.id().clone(), MenuAction::Copy));
-    let paste_item = MenuItem::new("Paste", true, None);
+    let paste_item = MenuItem::new(t.menu_paste, true, None);
     action_map.push((paste_item.id().clone(), MenuAction::Paste));
-    let select_all = MenuItem::new("Select All", true, None);
+    let select_all = MenuItem::new(t.menu_select_all, true, None);
     action_map.push((select_all.id().clone(), MenuAction::SelectAll));
-    let clear_sel = MenuItem::new("Clear Selection", has_selection, None);
+    let clear_sel = MenuItem::new(t.menu_clear_selection, has_selection, None);
     action_map.push((clear_sel.id().clone(), MenuAction::ClearSelection));
 
     let _ = menu.append_items(&[
@@ -51,13 +52,13 @@ pub(super) fn build_terminal_context_menu(
         &PredefinedMenuItem::separator(),
     ]);
 
-    let split_right = MenuItem::new("Split Right", true, None);
+    let split_right = MenuItem::new(t.menu_split_right, true, None);
     action_map.push((split_right.id().clone(), MenuAction::SplitRight));
-    let split_down = MenuItem::new("Split Down", true, None);
+    let split_down = MenuItem::new(t.menu_split_down, true, None);
     action_map.push((split_down.id().clone(), MenuAction::SplitDown));
-    let split_left = MenuItem::new("Split Left", true, None);
+    let split_left = MenuItem::new(t.menu_split_left, true, None);
     action_map.push((split_left.id().clone(), MenuAction::SplitLeft));
-    let split_up = MenuItem::new("Split Up", true, None);
+    let split_up = MenuItem::new(t.menu_split_up, true, None);
     action_map.push((split_up.id().clone(), MenuAction::SplitUp));
 
     let _ = menu.append_items(&[
@@ -69,14 +70,14 @@ pub(super) fn build_terminal_context_menu(
     ]);
 
     if has_multiple_panes {
-        let close_pane = MenuItem::new("Close Pane", true, None);
+        let close_pane = MenuItem::new(t.menu_close_pane, true, None);
         action_map.push((close_pane.id().clone(), MenuAction::ClosePane));
         let _ = menu.append_items(&[&close_pane, &PredefinedMenuItem::separator()]);
     }
 
-    let clear_term = MenuItem::new("Clear Terminal", true, None);
+    let clear_term = MenuItem::new(t.menu_clear_terminal, true, None);
     action_map.push((clear_term.id().clone(), MenuAction::ClearTerminal));
-    let reset_term = MenuItem::new("Reset Terminal", true, None);
+    let reset_term = MenuItem::new(t.menu_reset_terminal, true, None);
     action_map.push((reset_term.id().clone(), MenuAction::ResetTerminal));
 
     let _ = menu.append_items(&[&clear_term, &reset_term]);
@@ -87,14 +88,15 @@ pub(super) fn build_terminal_context_menu(
 /// Builds the tab bar context menu.
 #[cfg(not(target_os = "linux"))]
 pub(super) fn build_tab_context_menu() -> (Menu, Vec<(MenuId, MenuAction)>) {
+    let t = crate::i18n::t();
     let menu = Menu::new();
     let mut action_map = Vec::new();
 
-    let rename = MenuItem::new("Rename", true, None);
+    let rename = MenuItem::new(t.menu_rename, true, None);
     action_map.push((rename.id().clone(), MenuAction::RenameTab));
-    let duplicate = MenuItem::new("Duplicate", true, None);
+    let duplicate = MenuItem::new(t.menu_duplicate, true, None);
     action_map.push((duplicate.id().clone(), MenuAction::DuplicateTab));
-    let close = MenuItem::new("Close", true, None);
+    let close = MenuItem::new(t.menu_close, true, None);
     action_map.push((close.id().clone(), MenuAction::CloseTab));
 
     let _ = menu.append_items(&[
