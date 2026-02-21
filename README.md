@@ -4,40 +4,30 @@ Ferrum is a GPU-accelerated terminal emulator written in Rust.
 
 ## Install
 
-### Homebrew (macOS/Linux)
+### macOS
+
+**Homebrew (recommended):**
 
 ```bash
-brew tap itsserbin/homebrew-tap
-brew install ferrum
+brew install itsserbin/tap/ferrum
 ```
 
-Or install directly without pre-tapping:
+**DMG installer:**
 
-```bash
-brew install itsserbin/homebrew-tap/ferrum
-```
+Download the `.dmg` for your architecture from [GitHub Releases](https://github.com/itsserbin/ferrum/releases/latest):
 
-### GitHub Releases (all platforms)
+| File | Architecture |
+|------|--------------|
+| `ferrum-aarch64-apple-darwin.dmg` | Apple Silicon (M1/M2/M3/M4) |
+| `ferrum-x86_64-apple-darwin.dmg` | Intel |
 
-Download the latest artifacts from:
+Open the DMG and drag Ferrum to Applications.
 
-- https://github.com/itsserbin/ferrum/releases/latest
-
-Expected release files:
-
-- `Ferrum-x86_64-unknown-linux-gnu.zip`
-- `ferrum_<version>_amd64.deb`
-- `ferrum-<version>.x86_64.rpm`
-- `Ferrum-x86_64-pc-windows-msvc.zip`
-- `Ferrum-x86_64-pc-windows-msvc.msi`
-- `ferrum-aarch64-apple-darwin.dmg` (macOS Apple Silicon)
-- `ferrum-x86_64-apple-darwin.dmg` (macOS Intel)
-
-### macOS DMG
-
-Download the `.dmg` file for your architecture from [GitHub Releases](https://github.com/itsserbin/ferrum/releases/latest), open it, and drag Ferrum to Applications.
-
-> **Note:** Since Ferrum is not signed with an Apple Developer certificate, macOS will show a warning on first launch. To open it: right-click the app, select Open, then click Open again. You only need to do this once.
+> **macOS Sequoia+:** Since Ferrum is not notarized with an Apple Developer certificate, macOS will block the app on first launch. To fix this, run once in Terminal:
+> ```bash
+> xattr -cr /Applications/Ferrum.app
+> ```
+> Then open Ferrum normally. This is only needed once.
 
 To use `ferrum` from the terminal:
 
@@ -45,25 +35,40 @@ To use `ferrum` from the terminal:
 sudo ln -sf /Applications/Ferrum.app/Contents/MacOS/Ferrum /usr/local/bin/ferrum
 ```
 
-### Linux packages
+### Windows
 
-Debian/Ubuntu:
+Download the installer from [GitHub Releases](https://github.com/itsserbin/ferrum/releases/latest):
+
+| File | Type |
+|------|------|
+| `Ferrum-Setup-x64.exe` | Installer (x64) |
+
+### Linux
+
+**Debian / Ubuntu:**
 
 ```bash
-sudo dpkg -i ferrum_0.1.0_amd64.deb
+# Download .deb from GitHub Releases, then:
+sudo dpkg -i ferrum_*_amd64.deb
 ```
 
-Fedora/RHEL/openSUSE:
+**Fedora / RHEL:**
 
 ```bash
-sudo rpm -i ferrum-0.1.0.x86_64.rpm
+# Download .rpm from GitHub Releases, then:
+sudo rpm -i ferrum-*.x86_64.rpm
+```
+
+**Homebrew:**
+
+```bash
+brew install itsserbin/tap/ferrum
 ```
 
 ## Update checks
 
 Ferrum performs a non-blocking background check against the GitHub Releases API and notifies when a newer release is available.
 
-- URL: `https://api.github.com/repos/itsserbin/ferrum/releases/latest`
 - Cache: `~/.config/ferrum/update-check.json`
 - Cache TTL: 24 hours
 
