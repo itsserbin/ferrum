@@ -114,14 +114,14 @@ impl Color {
         }
     }
 
-    /// If this color matches one of the base 8 ANSI colors (indices 0-7),
-    /// returns the corresponding bright variant (indices 8-15).
+    /// If this color matches one of the base 8 ANSI colors (indices 0-7)
+    /// in the given `palette`, returns the corresponding bright variant (8-15).
     /// Otherwise returns `self` unchanged.  Used to implement the
     /// bold-implies-bright convention for terminal emulators.
-    pub fn bold_bright(self) -> Color {
+    pub fn bold_bright_with_palette(self, palette: &[Color; 16]) -> Color {
         for i in 0..8 {
-            if self.r == Self::ANSI[i].r && self.g == Self::ANSI[i].g && self.b == Self::ANSI[i].b {
-                return Self::ANSI[i + 8];
+            if self == palette[i] {
+                return palette[i + 8];
             }
         }
         self
@@ -217,27 +217,29 @@ mod tests {
     #[test]
     fn bold_bright_maps_base_to_bright() {
         for i in 0..8 {
-            assert_eq!(Color::ANSI[i].bold_bright(), Color::ANSI[i + 8]);
+            assert_eq!(
+                Color::ANSI[i].bold_bright_with_palette(&Color::ANSI),
+                Color::ANSI[i + 8]
+            );
         }
     }
 
     #[test]
     fn bold_bright_returns_self_for_non_ansi() {
         let custom = Color { r: 1, g: 2, b: 3 };
-        assert_eq!(custom.bold_bright(), custom);
+        assert_eq!(custom.bold_bright_with_palette(&Color::ANSI), custom);
     }
 
     #[test]
     fn bold_bright_returns_self_for_bright_colors() {
         // Bright colors that don't match any base 0-7 should return self
         let bright_black = Color::ANSI[8];
-        let matches_base = (0..8).any(|i| {
-            bright_black.r == Color::ANSI[i].r
-                && bright_black.g == Color::ANSI[i].g
-                && bright_black.b == Color::ANSI[i].b
-        });
+        let matches_base = (0..8).any(|i| Color::ANSI[i] == bright_black);
         if !matches_base {
-            assert_eq!(bright_black.bold_bright(), bright_black);
+            assert_eq!(
+                bright_black.bold_bright_with_palette(&Color::ANSI),
+                bright_black
+            );
         }
     }
 }

@@ -51,6 +51,7 @@ pub struct Terminal {
     current_bg: Color,
     pub default_fg: Color,
     pub default_bg: Color,
+    pub ansi_palette: [Color; 16],
     current_bold: bool,
     current_reverse: bool,
     current_underline: bool,
@@ -76,7 +77,7 @@ pub struct Terminal {
 
 impl Terminal {
     pub fn new(rows: usize, cols: usize) -> Self {
-        Self::with_config(rows, cols, 1000, Color::DEFAULT_FG, Color::DEFAULT_BG)
+        Self::with_config(rows, cols, 1000, Color::DEFAULT_FG, Color::DEFAULT_BG, Color::ANSI)
     }
 
     pub fn with_config(
@@ -85,6 +86,7 @@ impl Terminal {
         max_scrollback: usize,
         default_fg: Color,
         default_bg: Color,
+        ansi_palette: [Color; 16],
     ) -> Self {
         Self {
             grid: Grid::new(rows, cols),
@@ -97,6 +99,7 @@ impl Terminal {
             current_bg: default_bg,
             default_fg,
             default_bg,
+            ansi_palette,
             current_bold: false,
             current_reverse: false,
             current_underline: false,
@@ -118,6 +121,15 @@ impl Terminal {
             scrollback_popped: 0,
             parser: Parser::new(),
             cwd: None,
+        }
+    }
+
+    /// Palette-aware 256-color lookup: indices 0-15 use the current ANSI palette,
+    /// 16-231 use the 6x6x6 color cube, 232-255 use the grayscale ramp.
+    pub fn color_from_256(&self, n: u16) -> Color {
+        match n {
+            0..=15 => self.ansi_palette[n as usize],
+            _ => Color::from_256(n),
         }
     }
 
@@ -302,6 +314,7 @@ impl Terminal {
         self.current_bg = remap(self.current_bg);
         self.default_fg = new_fg;
         self.default_bg = new_bg;
+        self.ansi_palette = *new_ansi;
     }
 
     pub fn full_reset(&mut self) {

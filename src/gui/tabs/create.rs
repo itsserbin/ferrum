@@ -112,6 +112,7 @@ impl FerrumWindow {
             config.terminal.max_scrollback,
             palette.default_fg,
             palette.default_bg,
+            palette.ansi,
         );
 
         // Show "Last login" greeting with local time.

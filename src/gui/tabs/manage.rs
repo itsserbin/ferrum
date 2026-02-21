@@ -321,6 +321,7 @@ impl FerrumWindow {
             config.terminal.max_scrollback,
             palette.default_fg,
             palette.default_bg,
+            palette.ansi,
         );
 
         let new_leaf = PaneNode::Leaf(Box::new(PaneLeaf {

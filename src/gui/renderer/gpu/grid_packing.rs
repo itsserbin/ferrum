@@ -97,7 +97,7 @@ impl super::GpuRenderer {
 
                 let mut fg = cell.fg;
                 if cell.bold {
-                    fg = fg.bold_bright();
+                    fg = fg.bold_bright_with_palette(&self.palette.ansi);
                 }
                 if fg_dim > 0.0 {
                     fg = fg.dimmed(fg_dim);

@@ -38,7 +38,7 @@ impl CpuRenderer {
 
                 // Bold: bright variant
                 if cell.bold {
-                    fg = fg.bold_bright();
+                    fg = fg.bold_bright_with_palette(&self.palette.ansi);
                 }
 
                 if selected {
@@ -119,7 +119,7 @@ impl CpuRenderer {
                 }
 
                 if cell.bold {
-                    fg = fg.bold_bright();
+                    fg = fg.bold_bright_with_palette(&self.palette.ansi);
                 }
 
                 if fg_dim > 0.0 {
