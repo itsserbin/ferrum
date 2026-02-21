@@ -38,6 +38,14 @@ pub(crate) fn font_data(family: FontFamily) -> &'static [u8] {
     }
 }
 
+/// Returns the embedded Symbols Nerd Font Mono bytes (fallback for missing glyphs).
+pub(crate) fn fallback_font_data() -> &'static [u8] {
+    include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/assets/fonts/SymbolsNerdFontMono-Regular.ttf"
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -57,5 +65,12 @@ mod tests {
             let font = fontdue::Font::from_bytes(data, fontdue::FontSettings::default());
             assert!(font.is_ok(), "{family:?} should be a valid font");
         }
+    }
+
+    #[test]
+    fn fallback_font_loads_as_valid() {
+        let data = super::fallback_font_data();
+        let font = fontdue::Font::from_bytes(data, fontdue::FontSettings::default());
+        assert!(font.is_ok(), "fallback font should be a valid font");
     }
 }
