@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use objc2::msg_send;
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
-use objc2_app_kit::{NSWindow, NSWindowTabbingMode};
+use objc2_app_kit::{NSWindow, NSWindowTabbingMode, NSWindowTitleVisibility};
 use objc2_foundation::ns_string;
 use winit::window::Window;
 
@@ -32,9 +32,12 @@ pub fn configure_native_tabs(window: &Window) {
     let Some(ns_window) = get_ns_window(window) else {
         return;
     };
-    // SAFETY: `ns_window` is valid; both selectors exist on supported macOS and signatures match.
+    // SAFETY: `ns_window` is valid; all selectors exist on supported macOS and signatures match.
     unsafe {
         ns_window.setTabbingMode(NSWindowTabbingMode::Preferred);
+        // Force standard tab bar rendering (not document-style titlebar tabs)
+        // that bundled .app may otherwise default to.
+        ns_window.setTitleVisibility(NSWindowTitleVisibility::Visible);
         let identifier = ns_string!("com.ferrum.terminal");
         let _: () = msg_send![&ns_window, setTabbingIdentifier: identifier];
     }
