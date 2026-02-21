@@ -302,12 +302,4 @@ pub trait Renderer {
         tab_math::security_badge_rect(&m, tab_index, tab_count, buf_width, security_count)
             .map(|r| r.to_tuple())
     }
-
-    // ── Settings overlay ────────────────────────────────────────────
-
-    fn draw_settings_overlay(
-        &mut self,
-        target: &mut RenderTarget<'_>,
-        overlay: &crate::gui::settings::SettingsOverlay,
-    );
 }

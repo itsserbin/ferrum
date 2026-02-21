@@ -62,11 +62,6 @@ impl FerrumWindow {
             self.resize_direction = None;
         }
 
-        // Settings overlay consumes all mouse movement when open.
-        if self.handle_settings_mouse_move(mx, my) {
-            return;
-        }
-
         // Handle active divider drag (pane resize).
         if self.divider_drag.is_some() {
             self.handle_divider_drag(mx, my);

@@ -5,7 +5,6 @@ mod forward;
 mod navigation_shortcuts;
 mod rename;
 mod selection;
-mod settings;
 mod shortcuts;
 mod tab_shortcuts;
 mod word_motion;

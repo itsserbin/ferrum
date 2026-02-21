@@ -257,6 +257,7 @@ impl FerrumWindow {
         // Spawn PTY reader thread (same pattern as tabs/create.rs).
         {
             let tx = tx.clone();
+            let proxy = self.event_proxy.clone();
             let mut reader = match session
                 .reader()
                 .context("failed to clone PTY reader for new pane")
@@ -280,6 +281,7 @@ impl FerrumWindow {
                                     tab_id,
                                     pane_id: reader_pane_id,
                                 });
+                                let _ = proxy.send_event(());
                                 break;
                             }
                             Err(err) => {
@@ -290,6 +292,7 @@ impl FerrumWindow {
                                     tab_id,
                                     pane_id: reader_pane_id,
                                 });
+                                let _ = proxy.send_event(());
                                 break;
                             }
                             Ok(n) => {
@@ -307,6 +310,7 @@ impl FerrumWindow {
                                     );
                                     break;
                                 }
+                                let _ = proxy.send_event(());
                             }
                         }
                     }

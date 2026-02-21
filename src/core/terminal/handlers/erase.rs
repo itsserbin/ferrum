@@ -1,5 +1,4 @@
 use crate::core::terminal::Terminal;
-use crate::core::{Cell, Grid};
 use vte::Params;
 
 pub(in super::super) fn handle_erase_csi(
@@ -11,26 +10,35 @@ pub(in super::super) fn handle_erase_csi(
         'J' => {
             match term.param(params, 0) {
                 0 => {
+                    let blank = term.make_blank_cell();
                     for col in term.cursor_col..term.grid.cols {
-                        term.grid.set(term.cursor_row, col, Cell::default());
+                        term.grid.set(term.cursor_row, col, blank.clone());
                     }
                     for row in (term.cursor_row + 1)..term.grid.rows {
                         for col in 0..term.grid.cols {
-                            term.grid.set(row, col, Cell::default());
+                            term.grid.set(row, col, blank.clone());
                         }
                     }
                 }
                 1 => {
+                    let blank = term.make_blank_cell();
                     for row in 0..term.cursor_row {
                         for col in 0..term.grid.cols {
-                            term.grid.set(row, col, Cell::default());
+                            term.grid.set(row, col, blank.clone());
                         }
                     }
                     for col in 0..=term.cursor_col.min(term.grid.cols - 1) {
-                        term.grid.set(term.cursor_row, col, Cell::default());
+                        term.grid.set(term.cursor_row, col, blank.clone());
                     }
                 }
-                2 => term.grid = Grid::new(term.grid.rows, term.grid.cols),
+                2 => {
+                    let blank = term.make_blank_cell();
+                    for row in 0..term.grid.rows {
+                        for col in 0..term.grid.cols {
+                            term.grid.set(row, col, blank.clone());
+                        }
+                    }
+                }
                 3 => {
                     let cleared = term.scrollback.len();
                     term.scrollback.clear();
@@ -44,18 +52,21 @@ pub(in super::super) fn handle_erase_csi(
         'K' => {
             match term.param(params, 0) {
                 0 => {
+                    let blank = term.make_blank_cell();
                     for col in term.cursor_col..term.grid.cols {
-                        term.grid.set(term.cursor_row, col, Cell::default());
+                        term.grid.set(term.cursor_row, col, blank.clone());
                     }
                 }
                 1 => {
+                    let blank = term.make_blank_cell();
                     for col in 0..=term.cursor_col.min(term.grid.cols - 1) {
-                        term.grid.set(term.cursor_row, col, Cell::default());
+                        term.grid.set(term.cursor_row, col, blank.clone());
                     }
                 }
                 2 => {
+                    let blank = term.make_blank_cell();
                     for col in 0..term.grid.cols {
-                        term.grid.set(term.cursor_row, col, Cell::default());
+                        term.grid.set(term.cursor_row, col, blank.clone());
                     }
                 }
                 _ => {}
@@ -355,5 +366,28 @@ mod tests {
                 c
             );
         }
+    }
+
+    #[test]
+    fn ed_erase_inherits_current_bg() {
+        use crate::core::Color;
+        let mut term = Terminal::new(4, 10);
+        let red = Color { r: 255, g: 0, b: 0 };
+        term.process(b"\x1b[48;2;255;0;0m");
+        term.process(b"\x1b[2J");
+        assert_eq!(term.grid.get_unchecked(0, 0).bg, red);
+        assert_eq!(term.grid.get_unchecked(3, 9).bg, red);
+    }
+
+    #[test]
+    fn el_erase_right_inherits_current_bg() {
+        use crate::core::Color;
+        let mut term = Terminal::new(4, 10);
+        let blue = Color { r: 0, g: 0, b: 255 };
+        term.process(b"AAAA");
+        term.cursor_col = 0;
+        term.process(b"\x1b[48;2;0;0;255m\x1b[2K");
+        assert_eq!(term.grid.get_unchecked(0, 0).bg, blue);
+        assert_eq!(term.grid.get_unchecked(0, 9).bg, blue);
     }
 }

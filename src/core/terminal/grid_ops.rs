@@ -51,8 +51,9 @@ impl super::Terminal {
             let wrapped = self.grid.is_wrapped(row);
             self.grid.set_wrapped(row - 1, wrapped);
         }
+        let blank = self.make_blank_cell();
         for col in 0..self.grid.cols {
-            self.grid.set(bottom, col, Cell::default());
+            self.grid.set(bottom, col, blank.clone());
         }
         self.grid.set_wrapped(bottom, false);
     }
@@ -66,8 +67,9 @@ impl super::Terminal {
             let wrapped = self.grid.is_wrapped(row);
             self.grid.set_wrapped(row + 1, wrapped);
         }
+        let blank = self.make_blank_cell();
         for col in 0..self.grid.cols {
-            self.grid.set(top, col, Cell::default());
+            self.grid.set(top, col, blank.clone());
         }
         self.grid.set_wrapped(top, false);
     }

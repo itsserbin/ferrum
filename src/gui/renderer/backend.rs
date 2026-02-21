@@ -222,58 +222,6 @@ impl RendererBackend {
         self.as_renderer()
             .hit_test_security_popup(popup, x, y, buf_width, buf_height)
     }
-}
-
-// ── Palette accessors (used by settings overlay mouse handling) ────
-
-impl RendererBackend {
-    pub(in crate::gui) fn palette_menu_bg(&self) -> u32 {
-        match self {
-            Self::Cpu { renderer, .. } => renderer.palette.menu_bg.to_pixel(),
-            #[cfg(feature = "gpu")]
-            Self::Gpu(gpu) => gpu.palette.menu_bg.to_pixel(),
-        }
-    }
-
-    pub(in crate::gui) fn palette_active_accent(&self) -> u32 {
-        match self {
-            Self::Cpu { renderer, .. } => renderer.palette.active_accent.to_pixel(),
-            #[cfg(feature = "gpu")]
-            Self::Gpu(gpu) => gpu.palette.active_accent.to_pixel(),
-        }
-    }
-
-    pub(in crate::gui) fn palette_text_active(&self) -> u32 {
-        match self {
-            Self::Cpu { renderer, .. } => renderer.palette.tab_text_active.to_pixel(),
-            #[cfg(feature = "gpu")]
-            Self::Gpu(gpu) => gpu.palette.tab_text_active.to_pixel(),
-        }
-    }
-
-    pub(in crate::gui) fn palette_text_inactive(&self) -> u32 {
-        match self {
-            Self::Cpu { renderer, .. } => renderer.palette.tab_text_inactive.to_pixel(),
-            #[cfg(feature = "gpu")]
-            Self::Gpu(gpu) => gpu.palette.tab_text_inactive.to_pixel(),
-        }
-    }
-
-    pub(in crate::gui) fn palette_bar_bg(&self) -> u32 {
-        match self {
-            Self::Cpu { renderer, .. } => renderer.palette.bar_bg.to_pixel(),
-            #[cfg(feature = "gpu")]
-            Self::Gpu(gpu) => gpu.palette.bar_bg.to_pixel(),
-        }
-    }
-
-    pub(in crate::gui) fn palette_close_hover_bg(&self) -> u32 {
-        match self {
-            Self::Cpu { renderer, .. } => renderer.palette.close_hover_bg.to_pixel(),
-            #[cfg(feature = "gpu")]
-            Self::Gpu(gpu) => gpu.palette.close_hover_bg.to_pixel(),
-        }
-    }
 
     pub(in crate::gui) fn palette(&self) -> &crate::config::ThemePalette {
         match self {

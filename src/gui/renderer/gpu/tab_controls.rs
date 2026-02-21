@@ -134,7 +134,7 @@ impl super::GpuRenderer {
             self.palette.tab_text_inactive.to_pixel()
         };
 
-        let icon_size = gw as f32;
+        let icon_size = gw as f32 * 0.5;
         let cx = gx as f32 + gw as f32 / 2.0;
         let cy = gy as f32 + gh as f32 / 2.0;
         let layout = ui_layout::gear_icon_layout(cx, cy, icon_size, icon_color);

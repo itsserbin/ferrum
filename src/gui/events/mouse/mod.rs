@@ -6,7 +6,6 @@ mod tab_bar_actions;
 mod tab_bar_rename;
 mod tab_drag;
 mod terminal_click;
-mod settings;
 mod wheel;
 
 const TAB_BAR_MULTI_CLICK_MS: u128 = 400;

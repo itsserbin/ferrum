@@ -85,6 +85,14 @@ impl ApplicationHandler for App {
                         platform::macos::set_pin_button_state(&win.window, win.pinned);
                     }
                 }
+                // DECSET 1004 focus reporting: send CSI I (focus) or CSI O (blur).
+                if let Some(leaf) = win.active_leaf_mut()
+                    && leaf.terminal.focus_reporting
+                {
+                    let seq = if focused { b"\x1b[I" } else { b"\x1b[O" };
+                    let _ = leaf.pty_writer.write_all(seq);
+                    let _ = leaf.pty_writer.flush();
+                }
                 should_redraw = true;
             }
             WindowEvent::ModifiersChanged(modifiers) => {
@@ -128,13 +136,6 @@ impl ApplicationHandler for App {
         }
         if should_redraw {
             win.window.request_redraw();
-        }
-
-        // Pick up config updates from settings overlay.
-        if let Some(win) = self.windows.get_mut(&window_id)
-            && let Some(new_config) = win.pending_config.take()
-        {
-            self.config = new_config;
         }
 
         // Process any pending window requests (detach, close).
@@ -224,8 +225,19 @@ impl ApplicationHandler for App {
             }
         }
 
+        // Windows/Linux: config changes are sent directly through the channel
+        // from the settings window thread. We only need to detect window close
+        // for bookkeeping (the window thread already saved config on close).
+        #[cfg(target_os = "windows")]
+        {
+            platform::windows::settings_window::check_window_closed();
+        }
+        #[cfg(target_os = "linux")]
+        {
+            platform::linux::settings_window::check_window_closed();
+        }
+
         // Apply config changes from native settings window.
-        #[cfg(target_os = "macos")]
         while let Ok(new_config) = self.settings_rx.try_recv() {
             for win in self.windows.values_mut() {
                 win.apply_config_change(&new_config);
