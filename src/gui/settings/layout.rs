@@ -77,6 +77,11 @@ pub(in crate::gui) enum ItemControlLayout {
         /// Populated only when this dropdown is open.
         options: Vec<DropdownOptionLayout>,
     },
+    /// Boolean toggle: clickable pill showing ON or OFF.
+    Toggle {
+        pill: RoundedRectCmd,
+        pill_text: TextCmd,
+    },
 }
 
 /// Layout for a single option in an open dropdown list.
@@ -539,6 +544,19 @@ fn build_item_layouts(
                     text_inactive,
                     bar_bg,
                 ),
+                SettingItem::BoolToggle { value, .. } => build_toggle_control(
+                    control_x,
+                    label_y,
+                    cell_height,
+                    ui_scale,
+                    *value,
+                    accent,
+                    text_active,
+                    text_inactive,
+                    bar_bg,
+                    overlay,
+                    i,
+                ),
             };
 
             ItemLayout { row_bg, label, controls }
@@ -552,7 +570,8 @@ fn item_label(item: &SettingItem) -> &'static str {
         SettingItem::FloatSlider { label, .. }
         | SettingItem::IntSlider { label, .. }
         | SettingItem::LargeIntSlider { label, .. }
-        | SettingItem::EnumChoice { label, .. } => label,
+        | SettingItem::EnumChoice { label, .. }
+        | SettingItem::BoolToggle { label, .. } => label,
     }
 }
 
@@ -648,6 +667,66 @@ fn build_stepper_control(
         plus_btn,
         plus_text,
     }
+}
+
+// ── Toggle control ──────────────────────────────────────────────────
+
+/// Toggle pill height in base pixels.
+const TOGGLE_HEIGHT: u32 = 22;
+/// Toggle pill width in base pixels.
+const TOGGLE_WIDTH: u32 = 40;
+
+#[allow(clippy::too_many_arguments)]
+fn build_toggle_control(
+    x: f32,
+    row_center_y: f32,
+    cell_height: u32,
+    ui_scale: f64,
+    value: bool,
+    accent: u32,
+    _text_active: u32,
+    text_inactive: u32,
+    bar_bg: u32,
+    overlay: &SettingsOverlay,
+    item_index: usize,
+) -> ItemControlLayout {
+    let sp = |base| scaled_px(base, ui_scale);
+    let pill_w = sp(TOGGLE_WIDTH) as f32;
+    let pill_h = sp(TOGGLE_HEIGHT) as f32;
+    let btn_radius = sp(SMALL_PAD) as f32;
+
+    let pill_y = row_center_y + (cell_height as f32 - pill_h) / 2.0;
+
+    let is_hovered = overlay.hovered_stepper == Some((item_index, StepperHalf::Minus));
+
+    let (pill_color, pill_opacity) = if value {
+        (accent, if is_hovered { 0.9 } else { 0.7 })
+    } else {
+        (bar_bg, if is_hovered { 0.8 } else { 0.5 })
+    };
+
+    let pill = RoundedRectCmd {
+        x,
+        y: pill_y,
+        w: pill_w,
+        h: pill_h,
+        radius: btn_radius,
+        color: pill_color,
+        opacity: pill_opacity,
+    };
+
+    let label = if value { "ON" } else { "OFF" };
+    let text_color = if value { accent } else { text_inactive };
+
+    let pill_text = TextCmd {
+        x: x + (pill_w - label.len() as f32 * cell_height as f32 * 0.5) / 2.0,
+        y: row_center_y,
+        text: label.to_string(),
+        color: text_color,
+        opacity: 1.0,
+    };
+
+    ItemControlLayout::Toggle { pill, pill_text }
 }
 
 // ── Dropdown control ────────────────────────────────────────────────

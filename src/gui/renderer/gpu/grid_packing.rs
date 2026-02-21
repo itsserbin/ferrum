@@ -95,8 +95,8 @@ impl super::GpuRenderer {
                     attrs |= 8;
                 }
 
-                let mut fg = if cell.fg == Color::DEFAULT_FG { self.palette.default_fg } else { cell.fg };
-                let bg_color = if cell.bg == Color::DEFAULT_BG { self.palette.default_bg } else { cell.bg };
+                let mut fg = if cell.fg == Color::SENTINEL_FG { self.palette.default_fg } else { cell.fg };
+                let bg_color = if cell.bg == Color::SENTINEL_BG { self.palette.default_bg } else { cell.bg };
                 if cell.bold {
                     fg = fg.bold_bright_with_palette(&self.palette.ansi);
                 }

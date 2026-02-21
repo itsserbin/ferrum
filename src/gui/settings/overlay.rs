@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::config::{AppConfig, FontFamily, ThemeChoice};
+use crate::config::{AppConfig, FontFamily, SecurityMode, ThemeChoice};
 
 /// Categories in the settings sidebar.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -9,6 +9,7 @@ pub(in crate::gui) enum SettingsCategory {
     Theme,
     Terminal,
     Layout,
+    Security,
 }
 
 impl SettingsCategory {
@@ -18,6 +19,7 @@ impl SettingsCategory {
         SettingsCategory::Theme,
         SettingsCategory::Terminal,
         SettingsCategory::Layout,
+        SettingsCategory::Security,
     ];
 }
 
@@ -28,6 +30,7 @@ impl fmt::Display for SettingsCategory {
             SettingsCategory::Theme => write!(f, "Theme"),
             SettingsCategory::Terminal => write!(f, "Terminal"),
             SettingsCategory::Layout => write!(f, "Layout"),
+            SettingsCategory::Security => write!(f, "Security"),
         }
     }
 }
@@ -59,6 +62,10 @@ pub(in crate::gui) enum SettingItem {
         label: &'static str,
         options: &'static [&'static str],
         selected: usize,
+    },
+    BoolToggle {
+        label: &'static str,
+        value: bool,
     },
 }
 
@@ -122,6 +129,7 @@ impl SettingsOverlay {
             SettingsCategory::Theme => self.theme_items(),
             SettingsCategory::Terminal => self.terminal_items(),
             SettingsCategory::Layout => self.layout_items(),
+            SettingsCategory::Security => self.security_items(),
         }
     }
 
@@ -185,32 +193,67 @@ impl SettingsOverlay {
 
     fn layout_items(&self) -> Vec<SettingItem> {
         let layout = &self.editing_config.layout;
-        vec![
-            SettingItem::IntSlider {
-                label: "Window Padding",
-                value: layout.window_padding,
-                min: 0,
-                max: 32,
+        let mut items = vec![SettingItem::IntSlider {
+            label: "Window Padding",
+            value: layout.window_padding,
+            min: 0,
+            max: 32,
+        }];
+        // macOS uses native tab bar — Tab Bar Height has no effect there.
+        #[cfg(not(target_os = "macos"))]
+        items.push(SettingItem::IntSlider {
+            label: "Tab Bar Height",
+            value: layout.tab_bar_height,
+            min: 24,
+            max: 60,
+        });
+        items.push(SettingItem::IntSlider {
+            label: "Pane Padding",
+            value: layout.pane_inner_padding,
+            min: 0,
+            max: 16,
+        });
+        items.push(SettingItem::IntSlider {
+            label: "Scrollbar Width",
+            value: layout.scrollbar_width,
+            min: 2,
+            max: 16,
+        });
+        items
+    }
+
+    fn security_items(&self) -> Vec<SettingItem> {
+        let sec = &self.editing_config.security;
+        let mut items = vec![SettingItem::EnumChoice {
+            label: "Security Mode",
+            options: &["Disabled", "Standard", "Custom"],
+            selected: match sec.mode {
+                SecurityMode::Disabled => 0,
+                SecurityMode::Standard => 1,
+                SecurityMode::Custom => 2,
             },
-            SettingItem::IntSlider {
-                label: "Tab Bar Height",
-                value: layout.tab_bar_height,
-                min: 24,
-                max: 60,
-            },
-            SettingItem::IntSlider {
-                label: "Pane Padding",
-                value: layout.pane_inner_padding,
-                min: 0,
-                max: 16,
-            },
-            SettingItem::IntSlider {
-                label: "Scrollbar Width",
-                value: layout.scrollbar_width,
-                min: 2,
-                max: 16,
-            },
-        ]
+        }];
+        if sec.mode != SecurityMode::Disabled {
+            items.extend([
+                SettingItem::BoolToggle {
+                    label: "Paste Protection",
+                    value: sec.paste_protection,
+                },
+                SettingItem::BoolToggle {
+                    label: "Block Title Query",
+                    value: sec.block_title_query,
+                },
+                SettingItem::BoolToggle {
+                    label: "Limit Cursor Jumps",
+                    value: sec.limit_cursor_jumps,
+                },
+                SettingItem::BoolToggle {
+                    label: "Clear Mouse on Reset",
+                    value: sec.clear_mouse_on_reset,
+                },
+            ]);
+        }
+        items
     }
 }
 
@@ -252,16 +295,20 @@ mod tests {
     }
 
     #[test]
-    fn layout_items_returns_four_settings() {
+    fn layout_items_count_is_platform_correct() {
         let mut overlay = SettingsOverlay::new(&AppConfig::default());
         overlay.active_category = SettingsCategory::Layout;
         let items = overlay.items();
+        // macOS hides Tab Bar Height (native tab bar), other platforms show it.
+        #[cfg(target_os = "macos")]
+        assert_eq!(items.len(), 3);
+        #[cfg(not(target_os = "macos"))]
         assert_eq!(items.len(), 4);
     }
 
     #[test]
-    fn categories_array_has_four_entries() {
-        assert_eq!(SettingsCategory::CATEGORIES.len(), 4);
+    fn categories_array_has_five_entries() {
+        assert_eq!(SettingsCategory::CATEGORIES.len(), 5);
     }
 
     #[test]
@@ -270,6 +317,34 @@ mod tests {
         assert_eq!(SettingsCategory::Theme.to_string(), "Theme");
         assert_eq!(SettingsCategory::Terminal.to_string(), "Terminal");
         assert_eq!(SettingsCategory::Layout.to_string(), "Layout");
+        assert_eq!(SettingsCategory::Security.to_string(), "Security");
+    }
+
+    #[test]
+    fn security_standard_shows_five_items() {
+        let mut overlay = SettingsOverlay::new(&AppConfig::default());
+        overlay.active_category = SettingsCategory::Security;
+        let items = overlay.items();
+        // 1 EnumChoice (mode) + 4 BoolToggle
+        assert_eq!(items.len(), 5);
+    }
+
+    #[test]
+    fn security_custom_shows_five_items() {
+        let mut config = AppConfig::default();
+        config.security.mode = SecurityMode::Custom;
+        let mut overlay = SettingsOverlay::new(&config);
+        overlay.active_category = SettingsCategory::Security;
+        assert_eq!(overlay.items().len(), 5);
+    }
+
+    #[test]
+    fn security_disabled_shows_one_item() {
+        let mut config = AppConfig::default();
+        config.security.mode = SecurityMode::Disabled;
+        let mut overlay = SettingsOverlay::new(&config);
+        overlay.active_category = SettingsCategory::Security;
+        assert_eq!(overlay.items().len(), 1);
     }
 
     #[test]

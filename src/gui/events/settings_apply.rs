@@ -37,10 +37,13 @@ impl FerrumWindow {
         // Update cursor blink interval.
         self.cursor_blink_interval_ms = config.terminal.cursor_blink_interval_ms;
 
-        // Update terminal max scrollback.
+        // Update terminal max scrollback and security config.
+        let sec = config.security.to_runtime();
         for tab in &mut self.tabs {
             tab.pane_tree.for_each_leaf_mut(&mut |leaf| {
                 leaf.terminal.max_scrollback = config.terminal.max_scrollback;
+                leaf.terminal.security_config = sec;
+                leaf.security.config = sec;
             });
         }
     }

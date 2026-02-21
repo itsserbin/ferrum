@@ -120,6 +120,13 @@ impl super::GpuRenderer {
                         &arrow_text.text, arrow_text.color, arrow_text.opacity,
                     );
                 }
+                ItemControlLayout::Toggle { pill, pill_text } => {
+                    self.push_rounded_rect_cmd(pill);
+                    self.push_text(
+                        pill_text.x, pill_text.y,
+                        &pill_text.text, pill_text.color, pill_text.opacity,
+                    );
+                }
             }
         }
 

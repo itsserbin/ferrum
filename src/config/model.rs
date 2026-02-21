@@ -7,6 +7,7 @@ pub(crate) struct AppConfig {
     pub theme: ThemeChoice,
     pub terminal: TerminalConfig,
     pub layout: LayoutConfig,
+    pub security: SecuritySettings,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -74,8 +75,79 @@ pub(crate) enum FontFamily {
 pub(crate) enum ThemeChoice {
     #[default]
     FerrumDark,
-    #[serde(alias = "CatppuccinLatte")]
     FerrumLight,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub(crate) enum SecurityMode {
+    Disabled,
+    #[default]
+    Standard,
+    Custom,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default)]
+pub(crate) struct SecuritySettings {
+    pub mode: SecurityMode,
+    pub paste_protection: bool,
+    pub block_title_query: bool,
+    pub limit_cursor_jumps: bool,
+    pub clear_mouse_on_reset: bool,
+}
+
+impl Default for SecuritySettings {
+    fn default() -> Self {
+        Self {
+            mode: SecurityMode::Standard,
+            paste_protection: true,
+            block_title_query: true,
+            limit_cursor_jumps: true,
+            clear_mouse_on_reset: true,
+        }
+    }
+}
+
+impl SecuritySettings {
+    /// Converts settings into a runtime `SecurityConfig`.
+    ///
+    /// When mode is `Disabled`, all checks are turned off regardless of
+    /// individual toggle values. `Standard` and `Custom` use individual toggles.
+    pub(crate) fn to_runtime(&self) -> crate::core::SecurityConfig {
+        match self.mode {
+            SecurityMode::Disabled => crate::core::SecurityConfig {
+                paste_protection: false,
+                block_title_query: false,
+                limit_cursor_jumps: false,
+                clear_mouse_on_reset: false,
+            },
+            SecurityMode::Standard | SecurityMode::Custom => crate::core::SecurityConfig {
+                paste_protection: self.paste_protection,
+                block_title_query: self.block_title_query,
+                limit_cursor_jumps: self.limit_cursor_jumps,
+                clear_mouse_on_reset: self.clear_mouse_on_reset,
+            },
+        }
+    }
+
+    /// Infers the mode from the current toggle values.
+    ///
+    /// All ON → Standard, all OFF → Disabled, mixed → Custom.
+    pub(crate) fn inferred_mode(&self) -> SecurityMode {
+        let all = [
+            self.paste_protection,
+            self.block_title_query,
+            self.limit_cursor_jumps,
+            self.clear_mouse_on_reset,
+        ];
+        if all.iter().all(|&v| v) {
+            SecurityMode::Standard
+        } else if all.iter().all(|&v| !v) {
+            SecurityMode::Disabled
+        } else {
+            SecurityMode::Custom
+        }
+    }
 }
 
 #[cfg(test)]
@@ -114,5 +186,88 @@ mod tests {
         assert_eq!(config.layout.tab_bar_height, 36);
         assert_eq!(config.layout.pane_inner_padding, 4);
         assert_eq!(config.layout.scrollbar_width, 6);
+        assert_eq!(config.security.mode, SecurityMode::Standard);
+        assert!(config.security.paste_protection);
+        assert!(config.security.block_title_query);
+        assert!(config.security.limit_cursor_jumps);
+        assert!(config.security.clear_mouse_on_reset);
+    }
+
+    #[test]
+    fn security_disabled_turns_off_all_checks() {
+        let settings = SecuritySettings {
+            mode: SecurityMode::Disabled,
+            paste_protection: true,
+            block_title_query: true,
+            limit_cursor_jumps: true,
+            clear_mouse_on_reset: true,
+        };
+        let runtime = settings.to_runtime();
+        assert!(!runtime.paste_protection);
+        assert!(!runtime.block_title_query);
+        assert!(!runtime.limit_cursor_jumps);
+        assert!(!runtime.clear_mouse_on_reset);
+    }
+
+    #[test]
+    fn security_standard_uses_individual_toggles() {
+        let settings = SecuritySettings {
+            mode: SecurityMode::Standard,
+            paste_protection: false,
+            block_title_query: true,
+            limit_cursor_jumps: false,
+            clear_mouse_on_reset: true,
+        };
+        let runtime = settings.to_runtime();
+        assert!(!runtime.paste_protection);
+        assert!(runtime.block_title_query);
+        assert!(!runtime.limit_cursor_jumps);
+        assert!(runtime.clear_mouse_on_reset);
+    }
+
+    #[test]
+    fn security_custom_uses_individual_toggles() {
+        let settings = SecuritySettings {
+            mode: SecurityMode::Custom,
+            paste_protection: true,
+            block_title_query: false,
+            limit_cursor_jumps: true,
+            clear_mouse_on_reset: false,
+        };
+        let runtime = settings.to_runtime();
+        assert!(runtime.paste_protection);
+        assert!(!runtime.block_title_query);
+        assert!(runtime.limit_cursor_jumps);
+        assert!(!runtime.clear_mouse_on_reset);
+    }
+
+    #[test]
+    fn inferred_mode_all_on_is_standard() {
+        let s = SecuritySettings::default();
+        assert_eq!(s.inferred_mode(), SecurityMode::Standard);
+    }
+
+    #[test]
+    fn inferred_mode_all_off_is_disabled() {
+        let s = SecuritySettings {
+            mode: SecurityMode::Custom,
+            paste_protection: false,
+            block_title_query: false,
+            limit_cursor_jumps: false,
+            clear_mouse_on_reset: false,
+        };
+        assert_eq!(s.inferred_mode(), SecurityMode::Disabled);
+    }
+
+    #[test]
+    fn inferred_mode_mixed_is_custom() {
+        let s = SecuritySettings {
+            mode: SecurityMode::Standard,
+            paste_protection: true,
+            block_title_query: false,
+            limit_cursor_jumps: true,
+            clear_mouse_on_reset: true,
+        };
+        assert_eq!(s.inferred_mode(), SecurityMode::Custom);
     }
 }

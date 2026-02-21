@@ -36,55 +36,6 @@ pub const TAB_BAR_HEIGHT: u32 = 36;
 /// Minimum scrollbar thumb height in base UI pixels.
 pub(super) const SCROLLBAR_MIN_THUMB: u32 = 20;
 
-// -- Tab bar palette (derived from terminal background #282C34) --
-//
-// All colors maintain the neutral gray tone of the terminal palette,
-// avoiding the blue/purple tint of Catppuccin Mocha.
-
-/// Bar background — darkened terminal bg, neutral gray.
-#[cfg_attr(target_os = "macos", allow(dead_code))]
-pub(super) const BAR_BG: u32 = 0x1E2127;
-
-/// Active-tab fill — matches terminal background exactly.
-#[cfg_attr(target_os = "macos", allow(dead_code))]
-pub(super) const ACTIVE_TAB_BG: u32 = 0x282C34;
-
-/// Inactive-tab hover highlight — between bar bg and active tab.
-#[cfg_attr(target_os = "macos", allow(dead_code))]
-pub(super) const INACTIVE_TAB_HOVER: u32 = 0x2E333C;
-
-/// Active-tab text — matches terminal default fg.
-#[cfg_attr(target_os = "macos", allow(dead_code))]
-pub(super) const TAB_TEXT_ACTIVE: u32 = 0xD2DBEB;
-
-/// Inactive-tab text — muted neutral gray.
-#[cfg_attr(target_os = "macos", allow(dead_code))]
-pub(super) const TAB_TEXT_INACTIVE: u32 = 0x6C7480;
-
-/// Tab bottom separator / border.
-#[cfg_attr(target_os = "macos", allow(dead_code))]
-pub(super) const TAB_BORDER: u32 = 0x2E333C;
-
-/// Close-button hover background — terminal ANSI black.
-#[cfg_attr(target_os = "macos", allow(dead_code))]
-pub(super) const CLOSE_HOVER_BG_COLOR: u32 = 0x454B59;
-
-/// Editable-field background for rename input.
-#[cfg_attr(target_os = "macos", allow(dead_code))]
-pub(super) const RENAME_FIELD_BG: u32 = 0x1E2127;
-
-/// Field border for rename input.
-#[cfg_attr(target_os = "macos", allow(dead_code))]
-pub(super) const RENAME_FIELD_BORDER: u32 = 0x6C7480;
-
-/// Tab drag insertion indicator (Catppuccin Mocha Mauve #CBA6F7).
-#[cfg_attr(target_os = "macos", allow(dead_code))]
-pub(super) const INSERTION_COLOR: u32 = 0xCBA6F7;
-
-/// Window-button close hover background (Catppuccin Mocha Red #F38BA8).
-#[cfg(not(target_os = "macos"))]
-pub(super) const WIN_BTN_CLOSE_HOVER: u32 = 0xF38BA8;
-
 /// Sanitizes a DPI scale factor to a safe, finite range.
 ///
 /// Returns `1.0` for non-finite inputs, otherwise clamps to `[0.75, 4.0]`.

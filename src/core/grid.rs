@@ -395,7 +395,7 @@ mod tests {
     fn recolor_cells_transforms_all_cells() {
         use crate::core::Color;
         let mut grid = Grid::new(2, 3);
-        let old_fg = Color::DEFAULT_FG;
+        let old_fg = Color::SENTINEL_FG;
         let new_fg = Color { r: 1, g: 2, b: 3 };
 
         grid.recolor_cells(|cell| {

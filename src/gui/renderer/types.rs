@@ -292,7 +292,7 @@ mod tests {
         PopupColors {
             accent: 0xF9E2AF,
             menu_bg: 0x1E2433,
-            default_fg: Color::DEFAULT_FG.to_pixel(),
+            default_fg: Color::SENTINEL_FG.to_pixel(),
         }
     }
 

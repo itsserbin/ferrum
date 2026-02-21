@@ -81,6 +81,10 @@ impl super::CpuRenderer {
                     self.draw_text_cmd(target, button_text);
                     self.draw_text_cmd(target, arrow_text);
                 }
+                ItemControlLayout::Toggle { pill, pill_text } => {
+                    self.draw_rounded_rect_cmd(target, pill);
+                    self.draw_text_cmd(target, pill_text);
+                }
             }
         }
 

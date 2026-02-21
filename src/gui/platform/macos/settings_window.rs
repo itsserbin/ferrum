@@ -1,5 +1,5 @@
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
 use std::sync::mpsc;
 
 use objc2::MainThreadMarker;
@@ -14,7 +14,8 @@ use objc2_foundation::{NSPoint, NSRect, NSSize, NSString, ns_string};
 
 use super::ffi::{class_addMethod, class_replaceMethod, object_getClass, sel_registerName};
 use crate::config::{
-    AppConfig, FontConfig, FontFamily, LayoutConfig, TerminalConfig, ThemeChoice,
+    AppConfig, FontConfig, FontFamily, LayoutConfig, SecurityMode, SecuritySettings, TerminalConfig,
+    ThemeChoice,
 };
 
 /// Holds references to the native settings window and all its controls.
@@ -41,15 +42,19 @@ struct NativeSettingsState {
     scrollback_field: Retained<NSTextField>,
     cursor_blink_stepper: Retained<NSStepper>,
     cursor_blink_field: Retained<NSTextField>,
-    // Layout
+    // Layout (Tab Bar Height removed — macOS uses native tab bar)
     window_padding_stepper: Retained<NSStepper>,
     window_padding_field: Retained<NSTextField>,
-    tab_bar_height_stepper: Retained<NSStepper>,
-    tab_bar_height_field: Retained<NSTextField>,
     pane_padding_stepper: Retained<NSStepper>,
     pane_padding_field: Retained<NSTextField>,
     scrollbar_width_stepper: Retained<NSStepper>,
     scrollbar_width_field: Retained<NSTextField>,
+    // Security
+    security_mode_popup: Retained<NSPopUpButton>,
+    paste_protection_check: Retained<NSButton>,
+    block_title_query_check: Retained<NSButton>,
+    limit_cursor_jumps_check: Retained<NSButton>,
+    clear_mouse_on_reset_check: Retained<NSButton>,
     // Reset (kept alive so ObjC retains the button; never read from Rust).
     #[allow(dead_code)]
     reset_button: Retained<NSButton>,
@@ -71,6 +76,11 @@ static TEXT_FIELD_CHANGED: AtomicBool = AtomicBool::new(false);
 
 /// Atomic flag: Reset to Defaults was clicked.
 static RESET_REQUESTED: AtomicBool = AtomicBool::new(false);
+
+/// Tracks the last known security mode popup index so `sync_security_controls`
+/// can distinguish popup changes (apply presets) from checkbox changes (infer mode).
+/// Initialised to 1 = Standard (the default).
+static LAST_SECURITY_MODE_INDEX: AtomicIsize = AtomicIsize::new(1);
 
 /// ObjC action handler for steppers and popups.
 ///
@@ -131,6 +141,11 @@ pub fn take_reset_requested() -> bool {
 
 /// Builds an `AppConfig` from the current control values.
 fn build_config_from_controls(state: &NativeSettingsState) -> AppConfig {
+    let security_mode = match state.security_mode_popup.indexOfSelectedItem() {
+        0 => SecurityMode::Disabled,
+        1 => SecurityMode::Standard,
+        _ => SecurityMode::Custom,
+    };
     AppConfig {
         font: FontConfig {
             size: state.font_size_stepper.doubleValue() as f32,
@@ -150,10 +165,90 @@ fn build_config_from_controls(state: &NativeSettingsState) -> AppConfig {
         },
         layout: LayoutConfig {
             window_padding: state.window_padding_stepper.integerValue() as u32,
-            tab_bar_height: state.tab_bar_height_stepper.integerValue() as u32,
+            tab_bar_height: AppConfig::default().layout.tab_bar_height,
             pane_inner_padding: state.pane_padding_stepper.integerValue() as u32,
             scrollbar_width: state.scrollbar_width_stepper.integerValue() as u32,
         },
+        security: SecuritySettings {
+            mode: security_mode,
+            paste_protection: is_checkbox_on(&state.paste_protection_check),
+            block_title_query: is_checkbox_on(&state.block_title_query_check),
+            limit_cursor_jumps: is_checkbox_on(&state.limit_cursor_jumps_check),
+            clear_mouse_on_reset: is_checkbox_on(&state.clear_mouse_on_reset_check),
+        },
+    }
+}
+
+/// Returns `true` if the checkbox (`NSButton` with switch style) is in the ON state.
+fn is_checkbox_on(button: &NSButton) -> bool {
+    // NSControlStateValueOn = 1
+    button.state() == 1
+}
+
+/// Syncs security checkboxes and mode popup.
+///
+/// Uses `LAST_SECURITY_MODE_INDEX` to distinguish popup changes from checkbox changes:
+/// - Popup changed → apply presets (force checkbox values for Standard/Disabled).
+/// - Checkbox changed → infer mode from current values and update popup.
+fn sync_security_controls(state: &NativeSettingsState) {
+    let current_index = state.security_mode_popup.indexOfSelectedItem();
+    let last_index = LAST_SECURITY_MODE_INDEX.swap(current_index, Ordering::SeqCst);
+
+    let all_checks = [
+        &state.paste_protection_check,
+        &state.block_title_query_check,
+        &state.limit_cursor_jumps_check,
+        &state.clear_mouse_on_reset_check,
+    ];
+
+    if current_index != last_index {
+        // Popup was changed by the user → apply presets.
+        match current_index {
+            0 => {
+                // Disabled: force all off, disable checkboxes.
+                for cb in &all_checks {
+                    set_checkbox(cb, false);
+                    cb.setEnabled(false);
+                }
+            }
+            1 => {
+                // Standard: force all on, enable checkboxes.
+                for cb in &all_checks {
+                    set_checkbox(cb, true);
+                    cb.setEnabled(true);
+                }
+            }
+            _ => {
+                // Custom: just enable checkboxes, keep their current values.
+                for cb in &all_checks {
+                    cb.setEnabled(true);
+                }
+            }
+        }
+    } else {
+        // Checkbox was changed → infer mode from current values.
+        let settings = SecuritySettings {
+            mode: SecurityMode::Custom,
+            paste_protection: is_checkbox_on(&state.paste_protection_check),
+            block_title_query: is_checkbox_on(&state.block_title_query_check),
+            limit_cursor_jumps: is_checkbox_on(&state.limit_cursor_jumps_check),
+            clear_mouse_on_reset: is_checkbox_on(&state.clear_mouse_on_reset_check),
+        };
+        let inferred = settings.inferred_mode();
+        let new_index = match inferred {
+            SecurityMode::Disabled => 0,
+            SecurityMode::Standard => 1,
+            SecurityMode::Custom => 2,
+        };
+        state.security_mode_popup.selectItemAtIndex(new_index);
+        LAST_SECURITY_MODE_INDEX.store(new_index, Ordering::SeqCst);
+
+        // If all toggled off → Disabled: disable checkboxes.
+        if matches!(inferred, SecurityMode::Disabled) {
+            for cb in &all_checks {
+                cb.setEnabled(false);
+            }
+        }
     }
 }
 
@@ -163,6 +258,7 @@ pub fn send_current_config() {
     let Some(state) = guard.as_ref() else {
         return;
     };
+    sync_security_controls(state);
     let config = build_config_from_controls(state);
     let _ = state.sender.send(config);
 }
@@ -196,7 +292,6 @@ pub fn sync_text_fields_to_steppers() {
     sync_int(&state.scrollback_field, &state.scrollback_stepper);
     sync_int(&state.cursor_blink_field, &state.cursor_blink_stepper);
     sync_int(&state.window_padding_field, &state.window_padding_stepper);
-    sync_int(&state.tab_bar_height_field, &state.tab_bar_height_stepper);
     sync_int(&state.pane_padding_field, &state.pane_padding_stepper);
     sync_int(&state.scrollbar_width_field, &state.scrollbar_width_stepper);
 }
@@ -228,12 +323,6 @@ pub fn update_text_fields() {
         .setStringValue(&NSString::from_str(&format!(
             "{}",
             state.window_padding_stepper.integerValue()
-        )));
-    state
-        .tab_bar_height_field
-        .setStringValue(&NSString::from_str(&format!(
-            "{}",
-            state.tab_bar_height_stepper.integerValue()
         )));
     state
         .pane_padding_field
@@ -275,17 +364,30 @@ pub fn reset_controls_to_defaults() {
         .window_padding_stepper
         .setIntegerValue(defaults.layout.window_padding as isize);
     state
-        .tab_bar_height_stepper
-        .setIntegerValue(defaults.layout.tab_bar_height as isize);
-    state
         .pane_padding_stepper
         .setIntegerValue(defaults.layout.pane_inner_padding as isize);
     state
         .scrollbar_width_stepper
         .setIntegerValue(defaults.layout.scrollbar_width as isize);
+    // Security: Standard mode, all toggles on.
+    state.security_mode_popup.selectItemAtIndex(1); // Standard
+    LAST_SECURITY_MODE_INDEX.store(1, Ordering::SeqCst);
+    set_checkbox(&state.paste_protection_check, true);
+    set_checkbox(&state.block_title_query_check, true);
+    set_checkbox(&state.limit_cursor_jumps_check, true);
+    set_checkbox(&state.clear_mouse_on_reset_check, true);
+    state.paste_protection_check.setEnabled(true);
+    state.block_title_query_check.setEnabled(true);
+    state.limit_cursor_jumps_check.setEnabled(true);
+    state.clear_mouse_on_reset_check.setEnabled(true);
 
     drop(guard);
     update_text_fields();
+}
+
+/// Sets a checkbox state. ON = 1, OFF = 0.
+fn set_checkbox(button: &NSButton, on: bool) {
+    button.setState(if on { 1 } else { 0 });
 }
 
 /// Returns true if the settings window exists but is no longer visible.
@@ -376,6 +478,33 @@ fn create_popup_row(
     popup
 }
 
+/// Creates a label + checkbox (`NSButton` with switch/checkbox type) row.
+/// Returns the checkbox button. The label is built into the button title.
+fn create_checkbox_row(
+    mtm: MainThreadMarker,
+    parent: &NSView,
+    label_text: &str,
+    checked: bool,
+    y_offset: f64,
+) -> Retained<NSButton> {
+    // SAFETY: checkboxWithTitle is a safe AppKit class method.
+    let checkbox = unsafe {
+        NSButton::checkboxWithTitle_target_action(
+            &NSString::from_str(label_text),
+            None,
+            None,
+            mtm,
+        )
+    };
+    checkbox.setFrame(NSRect::new(
+        NSPoint::new(20.0, y_offset),
+        NSSize::new(300.0, 24.0),
+    ));
+    set_checkbox(&checkbox, checked);
+    parent.addSubview(&checkbox);
+    checkbox
+}
+
 /// Returns true if the native settings window is currently open.
 pub fn is_settings_window_open() -> bool {
     SETTINGS_STATE.lock().unwrap().is_some()
@@ -420,6 +549,7 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
     // macOS releases the window when the user closes it, leaving a dangling pointer.
     unsafe { window.setReleasedWhenClosed(false) };
     window.center();
+
 
     // ── NSTabView ─────────────────────────────────────────────────────
 
@@ -535,6 +665,7 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
     tab_view.addTabViewItem(&terminal_tab);
 
     // ── Layout tab ────────────────────────────────────────────────────
+    // Note: Tab Bar Height is omitted — macOS uses the native tab bar.
 
     let layout_tab = NSTabViewItem::new();
     layout_tab.setLabel(&NSString::from_str("Layout"));
@@ -554,17 +685,6 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
         280.0,
     );
 
-    let (tab_bar_height_field, tab_bar_height_stepper) = create_stepper_row(
-        mtm,
-        &layout_view,
-        "Tab Bar Height:",
-        f64::from(config.layout.tab_bar_height),
-        24.0,
-        60.0,
-        1.0,
-        230.0,
-    );
-
     let (pane_padding_field, pane_padding_stepper) = create_stepper_row(
         mtm,
         &layout_view,
@@ -573,7 +693,7 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
         0.0,
         16.0,
         1.0,
-        180.0,
+        230.0,
     );
 
     let (scrollbar_width_field, scrollbar_width_stepper) = create_stepper_row(
@@ -584,11 +704,66 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
         2.0,
         16.0,
         1.0,
-        130.0,
+        180.0,
     );
 
     layout_tab.setView(Some(&layout_view));
     tab_view.addTabViewItem(&layout_tab);
+
+    // ── Security tab ─────────────────────────────────────────────────
+
+    let security_tab = NSTabViewItem::new();
+    security_tab.setLabel(&NSString::from_str("Security"));
+    let security_view = NSView::initWithFrame(
+        mtm.alloc(),
+        NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(500.0, 320.0)),
+    );
+
+    let security_mode_selected = match config.security.mode {
+        SecurityMode::Disabled => 0,
+        SecurityMode::Standard => 1,
+        SecurityMode::Custom => 2,
+    };
+    let security_mode_popup = create_popup_row(
+        mtm,
+        &security_view,
+        "Security Mode:",
+        &["Disabled", "Standard", "Custom"],
+        security_mode_selected,
+        280.0,
+    );
+
+    let paste_protection_check = create_checkbox_row(
+        mtm,
+        &security_view,
+        "Paste Protection",
+        config.security.paste_protection,
+        240.0,
+    );
+    let block_title_query_check = create_checkbox_row(
+        mtm,
+        &security_view,
+        "Block Title Query",
+        config.security.block_title_query,
+        210.0,
+    );
+    let limit_cursor_jumps_check = create_checkbox_row(
+        mtm,
+        &security_view,
+        "Limit Cursor Jumps",
+        config.security.limit_cursor_jumps,
+        180.0,
+    );
+    let clear_mouse_on_reset_check = create_checkbox_row(
+        mtm,
+        &security_view,
+        "Clear Mouse on Reset",
+        config.security.clear_mouse_on_reset,
+        150.0,
+    );
+
+    security_tab.setView(Some(&security_view));
+    tab_view.addTabViewItem(&security_tab);
 
     // ── Reset button ──────────────────────────────────────────────────
 
@@ -666,12 +841,21 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
         let _: () = msg_send![&cursor_blink_stepper, setAction: sel_stepper];
         let _: () = msg_send![&window_padding_stepper, setTarget: &*window];
         let _: () = msg_send![&window_padding_stepper, setAction: sel_stepper];
-        let _: () = msg_send![&tab_bar_height_stepper, setTarget: &*window];
-        let _: () = msg_send![&tab_bar_height_stepper, setAction: sel_stepper];
         let _: () = msg_send![&pane_padding_stepper, setTarget: &*window];
         let _: () = msg_send![&pane_padding_stepper, setAction: sel_stepper];
         let _: () = msg_send![&scrollbar_width_stepper, setTarget: &*window];
         let _: () = msg_send![&scrollbar_width_stepper, setAction: sel_stepper];
+        // Security popup and checkboxes also trigger stepper-changed.
+        let _: () = msg_send![&security_mode_popup, setTarget: &*window];
+        let _: () = msg_send![&security_mode_popup, setAction: sel_stepper];
+        let _: () = msg_send![&paste_protection_check, setTarget: &*window];
+        let _: () = msg_send![&paste_protection_check, setAction: sel_stepper];
+        let _: () = msg_send![&block_title_query_check, setTarget: &*window];
+        let _: () = msg_send![&block_title_query_check, setAction: sel_stepper];
+        let _: () = msg_send![&limit_cursor_jumps_check, setTarget: &*window];
+        let _: () = msg_send![&limit_cursor_jumps_check, setAction: sel_stepper];
+        let _: () = msg_send![&clear_mouse_on_reset_check, setTarget: &*window];
+        let _: () = msg_send![&clear_mouse_on_reset_check, setAction: sel_stepper];
 
         // Wire all editable text fields to the text-field-changed action.
         let _: () = msg_send![&font_size_field, setTarget: &*window];
@@ -684,8 +868,6 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
         let _: () = msg_send![&cursor_blink_field, setAction: sel_text];
         let _: () = msg_send![&window_padding_field, setTarget: &*window];
         let _: () = msg_send![&window_padding_field, setAction: sel_text];
-        let _: () = msg_send![&tab_bar_height_field, setTarget: &*window];
-        let _: () = msg_send![&tab_bar_height_field, setAction: sel_text];
         let _: () = msg_send![&pane_padding_field, setTarget: &*window];
         let _: () = msg_send![&pane_padding_field, setAction: sel_text];
         let _: () = msg_send![&scrollbar_width_field, setTarget: &*window];
@@ -712,6 +894,9 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
 
     // ── Store state ───────────────────────────────────────────────────
 
+    // Initialise security mode tracking to match the current config.
+    LAST_SECURITY_MODE_INDEX.store(security_mode_selected as isize, Ordering::SeqCst);
+
     let state = NativeSettingsState {
         window: window.clone(),
         sender,
@@ -727,12 +912,15 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
         cursor_blink_field,
         window_padding_stepper,
         window_padding_field,
-        tab_bar_height_stepper,
-        tab_bar_height_field,
         pane_padding_stepper,
         pane_padding_field,
         scrollbar_width_stepper,
         scrollbar_width_field,
+        security_mode_popup,
+        paste_protection_check,
+        block_title_query_check,
+        limit_cursor_jumps_check,
+        clear_mouse_on_reset_check,
         reset_button,
     };
     *SETTINGS_STATE.lock().unwrap() = Some(state);

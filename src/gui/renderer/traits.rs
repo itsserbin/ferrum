@@ -30,18 +30,13 @@ pub trait Renderer {
 
     /// Returns the split divider color as a pixel value (0x00RRGGBB).
     ///
-    /// Used by the CPU path for direct buffer writes. The default returns
-    /// Catppuccin Mocha Surface2 as a fallback.
-    fn split_divider_color_pixel(&self) -> u32 {
-        0x585B70
-    }
+    /// Sourced from the active theme palette by each renderer implementation.
+    fn split_divider_color_pixel(&self) -> u32;
 
     /// Returns the default background color as a pixel value (0x00RRGGBB).
     ///
-    /// Used by the CPU path to clear the frame buffer before rendering.
-    fn default_bg_pixel(&self) -> u32 {
-        0x282C34
-    }
+    /// Sourced from the active theme palette by each renderer implementation.
+    fn default_bg_pixel(&self) -> u32;
 
     /// Builds a [`TabLayoutMetrics`] from the renderer's current state.
     fn tab_layout_metrics(&self) -> TabLayoutMetrics {

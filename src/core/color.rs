@@ -6,100 +6,24 @@ pub struct Color {
 }
 
 impl Color {
-    pub const DEFAULT_FG: Color = Color {
+    /// Sentinel value for "use the theme's default foreground."
+    ///
+    /// Compile-time constant used by `Cell::DEFAULT`. Renderers compare
+    /// against this to remap cells to the active theme palette.
+    pub const SENTINEL_FG: Color = Color {
         r: 210,
         g: 219,
         b: 235,
     }; // #D2DBEB
-    pub const DEFAULT_BG: Color = Color {
+
+    /// Sentinel value for "use the theme's default background."
+    ///
+    /// See [`SENTINEL_FG`](Self::SENTINEL_FG) for details.
+    pub const SENTINEL_BG: Color = Color {
         r: 40,
         g: 44,
         b: 52,
     }; // #282C34
-
-    // Custom dark palette (ghostty-like vibe, not a 1:1 copy).
-    pub const ANSI: [Color; 16] = [
-        Color {
-            r: 69,
-            g: 75,
-            b: 89,
-        }, //  0 black    #454B59
-        Color {
-            r: 224,
-            g: 108,
-            b: 117,
-        }, //  1 red      #E06C75
-        Color {
-            r: 152,
-            g: 195,
-            b: 121,
-        }, //  2 green    #98C379
-        Color {
-            r: 229,
-            g: 192,
-            b: 123,
-        }, //  3 yellow   #E5C07B
-        Color {
-            r: 97,
-            g: 175,
-            b: 239,
-        }, //  4 blue     #61AFEF
-        Color {
-            r: 198,
-            g: 120,
-            b: 221,
-        }, //  5 magenta  #C678DD
-        Color {
-            r: 86,
-            g: 182,
-            b: 194,
-        }, //  6 cyan     #56B6C2
-        Color {
-            r: 171,
-            g: 178,
-            b: 191,
-        }, //  7 white    #ABB2BF
-        Color {
-            r: 106,
-            g: 114,
-            b: 130,
-        }, //  8 br black #6A7282
-        Color {
-            r: 240,
-            g: 139,
-            b: 149,
-        }, //  9 br red   #F08B95
-        Color {
-            r: 167,
-            g: 213,
-            b: 141,
-        }, // 10 br green #A7D58D
-        Color {
-            r: 235,
-            g: 203,
-            b: 139,
-        }, // 11 br yello #EBCB8B
-        Color {
-            r: 123,
-            g: 195,
-            b: 255,
-        }, // 12 br blue  #7BC3FF
-        Color {
-            r: 215,
-            g: 153,
-            b: 240,
-        }, // 13 br magen #D799F0
-        Color {
-            r: 111,
-            g: 199,
-            b: 211,
-        }, // 14 br cyan  #6FC7D3
-        Color {
-            r: 221,
-            g: 229,
-            b: 245,
-        }, // 15 br white #DDE5F5
-    ];
 
     pub const fn to_pixel(self) -> u32 {
         ((self.r as u32) << 16) | ((self.g as u32) << 8) | (self.b as u32)
@@ -139,10 +63,13 @@ impl Color {
         }
     }
 
-    /// 256-color palette: 0-15 = ANSI, 16-231 = 6x6x6 color cube, 232-255 = grayscale
+    /// 256-color palette lookup for indices 16-255 (color cube + grayscale).
+    ///
+    /// Indices 0-15 require a theme palette — use [`Terminal::color_from_256`]
+    /// instead.  Out-of-range values return [`SENTINEL_FG`](Self::SENTINEL_FG).
     pub fn from_256(n: u16) -> Color {
         match n {
-            0..=15 => Color::ANSI[n as usize],
+            0..=15 | 256.. => Color::SENTINEL_FG,
             16..=231 => {
                 let n = n - 16;
                 let r = (n / 36) as u8;
@@ -158,7 +85,6 @@ impl Color {
                 let v = (8 + (n - 232) * 10) as u8;
                 Color { r: v, g: v, b: v }
             }
-            _ => Color::DEFAULT_FG,
         }
     }
 }
@@ -179,9 +105,9 @@ mod tests {
     }
 
     #[test]
-    fn from_256_ansi_range() {
+    fn from_256_ansi_range_returns_sentinel() {
         for i in 0..16u16 {
-            assert_eq!(Color::from_256(i), Color::ANSI[i as usize]);
+            assert_eq!(Color::from_256(i), Color::SENTINEL_FG);
         }
     }
 
@@ -211,35 +137,36 @@ mod tests {
 
     #[test]
     fn from_256_out_of_range() {
-        assert_eq!(Color::from_256(256), Color::DEFAULT_FG);
+        assert_eq!(Color::from_256(256), Color::SENTINEL_FG);
+    }
+
+    fn test_ansi_palette() -> [Color; 16] {
+        crate::config::ThemeChoice::FerrumDark.resolve().ansi
     }
 
     #[test]
     fn bold_bright_maps_base_to_bright() {
+        let ansi = test_ansi_palette();
         for i in 0..8 {
-            assert_eq!(
-                Color::ANSI[i].bold_bright_with_palette(&Color::ANSI),
-                Color::ANSI[i + 8]
-            );
+            assert_eq!(ansi[i].bold_bright_with_palette(&ansi), ansi[i + 8]);
         }
     }
 
     #[test]
     fn bold_bright_returns_self_for_non_ansi() {
+        let ansi = test_ansi_palette();
         let custom = Color { r: 1, g: 2, b: 3 };
-        assert_eq!(custom.bold_bright_with_palette(&Color::ANSI), custom);
+        assert_eq!(custom.bold_bright_with_palette(&ansi), custom);
     }
 
     #[test]
     fn bold_bright_returns_self_for_bright_colors() {
+        let ansi = test_ansi_palette();
         // Bright colors that don't match any base 0-7 should return self
-        let bright_black = Color::ANSI[8];
-        let matches_base = (0..8).any(|i| Color::ANSI[i] == bright_black);
+        let bright_black = ansi[8];
+        let matches_base = (0..8).any(|i| ansi[i] == bright_black);
         if !matches_base {
-            assert_eq!(
-                bright_black.bold_bright_with_palette(&Color::ANSI),
-                bright_black
-            );
+            assert_eq!(bright_black.bold_bright_with_palette(&ansi), bright_black);
         }
     }
 }

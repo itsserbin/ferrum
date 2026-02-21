@@ -77,7 +77,8 @@ pub struct Terminal {
 
 impl Terminal {
     pub fn new(rows: usize, cols: usize) -> Self {
-        Self::with_config(rows, cols, 1000, Color::DEFAULT_FG, Color::DEFAULT_BG, Color::ANSI)
+        let palette = crate::config::ThemeChoice::FerrumDark.resolve();
+        Self::with_config(rows, cols, 1000, Color::SENTINEL_FG, Color::SENTINEL_BG, palette.ansi)
     }
 
     pub fn with_config(

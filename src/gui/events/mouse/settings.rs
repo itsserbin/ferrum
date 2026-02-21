@@ -1,4 +1,4 @@
-use crate::config::{FontFamily, ThemeChoice};
+use crate::config::{FontFamily, SecurityMode, ThemeChoice};
 use crate::gui::settings::layout::{compute_settings_layout, ItemControlLayout};
 use crate::gui::settings::{SettingItem, SettingsCategory, StepperHalf};
 use crate::gui::*;
@@ -102,7 +102,7 @@ impl FerrumWindow {
             }
         }
 
-        // Check item control clicks (stepper buttons and dropdown buttons).
+        // Check item control clicks (stepper buttons, dropdown buttons, toggles).
         for (i, item_layout) in layout.items.iter().enumerate() {
             match &item_layout.controls {
                 ItemControlLayout::Stepper {
@@ -139,6 +139,17 @@ impl FerrumWindow {
                                 ov.open_dropdown = Some(i);
                                 ov.hovered_dropdown_option = None;
                             }
+                        }
+                        self.window.request_redraw();
+                        return true;
+                    }
+                }
+                ItemControlLayout::Toggle { pill, .. } => {
+                    if hit_test_rounded_rect(pill, mx, my) {
+                        self.apply_toggle(i, &items);
+                        if let Some(ref overlay) = self.settings_overlay {
+                            let config = overlay.editing_config.clone();
+                            self.apply_config_change(&config);
                         }
                         self.window.request_redraw();
                         return true;
@@ -230,6 +241,12 @@ impl FerrumWindow {
                         new_hovered_dropdown = Some(i);
                     }
                 }
+                ItemControlLayout::Toggle { pill, .. } => {
+                    // Reuse StepperHalf::Minus as the hover tag for the whole pill.
+                    if hit_test_rounded_rect(pill, mx, my) {
+                        new_hovered_stepper = Some((i, StepperHalf::Minus));
+                    }
+                }
             }
         }
 
@@ -306,8 +323,57 @@ impl FerrumWindow {
                         _ => ThemeChoice::FerrumLight,
                     };
                 }
+                "Security Mode" => {
+                    let new_mode = match option_index {
+                        0 => SecurityMode::Disabled,
+                        1 => SecurityMode::Standard,
+                        _ => SecurityMode::Custom,
+                    };
+                    overlay.editing_config.security.mode = new_mode;
+                    // Preset toggles for Disabled/Standard.
+                    match new_mode {
+                        SecurityMode::Disabled => {
+                            overlay.editing_config.security.paste_protection = false;
+                            overlay.editing_config.security.block_title_query = false;
+                            overlay.editing_config.security.limit_cursor_jumps = false;
+                            overlay.editing_config.security.clear_mouse_on_reset = false;
+                        }
+                        SecurityMode::Standard => {
+                            overlay.editing_config.security.paste_protection = true;
+                            overlay.editing_config.security.block_title_query = true;
+                            overlay.editing_config.security.limit_cursor_jumps = true;
+                            overlay.editing_config.security.clear_mouse_on_reset = true;
+                        }
+                        SecurityMode::Custom => {}
+                    }
+                }
                 _ => {}
             }
+        }
+    }
+
+    /// Toggles a BoolToggle item value in the editing config.
+    fn apply_toggle(&mut self, item_index: usize, items: &[SettingItem]) {
+        let Some(overlay) = self.settings_overlay.as_mut() else {
+            return;
+        };
+        let Some(item) = items.get(item_index) else {
+            return;
+        };
+        if let SettingItem::BoolToggle { label, value } = item {
+            let new_val = !value;
+            match *label {
+                "Paste Protection" => overlay.editing_config.security.paste_protection = new_val,
+                "Block Title Query" => overlay.editing_config.security.block_title_query = new_val,
+                "Limit Cursor Jumps" => overlay.editing_config.security.limit_cursor_jumps = new_val,
+                "Clear Mouse on Reset" => {
+                    overlay.editing_config.security.clear_mouse_on_reset = new_val;
+                }
+                _ => {}
+            }
+            // Auto-infer mode from current toggle values.
+            overlay.editing_config.security.mode =
+                overlay.editing_config.security.inferred_mode();
         }
     }
 
