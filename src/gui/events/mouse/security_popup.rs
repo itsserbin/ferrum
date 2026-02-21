@@ -40,7 +40,7 @@ impl FerrumWindow {
             tab_index,
             x: popup_x,
             y: popup_y,
-            title: "Security events",
+            title: crate::i18n::t().security_popup_title,
             lines,
         });
     }
