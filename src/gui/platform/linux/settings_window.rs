@@ -14,6 +14,8 @@ use gtk4::{
 static WINDOW_OPEN: AtomicBool = AtomicBool::new(false);
 /// Set to true when the GTK window closes; cleared by `check_window_closed()`.
 static JUST_CLOSED: AtomicBool = AtomicBool::new(false);
+/// Set by `close_settings_window()` from the main thread; polled by GTK timer.
+static CLOSE_REQUESTED: AtomicBool = AtomicBool::new(false);
 
 pub fn is_settings_window_open() -> bool {
     WINDOW_OPEN.load(Ordering::Relaxed)
@@ -25,7 +27,7 @@ pub fn check_window_closed() -> bool {
 }
 
 pub fn close_settings_window() {
-    WINDOW_OPEN.store(false, Ordering::Relaxed);
+    CLOSE_REQUESTED.store(true, Ordering::Relaxed);
 }
 
 pub fn open_settings_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>) {
@@ -248,6 +250,19 @@ fn build_window(app: &gtk4::Application, config: &AppConfig, tx: mpsc::Sender<Ap
             let config = build_config(&controls);
             crate::config::save_config(&config);
             gtk4::glib::Propagation::Proceed
+        });
+    }
+
+    // Poll CLOSE_REQUESTED so the main thread can close us.
+    {
+        let w = window.clone();
+        gtk4::glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
+            if CLOSE_REQUESTED.swap(false, Ordering::Relaxed) {
+                w.close();
+                gtk4::glib::ControlFlow::Break
+            } else {
+                gtk4::glib::ControlFlow::Continue
+            }
         });
     }
 
