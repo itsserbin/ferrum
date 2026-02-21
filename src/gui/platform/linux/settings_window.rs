@@ -7,8 +7,7 @@ use std::sync::mpsc;
 
 use gtk4::prelude::*;
 use gtk4::{
-    Adjustment, Align, ComboBoxText, Label, Notebook, Orientation, SpinButton, Switch, Widget,
-    Window,
+    Adjustment, Align, ComboBoxText, Label, Notebook, Orientation, SpinButton, Switch, Window,
 };
 
 static WINDOW_OPEN: AtomicBool = AtomicBool::new(false);
