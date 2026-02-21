@@ -98,6 +98,7 @@ pub(in crate::gui) struct SettingsOverlay {
 
 impl SettingsOverlay {
     /// Opens the settings overlay with a snapshot of the current config.
+    #[cfg_attr(target_os = "macos", allow(dead_code))]
     pub(in crate::gui) fn new(config: &AppConfig) -> Self {
         Self {
             active_category: SettingsCategory::Font,

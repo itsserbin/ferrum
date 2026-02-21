@@ -50,7 +50,8 @@ struct NativeSettingsState {
     pane_padding_field: Retained<NSTextField>,
     scrollbar_width_stepper: Retained<NSStepper>,
     scrollbar_width_field: Retained<NSTextField>,
-    // Reset
+    // Reset (kept alive so ObjC retains the button; never read from Rust).
+    #[allow(dead_code)]
     reset_button: Retained<NSButton>,
 }
 

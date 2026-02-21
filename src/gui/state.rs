@@ -234,6 +234,9 @@ pub(super) struct FerrumWindow {
     pub(super) settings_overlay: Option<crate::gui::settings::SettingsOverlay>,
     /// Pending config update from settings overlay (picked up by App).
     pub(super) pending_config: Option<crate::config::AppConfig>,
+    /// Sender for native settings window config updates (macOS only).
+    #[cfg(target_os = "macos")]
+    pub(super) settings_tx: std::sync::mpsc::Sender<crate::config::AppConfig>,
 }
 
 /// App is now a window manager holding multiple FerrumWindows.
@@ -247,7 +250,6 @@ pub(super) struct App {
     pub(super) available_release: Option<crate::update::AvailableRelease>,
     pub(super) config: crate::config::AppConfig,
     #[cfg(target_os = "macos")]
-    #[allow(dead_code)] // Used when opening the native settings window (upcoming task).
     pub(super) settings_tx: std::sync::mpsc::Sender<crate::config::AppConfig>,
     #[cfg(target_os = "macos")]
     pub(super) settings_rx: std::sync::mpsc::Receiver<crate::config::AppConfig>,

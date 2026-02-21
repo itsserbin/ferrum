@@ -1,15 +1,32 @@
 use crate::config::AppConfig;
-use crate::gui::settings::{SettingsCategory, SettingsOverlay};
+#[cfg(not(target_os = "macos"))]
+use crate::gui::settings::SettingsOverlay;
+use crate::gui::settings::SettingsCategory;
 use crate::gui::*;
 
 impl FerrumWindow {
     /// Toggles the settings overlay open/closed.
+    ///
+    /// On macOS, opens the native settings window instead of the in-app overlay.
     pub(in crate::gui) fn toggle_settings_overlay(&mut self, config: &AppConfig) {
-        if self.settings_overlay.is_some() {
-            self.close_settings_overlay();
-        } else {
-            self.settings_overlay = Some(SettingsOverlay::new(config));
-            self.window.request_redraw();
+        #[cfg(target_os = "macos")]
+        {
+            use crate::gui::platform::macos::settings_window;
+            if settings_window::is_settings_window_open() {
+                settings_window::close_settings_window();
+            } else {
+                settings_window::open_settings_window(config, self.settings_tx.clone());
+            }
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            if self.settings_overlay.is_some() {
+                self.close_settings_overlay();
+            } else {
+                self.settings_overlay = Some(SettingsOverlay::new(config));
+                self.window.request_redraw();
+            }
         }
     }
 
