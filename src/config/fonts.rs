@@ -102,5 +102,6 @@ mod tests {
         // U+23FA (⏺) — covered by fallback[1] (Noto Sans Symbols 2).
         assert!(!primary.has_glyph('\u{23FA}'));
         assert!(fallbacks[1].has_glyph('\u{23FA}'));
+
     }
 }

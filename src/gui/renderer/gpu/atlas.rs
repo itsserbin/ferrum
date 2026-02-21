@@ -127,7 +127,8 @@ impl GlyphAtlas {
         codepoint: u32,
         ch: char,
     ) {
-        let raster_font = if font.has_glyph(ch) {
+        let is_primary = font.has_glyph(ch);
+        let raster_font = if is_primary {
             font
         } else {
             fallback_fonts
@@ -135,7 +136,21 @@ impl GlyphAtlas {
                 .find(|f| f.has_glyph(ch))
                 .unwrap_or(font)
         };
-        let (metrics, bitmap) = raster_font.rasterize(ch, font_size);
+        // Scale down fallback glyphs that exceed cell width.
+        let actual_size = if is_primary {
+            font_size
+        } else {
+            let m = raster_font.metrics(ch, font_size);
+            let cell_w = font
+                .metrics('M', font_size)
+                .advance_width;
+            if m.advance_width > cell_w {
+                font_size * (cell_w / m.advance_width)
+            } else {
+                font_size
+            }
+        };
+        let (metrics, bitmap) = raster_font.rasterize(ch, actual_size);
         let gw = metrics.width as u32;
         let gh = metrics.height as u32;
 
