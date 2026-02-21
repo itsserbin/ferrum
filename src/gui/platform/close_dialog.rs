@@ -109,29 +109,15 @@ fn to_wide(text: &str) -> Vec<u16> {
 
 #[cfg(target_os = "linux")]
 fn confirm_window_close_linux(window: &Window) -> bool {
-    use gtk::prelude::*;
-    use gtk::{ButtonsType, DialogFlags, MessageDialog, MessageType, ResponseType};
-
     let _ = window;
 
-    if !gtk::is_initialized_main_thread() && gtk::init().is_err() {
-        eprintln!("[ferrum] Failed to initialize GTK for close confirmation dialog");
-        return false;
-    }
-
-    let dialog = MessageDialog::new(
-        None::<&gtk::Window>,
-        DialogFlags::MODAL,
-        MessageType::Warning,
-        ButtonsType::OkCancel,
-        "Close Ferrum?",
-    );
-    dialog.set_title("Close Ferrum");
-    dialog.set_secondary_text(Some(
-        "Closing this terminal window will stop all running processes in its tabs.",
-    ));
-    dialog.set_default_response(ResponseType::Cancel);
-    let response = dialog.run();
-    dialog.close();
-    response == ResponseType::Ok
+    rfd::MessageDialog::new()
+        .set_title("Close Ferrum")
+        .set_description(
+            "Closing this terminal window will stop all running processes in its tabs.",
+        )
+        .set_level(rfd::MessageLevel::Warning)
+        .set_buttons(rfd::MessageButtons::OkCancel)
+        .show()
+        == rfd::MessageDialogResult::Ok
 }
