@@ -45,29 +45,18 @@ pub fn open_settings_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>) {
 // ── GTK4 window ──────────────────────────────────────────────────────
 
 fn run_gtk_window(config: AppConfig, tx: mpsc::Sender<AppConfig>) {
-    let app = gtk4::Application::builder()
-        .application_id("io.github.itsserbin.ferrum.settings")
-        .build();
+    gtk4::init().expect("Failed to initialize GTK4");
 
-    let tx_close = tx.clone();
-    let config_clone = config.clone();
+    let main_loop = gtk4::glib::MainLoop::new(None, false);
+    build_window(&config, tx, &main_loop);
+    main_loop.run();
 
-    app.connect_activate(move |app| {
-        build_window(app, &config_clone, tx_close.clone());
-    });
-
-    // GTK4 Application::run() processes command-line args; pass empty to avoid
-    // interfering with the main application's args.
-    app.run_with_args::<&str>(&[]);
-
-    // Window closed — persist config and signal lifecycle.
     WINDOW_OPEN.store(false, Ordering::Relaxed);
     JUST_CLOSED.store(true, Ordering::Relaxed);
 }
 
-fn build_window(app: &gtk4::Application, config: &AppConfig, tx: mpsc::Sender<AppConfig>) {
+fn build_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>, main_loop: &gtk4::glib::MainLoop) {
     let window = Window::builder()
-        .application(app)
         .title("Ferrum Settings")
         .default_width(500)
         .default_height(420)
@@ -245,12 +234,14 @@ fn build_window(app: &gtk4::Application, config: &AppConfig, tx: mpsc::Sender<Ap
         });
     }
 
-    // On close, save config to disk.
+    // On close, save config to disk and quit the main loop.
     {
         let controls = Rc::clone(&controls);
+        let ml = main_loop.clone();
         window.connect_close_request(move |_| {
             let config = build_config(&controls);
             crate::config::save_config(&config);
+            ml.quit();
             gtk4::glib::Propagation::Proceed
         });
     }
@@ -258,9 +249,11 @@ fn build_window(app: &gtk4::Application, config: &AppConfig, tx: mpsc::Sender<Ap
     // Poll CLOSE_REQUESTED so the main thread can close us.
     {
         let w = window.clone();
+        let ml = main_loop.clone();
         gtk4::glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
             if CLOSE_REQUESTED.swap(false, Ordering::Relaxed) {
                 w.close();
+                ml.quit();
                 gtk4::glib::ControlFlow::Break
             } else {
                 gtk4::glib::ControlFlow::Continue
