@@ -23,7 +23,7 @@ impl Default for FontConfig {
         Self {
             size: 14.0,
             family: FontFamily::default(),
-            line_padding: 2,
+            line_padding: 0,
         }
     }
 }
