@@ -211,14 +211,17 @@ pub fn close_settings_window() {
 }
 
 pub fn open_settings_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>) {
-    if WINDOW_OPEN.load(Ordering::Relaxed) {
+    if WINDOW_OPEN
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Relaxed)
+        .is_err()
+    {
+        // Already open — bring to front.
         let hwnd = SETTINGS_HWND.load(Ordering::Acquire);
         if !hwnd.is_null() {
             unsafe { SetForegroundWindow(hwnd) };
         }
         return;
     }
-    WINDOW_OPEN.store(true, Ordering::Relaxed);
 
     let config = config.clone();
     std::thread::spawn(move || {
@@ -554,31 +557,35 @@ unsafe fn create_controls(
     let y0 = s(layout::CONTENT_Y);
     let sp = s(layout::ROW_SPACING);
 
+    let ctx = RowContext { parent: hwnd, hinstance, font, dpi };
+
     // ── Font tab controls ────────────────────────────────────────────
     let mut font_page = Vec::new();
 
-    // Font Size (updown: 0..48 → 8.0..32.0, step 0.5)
-    let font_size_initial = ((config.font.size - 8.0) / 0.5).round() as i32;
-    let (font_size_updown, font_size_edit, mut ctrls) = create_spin_row(
-        hwnd, hinstance, font, "Font Size:", x0, y0, 0, 48, font_size_initial,
-        id::FONT_SIZE_UPDOWN, id::FONT_SIZE_EDIT, dpi,
-    );
+    // Font Size (updown: 0..48 → SIZE_MIN..SIZE_MAX, step SIZE_STEP)
+    let font_size_initial = ((config.font.size - FontConfig::SIZE_MIN) / FontConfig::SIZE_STEP).round() as i32;
+    let font_size_range_max = ((FontConfig::SIZE_MAX - FontConfig::SIZE_MIN) / FontConfig::SIZE_STEP).round() as i32;
+    let (font_size_updown, font_size_edit, mut ctrls) = create_spin_row(&ctx, &SpinRowParams {
+        label_text: "Font Size:", x: x0, y: y0,
+        range_min: 0, range_max: font_size_range_max, initial: font_size_initial,
+        updown_id: id::FONT_SIZE_UPDOWN, edit_id: id::FONT_SIZE_EDIT,
+    });
     font_page.append(&mut ctrls);
 
     // Font Family combo
-    let (font_family_combo, mut ctrls) = create_combo_row(
-        hwnd, hinstance, font, "Font Family:", x0, y0 + sp,
-        FontFamily::DISPLAY_NAMES, config.font.family.index(),
-        id::FONT_FAMILY_COMBO, dpi,
-    );
+    let (font_family_combo, mut ctrls) = create_combo_row(&ctx, &ComboRowParams {
+        label_text: "Font Family:", x: x0, y: y0 + sp,
+        options: FontFamily::DISPLAY_NAMES, selected: config.font.family.index(),
+        combo_id: id::FONT_FAMILY_COMBO,
+    });
     font_page.append(&mut ctrls);
 
     // Line Padding (updown: 0..10)
-    let (line_padding_updown, line_padding_edit, mut ctrls) = create_spin_row(
-        hwnd, hinstance, font, "Line Padding:", x0, y0 + sp * 2, 0, 10,
-        config.font.line_padding as i32,
-        id::LINE_PADDING_UPDOWN, id::LINE_PADDING_EDIT, dpi,
-    );
+    let (line_padding_updown, line_padding_edit, mut ctrls) = create_spin_row(&ctx, &SpinRowParams {
+        label_text: "Line Padding:", x: x0, y: y0 + sp * 2,
+        range_min: 0, range_max: 10, initial: config.font.line_padding as i32,
+        updown_id: id::LINE_PADDING_UPDOWN, edit_id: id::LINE_PADDING_EDIT,
+    });
     font_page.append(&mut ctrls);
 
     // ── Theme tab controls ───────────────────────────────────────────
@@ -586,60 +593,63 @@ unsafe fn create_controls(
         ThemeChoice::FerrumDark => 0,
         ThemeChoice::FerrumLight => 1,
     };
-    let (theme_combo, theme_page) = create_combo_row(
-        hwnd, hinstance, font, "Theme:", x0, y0,
-        &["Ferrum Dark", "Ferrum Light"], theme_selected,
-        id::THEME_COMBO, dpi,
-    );
+    let (theme_combo, theme_page) = create_combo_row(&ctx, &ComboRowParams {
+        label_text: "Theme:", x: x0, y: y0,
+        options: &["Ferrum Dark", "Ferrum Light"], selected: theme_selected,
+        combo_id: id::THEME_COMBO,
+    });
 
     // ── Terminal tab controls ────────────────────────────────────────
     let mut terminal_page = Vec::new();
 
     // Scrollback (updown: 0..500 → 0..50000, step 100)
     let scrollback_initial = config.terminal.max_scrollback as i32 / 100;
-    let (scrollback_updown, scrollback_edit, mut ctrls) = create_spin_row(
-        hwnd, hinstance, font, "Max Scrollback:", x0, y0, 0, 500, scrollback_initial,
-        id::SCROLLBACK_UPDOWN, id::SCROLLBACK_EDIT, dpi,
-    );
+    let (scrollback_updown, scrollback_edit, mut ctrls) = create_spin_row(&ctx, &SpinRowParams {
+        label_text: "Max Scrollback:", x: x0, y: y0,
+        range_min: 0, range_max: 500, initial: scrollback_initial,
+        updown_id: id::SCROLLBACK_UPDOWN, edit_id: id::SCROLLBACK_EDIT,
+    });
     terminal_page.append(&mut ctrls);
 
-    // Cursor Blink (updown: 0..38 → 100..2000, step 50)
-    let blink_initial = (config.terminal.cursor_blink_interval_ms as i32 - 100) / 50;
-    let (cursor_blink_updown, cursor_blink_edit, mut ctrls) = create_spin_row(
-        hwnd, hinstance, font, "Cursor Blink (ms):", x0, y0 + sp, 0, 38, blink_initial,
-        id::CURSOR_BLINK_UPDOWN, id::CURSOR_BLINK_EDIT, dpi,
-    );
+    // Cursor Blink (updown: 0..N → BLINK_MS_MIN..BLINK_MS_MAX, step BLINK_MS_STEP)
+    let blink_initial = (config.terminal.cursor_blink_interval_ms as i64 - TerminalConfig::BLINK_MS_MIN as i64) / TerminalConfig::BLINK_MS_STEP as i64;
+    let blink_range_max = ((TerminalConfig::BLINK_MS_MAX - TerminalConfig::BLINK_MS_MIN) / TerminalConfig::BLINK_MS_STEP) as i32;
+    let (cursor_blink_updown, cursor_blink_edit, mut ctrls) = create_spin_row(&ctx, &SpinRowParams {
+        label_text: "Cursor Blink (ms):", x: x0, y: y0 + sp,
+        range_min: 0, range_max: blink_range_max, initial: blink_initial as i32,
+        updown_id: id::CURSOR_BLINK_UPDOWN, edit_id: id::CURSOR_BLINK_EDIT,
+    });
     terminal_page.append(&mut ctrls);
 
     // ── Layout tab controls ──────────────────────────────────────────
     let mut layout_page = Vec::new();
 
-    let (win_padding_updown, win_padding_edit, mut ctrls) = create_spin_row(
-        hwnd, hinstance, font, "Window Padding:", x0, y0, 0, 32,
-        config.layout.window_padding as i32,
-        id::WIN_PADDING_UPDOWN, id::WIN_PADDING_EDIT, dpi,
-    );
+    let (win_padding_updown, win_padding_edit, mut ctrls) = create_spin_row(&ctx, &SpinRowParams {
+        label_text: "Window Padding:", x: x0, y: y0,
+        range_min: 0, range_max: 32, initial: config.layout.window_padding as i32,
+        updown_id: id::WIN_PADDING_UPDOWN, edit_id: id::WIN_PADDING_EDIT,
+    });
     layout_page.append(&mut ctrls);
 
-    let (pane_padding_updown, pane_padding_edit, mut ctrls) = create_spin_row(
-        hwnd, hinstance, font, "Pane Padding:", x0, y0 + sp, 0, 16,
-        config.layout.pane_inner_padding as i32,
-        id::PANE_PADDING_UPDOWN, id::PANE_PADDING_EDIT, dpi,
-    );
+    let (pane_padding_updown, pane_padding_edit, mut ctrls) = create_spin_row(&ctx, &SpinRowParams {
+        label_text: "Pane Padding:", x: x0, y: y0 + sp,
+        range_min: 0, range_max: 16, initial: config.layout.pane_inner_padding as i32,
+        updown_id: id::PANE_PADDING_UPDOWN, edit_id: id::PANE_PADDING_EDIT,
+    });
     layout_page.append(&mut ctrls);
 
-    let (scrollbar_updown, scrollbar_edit, mut ctrls) = create_spin_row(
-        hwnd, hinstance, font, "Scrollbar Width:", x0, y0 + sp * 2, 2, 16,
-        config.layout.scrollbar_width as i32,
-        id::SCROLLBAR_UPDOWN, id::SCROLLBAR_EDIT, dpi,
-    );
+    let (scrollbar_updown, scrollbar_edit, mut ctrls) = create_spin_row(&ctx, &SpinRowParams {
+        label_text: "Scrollbar Width:", x: x0, y: y0 + sp * 2,
+        range_min: 2, range_max: 16, initial: config.layout.scrollbar_width as i32,
+        updown_id: id::SCROLLBAR_UPDOWN, edit_id: id::SCROLLBAR_EDIT,
+    });
     layout_page.append(&mut ctrls);
 
-    let (tab_bar_updown, tab_bar_edit, mut ctrls) = create_spin_row(
-        hwnd, hinstance, font, "Tab Bar Height:", x0, y0 + sp * 3, 24, 48,
-        config.layout.tab_bar_height as i32,
-        id::TAB_BAR_UPDOWN, id::TAB_BAR_EDIT, dpi,
-    );
+    let (tab_bar_updown, tab_bar_edit, mut ctrls) = create_spin_row(&ctx, &SpinRowParams {
+        label_text: "Tab Bar Height:", x: x0, y: y0 + sp * 3,
+        range_min: 24, range_max: 48, initial: config.layout.tab_bar_height as i32,
+        updown_id: id::TAB_BAR_UPDOWN, edit_id: id::TAB_BAR_EDIT,
+    });
     layout_page.append(&mut ctrls);
 
     // ── Security tab controls ────────────────────────────────────────
@@ -650,36 +660,36 @@ unsafe fn create_controls(
         SecurityMode::Standard => 1,
         SecurityMode::Custom => 2,
     };
-    let (security_mode_combo, mut ctrls) = create_combo_row(
-        hwnd, hinstance, font, "Security Mode:", x0, y0,
-        &["Disabled", "Standard", "Custom"], mode_index,
-        id::SECURITY_MODE_COMBO, dpi,
-    );
+    let (security_mode_combo, mut ctrls) = create_combo_row(&ctx, &ComboRowParams {
+        label_text: "Security Mode:", x: x0, y: y0,
+        options: &["Disabled", "Standard", "Custom"], selected: mode_index,
+        combo_id: id::SECURITY_MODE_COMBO,
+    });
     security_page.append(&mut ctrls);
 
     let enabled = !matches!(config.security.mode, SecurityMode::Disabled);
-    let (paste_check, mut ctrls) = create_checkbox_row(
-        hwnd, hinstance, font, "Paste Protection", x0, y0 + sp,
-        config.security.paste_protection, enabled, id::PASTE_CHECK, dpi,
-    );
+    let (paste_check, mut ctrls) = create_checkbox_row(&ctx, &CheckboxRowParams {
+        label_text: "Paste Protection", x: x0, y: y0 + sp,
+        checked: config.security.paste_protection, enabled, check_id: id::PASTE_CHECK,
+    });
     security_page.append(&mut ctrls);
 
-    let (block_title_check, mut ctrls) = create_checkbox_row(
-        hwnd, hinstance, font, "Block Title Query", x0, y0 + sp * 2,
-        config.security.block_title_query, enabled, id::BLOCK_TITLE_CHECK, dpi,
-    );
+    let (block_title_check, mut ctrls) = create_checkbox_row(&ctx, &CheckboxRowParams {
+        label_text: "Block Title Query", x: x0, y: y0 + sp * 2,
+        checked: config.security.block_title_query, enabled, check_id: id::BLOCK_TITLE_CHECK,
+    });
     security_page.append(&mut ctrls);
 
-    let (limit_cursor_check, mut ctrls) = create_checkbox_row(
-        hwnd, hinstance, font, "Limit Cursor Jumps", x0, y0 + sp * 3,
-        config.security.limit_cursor_jumps, enabled, id::LIMIT_CURSOR_CHECK, dpi,
-    );
+    let (limit_cursor_check, mut ctrls) = create_checkbox_row(&ctx, &CheckboxRowParams {
+        label_text: "Limit Cursor Jumps", x: x0, y: y0 + sp * 3,
+        checked: config.security.limit_cursor_jumps, enabled, check_id: id::LIMIT_CURSOR_CHECK,
+    });
     security_page.append(&mut ctrls);
 
-    let (clear_mouse_check, mut ctrls) = create_checkbox_row(
-        hwnd, hinstance, font, "Clear Mouse on Reset", x0, y0 + sp * 4,
-        config.security.clear_mouse_on_reset, enabled, id::CLEAR_MOUSE_CHECK, dpi,
-    );
+    let (clear_mouse_check, mut ctrls) = create_checkbox_row(&ctx, &CheckboxRowParams {
+        label_text: "Clear Mouse on Reset", x: x0, y: y0 + sp * 4,
+        checked: config.security.clear_mouse_on_reset, enabled, check_id: id::CLEAR_MOUSE_CHECK,
+    });
     security_page.append(&mut ctrls);
 
     // ── Reset button (always visible, below tab control) ─────────────
@@ -739,14 +749,16 @@ unsafe fn create_controls(
 
 // ── Control builder helpers ──────────────────────────────────────────
 
-/// Creates a row with: static label | read-only edit | updown (spin box).
-/// Returns (updown_hwnd, edit_hwnd, vec_of_all_hwnds_for_page).
-#[allow(clippy::too_many_arguments)]
-unsafe fn create_spin_row(
+/// Shared context for all control row builders (parent window, instance, font, DPI).
+struct RowContext {
     parent: HWND,
     hinstance: HINSTANCE,
     font: *mut core::ffi::c_void,
-    label_text: &str,
+    dpi: u32,
+}
+
+struct SpinRowParams<'a> {
+    label_text: &'a str,
     x: i32,
     y: i32,
     range_min: i32,
@@ -754,35 +766,56 @@ unsafe fn create_spin_row(
     initial: i32,
     updown_id: i32,
     edit_id: i32,
-    dpi: u32,
-) -> (HWND, HWND, Vec<HWND>) { unsafe {
-    let s = |v: i32| dpi_scale(v, dpi);
-    let label_wide = to_wide(label_text);
+}
+
+struct ComboRowParams<'a> {
+    label_text: &'a str,
+    x: i32,
+    y: i32,
+    options: &'a [&'a str],
+    selected: usize,
+    combo_id: i32,
+}
+
+struct CheckboxRowParams<'a> {
+    label_text: &'a str,
+    x: i32,
+    y: i32,
+    checked: bool,
+    enabled: bool,
+    check_id: i32,
+}
+
+/// Creates a row with: static label | read-only edit | updown (spin box).
+/// Returns (updown_hwnd, edit_hwnd, vec_of_all_hwnds_for_page).
+unsafe fn create_spin_row(ctx: &RowContext, p: &SpinRowParams) -> (HWND, HWND, Vec<HWND>) { unsafe {
+    let s = |v: i32| dpi_scale(v, ctx.dpi);
+    let label_wide = to_wide(p.label_text);
     let lbl = CreateWindowExW(
         0,
         to_wide("STATIC").as_ptr(),
         label_wide.as_ptr(),
         WS_CHILD | WS_VISIBLE | SS_LEFT,
-        x, y + s(3), s(150), s(20),
-        parent,
+        p.x, p.y + s(3), s(150), s(20),
+        ctx.parent,
         std::ptr::null_mut(),
-        hinstance,
+        ctx.hinstance,
         std::ptr::null(),
     );
-    SendMessageW(lbl, WM_SETFONT, font as usize, 0);
+    SendMessageW(lbl, WM_SETFONT, ctx.font as usize, 0);
 
     let edit = CreateWindowExW(
         WS_EX_CLIENTEDGE,
         to_wide("EDIT").as_ptr(),
         to_wide("").as_ptr(),
         WS_CHILD | WS_VISIBLE | ES_READONLY | ES_RIGHT,
-        x + s(160), y, s(100), s(24),
-        parent,
-        edit_id as isize as HMENU,
-        hinstance,
+        p.x + s(160), p.y, s(100), s(24),
+        ctx.parent,
+        p.edit_id as isize as HMENU,
+        ctx.hinstance,
         std::ptr::null(),
     );
-    SendMessageW(edit, WM_SETFONT, font as usize, 0);
+    SendMessageW(edit, WM_SETFONT, ctx.font as usize, 0);
 
     let updown_class = to_wide("msctls_updown32");
     let updown = CreateWindowExW(
@@ -791,104 +824,80 @@ unsafe fn create_spin_row(
         std::ptr::null(),
         WS_CHILD | WS_VISIBLE | UDS_ALIGNRIGHT | UDS_ARROWKEYS | UDS_NOTHOUSANDS,
         0, 0, 0, 0,
-        parent,
-        updown_id as isize as HMENU,
-        hinstance,
+        ctx.parent,
+        p.updown_id as isize as HMENU,
+        ctx.hinstance,
         std::ptr::null(),
     );
     SendMessageW(updown, UDM_SETBUDDY, edit as usize, 0);
-    SendMessageW(updown, UDM_SETRANGE32, range_min as WPARAM, range_max as LPARAM);
-    SendMessageW(updown, UDM_SETPOS32, 0, initial as LPARAM);
+    SendMessageW(updown, UDM_SETRANGE32, p.range_min as WPARAM, p.range_max as LPARAM);
+    SendMessageW(updown, UDM_SETPOS32, 0, p.initial as LPARAM);
 
     (updown, edit, vec![lbl, edit, updown])
 } }
 
 /// Creates a row with: static label | combobox.
 /// Returns (combo_hwnd, vec_of_all_hwnds_for_page).
-#[allow(clippy::too_many_arguments)]
-unsafe fn create_combo_row(
-    parent: HWND,
-    hinstance: HINSTANCE,
-    font: *mut core::ffi::c_void,
-    label_text: &str,
-    x: i32,
-    y: i32,
-    options: &[&str],
-    selected: usize,
-    combo_id: i32,
-    dpi: u32,
-) -> (HWND, Vec<HWND>) { unsafe {
-    let s = |v: i32| dpi_scale(v, dpi);
-    let label_wide = to_wide(label_text);
+unsafe fn create_combo_row(ctx: &RowContext, p: &ComboRowParams) -> (HWND, Vec<HWND>) { unsafe {
+    let s = |v: i32| dpi_scale(v, ctx.dpi);
+    let label_wide = to_wide(p.label_text);
     let lbl = CreateWindowExW(
         0,
         to_wide("STATIC").as_ptr(),
         label_wide.as_ptr(),
         WS_CHILD | WS_VISIBLE | SS_LEFT,
-        x, y + s(5), s(150), s(20),
-        parent,
+        p.x, p.y + s(5), s(150), s(20),
+        ctx.parent,
         std::ptr::null_mut(),
-        hinstance,
+        ctx.hinstance,
         std::ptr::null(),
     );
-    SendMessageW(lbl, WM_SETFONT, font as usize, 0);
+    SendMessageW(lbl, WM_SETFONT, ctx.font as usize, 0);
 
     let combo = CreateWindowExW(
         0,
         to_wide("COMBOBOX").as_ptr(),
         std::ptr::null(),
         WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | CBS_HASSTRINGS,
-        x + s(160), y, s(200), s(200),
-        parent,
-        combo_id as isize as HMENU,
-        hinstance,
+        p.x + s(160), p.y, s(200), s(200),
+        ctx.parent,
+        p.combo_id as isize as HMENU,
+        ctx.hinstance,
         std::ptr::null(),
     );
-    SendMessageW(combo, WM_SETFONT, font as usize, 0);
+    SendMessageW(combo, WM_SETFONT, ctx.font as usize, 0);
 
-    for opt in options {
+    for opt in p.options {
         let wide = to_wide(opt);
         SendMessageW(combo, CB_ADDSTRING, 0, wide.as_ptr() as LPARAM);
     }
-    SendMessageW(combo, CB_SETCURSEL, selected, 0);
+    SendMessageW(combo, CB_SETCURSEL, p.selected, 0);
 
     (combo, vec![lbl, combo])
 } }
 
 /// Creates a row with: checkbox.
 /// Returns (checkbox_hwnd, vec_of_all_hwnds_for_page).
-#[allow(clippy::too_many_arguments)]
-unsafe fn create_checkbox_row(
-    parent: HWND,
-    hinstance: HINSTANCE,
-    font: *mut core::ffi::c_void,
-    label_text: &str,
-    x: i32,
-    y: i32,
-    checked: bool,
-    enabled: bool,
-    check_id: i32,
-    dpi: u32,
-) -> (HWND, Vec<HWND>) { unsafe {
-    let s = |v: i32| dpi_scale(v, dpi);
-    let text = to_wide(label_text);
+unsafe fn create_checkbox_row(ctx: &RowContext, p: &CheckboxRowParams) -> (HWND, Vec<HWND>) { unsafe {
+    let s = |v: i32| dpi_scale(v, ctx.dpi);
+    let text = to_wide(p.label_text);
     let check = CreateWindowExW(
         0,
         to_wide("BUTTON").as_ptr(),
         text.as_ptr(),
         WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
-        x + s(160), y + s(5), s(250), s(20),
-        parent,
-        check_id as isize as HMENU,
-        hinstance,
+        p.x + s(160), p.y + s(5), s(250), s(20),
+        ctx.parent,
+        p.check_id as isize as HMENU,
+        ctx.hinstance,
         std::ptr::null(),
     );
-    SendMessageW(check, WM_SETFONT, font as usize, 0);
+    SendMessageW(check, WM_SETFONT, ctx.font as usize, 0);
 
-    if checked {
+    if p.checked {
         SendMessageW(check, BM_SETCHECK, BST_CHECKED as usize, 0);
     }
-    if !enabled {
+    if !p.enabled {
         EnableWindow(check, 0);
     }
 
@@ -900,7 +909,7 @@ unsafe fn create_checkbox_row(
 fn build_config(state: &Win32State) -> AppConfig {
     unsafe {
         let font_size_pos = SendMessageW(state.font_size_updown, UDM_GETPOS32, 0, 0) as f32;
-        let font_size = 8.0 + font_size_pos * 0.5;
+        let font_size = FontConfig::SIZE_MIN + font_size_pos * FontConfig::SIZE_STEP;
 
         let font_family_idx = SendMessageW(state.font_family_combo, CB_GETCURSEL, 0, 0) as usize;
         let line_padding = SendMessageW(state.line_padding_updown, UDM_GETPOS32, 0, 0) as u32;
@@ -911,7 +920,7 @@ fn build_config(state: &Win32State) -> AppConfig {
         let scrollback = scrollback_pos * 100;
 
         let blink_pos = SendMessageW(state.cursor_blink_updown, UDM_GETPOS32, 0, 0) as u64;
-        let cursor_blink = 100 + blink_pos * 50;
+        let cursor_blink = TerminalConfig::BLINK_MS_MIN + blink_pos * TerminalConfig::BLINK_MS_STEP;
 
         let win_padding = SendMessageW(state.win_padding_updown, UDM_GETPOS32, 0, 0) as u32;
         let pane_padding = SendMessageW(state.pane_padding_updown, UDM_GETPOS32, 0, 0) as u32;
@@ -966,7 +975,7 @@ fn build_config(state: &Win32State) -> AppConfig {
 fn update_all_displays(state: &Win32State) {
     unsafe {
         let font_size_pos = SendMessageW(state.font_size_updown, UDM_GETPOS32, 0, 0) as f32;
-        set_edit_text(state.font_size_edit, &format!("{:.1}", 8.0 + font_size_pos * 0.5));
+        set_edit_text(state.font_size_edit, &format!("{:.1}", FontConfig::SIZE_MIN + font_size_pos * FontConfig::SIZE_STEP));
 
         let line_padding = SendMessageW(state.line_padding_updown, UDM_GETPOS32, 0, 0);
         set_edit_text(state.line_padding_edit, &line_padding.to_string());
@@ -974,7 +983,7 @@ fn update_all_displays(state: &Win32State) {
         let scrollback = SendMessageW(state.scrollback_updown, UDM_GETPOS32, 0, 0) as usize * 100;
         set_edit_text(state.scrollback_edit, &scrollback.to_string());
 
-        let blink = 100 + SendMessageW(state.cursor_blink_updown, UDM_GETPOS32, 0, 0) as u64 * 50;
+        let blink = TerminalConfig::BLINK_MS_MIN + SendMessageW(state.cursor_blink_updown, UDM_GETPOS32, 0, 0) as u64 * TerminalConfig::BLINK_MS_STEP;
         set_edit_text(state.cursor_blink_edit, &format!("{blink} ms"));
 
         let wp = SendMessageW(state.win_padding_updown, UDM_GETPOS32, 0, 0);
@@ -1067,7 +1076,7 @@ fn reset_controls(state: &Win32State) {
     let d = AppConfig::default();
     unsafe {
         // Font
-        let font_size_pos = ((d.font.size - 8.0) / 0.5).round() as i32;
+        let font_size_pos = ((d.font.size - FontConfig::SIZE_MIN) / FontConfig::SIZE_STEP).round() as i32;
         SendMessageW(state.font_size_updown, UDM_SETPOS32, 0, font_size_pos as LPARAM);
         SendMessageW(state.font_family_combo, CB_SETCURSEL, d.font.family.index(), 0);
         SendMessageW(state.line_padding_updown, UDM_SETPOS32, 0, d.font.line_padding as LPARAM);
@@ -1081,7 +1090,7 @@ fn reset_controls(state: &Win32State) {
 
         // Terminal
         SendMessageW(state.scrollback_updown, UDM_SETPOS32, 0, (d.terminal.max_scrollback / 100) as LPARAM);
-        let blink_pos = (d.terminal.cursor_blink_interval_ms as i32 - 100) / 50;
+        let blink_pos = (d.terminal.cursor_blink_interval_ms as i64 - TerminalConfig::BLINK_MS_MIN as i64) / TerminalConfig::BLINK_MS_STEP as i64;
         SendMessageW(state.cursor_blink_updown, UDM_SETPOS32, 0, blink_pos as LPARAM);
 
         // Layout

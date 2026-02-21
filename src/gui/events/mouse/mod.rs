@@ -8,4 +8,4 @@ mod tab_drag;
 mod terminal_click;
 mod wheel;
 
-const TAB_BAR_MULTI_CLICK_MS: u128 = 400;
+const MULTI_CLICK_TIMEOUT_MS: u128 = 400;

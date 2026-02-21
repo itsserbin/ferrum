@@ -13,8 +13,7 @@ impl FerrumWindow {
         let sgr = self.active_leaf_ref().is_some_and(|l| l.terminal.sgr_mouse);
         let bytes = encode_mouse_event(button, col, row, pressed, sgr);
         if let Some(leaf) = self.active_leaf_mut() {
-            let _ = leaf.pty_writer.write_all(&bytes);
-            let _ = leaf.pty_writer.flush();
+            leaf.write_pty(&bytes);
         }
     }
 

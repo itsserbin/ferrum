@@ -123,8 +123,7 @@ impl FerrumWindow {
             && let Some(leaf) = self.active_leaf_mut()
         {
             leaf.scroll_offset = 0;
-            let _ = leaf.pty_writer.write_all(&bytes);
-            let _ = leaf.pty_writer.flush();
+            leaf.write_pty(&bytes);
         }
 
         self.keyboard_selection_anchor = Some(crate::core::SelectionPoint {

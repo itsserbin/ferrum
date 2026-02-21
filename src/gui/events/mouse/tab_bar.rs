@@ -1,6 +1,7 @@
 use crate::config::AppConfig;
 use crate::gui::renderer::shared::tab_math;
 use crate::gui::renderer::{TabBarHit, TabInfo};
+use crate::gui::tabs::create::NewTabParams;
 use crate::gui::*;
 
 impl FerrumWindow {
@@ -133,7 +134,15 @@ impl FerrumWindow {
                 self.last_topbar_empty_click = None;
                 let size = self.window.inner_size();
                 let (rows, cols) = self.calc_grid_size(size.width, size.height);
-                self.new_tab(rows, cols, next_tab_id, tx, None, config);
+                self.new_tab(NewTabParams {
+                    rows,
+                    cols,
+                    title: None,
+                    next_tab_id,
+                    tx,
+                    cwd: None,
+                    config,
+                });
             }
             #[cfg(not(target_os = "macos"))]
             TabBarHit::WindowButton(btn) => {

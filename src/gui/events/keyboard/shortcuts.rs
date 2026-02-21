@@ -1,5 +1,7 @@
 use crate::config::AppConfig;
 use crate::gui::pane::{NavigateDirection, SplitDirection};
+#[cfg(not(target_os = "macos"))]
+use crate::gui::tabs::create::NewTabParams;
 use crate::gui::*;
 
 impl FerrumWindow {
@@ -91,7 +93,15 @@ impl FerrumWindow {
             {
                 let size = self.window.inner_size();
                 let (rows, cols) = self.calc_grid_size(size.width, size.height);
-                self.new_tab_with_title(rows, cols, Some(closed.title), next_tab_id, tx, None, config);
+                self.new_tab(NewTabParams {
+                    rows,
+                    cols,
+                    title: Some(closed.title),
+                    next_tab_id,
+                    tx,
+                    cwd: None,
+                    config,
+                });
             }
             return true;
         }

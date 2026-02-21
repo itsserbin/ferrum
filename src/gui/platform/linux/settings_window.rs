@@ -15,6 +15,10 @@ static WINDOW_OPEN: AtomicBool = AtomicBool::new(false);
 static JUST_CLOSED: AtomicBool = AtomicBool::new(false);
 /// Set by `close_settings_window()` from the main thread; polled by GTK timer.
 static CLOSE_REQUESTED: AtomicBool = AtomicBool::new(false);
+/// Set by the main thread to request the GTK timer to present (raise) the window.
+static PRESENT_REQUESTED: AtomicBool = AtomicBool::new(false);
+/// Set to true only if GTK4 initialised successfully.
+static GTK_READY: AtomicBool = AtomicBool::new(false);
 
 pub fn is_settings_window_open() -> bool {
     WINDOW_OPEN.load(Ordering::Relaxed)
@@ -36,22 +40,39 @@ pub fn close_settings_window() {
 static GTK_INIT: std::sync::Once = std::sync::Once::new();
 
 pub fn open_settings_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>) {
-    if WINDOW_OPEN.load(Ordering::Relaxed) {
+    if WINDOW_OPEN
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Relaxed)
+        .is_err()
+    {
+        // Already open — request the GTK timer to bring the window to front.
+        PRESENT_REQUESTED.store(true, Ordering::Relaxed);
         return;
     }
-    WINDOW_OPEN.store(true, Ordering::Relaxed);
 
     let config = config.clone();
 
     GTK_INIT.call_once(|| {
         let (ready_tx, ready_rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
-            gtk4::init().expect("Failed to initialize GTK4");
-            let _ = ready_tx.send(());
+            if let Err(e) = gtk4::init() {
+                eprintln!("[ferrum] Failed to initialize GTK4: {e}");
+                let _ = ready_tx.send(false);
+                return;
+            }
+            let _ = ready_tx.send(true);
             gtk4::glib::MainLoop::new(None, false).run();
         });
-        ready_rx.recv().expect("GTK thread failed to initialize");
+        if ready_rx.recv() == Ok(true) {
+            GTK_READY.store(true, Ordering::Release);
+        } else {
+            eprintln!("[ferrum] GTK4 initialization failed, settings window unavailable");
+        }
     });
+
+    if !GTK_READY.load(Ordering::Acquire) {
+        WINDOW_OPEN.store(false, Ordering::Relaxed);
+        return;
+    }
 
     gtk4::glib::MainContext::default().invoke(move || {
         build_window(&config, tx);
@@ -252,22 +273,18 @@ fn build_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>) {
         });
     }
 
-    // Signal lifecycle after GTK has destroyed the window.
-    window.connect_destroy(|_| {
-        WINDOW_OPEN.store(false, Ordering::Relaxed);
-        JUST_CLOSED.store(true, Ordering::Relaxed);
-    });
-
-    // Poll CLOSE_REQUESTED so the main thread can close us.
+    // Poll CLOSE_REQUESTED and PRESENT_REQUESTED so the main thread can control us.
     {
         let w = window.clone();
         gtk4::glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
             if CLOSE_REQUESTED.swap(false, Ordering::Relaxed) {
                 w.close();
-                gtk4::glib::ControlFlow::Break
-            } else {
-                gtk4::glib::ControlFlow::Continue
+                return gtk4::glib::ControlFlow::Break;
             }
+            if PRESENT_REQUESTED.swap(false, Ordering::Relaxed) {
+                w.present();
+            }
+            gtk4::glib::ControlFlow::Continue
         });
     }
 
@@ -282,7 +299,15 @@ fn build_font_tab(config: &AppConfig) -> (gtk4::Box, SpinButton, DropDown, SpinB
     vbox.set_margin_start(16);
     vbox.set_margin_end(16);
 
-    let font_size = labeled_spin(&vbox, "Font Size", config.font.size as f64, 8.0, 32.0, 0.5, 1);
+    let font_size = labeled_spin(
+        &vbox,
+        "Font Size",
+        config.font.size as f64,
+        f64::from(FontConfig::SIZE_MIN),
+        f64::from(FontConfig::SIZE_MAX),
+        f64::from(FontConfig::SIZE_STEP),
+        1,
+    );
     let font_family = labeled_combo(
         &vbox,
         "Font Family",
@@ -329,9 +354,9 @@ fn build_terminal_tab(config: &AppConfig) -> (gtk4::Box, SpinButton, SpinButton)
         &vbox,
         "Cursor Blink (ms)",
         config.terminal.cursor_blink_interval_ms as f64,
-        100.0,
-        2000.0,
-        50.0,
+        TerminalConfig::BLINK_MS_MIN as f64,
+        TerminalConfig::BLINK_MS_MAX as f64,
+        TerminalConfig::BLINK_MS_STEP as f64,
         0,
     );
 

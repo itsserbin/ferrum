@@ -127,7 +127,9 @@ impl SecurityGuard {
 
     /// Fast check for any active security events.
     pub fn has_events(&self) -> bool {
-        self.active_event_count() > 0
+        self.events
+            .iter()
+            .any(|e| e.timestamp.elapsed() <= Self::EVENT_TTL)
     }
 
     /// Returns active events and clears the internal queue.

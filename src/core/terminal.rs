@@ -282,13 +282,20 @@ impl Terminal {
         }
     }
 
+    /// Grace period (in seconds) after a resize during which upward cursor jumps
+    /// are not flagged as security events (shells legitimately redraw prompts).
+    pub(crate) const RESIZE_CURSOR_JUMP_GRACE_SECS: u64 = 2;
+
     fn maybe_record_cursor_rewrite(&mut self, from_row: usize, to_row: usize) {
         if !self.security_config.limit_cursor_jumps || self.is_alt_screen() || to_row >= from_row {
             return;
         }
 
         // Suppress false positives: shell redraws prompt after resize.
-        if self.resize_at.is_some_and(|t| t.elapsed().as_secs() < 2) {
+        if self
+            .resize_at
+            .is_some_and(|t| t.elapsed().as_secs() < Self::RESIZE_CURSOR_JUMP_GRACE_SECS)
+        {
             return;
         }
 
@@ -532,14 +539,9 @@ impl Perform for Terminal {
         }
         match params[0] {
             // OSC 0: set window title + icon name
-            // OSC 2: set window title
-            b"0" | b"2" => {
-                if params.len() >= 2 {
-                    self.title = Some(String::from_utf8_lossy(params[1]).into_owned());
-                }
-            }
             // OSC 1: set icon name (treat as title)
-            b"1" => {
+            // OSC 2: set window title
+            b"0" | b"1" | b"2" => {
                 if params.len() >= 2 {
                     self.title = Some(String::from_utf8_lossy(params[1]).into_owned());
                 }

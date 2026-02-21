@@ -1,7 +1,7 @@
 pub(in crate::gui::renderer) mod primitives;
 mod trait_impl;
 
-use fontdue::{Font, FontSettings};
+use fontdue::Font;
 use std::collections::HashMap;
 
 use crate::config::{AppConfig, ThemePalette};
@@ -19,29 +19,9 @@ pub struct CpuRenderer {
 
 impl CpuRenderer {
     pub fn new(config: &AppConfig) -> Self {
-        let font_data = crate::config::font_data(config.font.family);
-        let font = Font::from_bytes(font_data, FontSettings::default())
-            .expect("font load failed");
+        let (font, fallback_fonts) = crate::config::load_fonts(config.font.family);
 
-        let fallback_fonts: Vec<Font> = crate::config::fallback_fonts_data()
-            .iter()
-            .map(|d| Font::from_bytes(*d, FontSettings::default()).expect("fallback font load failed"))
-            .collect();
-
-        let mut metrics = FontMetrics {
-            cell_width: 1,
-            cell_height: 1,
-            font_size: 1.0,
-            ui_scale: 1.0,
-            ascent: 0,
-            tab_bar_visible: false,
-            base_font_size: config.font.size,
-            base_line_padding: config.font.line_padding,
-            base_tab_bar_height: config.layout.tab_bar_height,
-            base_window_padding: config.layout.window_padding,
-            base_scrollbar_width: config.layout.scrollbar_width,
-            base_pane_inner_padding: config.layout.pane_inner_padding,
-        };
+        let mut metrics = FontMetrics::from_config(config);
         metrics.recompute(&font);
 
         let palette = config.theme.resolve();
@@ -56,8 +36,9 @@ impl CpuRenderer {
     }
 
     pub(in crate::gui::renderer) fn apply_config(&mut self, config: &AppConfig) {
-        let font_data = crate::config::font_data(config.font.family);
-        self.font = Font::from_bytes(font_data, FontSettings::default()).expect("font load failed");
+        let (font, fallback_fonts) = crate::config::load_fonts(config.font.family);
+        self.font = font;
+        self.fallback_fonts = fallback_fonts;
         self.metrics.update_bases(config);
         self.recompute_metrics();
         self.palette = config.theme.resolve();

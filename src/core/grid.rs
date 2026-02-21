@@ -99,7 +99,10 @@ impl Grid {
 
     /// Extract a row as a Vec<Cell>, for saving to scrollback.
     pub fn row_cells(&self, row: usize) -> Vec<Cell> {
-        self.rows_data[row].cells.clone()
+        self.rows_data
+            .get(row)
+            .map(|r| r.cells.clone())
+            .unwrap_or_default()
     }
 
     /// Applies a function to every cell in the grid.

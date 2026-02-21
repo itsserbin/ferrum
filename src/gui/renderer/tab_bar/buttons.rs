@@ -171,7 +171,7 @@ impl CpuRenderer {
                 let idx = py * bw + px;
                 if idx < target.buffer.len() {
                     let alpha = (coverage * 255.0).round() as u8;
-                    target.buffer[idx] = Self::blend_pixel(target.buffer[idx], color, alpha);
+                    target.buffer[idx] = crate::gui::renderer::blend_rgb(target.buffer[idx], color, alpha);
                 }
             }
         }
@@ -211,7 +211,7 @@ impl CpuRenderer {
                 let idx = py * bw + px;
                 if idx < target.buffer.len() {
                     let alpha = (coverage * 255.0).round() as u8;
-                    target.buffer[idx] = Self::blend_pixel(target.buffer[idx], hole_color, alpha);
+                    target.buffer[idx] = crate::gui::renderer::blend_rgb(target.buffer[idx], hole_color, alpha);
                 }
             }
         }

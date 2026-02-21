@@ -207,7 +207,9 @@ impl Session {
                          source \"{}/ferrum-integration\"\n",
                         zdotdir.display()
                     );
-                    let _ = std::fs::write(zdotdir.join(".zshenv"), zshenv_content);
+                    if let Err(e) = std::fs::write(zdotdir.join(".zshenv"), zshenv_content) {
+                        eprintln!("[ferrum] Failed to write zsh integration: {e}");
+                    }
                     cmd.env("ZDOTDIR", zdotdir.to_string_lossy().as_ref());
                 }
                 "bash" => {
@@ -225,7 +227,9 @@ impl Session {
                         bash_integration.display()
                     );
                     let rcfile_path = bash_dir.join("bashrc-wrapper");
-                    let _ = std::fs::write(&rcfile_path, rcfile_content);
+                    if let Err(e) = std::fs::write(&rcfile_path, rcfile_content) {
+                        eprintln!("[ferrum] Failed to write bash integration: {e}");
+                    }
                     // --rcfile works for interactive non-login bash.
                     // On macOS where -l is added, login bash ignores --rcfile
                     // but sources ~/.bash_profile (which typically sources .bashrc).

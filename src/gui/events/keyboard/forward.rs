@@ -22,8 +22,7 @@ impl FerrumWindow {
             return;
         };
         if let Some(leaf) = self.active_leaf_mut() {
-            let _ = leaf.pty_writer.write_all(&bytes);
-            let _ = leaf.pty_writer.flush();
+            leaf.write_pty(&bytes);
         }
     }
 }

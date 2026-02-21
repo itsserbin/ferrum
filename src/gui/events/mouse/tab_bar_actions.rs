@@ -15,7 +15,7 @@ impl FerrumWindow {
         let now = std::time::Instant::now();
         if self.last_tab_click.is_some_and(|(last_idx, last_time)| {
             last_idx == idx
-                && now.duration_since(last_time).as_millis() < super::TAB_BAR_MULTI_CLICK_MS
+                && now.duration_since(last_time).as_millis() < super::MULTI_CLICK_TIMEOUT_MS
         }) {
             self.start_rename(idx);
             self.last_tab_click = None;
@@ -50,7 +50,7 @@ impl FerrumWindow {
         self.last_tab_click = None;
         let now = std::time::Instant::now();
         let is_double_click = self.last_topbar_empty_click.is_some_and(|last| {
-            now.duration_since(last).as_millis() < super::TAB_BAR_MULTI_CLICK_MS
+            now.duration_since(last).as_millis() < super::MULTI_CLICK_TIMEOUT_MS
         });
         if is_double_click {
             self.last_topbar_empty_click = None;

@@ -44,7 +44,7 @@ impl CpuRenderer {
                 }
 
                 let aa_alpha = (coverage * alpha as f32).round().clamp(0.0, 255.0) as u8;
-                target.buffer[idx] = Self::blend_pixel(target.buffer[idx], color, aa_alpha);
+                target.buffer[idx] = crate::gui::renderer::blend_rgb(target.buffer[idx], color, aa_alpha);
             }
         }
     }
@@ -106,7 +106,7 @@ impl CpuRenderer {
                     continue;
                 }
                 let alpha = (coverage * 255.0).round() as u8;
-                target.buffer[idx] = Self::blend_pixel(target.buffer[idx], color, alpha);
+                target.buffer[idx] = crate::gui::renderer::blend_rgb(target.buffer[idx], color, alpha);
             }
         }
     }

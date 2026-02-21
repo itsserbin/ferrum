@@ -48,7 +48,7 @@ pub(super) fn scale_changed(old: f64, new: f64) -> bool {
 }
 
 /// Blends `src` over `dst` with `alpha` in 0..=255 (both colors are 0xRRGGBB).
-pub(super) fn blend_rgb(dst: u32, src: u32, alpha: u8) -> u32 {
+pub(crate) fn blend_rgb(dst: u32, src: u32, alpha: u8) -> u32 {
     if alpha == 255 {
         return src;
     }

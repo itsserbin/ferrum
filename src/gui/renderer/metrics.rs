@@ -23,6 +23,24 @@ pub struct FontMetrics {
 }
 
 impl FontMetrics {
+    /// Creates a new `FontMetrics` initialized from config with default scale.
+    pub fn from_config(config: &crate::config::AppConfig) -> Self {
+        Self {
+            cell_width: 1,
+            cell_height: 1,
+            font_size: 1.0,
+            ui_scale: 1.0,
+            ascent: 0,
+            tab_bar_visible: false,
+            base_font_size: config.font.size,
+            base_line_padding: config.font.line_padding,
+            base_tab_bar_height: config.layout.tab_bar_height,
+            base_window_padding: config.layout.window_padding,
+            base_scrollbar_width: config.layout.scrollbar_width,
+            base_pane_inner_padding: config.layout.pane_inner_padding,
+        }
+    }
+
     /// Recomputes all metrics from the given font and current ui_scale.
     pub fn recompute(&mut self, font: &Font) {
         let scaled_font_size = (self.base_font_size as f64 * self.ui_scale).max(1.0) as f32;

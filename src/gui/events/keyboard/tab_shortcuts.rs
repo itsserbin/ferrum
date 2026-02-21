@@ -1,4 +1,6 @@
 use crate::config::AppConfig;
+#[cfg(not(target_os = "macos"))]
+use crate::gui::tabs::create::NewTabParams;
 use crate::gui::*;
 
 impl FerrumWindow {
@@ -26,7 +28,15 @@ impl FerrumWindow {
                 let cwd = self.active_leaf_ref().and_then(|l| l.cwd());
                 let size = self.window.inner_size();
                 let (rows, cols) = self.calc_grid_size(size.width, size.height);
-                self.new_tab(rows, cols, next_tab_id, tx, cwd, config);
+                self.new_tab(NewTabParams {
+                    rows,
+                    cols,
+                    title: None,
+                    next_tab_id,
+                    tx,
+                    cwd,
+                    config,
+                });
             }
             return Some(true);
         }

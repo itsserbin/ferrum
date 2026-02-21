@@ -2,6 +2,29 @@ use crate::core::{Color, UnderlineStyle};
 use crate::core::terminal::Terminal;
 use vte::Params;
 
+/// Parses an extended color (256-color or true-color) from the SGR parameter iterator.
+///
+/// Used by both SGR 38 (foreground) and SGR 48 (background).
+fn parse_extended_color<'a>(
+    term: &Terminal,
+    iter: &mut impl Iterator<Item = &'a [u16]>,
+) -> Option<Color> {
+    let sub_code = iter.next()?.first().copied().unwrap_or(0);
+    match sub_code {
+        5 => {
+            let n = iter.next()?.first().copied().unwrap_or(0);
+            Some(term.color_from_256(n))
+        }
+        2 => {
+            let r = iter.next().and_then(|p| p.first().copied()).unwrap_or(0) as u8;
+            let g = iter.next().and_then(|p| p.first().copied()).unwrap_or(0) as u8;
+            let b = iter.next().and_then(|p| p.first().copied()).unwrap_or(0) as u8;
+            Some(Color { r, g, b })
+        }
+        _ => None,
+    }
+}
+
 pub(in super::super) fn handle_sgr(term: &mut Terminal, params: &Params) {
     // SGR with no params means reset all attributes.
     if params.is_empty() {
@@ -11,7 +34,9 @@ pub(in super::super) fn handle_sgr(term: &mut Terminal, params: &Params) {
 
     let mut iter = params.iter();
     while let Some(param) = iter.next() {
-        let code = param[0];
+        let Some(&code) = param.first() else {
+            continue;
+        };
         match code {
             0 => term.reset_attributes(),
             1 => term.set_bold(true),
@@ -31,43 +56,15 @@ pub(in super::super) fn handle_sgr(term: &mut Terminal, params: &Params) {
             29 => term.set_strikethrough(false),
             30..=37 => term.set_fg(term.ansi_palette[(code - 30) as usize]),
             38 => {
-                // Extended foreground: 38;5;N (256-color) or 38;2;R;G;B (true color)
-                if let Some(sub) = iter.next() {
-                    match sub[0] {
-                        5 => {
-                            if let Some(n) = iter.next() {
-                                term.set_fg(term.color_from_256(n[0]));
-                            }
-                        }
-                        2 => {
-                            let r = iter.next().map(|p| p[0] as u8).unwrap_or(0);
-                            let g = iter.next().map(|p| p[0] as u8).unwrap_or(0);
-                            let b = iter.next().map(|p| p[0] as u8).unwrap_or(0);
-                            term.set_fg(Color { r, g, b });
-                        }
-                        _ => {}
-                    }
+                if let Some(color) = parse_extended_color(term, &mut iter) {
+                    term.set_fg(color);
                 }
             }
             39 => term.set_fg(term.default_fg),
             40..=47 => term.set_bg(term.ansi_palette[(code - 40) as usize]),
             48 => {
-                // Extended background: 48;5;N (256-color) or 48;2;R;G;B (true color)
-                if let Some(sub) = iter.next() {
-                    match sub[0] {
-                        5 => {
-                            if let Some(n) = iter.next() {
-                                term.set_bg(term.color_from_256(n[0]));
-                            }
-                        }
-                        2 => {
-                            let r = iter.next().map(|p| p[0] as u8).unwrap_or(0);
-                            let g = iter.next().map(|p| p[0] as u8).unwrap_or(0);
-                            let b = iter.next().map(|p| p[0] as u8).unwrap_or(0);
-                            term.set_bg(Color { r, g, b });
-                        }
-                        _ => {}
-                    }
+                if let Some(color) = parse_extended_color(term, &mut iter) {
+                    term.set_bg(color);
                 }
             }
             49 => term.set_bg(term.default_bg),

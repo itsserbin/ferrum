@@ -93,9 +93,8 @@ impl FerrumWindow {
                 && let Some(leaf) = tab.pane_tree.find_leaf_mut(target_pane)
             {
                 for _ in 0..raw_lines.unsigned_abs() {
-                    let _ = leaf.pty_writer.write_all(&bytes);
+                    leaf.write_pty(&bytes);
                 }
-                let _ = leaf.pty_writer.flush();
             }
             return;
         }
@@ -108,9 +107,8 @@ impl FerrumWindow {
                 let lines = raw_lines;
                 let seq = if lines > 0 { b"\x1b[A" } else { b"\x1b[B" };
                 for _ in 0..lines.unsigned_abs() {
-                    let _ = leaf.pty_writer.write_all(seq);
+                    leaf.write_pty(seq);
                 }
-                let _ = leaf.pty_writer.flush();
                 return;
             }
 

@@ -16,11 +16,10 @@ impl FerrumWindow {
         }
 
         // Don't move cursor shortly after resize - cursor position may not be synced with shell
-        // Use longer timeout (2 seconds) until reflow sync is properly fixed
         if leaf
             .terminal
             .resize_at
-            .is_some_and(|t| t.elapsed().as_millis() < 2000)
+            .is_some_and(|t| t.elapsed().as_secs() < crate::core::terminal::Terminal::RESIZE_CURSOR_JUMP_GRACE_SECS)
         {
             return;
         }
@@ -96,8 +95,7 @@ impl FerrumWindow {
         }
 
         if !bytes.is_empty() {
-            let _ = leaf.pty_writer.write_all(&bytes);
-            let _ = leaf.pty_writer.flush();
+            leaf.write_pty(&bytes);
         }
     }
 }

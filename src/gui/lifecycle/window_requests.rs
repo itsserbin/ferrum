@@ -1,3 +1,4 @@
+use crate::gui::tabs::create::NewTabParams;
 use crate::gui::*;
 
 impl App {
@@ -22,7 +23,15 @@ impl App {
         {
             let size = new_win.window.inner_size();
             let (rows, cols) = new_win.calc_grid_size(size.width, size.height);
-            new_win.new_tab_with_title(rows, cols, title, &mut self.next_tab_id, &self.tx, cwd, &self.config);
+            new_win.new_tab(NewTabParams {
+                rows,
+                cols,
+                title,
+                next_tab_id: &mut self.next_tab_id,
+                tx: &self.tx,
+                cwd,
+                config: &self.config,
+            });
             if let Some(tab) = new_win.tabs.first() {
                 new_win.window.set_title(&tab.title);
             }
@@ -105,15 +114,15 @@ impl App {
                     {
                         let size = new_win.window.inner_size();
                         let (rows, cols) = new_win.calc_grid_size(size.width, size.height);
-                        new_win.new_tab_with_title(
+                        new_win.new_tab(NewTabParams {
                             rows,
                             cols,
-                            None,
-                            &mut self.next_tab_id,
-                            &self.tx,
+                            title: None,
+                            next_tab_id: &mut self.next_tab_id,
+                            tx: &self.tx,
                             cwd,
-                            &self.config,
-                        );
+                            config: &self.config,
+                        });
                         #[cfg(target_os = "macos")]
                         if let Some(tab) = new_win.tabs.first() {
                             new_win.window.set_title(&tab.title);

@@ -35,38 +35,41 @@ impl CpuRenderer {
         character: char,
         fg: Color,
     ) {
-        if !self.glyph_cache.contains_key(&character) {
-            let is_primary = self.font.has_glyph(character);
-            let font = if is_primary {
-                &self.font
-            } else {
-                self.fallback_fonts
-                    .iter()
-                    .find(|f| f.has_glyph(character))
-                    .unwrap_or(&self.font)
-            };
-            let font_size = if is_primary {
-                self.metrics.font_size
-            } else {
-                // Scale down fallback glyphs that exceed cell width.
-                let m = font.metrics(character, self.metrics.font_size);
-                if m.advance_width > self.metrics.cell_width as f32 {
-                    self.metrics.font_size * (self.metrics.cell_width as f32 / m.advance_width)
+        use std::collections::hash_map::Entry;
+        let glyph_entry = self.glyph_cache.entry(character);
+        let glyph = match glyph_entry {
+            Entry::Occupied(entry) => entry.into_mut(),
+            Entry::Vacant(entry) => {
+                let is_primary = self.font.has_glyph(character);
+                let font = if is_primary {
+                    &self.font
                 } else {
+                    self.fallback_fonts
+                        .iter()
+                        .find(|f| f.has_glyph(character))
+                        .unwrap_or(&self.font)
+                };
+                let font_size = if is_primary {
                     self.metrics.font_size
-                }
-            };
-            let (metrics, bitmap) = font.rasterize(character, font_size);
-            let cached = super::super::types::GlyphBitmap {
-                data: bitmap,
-                width: metrics.width,
-                height: metrics.height,
-                left: metrics.xmin,
-                top: metrics.height as i32 + metrics.ymin,
-            };
-            self.glyph_cache.insert(character, cached);
-        }
-        let glyph = self.glyph_cache.get(&character).unwrap();
+                } else {
+                    // Scale down fallback glyphs that exceed cell width.
+                    let m = font.metrics(character, self.metrics.font_size);
+                    if m.advance_width > self.metrics.cell_width as f32 {
+                        self.metrics.font_size * (self.metrics.cell_width as f32 / m.advance_width)
+                    } else {
+                        self.metrics.font_size
+                    }
+                };
+                let (metrics, bitmap) = font.rasterize(character, font_size);
+                entry.insert(super::super::types::GlyphBitmap {
+                    data: bitmap,
+                    width: metrics.width,
+                    height: metrics.height,
+                    left: metrics.xmin,
+                    top: metrics.height as i32 + metrics.ymin,
+                })
+            }
+        };
 
         for gy in 0..glyph.height {
             for gx in 0..glyph.width {
@@ -97,32 +100,6 @@ impl CpuRenderer {
                 }
             }
         }
-    }
-
-    pub(in crate::gui::renderer) fn blend_pixel(dst: u32, src: u32, alpha: u8) -> u32 {
-        if alpha == 255 {
-            return src;
-        }
-        if alpha == 0 {
-            return dst;
-        }
-
-        let a = alpha as u32;
-        let inv = 255 - a;
-
-        let dr = (dst >> 16) & 0xFF;
-        let dg = (dst >> 8) & 0xFF;
-        let db = dst & 0xFF;
-
-        let sr = (src >> 16) & 0xFF;
-        let sg = (src >> 8) & 0xFF;
-        let sb = src & 0xFF;
-
-        let r = (sr * a + dr * inv + 127) / 255;
-        let g = (sg * a + dg * inv + 127) / 255;
-        let b = (sb * a + db * inv + 127) / 255;
-
-        (r << 16) | (g << 8) | b
     }
 
     pub(in crate::gui::renderer) fn draw_rounded_rect(
@@ -180,7 +157,7 @@ impl CpuRenderer {
                 if aa_alpha == 0 {
                     continue;
                 }
-                target.buffer[idx] = Self::blend_pixel(target.buffer[idx], shape.color, aa_alpha);
+                target.buffer[idx] = crate::gui::renderer::blend_rgb(target.buffer[idx], shape.color, aa_alpha);
             }
         }
     }
@@ -264,7 +241,7 @@ impl CpuRenderer {
                 }
                 let idx = py * target.width + px;
                 if idx < target.buffer.len() {
-                    target.buffer[idx] = Self::blend_pixel(target.buffer[idx], cmd.color, alpha);
+                    target.buffer[idx] = crate::gui::renderer::blend_rgb(target.buffer[idx], cmd.color, alpha);
                 }
             }
         }

@@ -4,7 +4,7 @@ use crate::gui::pane::PaneRect;
 use super::super::traits;
 use super::super::{RenderTarget, ScrollbarState, SecurityPopup};
 #[cfg(not(target_os = "macos"))]
-use super::super::TabInfo;
+use super::super::TabBarDrawParams;
 use super::GpuRenderer;
 
 impl traits::Renderer for GpuRenderer {
@@ -156,14 +156,9 @@ impl traits::Renderer for GpuRenderer {
     fn draw_tab_bar(
         &mut self,
         target: &mut RenderTarget<'_>,
-        tabs: &[TabInfo],
-        hovered_tab: Option<usize>,
-        mouse_pos: (f64, f64),
-        tab_offsets: Option<&[f32]>,
-        pinned: bool,
-        settings_open: bool,
+        params: &TabBarDrawParams<'_>,
     ) {
-        self.draw_tab_bar_impl(target.width, tabs, hovered_tab, mouse_pos, tab_offsets, pinned, settings_open);
+        self.draw_tab_bar_impl(target.width, params);
     }
 
     #[cfg(not(target_os = "macos"))]

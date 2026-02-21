@@ -135,7 +135,9 @@ impl FerrumWindow {
         let divider_px = DIVIDER_WIDTH;
 
         let (hit_pos, direction) = {
-            let drag = self.divider_drag.as_ref().unwrap();
+            let Some(drag) = self.divider_drag.as_ref() else {
+                return;
+            };
             (drag.initial_mouse_pos, drag.direction)
         };
 

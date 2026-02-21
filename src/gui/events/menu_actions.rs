@@ -1,5 +1,3 @@
-use std::io::Write;
-
 use crate::config::AppConfig;
 use crate::core::{Grid, Selection, SelectionPoint};
 use crate::gui::menus::MenuAction;
@@ -16,6 +14,18 @@ impl FerrumWindow {
     const CLEAR_PTY_SEQUENCE: &[u8] = b"\x0c";
     #[cfg(windows)]
     const CLEAR_PTY_SEQUENCE: &[u8] = b"cls\r\n";
+
+    /// Resets the active leaf's scroll/selection state, sends the clear PTY sequence,
+    /// and clears window-level selection anchors.
+    fn clear_leaf_and_send_reset(&mut self) {
+        if let Some(leaf) = self.active_leaf_mut() {
+            leaf.scroll_offset = 0;
+            leaf.selection = None;
+            leaf.write_pty(Self::CLEAR_PTY_SEQUENCE);
+        }
+        self.selection_anchor = None;
+        self.keyboard_selection_anchor = None;
+    }
 
     fn focus_menu_target_pane(&mut self, pane_id: Option<crate::gui::pane::PaneId>) {
         let Some(pane_id) = pane_id else {
@@ -87,24 +97,14 @@ impl FerrumWindow {
                     leaf.terminal.cursor_row = 0;
                     leaf.terminal.cursor_col = 0;
                     leaf.terminal.reset_scroll_region();
-                    leaf.scroll_offset = 0;
-                    leaf.selection = None;
-                    let _ = leaf.pty_writer.write_all(Self::CLEAR_PTY_SEQUENCE);
-                    let _ = leaf.pty_writer.flush();
                 }
-                self.selection_anchor = None;
-                self.keyboard_selection_anchor = None;
+                self.clear_leaf_and_send_reset();
             }
             MenuAction::ResetTerminal => {
                 if let Some(leaf) = self.active_leaf_mut() {
                     leaf.terminal.full_reset();
-                    leaf.scroll_offset = 0;
-                    leaf.selection = None;
-                    let _ = leaf.pty_writer.write_all(Self::CLEAR_PTY_SEQUENCE);
-                    let _ = leaf.pty_writer.flush();
                 }
-                self.selection_anchor = None;
-                self.keyboard_selection_anchor = None;
+                self.clear_leaf_and_send_reset();
             }
             MenuAction::RenameTab => {
                 if let Some(idx) = tab_index {
