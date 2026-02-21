@@ -5,11 +5,12 @@
 use super::super::shared::tab_math;
 use super::super::traits::Renderer;
 use super::super::types::TabSlot;
-use super::super::{TAB_BORDER, TabInfo};
+use super::super::TabInfo;
 
 impl super::GpuRenderer {
     // ── Tab bar rendering: orchestrator ─────────────────────────────────
 
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn draw_tab_bar_impl(
         &mut self,
         buf_width: usize,
@@ -18,6 +19,7 @@ impl super::GpuRenderer {
         mouse_pos: (f64, f64),
         tab_offsets: Option<&[f32]>,
         pinned: bool,
+        settings_open: bool,
     ) {
         let bw = buf_width as u32;
         let tw = self.tab_width(tabs.len(), bw);
@@ -56,8 +58,14 @@ impl super::GpuRenderer {
         #[cfg(not(target_os = "macos"))]
         self.draw_pin_button_commands(mouse_pos, pinned);
 
+        #[cfg(not(target_os = "macos"))]
+        self.draw_gear_button_commands(mouse_pos, settings_open);
+
         #[cfg(target_os = "macos")]
         let _ = pinned;
+
+        #[cfg(target_os = "macos")]
+        let _ = settings_open;
 
         #[cfg(not(target_os = "macos"))]
         self.draw_window_buttons_commands(bw, mouse_pos);
@@ -65,6 +73,6 @@ impl super::GpuRenderer {
         // Bottom separator line.
         let tab_bar_h = self.metrics.tab_bar_height_px() as f32;
         let sep_y = tab_bar_h - 1.0;
-        self.push_rect(0.0, sep_y, bw as f32, 1.0, TAB_BORDER, 0.7);
+        self.push_rect(0.0, sep_y, bw as f32, 1.0, self.palette.tab_border.to_pixel(), 0.7);
     }
 }

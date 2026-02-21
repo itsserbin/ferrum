@@ -36,6 +36,14 @@ pub fn hit_test_tab_bar(
         }
     }
 
+    #[cfg(not(target_os = "macos"))]
+    {
+        let gear_rect = tab_math::gear_button_rect(m);
+        if tab_math::point_in_rect(x, y, gear_rect.to_tuple()) {
+            return TabBarHit::SettingsButton;
+        }
+    }
+
     let tw = tab_math::calculate_tab_width(m, tab_count, buf_width);
     let tab_strip_start = tab_math::tab_strip_start_x(m);
 

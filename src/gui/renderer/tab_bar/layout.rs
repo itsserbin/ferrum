@@ -4,8 +4,6 @@ use super::super::RenderTarget;
 use super::super::RoundedShape;
 use super::super::shared::overlay_layout;
 use super::super::traits::Renderer;
-use super::{ACTIVE_TAB_BG, TAB_BORDER};
-use crate::core::Color;
 
 impl super::super::CpuRenderer {
     /// Draws a small tooltip with full tab title near the pointer.
@@ -36,7 +34,7 @@ impl super::super::CpuRenderer {
                 w: layout.bg_w,
                 h: layout.bg_h,
                 radius: layout.radius,
-                color: ACTIVE_TAB_BG,
+                color: self.palette.active_tab_bg.to_pixel(),
                 alpha: 245,
             },
         );
@@ -49,14 +47,14 @@ impl super::super::CpuRenderer {
                 w: layout.bg_w,
                 h: layout.bg_h,
                 radius: layout.radius,
-                color: TAB_BORDER,
+                color: self.palette.tab_border.to_pixel(),
                 alpha: 80,
             },
         );
 
         for (ci, ch) in layout.display_text.chars().enumerate() {
             let cx = layout.text_x + ci as u32 * self.metrics.cell_width;
-            self.draw_char(target, cx, layout.text_y, ch, Color::DEFAULT_FG);
+            self.draw_char(target, cx, layout.text_y, ch, self.palette.default_fg);
         }
     }
 }

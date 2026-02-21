@@ -1,5 +1,6 @@
 use std::io::Write;
 
+use crate::config::AppConfig;
 use crate::core::{Grid, Selection, SelectionPoint};
 use crate::gui::menus::MenuAction;
 use crate::gui::pane::SplitDirection;
@@ -34,6 +35,7 @@ impl FerrumWindow {
         pane_id: Option<crate::gui::pane::PaneId>,
         next_tab_id: &mut u64,
         tx: &mpsc::Sender<PtyEvent>,
+        config: &AppConfig,
     ) {
         self.focus_menu_target_pane(pane_id);
 
@@ -62,16 +64,16 @@ impl FerrumWindow {
                 self.keyboard_selection_anchor = None;
             }
             MenuAction::SplitRight => {
-                self.split_pane(SplitDirection::Horizontal, false, next_tab_id, tx);
+                self.split_pane(SplitDirection::Horizontal, false, next_tab_id, tx, config);
             }
             MenuAction::SplitDown => {
-                self.split_pane(SplitDirection::Vertical, false, next_tab_id, tx);
+                self.split_pane(SplitDirection::Vertical, false, next_tab_id, tx, config);
             }
             MenuAction::SplitLeft => {
-                self.split_pane(SplitDirection::Horizontal, true, next_tab_id, tx);
+                self.split_pane(SplitDirection::Horizontal, true, next_tab_id, tx, config);
             }
             MenuAction::SplitUp => {
-                self.split_pane(SplitDirection::Vertical, true, next_tab_id, tx);
+                self.split_pane(SplitDirection::Vertical, true, next_tab_id, tx, config);
             }
             MenuAction::ClosePane => {
                 self.close_focused_pane();
@@ -111,7 +113,7 @@ impl FerrumWindow {
             }
             MenuAction::DuplicateTab => {
                 if let Some(idx) = tab_index {
-                    self.duplicate_tab(idx, next_tab_id, tx);
+                    self.duplicate_tab(idx, next_tab_id, tx, config);
                 }
             }
             MenuAction::CloseTab => {

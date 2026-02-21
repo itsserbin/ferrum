@@ -1,6 +1,6 @@
 //! Cursor rendering for the GPU renderer (block, underline, bar styles).
 
-use crate::core::{Cell, Color, CursorStyle, Grid};
+use crate::core::{Cell, CursorStyle, Grid};
 use crate::gui::pane::PaneRect;
 
 impl super::GpuRenderer {
@@ -17,7 +17,7 @@ impl super::GpuRenderer {
         let y = row as f32 * self.metrics.cell_height as f32 + origin_y;
         let cw = self.metrics.cell_width as f32;
         let ch = self.metrics.cell_height as f32;
-        let cursor_color = Color::DEFAULT_FG.to_pixel();
+        let cursor_color = self.palette.default_fg.to_pixel();
 
         match style {
             CursorStyle::BlinkingBlock | CursorStyle::SteadyBlock => {
@@ -38,7 +38,7 @@ impl super::GpuRenderer {
                             gx,
                             gy,
                             (info.x, info.y, info.w, info.h),
-                            Color::DEFAULT_BG.to_pixel(),
+                            self.palette.default_bg.to_pixel(),
                             1.0,
                         );
                     }

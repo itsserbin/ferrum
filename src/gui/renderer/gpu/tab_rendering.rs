@@ -3,10 +3,7 @@
 use super::super::shared::{tab_math, ui_layout};
 use super::super::traits::Renderer;
 use super::super::types::{RoundedRectCmd, TabSlot};
-use super::super::{
-    ACTIVE_TAB_BG, BAR_BG, INACTIVE_TAB_HOVER, RENAME_FIELD_BG, RENAME_FIELD_BORDER,
-    RENAME_SELECTION_BG, SECURITY_ACCENT, TAB_TEXT_ACTIVE, TAB_TEXT_INACTIVE, TabInfo,
-};
+use super::super::TabInfo;
 
 impl super::GpuRenderer {
     /// Draws the tab bar background rectangle.
@@ -18,7 +15,7 @@ impl super::GpuRenderer {
             w: buf_width as f32,
             h: tab_bar_h,
             radius: self.metrics.scaled_px(10) as f32,
-            color: BAR_BG,
+            color: self.palette.bar_bg.to_pixel(),
             opacity: 1.0,
         });
     }
@@ -29,14 +26,14 @@ impl super::GpuRenderer {
         let hover_t = tab.hover_progress.clamp(0.0, 1.0);
 
         if tab.is_active {
-            self.push_rect(tab_x, 0.0, tw as f32, tab_bar_h, ACTIVE_TAB_BG, 1.0);
+            self.push_rect(tab_x, 0.0, tw as f32, tab_bar_h, self.palette.active_tab_bg.to_pixel(), 1.0);
         } else if hover_t > 0.01 {
             self.push_rect(
                 tab_x,
                 0.0,
                 tw as f32,
                 tab_bar_h,
-                INACTIVE_TAB_HOVER,
+                self.palette.inactive_tab_hover.to_pixel(),
                 hover_t.min(1.0),
             );
         }
@@ -63,11 +60,11 @@ impl super::GpuRenderer {
         let radius = self.metrics.scaled_px(6) as f32;
         self.push_rounded_rect_cmd(&RoundedRectCmd {
             x: field_x, y: field_y, w: field_w, h: field_h, radius,
-            color: RENAME_FIELD_BG, opacity: 0.96,
+            color: self.palette.rename_field_bg.to_pixel(), opacity: 0.96,
         });
         self.push_rounded_rect_cmd(&RoundedRectCmd {
             x: field_x, y: field_y, w: field_w, h: field_h, radius,
-            color: RENAME_FIELD_BORDER, opacity: 0.35,
+            color: self.palette.rename_field_border.to_pixel(), opacity: 0.35,
         });
 
         // Rename text characters with optional selection highlight.
@@ -80,12 +77,12 @@ impl super::GpuRenderer {
                     text_y as f32,
                     self.metrics.cell_width as f32,
                     self.metrics.cell_height as f32,
-                    RENAME_SELECTION_BG,
+                    self.palette.rename_selection_bg.to_pixel(),
                     0.94,
                 );
-                self.push_text(cx, text_y as f32, &ch.to_string(), BAR_BG, 1.0);
+                self.push_text(cx, text_y as f32, &ch.to_string(), self.palette.bar_bg.to_pixel(), 1.0);
             } else {
-                self.push_text(cx, text_y as f32, &ch.to_string(), TAB_TEXT_ACTIVE, 1.0);
+                self.push_text(cx, text_y as f32, &ch.to_string(), self.palette.tab_text_active.to_pixel(), 1.0);
             }
         }
 
@@ -102,7 +99,7 @@ impl super::GpuRenderer {
             self.metrics
                 .cell_height
                 .saturating_sub(self.metrics.scaled_px(2)) as f32,
-            TAB_TEXT_ACTIVE,
+            self.palette.tab_text_active.to_pixel(),
             0.9,
         );
     }
@@ -116,9 +113,9 @@ impl super::GpuRenderer {
         text_y: u32,
     ) {
         let fg_color = if slot.tab.is_active {
-            TAB_TEXT_ACTIVE
+            self.palette.tab_text_active.to_pixel()
         } else {
-            TAB_TEXT_INACTIVE
+            self.palette.tab_text_inactive.to_pixel()
         };
 
         let m = self.tab_layout_metrics();
@@ -178,9 +175,9 @@ impl super::GpuRenderer {
     ) {
         use crate::gui::renderer::shared::path_display::format_tab_path;
         let fg_color = if tab.is_active {
-            TAB_TEXT_ACTIVE
+            self.palette.tab_text_active.to_pixel()
         } else {
-            TAB_TEXT_INACTIVE
+            self.palette.tab_text_inactive.to_pixel()
         };
 
         let m = self.tab_layout_metrics();
@@ -207,7 +204,7 @@ impl super::GpuRenderer {
             return;
         };
 
-        let color = SECURITY_ACCENT.to_pixel();
+        let color = self.palette.security_accent.to_pixel();
         let spans = ui_layout::shield_icon_spans(sw);
 
         for (dy, &(left, right)) in spans.iter().enumerate() {

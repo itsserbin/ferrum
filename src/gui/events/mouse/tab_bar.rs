@@ -1,3 +1,4 @@
+use crate::config::AppConfig;
 use crate::gui::renderer::shared::tab_math;
 use crate::gui::renderer::{TabBarHit, TabInfo};
 use crate::gui::*;
@@ -77,6 +78,7 @@ impl FerrumWindow {
         my: f64,
         next_tab_id: &mut u64,
         tx: &mpsc::Sender<PtyEvent>,
+        config: &AppConfig,
     ) {
         if state != ElementState::Pressed {
             // Mouse release in tab bar area.
@@ -131,7 +133,7 @@ impl FerrumWindow {
                 self.last_topbar_empty_click = None;
                 let size = self.window.inner_size();
                 let (rows, cols) = self.calc_grid_size(size.width, size.height);
-                self.new_tab(rows, cols, next_tab_id, tx, None);
+                self.new_tab(rows, cols, next_tab_id, tx, None, config);
             }
             #[cfg(not(target_os = "macos"))]
             TabBarHit::WindowButton(btn) => {
@@ -145,6 +147,12 @@ impl FerrumWindow {
                 self.last_topbar_empty_click = None;
                 self.last_tab_click = None;
                 self.toggle_pin();
+            }
+            #[cfg(not(target_os = "macos"))]
+            TabBarHit::SettingsButton => {
+                self.last_topbar_empty_click = None;
+                self.last_tab_click = None;
+                self.toggle_settings_overlay(config);
             }
         }
     }

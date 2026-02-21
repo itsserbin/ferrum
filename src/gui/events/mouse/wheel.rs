@@ -1,5 +1,5 @@
 use crate::gui::input::encode_mouse_event;
-use crate::gui::pane::{DIVIDER_WIDTH, PANE_INNER_PADDING, PaneId};
+use crate::gui::pane::{DIVIDER_WIDTH, PaneId};
 use crate::gui::*;
 
 impl FerrumWindow {
@@ -25,7 +25,7 @@ impl FerrumWindow {
         let leaf = tab.pane_tree.find_leaf(pane_id)?;
         let terminal_rect = self.terminal_content_rect();
         let pane_pad = if tab.has_multiple_panes() {
-            self.backend.scaled_px(PANE_INNER_PADDING)
+            self.backend.pane_inner_padding_px()
         } else {
             0
         };

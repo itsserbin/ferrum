@@ -20,6 +20,7 @@ use super::types::TabSlot;
 
 impl CpuRenderer {
     /// Draws top tab bar including tabs, controls, and separators.
+    #[allow(clippy::too_many_arguments)]
     pub fn draw_tab_bar(
         &mut self,
         target: &mut RenderTarget<'_>,
@@ -28,6 +29,7 @@ impl CpuRenderer {
         mouse_pos: (f64, f64),
         tab_offsets: Option<&[f32]>,
         pinned: bool,
+        settings_open: bool,
     ) {
         let tab_bar_height = self.tab_bar_height_px();
         let bar_h = tab_bar_height as usize;
@@ -46,7 +48,7 @@ impl CpuRenderer {
                     w: buf_width as u32,
                     h: tab_bar_height,
                     radius: bar_radius,
-                    color: BAR_BG,
+                    color: self.palette.bar_bg.to_pixel(),
                     alpha: 255,
                 },
             );
@@ -90,15 +92,15 @@ impl CpuRenderer {
                         w: pw,
                         h: ph,
                         radius: self.scaled_px(5),
-                        color: INACTIVE_TAB_HOVER,
+                        color: self.palette.inactive_tab_hover.to_pixel(),
                         alpha: 255,
                     },
                 );
             }
             let plus_fg = if plus_hover {
-                Color::from_pixel(TAB_TEXT_ACTIVE)
+                self.palette.tab_text_active
             } else {
-                Color::from_pixel(TAB_TEXT_INACTIVE)
+                self.palette.tab_text_inactive
             };
             self.draw_tab_plus_icon(target, plus_rect, plus_fg);
         }
@@ -106,8 +108,14 @@ impl CpuRenderer {
         #[cfg(not(target_os = "macos"))]
         self.draw_pin_button(target, mouse_pos, pinned);
 
+        #[cfg(not(target_os = "macos"))]
+        self.draw_gear_button(target, mouse_pos, settings_open);
+
         #[cfg(target_os = "macos")]
         let _ = pinned;
+
+        #[cfg(target_os = "macos")]
+        let _ = settings_open;
 
         #[cfg(not(target_os = "macos"))]
         self.draw_window_buttons(target, mouse_pos);
@@ -119,7 +127,7 @@ impl CpuRenderer {
                 let idx = py * target.width + px;
                 if idx < target.buffer.len() {
                     target.buffer[idx] =
-                        Self::blend_pixel(target.buffer[idx], TAB_BORDER, 180);
+                        Self::blend_pixel(target.buffer[idx], self.palette.tab_border.to_pixel(), 180);
                 }
             }
         }
@@ -138,7 +146,7 @@ impl CpuRenderer {
 
         if slot.tab.is_active {
             // Active tab: flat fill that merges with terminal.
-            let fill_bg = ACTIVE_TAB_BG;
+            let fill_bg = self.palette.active_tab_bg.to_pixel();
             for py in 0..tab_bar_height as usize {
                 if py >= bar_h {
                     break;
@@ -155,7 +163,7 @@ impl CpuRenderer {
             }
         } else if hover_t > 0.01 {
             // Inactive tab hover: flat fill highlight.
-            let fill_bg = INACTIVE_TAB_HOVER;
+            let fill_bg = self.palette.inactive_tab_hover.to_pixel();
             let alpha = (hover_t * 220.0).round().clamp(0.0, 255.0) as u8;
             for py in 0..tab_bar_height as usize {
                 if py >= bar_h {

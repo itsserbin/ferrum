@@ -2,7 +2,7 @@
 
 use super::super::shared::scrollbar_math;
 use super::super::types::{RoundedRectCmd, ScrollbarState};
-use super::super::{SCROLLBAR_COLOR, SCROLLBAR_HOVER_COLOR, SCROLLBAR_MIN_THUMB};
+use super::super::SCROLLBAR_MIN_THUMB;
 use crate::gui::pane::PaneRect;
 
 impl super::GpuRenderer {
@@ -41,11 +41,11 @@ impl super::GpuRenderer {
         let radius = self.metrics.scaled_px(3) as f32;
 
         let color = if state.hover {
-            SCROLLBAR_HOVER_COLOR.to_pixel()
+            self.palette.scrollbar_hover_color.to_pixel()
         } else {
-            SCROLLBAR_COLOR.to_pixel()
+            self.palette.scrollbar_color.to_pixel()
         };
-        let base_alpha = super::super::SCROLLBAR_BASE_ALPHA as f32 / 255.0;
+        let base_alpha = self.palette.scrollbar_base_alpha as f32 / 255.0;
         let alpha = base_alpha * state.opacity;
 
         self.push_rounded_rect_cmd(&RoundedRectCmd {
@@ -86,11 +86,11 @@ impl super::GpuRenderer {
         let radius = self.metrics.scaled_px(3) as f32;
 
         let color = if state.hover {
-            SCROLLBAR_HOVER_COLOR.to_pixel()
+            self.palette.scrollbar_hover_color.to_pixel()
         } else {
-            SCROLLBAR_COLOR.to_pixel()
+            self.palette.scrollbar_color.to_pixel()
         };
-        let base_alpha = super::super::SCROLLBAR_BASE_ALPHA as f32 / 255.0;
+        let base_alpha = self.palette.scrollbar_base_alpha as f32 / 255.0;
         let alpha = base_alpha * state.opacity;
 
         self.push_rounded_rect_cmd(&RoundedRectCmd {

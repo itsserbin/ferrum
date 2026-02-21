@@ -1,13 +1,10 @@
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
-use crate::core::Color;
-
 use super::super::RoundedShape;
 use super::super::shared::{tab_math, ui_layout};
 use super::super::traits::Renderer;
 use super::super::types::{RenderTarget, TabSlot};
-use super::super::{ACTIVE_ACCENT, CpuRenderer};
-use super::{RENAME_FIELD_BG, RENAME_FIELD_BORDER, TAB_TEXT_ACTIVE};
+use super::super::CpuRenderer;
 
 impl CpuRenderer {
     /// Renders the inline rename field: background, border, text with selection, and cursor.
@@ -53,7 +50,7 @@ impl CpuRenderer {
                 w: r.w,
                 h: r.h,
                 radius,
-                color: RENAME_FIELD_BG,
+                color: self.palette.rename_field_bg.to_pixel(),
                 alpha: 245,
             },
         );
@@ -65,7 +62,7 @@ impl CpuRenderer {
                 w: r.w,
                 h: r.h,
                 radius,
-                color: RENAME_FIELD_BORDER,
+                color: self.palette.rename_field_border.to_pixel(),
                 alpha: 90,
             },
         );
@@ -85,10 +82,10 @@ impl CpuRenderer {
             let cx = text_x + ci as u32 * self.metrics.cell_width;
             let selected = selection_chars.is_some_and(|(start, end)| ci >= start && ci < end);
             if selected {
-                self.draw_bg(target, cx, text_y, ACTIVE_ACCENT);
-                self.draw_char(target, cx, text_y, ch, Color::DEFAULT_BG);
+                self.draw_bg(target, cx, text_y, self.palette.active_accent);
+                self.draw_char(target, cx, text_y, ch, self.palette.default_bg);
             } else {
-                self.draw_char(target, cx, text_y, ch, Color::DEFAULT_FG);
+                self.draw_char(target, cx, text_y, ch, self.palette.default_fg);
             }
         }
     }
@@ -118,7 +115,7 @@ impl CpuRenderer {
             for px in cursor_x as usize..(cursor_x + cursor_w) as usize {
                 if px < target.width && py * target.width + px < target.buffer.len() {
                     let idx = py * target.width + px;
-                    target.buffer[idx] = Self::blend_pixel(target.buffer[idx], TAB_TEXT_ACTIVE, 220);
+                    target.buffer[idx] = Self::blend_pixel(target.buffer[idx], self.palette.tab_text_active.to_pixel(), 220);
                 }
             }
         }

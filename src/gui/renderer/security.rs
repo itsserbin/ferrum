@@ -94,12 +94,18 @@ impl CpuRenderer {
         target: &mut RenderTarget<'_>,
         popup: &SecurityPopup,
     ) {
+        let colors = super::types::PopupColors {
+            accent: self.palette.security_accent.to_pixel(),
+            menu_bg: self.palette.menu_bg.to_pixel(),
+            default_fg: self.palette.default_fg.to_pixel(),
+        };
         let layout = popup.layout(
             self.metrics.cell_width,
             self.metrics.cell_height,
             self.ui_scale(),
             target.width as u32,
             target.height as u32,
+            &colors,
         );
 
         self.draw_rounded_rect_cmd(target, &layout.bg);

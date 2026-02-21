@@ -18,15 +18,15 @@ impl CpuRenderer {
         let y = row as u32 * self.metrics.cell_height
             + self.tab_bar_height_px()
             + self.window_padding_px();
-        let cursor_pixel = Color::DEFAULT_FG.to_pixel();
+        let cursor_pixel = self.palette.default_fg.to_pixel();
 
         match style {
             CursorStyle::BlinkingBlock | CursorStyle::SteadyBlock => {
                 // Filled block with inverted foreground/background.
                 let cell = grid.get(row, col).unwrap_or(&Cell::DEFAULT);
-                self.draw_bg(target, x, y, Color::DEFAULT_FG);
+                self.draw_bg(target, x, y, self.palette.default_fg);
                 if cell.character != ' ' {
-                    self.draw_char(target, x, y, cell.character, Color::DEFAULT_BG);
+                    self.draw_char(target, x, y, cell.character, self.palette.default_bg);
                 }
             }
             CursorStyle::BlinkingUnderline | CursorStyle::SteadyUnderline => {
@@ -79,7 +79,7 @@ impl CpuRenderer {
         let buf_height = target.height;
         let x = col as u32 * self.metrics.cell_width + rect.x;
         let y = row as u32 * self.metrics.cell_height + rect.y;
-        let cursor_pixel = Color::DEFAULT_FG.to_pixel();
+        let cursor_pixel = self.palette.default_fg.to_pixel();
 
         let rect_right = (rect.x + rect.width) as usize;
         let rect_bottom = (rect.y + rect.height) as usize;
@@ -87,9 +87,9 @@ impl CpuRenderer {
         match style {
             CursorStyle::BlinkingBlock | CursorStyle::SteadyBlock => {
                 let cell = grid.get(row, col).unwrap_or(&Cell::DEFAULT);
-                self.draw_bg(target, x, y, Color::DEFAULT_FG);
+                self.draw_bg(target, x, y, self.palette.default_fg);
                 if cell.character != ' ' {
-                    self.draw_char(target, x, y, cell.character, Color::DEFAULT_BG);
+                    self.draw_char(target, x, y, cell.character, self.palette.default_bg);
                 }
             }
             CursorStyle::BlinkingUnderline | CursorStyle::SteadyUnderline => {

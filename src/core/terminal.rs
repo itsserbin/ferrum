@@ -49,6 +49,9 @@ pub struct Terminal {
     alt_saved_cursor: (usize, usize), // Saved separately for alt-screen enter/leave.
     current_fg: Color,
     current_bg: Color,
+    pub default_fg: Color,
+    pub default_bg: Color,
+    pub ansi_palette: [Color; 16],
     current_bold: bool,
     current_reverse: bool,
     current_underline: bool,
@@ -57,7 +60,7 @@ pub struct Terminal {
     saved_scroll_top: usize,
     saved_scroll_bottom: usize,
     pub scrollback: VecDeque<Row>,
-    max_scrollback: usize,
+    pub max_scrollback: usize,
     pub decckm: bool,               // Application Cursor Key Mode (ESC[?1h/l)
     pub cursor_visible: bool,       // DECTCEM (mode 25)
     pub pending_responses: Vec<u8>, // Bytes queued for PTY replies.
@@ -74,6 +77,18 @@ pub struct Terminal {
 
 impl Terminal {
     pub fn new(rows: usize, cols: usize) -> Self {
+        let palette = crate::config::ThemeChoice::FerrumDark.resolve();
+        Self::with_config(rows, cols, 1000, Color::SENTINEL_FG, Color::SENTINEL_BG, palette.ansi)
+    }
+
+    pub fn with_config(
+        rows: usize,
+        cols: usize,
+        max_scrollback: usize,
+        default_fg: Color,
+        default_bg: Color,
+        ansi_palette: [Color; 16],
+    ) -> Self {
         Self {
             grid: Grid::new(rows, cols),
             alt_grid: None,
@@ -81,8 +96,11 @@ impl Terminal {
             cursor_col: 0,
             saved_cursor: (0, 0),
             alt_saved_cursor: (0, 0),
-            current_fg: Color::DEFAULT_FG,
-            current_bg: Color::DEFAULT_BG,
+            current_fg: default_fg,
+            current_bg: default_bg,
+            default_fg,
+            default_bg,
+            ansi_palette,
             current_bold: false,
             current_reverse: false,
             current_underline: false,
@@ -91,7 +109,7 @@ impl Terminal {
             saved_scroll_top: 0,
             saved_scroll_bottom: rows - 1,
             scrollback: VecDeque::new(),
-            max_scrollback: 1000,
+            max_scrollback,
             decckm: false,
             cursor_visible: true,
             pending_responses: Vec::new(),
@@ -104,6 +122,15 @@ impl Terminal {
             scrollback_popped: 0,
             parser: Parser::new(),
             cwd: None,
+        }
+    }
+
+    /// Palette-aware 256-color lookup: indices 0-15 use the current ANSI palette,
+    /// 16-231 use the 6x6x6 color cube, 232-255 use the grayscale ramp.
+    pub fn color_from_256(&self, n: u16) -> Color {
+        match n {
+            0..=15 => self.ansi_palette[n as usize],
+            _ => Color::from_256(n),
         }
     }
 
@@ -236,6 +263,59 @@ impl Terminal {
             return false;
         }
         matches!(self.param(params, 0), 20 | 21)
+    }
+
+    /// Recolors all cells when the theme changes.
+    ///
+    /// Maps old default/ANSI colors to new ones; leaves custom SGR colors untouched.
+    pub fn recolor(
+        &mut self,
+        old_fg: Color,
+        old_bg: Color,
+        old_ansi: &[Color; 16],
+        new_fg: Color,
+        new_bg: Color,
+        new_ansi: &[Color; 16],
+    ) {
+        let remap = |color: Color| -> Color {
+            if color == old_fg {
+                return new_fg;
+            }
+            if color == old_bg {
+                return new_bg;
+            }
+            for (i, old_c) in old_ansi.iter().enumerate() {
+                if color == *old_c {
+                    return new_ansi[i];
+                }
+            }
+            color
+        };
+
+        self.grid.recolor_cells(|cell| {
+            cell.fg = remap(cell.fg);
+            cell.bg = remap(cell.bg);
+        });
+
+        if let Some(ref mut alt) = self.alt_grid {
+            alt.recolor_cells(|cell| {
+                cell.fg = remap(cell.fg);
+                cell.bg = remap(cell.bg);
+            });
+        }
+
+        for row in &mut self.scrollback {
+            for cell in &mut row.cells {
+                cell.fg = remap(cell.fg);
+                cell.bg = remap(cell.bg);
+            }
+        }
+
+        self.current_fg = remap(self.current_fg);
+        self.current_bg = remap(self.current_bg);
+        self.default_fg = new_fg;
+        self.default_bg = new_bg;
+        self.ansi_palette = *new_ansi;
     }
 
     pub fn full_reset(&mut self) {

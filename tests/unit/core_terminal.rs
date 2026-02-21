@@ -1,4 +1,5 @@
 use super::Terminal;
+use crate::config::ThemeChoice;
 use crate::core::Color;
 
 // ── Alternate screen mode ──
@@ -22,8 +23,8 @@ fn applies_sgr_and_resets_attributes() {
     let mut term = Terminal::new(2, 4);
     term.process(b"\x1b[31mA\x1b[0mB");
 
-    assert_eq!(term.grid.get(0, 0).unwrap().fg, Color::ANSI[1]);
-    assert_eq!(term.grid.get(0, 1).unwrap().fg, Color::DEFAULT_FG);
+    assert_eq!(term.grid.get(0, 0).unwrap().fg, term.ansi_palette[1]);
+    assert_eq!(term.grid.get(0, 1).unwrap().fg, Color::SENTINEL_FG);
 }
 
 // ── Device status reports ──
@@ -336,4 +337,67 @@ fn osc7_with_st_terminator() {
     let mut term = Terminal::new(4, 80);
     term.process(b"\x1b]7;file:///tmp/test\x1b\\");
     assert_eq!(term.cwd.as_deref(), Some("/tmp/test"));
+}
+
+// ── Theme recoloring ──
+
+#[test]
+fn recolor_remaps_default_fg_bg() {
+    let old_fg = Color::SENTINEL_FG;
+    let old_bg = Color::SENTINEL_BG;
+    let new_fg = Color { r: 46, g: 52, b: 64 };    // Ferrum Light fg
+    let new_bg = Color { r: 245, g: 240, b: 235 };  // Ferrum Light bg
+    let ansi = ThemeChoice::FerrumDark.resolve().ansi;
+
+    let mut term = Terminal::new(4, 4);
+    assert_eq!(term.grid.get(0, 0).unwrap().fg, old_fg);
+    assert_eq!(term.grid.get(0, 0).unwrap().bg, old_bg);
+
+    term.recolor(old_fg, old_bg, &ansi, new_fg, new_bg, &ansi);
+
+    assert_eq!(term.grid.get(0, 0).unwrap().fg, new_fg);
+    assert_eq!(term.grid.get(0, 0).unwrap().bg, new_bg);
+    assert_eq!(term.default_fg, new_fg);
+    assert_eq!(term.default_bg, new_bg);
+}
+
+#[test]
+fn recolor_leaves_custom_sgr_colors_untouched() {
+    let old_fg = Color::SENTINEL_FG;
+    let old_bg = Color::SENTINEL_BG;
+    let new_fg = Color { r: 46, g: 52, b: 64 };
+    let new_bg = Color { r: 245, g: 240, b: 235 };
+    let ansi = ThemeChoice::FerrumDark.resolve().ansi;
+
+    let mut term = Terminal::new(4, 10);
+    term.process(b"\x1b[38;2;255;128;0mHello");
+
+    let custom_fg = Color { r: 255, g: 128, b: 0 };
+    assert_eq!(term.grid.get(0, 0).unwrap().fg, custom_fg);
+
+    term.recolor(old_fg, old_bg, &ansi, new_fg, new_bg, &ansi);
+
+    assert_eq!(term.grid.get(0, 0).unwrap().fg, custom_fg);
+    assert_eq!(term.grid.get(0, 0).unwrap().bg, new_bg);
+}
+
+#[test]
+fn recolor_remaps_ansi_palette_colors() {
+    let old_fg = Color::SENTINEL_FG;
+    let old_bg = Color::SENTINEL_BG;
+    let old_ansi = ThemeChoice::FerrumDark.resolve().ansi;
+    let new_ansi: [Color; 16] = {
+        let mut a = old_ansi;
+        a[1] = Color { r: 191, g: 59, b: 59 }; // Ferrum Light red
+        a
+    };
+
+    let mut term = Terminal::new(4, 10);
+    term.process(b"\x1b[31mRed");
+
+    assert_eq!(term.grid.get(0, 0).unwrap().fg, old_ansi[1]);
+
+    term.recolor(old_fg, old_bg, &old_ansi, old_fg, old_bg, &new_ansi);
+
+    assert_eq!(term.grid.get(0, 0).unwrap().fg, new_ansi[1]);
 }

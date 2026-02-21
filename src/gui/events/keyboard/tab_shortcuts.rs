@@ -1,3 +1,4 @@
+use crate::config::AppConfig;
 use crate::gui::*;
 
 impl FerrumWindow {
@@ -9,9 +10,10 @@ impl FerrumWindow {
         physical: &PhysicalKey,
         next_tab_id: &mut u64,
         tx: &mpsc::Sender<PtyEvent>,
+        config: &AppConfig,
     ) -> Option<bool> {
         #[cfg(target_os = "macos")]
-        let _ = (&next_tab_id, tx);
+        let _ = (&next_tab_id, tx, config);
 
         if Self::physical_key_is(physical, KeyCode::KeyT) {
             #[cfg(target_os = "macos")]
@@ -24,7 +26,7 @@ impl FerrumWindow {
                 let cwd = self.active_leaf_ref().and_then(|l| l.cwd());
                 let size = self.window.inner_size();
                 let (rows, cols) = self.calc_grid_size(size.width, size.height);
-                self.new_tab(rows, cols, next_tab_id, tx, cwd);
+                self.new_tab(rows, cols, next_tab_id, tx, cwd, config);
             }
             return Some(true);
         }

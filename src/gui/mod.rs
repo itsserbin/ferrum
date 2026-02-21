@@ -6,6 +6,7 @@ mod menus;
 mod pane;
 mod platform;
 mod renderer;
+mod settings;
 mod state;
 mod tabs;
 
@@ -27,11 +28,7 @@ use winit::window::{CursorIcon, ResizeDirection, Window, WindowId};
 
 use crate::core::terminal::Terminal;
 use crate::core::{MouseMode, Position, SecurityGuard, Selection};
-#[cfg(not(target_os = "macos"))]
-use crate::gui::renderer::TAB_BAR_HEIGHT;
-use crate::gui::renderer::{
-    CpuRenderer, Renderer as _, RendererBackend, SecurityPopup, WINDOW_PADDING,
-};
+use crate::gui::renderer::{CpuRenderer, Renderer as _, RendererBackend, SecurityPopup};
 use crate::pty;
 use crate::update;
 
@@ -47,8 +44,12 @@ use self::state::{
 
 impl FerrumWindow {
     /// Creates a new FerrumWindow wrapping an already-created winit window and renderer backend.
-    fn new(window: Arc<Window>, context: &Context<winit::event_loop::OwnedDisplayHandle>) -> Self {
-        let mut backend = RendererBackend::new(window.clone(), context);
+    fn new(
+        window: Arc<Window>,
+        context: &Context<winit::event_loop::OwnedDisplayHandle>,
+        config: &crate::config::AppConfig,
+    ) -> Self {
+        let mut backend = RendererBackend::new(window.clone(), context, config);
         backend.set_scale(window.scale_factor());
 
         FerrumWindow {
@@ -95,6 +96,11 @@ impl FerrumWindow {
             pinned: false,
             divider_drag: None,
             last_cwd_poll: std::time::Instant::now(),
+            cursor_blink_interval_ms: config.terminal.cursor_blink_interval_ms,
+            settings_overlay: None,
+            pending_config: None,
+            #[cfg(target_os = "macos")]
+            settings_tx: std::sync::mpsc::channel().0,
         }
     }
 
@@ -224,6 +230,9 @@ impl App {
         let (tx, rx) = mpsc::channel::<PtyEvent>();
         let (update_tx, update_rx) = mpsc::channel::<update::AvailableRelease>();
         update::spawn_update_checker(update_tx);
+        let config = crate::config::load_config();
+        #[cfg(target_os = "macos")]
+        let (settings_tx, settings_rx) = std::sync::mpsc::channel();
         App {
             windows: std::collections::HashMap::new(),
             context: None,
@@ -232,6 +241,11 @@ impl App {
             rx,
             update_rx,
             available_release: None,
+            config,
+            #[cfg(target_os = "macos")]
+            settings_tx,
+            #[cfg(target_os = "macos")]
+            settings_rx,
         }
     }
 
@@ -244,18 +258,19 @@ impl App {
         let context = self.context.as_ref()?;
 
         // Use default metrics for minimum window size calculation.
-        let tmp = CpuRenderer::new();
+        let tmp = CpuRenderer::new(&self.config);
         let cw = tmp.cell_width();
         let ch = tmp.cell_height();
+        let wp = self.config.layout.window_padding;
         #[cfg(target_os = "macos")]
         let min_size = winit::dpi::LogicalSize::new(
-            (cw * MIN_WINDOW_COLS + WINDOW_PADDING * 2) as f64,
-            (ch * MIN_WINDOW_ROWS + WINDOW_PADDING * 2) as f64,
+            (cw * MIN_WINDOW_COLS + wp * 2) as f64,
+            (ch * MIN_WINDOW_ROWS + wp * 2) as f64,
         );
         #[cfg(not(target_os = "macos"))]
         let min_size = winit::dpi::LogicalSize::new(
-            (cw * MIN_WINDOW_COLS + WINDOW_PADDING * 2) as f64,
-            (ch * MIN_WINDOW_ROWS + TAB_BAR_HEIGHT + WINDOW_PADDING * 2) as f64,
+            (cw * MIN_WINDOW_COLS + wp * 2) as f64,
+            (ch * MIN_WINDOW_ROWS + self.config.layout.tab_bar_height + wp * 2) as f64,
         );
         let mut attrs = Window::default_attributes()
             .with_title("Ferrum")
@@ -297,7 +312,11 @@ impl App {
         platform::macos::setup_toolbar(&window);
 
         let id = window.id();
-        let mut ferrum_win = FerrumWindow::new(window, context);
+        let mut ferrum_win = FerrumWindow::new(window, context, &self.config);
+        #[cfg(target_os = "macos")]
+        {
+            ferrum_win.settings_tx = self.settings_tx.clone();
+        }
         ferrum_win.sync_window_title(self.available_release.as_ref());
         self.windows.insert(id, ferrum_win);
         Some(id)

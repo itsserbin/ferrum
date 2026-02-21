@@ -61,9 +61,6 @@ pub(super) struct DividerHit {
 /// Width of the visible divider between panes, in pixels.
 pub(super) const DIVIDER_WIDTH: u32 = 1;
 
-/// Inner padding for each pane (base pixels, scaled by DPI).
-pub(super) const PANE_INNER_PADDING: u32 = 4;
-
 /// Width of the hit zone around a divider for mouse interaction, in pixels.
 pub(super) const DIVIDER_HIT_ZONE: u32 = 6;
 
@@ -211,6 +208,17 @@ impl PaneNode {
         match self {
             PaneNode::Leaf(_) => 1,
             PaneNode::Split(split) => split.first.leaf_count() + split.second.leaf_count(),
+        }
+    }
+
+    /// Calls a closure on every leaf in the tree (mutable).
+    pub(super) fn for_each_leaf_mut(&mut self, f: &mut impl FnMut(&mut PaneLeaf)) {
+        match self {
+            PaneNode::Leaf(leaf) => f(leaf),
+            PaneNode::Split(split) => {
+                split.first.for_each_leaf_mut(f);
+                split.second.for_each_leaf_mut(f);
+            }
         }
     }
 

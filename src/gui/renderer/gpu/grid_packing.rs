@@ -30,7 +30,7 @@ impl super::GpuRenderer {
             return;
         }
 
-        let bg = Color::DEFAULT_BG.to_pixel();
+        let bg = self.palette.default_bg.to_pixel();
         self.grid_batches.push(GridBatch {
             cells: vec![PackedCell {
                 codepoint: 0,
@@ -95,19 +95,20 @@ impl super::GpuRenderer {
                     attrs |= 8;
                 }
 
-                let mut fg = cell.fg;
+                let mut fg = if cell.fg == Color::SENTINEL_FG { self.palette.default_fg } else { cell.fg };
+                let bg_color = if cell.bg == Color::SENTINEL_BG { self.palette.default_bg } else { cell.bg };
                 if cell.bold {
-                    fg = fg.bold_bright();
+                    fg = fg.bold_bright_with_palette(&self.palette.ansi);
                 }
                 if fg_dim > 0.0 {
                     fg = fg.dimmed(fg_dim);
                 }
-                let mut bg = cell.bg.to_pixel();
+                let mut bg = bg_color.to_pixel();
                 if selected {
                     bg = super::super::blend_rgb(
                         bg,
-                        super::super::SELECTION_OVERLAY_COLOR,
-                        super::super::SELECTION_OVERLAY_ALPHA,
+                        self.palette.selection_overlay_color.to_pixel(),
+                        self.palette.selection_overlay_alpha,
                     );
                 }
 
@@ -157,7 +158,7 @@ impl super::GpuRenderer {
                 cell_height: self.metrics.cell_height,
                 origin_x: region.x,
                 origin_y: region.y,
-                bg_color: Color::DEFAULT_BG.to_pixel(),
+                bg_color: self.palette.default_bg.to_pixel(),
                 _pad0: 0,
                 tex_width: self.width,
                 tex_height: self.height,

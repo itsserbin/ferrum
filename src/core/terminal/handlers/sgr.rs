@@ -20,14 +20,14 @@ pub(in super::super) fn handle_sgr(term: &mut Terminal, params: &Params) {
             22 => term.set_bold(false),
             24 => term.set_underline(false),
             27 => term.set_reverse(false),
-            30..=37 => term.set_fg(Color::ANSI[(code - 30) as usize]),
+            30..=37 => term.set_fg(term.ansi_palette[(code - 30) as usize]),
             38 => {
                 // Extended foreground: 38;5;N (256-color) or 38;2;R;G;B (true color)
                 if let Some(sub) = iter.next() {
                     match sub[0] {
                         5 => {
                             if let Some(n) = iter.next() {
-                                term.set_fg(Color::from_256(n[0]));
+                                term.set_fg(term.color_from_256(n[0]));
                             }
                         }
                         2 => {
@@ -40,15 +40,15 @@ pub(in super::super) fn handle_sgr(term: &mut Terminal, params: &Params) {
                     }
                 }
             }
-            39 => term.set_fg(Color::DEFAULT_FG),
-            40..=47 => term.set_bg(Color::ANSI[(code - 40) as usize]),
+            39 => term.set_fg(term.default_fg),
+            40..=47 => term.set_bg(term.ansi_palette[(code - 40) as usize]),
             48 => {
                 // Extended background: 48;5;N (256-color) or 48;2;R;G;B (true color)
                 if let Some(sub) = iter.next() {
                     match sub[0] {
                         5 => {
                             if let Some(n) = iter.next() {
-                                term.set_bg(Color::from_256(n[0]));
+                                term.set_bg(term.color_from_256(n[0]));
                             }
                         }
                         2 => {
@@ -61,9 +61,9 @@ pub(in super::super) fn handle_sgr(term: &mut Terminal, params: &Params) {
                     }
                 }
             }
-            49 => term.set_bg(Color::DEFAULT_BG),
-            90..=97 => term.set_fg(Color::ANSI[(code - 90 + 8) as usize]),
-            100..=107 => term.set_bg(Color::ANSI[(code - 100 + 8) as usize]),
+            49 => term.set_bg(term.default_bg),
+            90..=97 => term.set_fg(term.ansi_palette[(code - 90 + 8) as usize]),
+            100..=107 => term.set_bg(term.ansi_palette[(code - 100 + 8) as usize]),
             _ => {}
         }
     }
@@ -92,10 +92,10 @@ mod tests {
         term.process(b"\x1b[1;31mA\x1b[0mB");
         let a = cell_at(&term, 0, 0);
         assert!(a.bold);
-        assert_eq!(a.fg, Color::ANSI[1]);
+        assert_eq!(a.fg, term.ansi_palette[1]);
         let b = cell_at(&term, 0, 1);
         assert!(!b.bold);
-        assert_eq!(b.fg, Color::DEFAULT_FG);
+        assert_eq!(b.fg, Color::SENTINEL_FG);
     }
 
     #[test]
@@ -141,7 +141,7 @@ mod tests {
             let term = write_colored(seq.as_bytes());
             assert_eq!(
                 cell_at(&term, 0, 0).fg,
-                Color::ANSI[i as usize],
+                term.ansi_palette[i as usize],
                 "SGR {} should set fg to ANSI[{}]",
                 30 + i,
                 i
@@ -156,7 +156,7 @@ mod tests {
             let term = write_colored(seq.as_bytes());
             assert_eq!(
                 cell_at(&term, 0, 0).bg,
-                Color::ANSI[i as usize],
+                term.ansi_palette[i as usize],
                 "SGR {} should set bg to ANSI[{}]",
                 40 + i,
                 i
@@ -171,7 +171,7 @@ mod tests {
             let term = write_colored(seq.as_bytes());
             assert_eq!(
                 cell_at(&term, 0, 0).fg,
-                Color::ANSI[(8 + i) as usize],
+                term.ansi_palette[(8 + i) as usize],
                 "SGR {} should set fg to ANSI[{}]",
                 90 + i,
                 8 + i
@@ -186,7 +186,7 @@ mod tests {
             let term = write_colored(seq.as_bytes());
             assert_eq!(
                 cell_at(&term, 0, 0).bg,
-                Color::ANSI[(8 + i) as usize],
+                term.ansi_palette[(8 + i) as usize],
                 "SGR {} should set bg to ANSI[{}]",
                 100 + i,
                 8 + i
@@ -235,13 +235,13 @@ mod tests {
     #[test]
     fn sgr_default_fg() {
         let term = write_colored(b"\x1b[31m\x1b[39m");
-        assert_eq!(cell_at(&term, 0, 0).fg, Color::DEFAULT_FG);
+        assert_eq!(cell_at(&term, 0, 0).fg, Color::SENTINEL_FG);
     }
 
     #[test]
     fn sgr_default_bg() {
         let term = write_colored(b"\x1b[41m\x1b[49m");
-        assert_eq!(cell_at(&term, 0, 0).bg, Color::DEFAULT_BG);
+        assert_eq!(cell_at(&term, 0, 0).bg, Color::SENTINEL_BG);
     }
 
     #[test]
@@ -250,7 +250,7 @@ mod tests {
         let cell = cell_at(&term, 0, 0);
         assert!(cell.bold);
         assert!(cell.underline);
-        assert_eq!(cell.fg, Color::ANSI[1]);
+        assert_eq!(cell.fg, term.ansi_palette[1]);
     }
 
     #[test]
@@ -259,6 +259,6 @@ mod tests {
         term.process(b"\x1b[1;31mA\x1b[mB");
         let b = cell_at(&term, 0, 1);
         assert!(!b.bold);
-        assert_eq!(b.fg, Color::DEFAULT_FG);
+        assert_eq!(b.fg, Color::SENTINEL_FG);
     }
 }

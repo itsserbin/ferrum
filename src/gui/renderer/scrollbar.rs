@@ -3,7 +3,7 @@ use super::*;
 use super::{RenderTarget, ScrollbarState};
 use crate::gui::pane::PaneRect;
 
-// SCROLLBAR_BASE_ALPHA and SCROLLBAR_MIN_THUMB come from `use super::*`.
+// SCROLLBAR_MIN_THUMB comes from `use super::*`.
 
 impl CpuRenderer {
     /// Renders an overlay scrollbar thumb with alpha blending over existing buffer content.
@@ -51,11 +51,11 @@ impl CpuRenderer {
 
         // Color and alpha.
         let color = if state.hover {
-            SCROLLBAR_HOVER_COLOR
+            self.palette.scrollbar_hover_color
         } else {
-            SCROLLBAR_COLOR
+            self.palette.scrollbar_color
         };
-        let alpha = ((SCROLLBAR_BASE_ALPHA as f32 * state.opacity) as u32).min(255);
+        let alpha = ((self.palette.scrollbar_base_alpha as f32 * state.opacity) as u32).min(255);
         if alpha == 0 {
             return;
         }
@@ -119,11 +119,11 @@ impl CpuRenderer {
         let thumb_right = rect_right.saturating_sub(self.scrollbar_margin_px() as usize);
 
         let color = if state.hover {
-            SCROLLBAR_HOVER_COLOR
+            self.palette.scrollbar_hover_color
         } else {
-            SCROLLBAR_COLOR
+            self.palette.scrollbar_color
         };
-        let alpha = ((SCROLLBAR_BASE_ALPHA as f32 * state.opacity) as u32).min(255);
+        let alpha = ((self.palette.scrollbar_base_alpha as f32 * state.opacity) as u32).min(255);
         if alpha == 0 {
             return;
         }

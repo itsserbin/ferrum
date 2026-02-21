@@ -14,8 +14,6 @@ use crate::gui::renderer::TabInfo;
 
 /// Opacity of the inactive-pane dim overlay.
 const INACTIVE_PANE_DIM_ALPHA: f32 = 0.18;
-/// Catppuccin Mocha Surface2 for split dividers.
-const SPLIT_DIVIDER_COLOR: u32 = 0xFF585B70;
 
 /// Pre-computed tab bar state needed by both CPU and GPU render paths.
 ///
@@ -83,6 +81,7 @@ impl TabBarFrameState {
 pub(in crate::gui::events) struct FrameParams<'a> {
     pub tab: Option<&'a crate::gui::state::TabState>,
     pub cursor_blink_start: std::time::Instant,
+    pub cursor_blink_interval_ms: u64,
     #[cfg_attr(target_os = "macos", allow(dead_code))]
     pub hovered_tab: Option<usize>,
     #[cfg_attr(target_os = "macos", allow(dead_code))]
@@ -90,6 +89,7 @@ pub(in crate::gui::events) struct FrameParams<'a> {
     #[cfg_attr(target_os = "macos", allow(dead_code))]
     pub pinned: bool,
     pub security_popup: Option<&'a SecurityPopup>,
+    pub settings_overlay: Option<&'a crate::gui::settings::SettingsOverlay>,
 }
 
 impl FerrumWindow {
@@ -256,7 +256,7 @@ pub(in crate::gui::events) fn draw_frame_content(
                 height: (bh as u32).saturating_sub(tab_bar_h + padding * 2),
             };
             let divider_px = DIVIDER_WIDTH;
-            let pane_pad = renderer.scaled_px(crate::gui::pane::PANE_INNER_PADDING);
+            let pane_pad = renderer.pane_inner_padding_px();
             let pane_layout = tab.pane_tree.layout(terminal_rect, divider_px);
 
             for &(pane_id, rect) in &pane_layout {
@@ -301,7 +301,7 @@ pub(in crate::gui::events) fn draw_frame_content(
                     if leaf.scroll_offset == 0
                         && leaf.terminal.cursor_visible
                         && is_focused
-                        && should_show_cursor(params.cursor_blink_start, leaf.terminal.cursor_style)
+                        && should_show_cursor(params.cursor_blink_start, leaf.terminal.cursor_style, params.cursor_blink_interval_ms)
                     {
                         renderer.draw_cursor_in_rect(
                             &mut target,
@@ -341,6 +341,7 @@ pub(in crate::gui::events) fn draw_frame_content(
 
             // Draw dividers between panes.
             if !target.buffer.is_empty() {
+                let divider_color = renderer.split_divider_color_pixel();
                 draw_dividers(
                     target.buffer,
                     target.width,
@@ -348,6 +349,7 @@ pub(in crate::gui::events) fn draw_frame_content(
                     &tab.pane_tree,
                     terminal_rect,
                     divider_px,
+                    divider_color,
                 );
             } else {
                 draw_dividers_with_renderer(renderer, &tab.pane_tree, terminal_rect, divider_px);
@@ -380,7 +382,7 @@ pub(in crate::gui::events) fn draw_frame_content(
                 // Cursor.
                 if leaf.scroll_offset == 0
                     && leaf.terminal.cursor_visible
-                    && should_show_cursor(params.cursor_blink_start, leaf.terminal.cursor_style)
+                    && should_show_cursor(params.cursor_blink_start, leaf.terminal.cursor_style, params.cursor_blink_interval_ms)
                 {
                     renderer.draw_cursor(
                         &mut target,
@@ -428,6 +430,7 @@ pub(in crate::gui::events) fn draw_frame_content(
                 params.mouse_pos,
                 tab_bar.tab_offsets.as_deref(),
                 params.pinned,
+                params.settings_overlay.is_some(),
             );
 
             // 5) Draw drag overlay.
@@ -448,6 +451,11 @@ pub(in crate::gui::events) fn draw_frame_content(
         renderer.draw_security_popup(&mut target, popup);
     }
 
+    // 6b) Draw settings overlay.
+    if let Some(overlay) = params.settings_overlay {
+        renderer.draw_settings_overlay(&mut target, overlay);
+    }
+
     // 7) Draw tooltip.
     #[cfg(not(target_os = "macos"))]
     if tab_bar.show_tooltip
@@ -466,6 +474,7 @@ fn draw_dividers(
     tree: &PaneNode,
     rect: PaneRect,
     divider_px: u32,
+    divider_color: u32,
 ) {
     if let PaneNode::Split(split) = tree {
         let (first_rect, second_rect) = split_rect(rect, split.direction, split.ratio, divider_px);
@@ -479,7 +488,7 @@ fn draw_dividers(
                         if (px as usize) < bw {
                             let idx = py as usize * bw + px as usize;
                             if idx < buffer.len() {
-                                buffer[idx] = SPLIT_DIVIDER_COLOR;
+                                buffer[idx] = divider_color;
                             }
                         }
                     }
@@ -493,7 +502,7 @@ fn draw_dividers(
                         for px in rect.x..(rect.x + rect.width).min(bw as u32) {
                             let idx = py as usize * bw + px as usize;
                             if idx < buffer.len() {
-                                buffer[idx] = SPLIT_DIVIDER_COLOR;
+                                buffer[idx] = divider_color;
                             }
                         }
                     }
@@ -502,8 +511,8 @@ fn draw_dividers(
         }
 
         // Recurse into children.
-        draw_dividers(buffer, bw, bh, &split.first, first_rect, divider_px);
-        draw_dividers(buffer, bw, bh, &split.second, second_rect, divider_px);
+        draw_dividers(buffer, bw, bh, &split.first, first_rect, divider_px, divider_color);
+        draw_dividers(buffer, bw, bh, &split.second, second_rect, divider_px, divider_color);
     }
 }
 
@@ -566,10 +575,12 @@ pub(in crate::gui::events) fn scrollbar_opacity(
 pub(in crate::gui::events) fn should_show_cursor(
     blink_start: std::time::Instant,
     style: CursorStyle,
+    interval_ms: u64,
 ) -> bool {
     if style.is_blinking() {
+        let interval = interval_ms as u128;
         let ms = blink_start.elapsed().as_millis();
-        ms < 500 || (ms / 500).is_multiple_of(2)
+        ms < interval || (ms / interval).is_multiple_of(2)
     } else {
         true
     }

@@ -62,6 +62,11 @@ impl FerrumWindow {
             self.resize_direction = None;
         }
 
+        // Settings overlay consumes all mouse movement when open.
+        if self.handle_settings_mouse_move(mx, my) {
+            return;
+        }
+
         // Handle active divider drag (pane resize).
         if self.divider_drag.is_some() {
             self.handle_divider_drag(mx, my);
@@ -89,6 +94,8 @@ impl FerrumWindow {
                 TabBarHit::WindowButton(_) => CursorIcon::Pointer,
                 #[cfg(not(target_os = "macos"))]
                 TabBarHit::PinButton => CursorIcon::Pointer,
+                #[cfg(not(target_os = "macos"))]
+                TabBarHit::SettingsButton => CursorIcon::Pointer,
                 TabBarHit::Empty => CursorIcon::Default,
             }
         } else {

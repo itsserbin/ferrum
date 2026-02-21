@@ -19,6 +19,9 @@ use super::get_ns_window;
 /// Flag: pin button was clicked, need to toggle pin state.
 static PIN_BUTTON_CLICKED: AtomicUsize = AtomicUsize::new(0);
 
+/// Flag: gear (settings) button was clicked, need to toggle settings overlay.
+static GEAR_BUTTON_CLICKED: AtomicUsize = AtomicUsize::new(0);
+
 /// Map from NSWindow pointer to its toolbar item (for updating icon state).
 /// We store raw addresses as usize to keep the static map `Send + Sync`.
 static TOOLBAR_ITEMS: Mutex<Option<HashMap<usize, usize>>> = Mutex::new(None);
@@ -43,9 +46,28 @@ unsafe extern "C" fn handle_pin_button_click(
     PIN_BUTTON_CLICKED.fetch_add(1, Ordering::SeqCst);
 }
 
+/// ObjC method implementation for gear button action.
+///
+/// # Safety
+///
+/// Called by the Objective-C runtime as a method implementation.
+/// Same safety requirements as `handle_pin_button_click`.
+unsafe extern "C" fn handle_gear_button_click(
+    _this: *mut core::ffi::c_void,
+    _cmd: *const core::ffi::c_void,
+    _sender: *mut core::ffi::c_void,
+) {
+    GEAR_BUTTON_CLICKED.fetch_add(1, Ordering::SeqCst);
+}
+
 /// Returns and resets the pin-button click counter.
 pub fn take_pin_button_requests() -> usize {
     PIN_BUTTON_CLICKED.swap(0, Ordering::SeqCst)
+}
+
+/// Returns and resets the gear-button click counter.
+pub fn take_gear_button_requests() -> usize {
+    GEAR_BUTTON_CLICKED.swap(0, Ordering::SeqCst)
 }
 
 fn window_and_group_ptrs(ns_window: &Retained<NSWindow>) -> std::collections::HashSet<usize> {
@@ -211,6 +233,41 @@ pub fn setup_toolbar(window: &Window) {
         }
 
         eprintln!("[ferrum] Pin button accessory installed");
+
+        // ── Gear (settings) button ──────────────────────────────────────
+
+        let sel_gear_action_ptr = sel_registerName(c"ferrumGearButtonClicked:".as_ptr());
+        let sel_gear_action = Sel::register(c"ferrumGearButtonClicked:");
+        let imp_gear: unsafe extern "C" fn() =
+            core::mem::transmute(handle_gear_button_click as unsafe extern "C" fn(_, _, _));
+
+        if !win_cls.is_null() && !class_addMethod(win_cls, sel_gear_action_ptr, imp_gear, types) {
+            class_replaceMethod(win_cls, sel_gear_action_ptr, imp_gear, types);
+        }
+
+        let Some(gear_image) = NSImage::imageWithSystemSymbolName_accessibilityDescription(
+            ns_string!("gearshape"),
+            Some(ns_string!("Settings")),
+        ) else {
+            eprintln!("[ferrum] Failed to create gear icon");
+            return;
+        };
+
+        let gear_button =
+            NSButton::buttonWithImage_target_action(&gear_image, None, None, mtm_button);
+        gear_button.setBordered(false);
+        gear_button.setBezelStyle(NSBezelStyle::Toolbar);
+        gear_button.setToolTip(Some(ns_string!("Settings")));
+
+        let _: () = msg_send![&gear_button, setTarget: &*ns_window];
+        let _: () = msg_send![&gear_button, setAction: sel_gear_action];
+
+        let gear_accessory_vc = NSTitlebarAccessoryViewController::new(mtm_accessory);
+        gear_accessory_vc.setView(&gear_button);
+        gear_accessory_vc.setLayoutAttribute(NSLayoutAttribute::Leading);
+        ns_window.addTitlebarAccessoryViewController(&gear_accessory_vc);
+
+        eprintln!("[ferrum] Gear button accessory installed");
     }
 }
 

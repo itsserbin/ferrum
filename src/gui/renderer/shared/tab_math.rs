@@ -53,6 +53,13 @@ pub const PIN_BUTTON_SIZE: u32 = 24;
 #[cfg(not(target_os = "macos"))]
 pub const PIN_BUTTON_GAP: u32 = 8;
 
+/// Size of the settings gear button (non-macOS).
+#[cfg(not(target_os = "macos"))]
+pub const GEAR_BUTTON_SIZE: u32 = 24;
+/// Gap between gear button and next element (non-macOS).
+#[cfg(not(target_os = "macos"))]
+pub const GEAR_BUTTON_GAP: u32 = 8;
+
 /// Window button width (non-macOS).
 #[cfg(not(target_os = "macos"))]
 pub const WIN_BTN_WIDTH: u32 = 46;
@@ -118,7 +125,11 @@ pub fn tab_strip_start_x(m: &TabLayoutMetrics) -> u32 {
     }
     #[cfg(not(target_os = "macos"))]
     {
-        m.scaled_px(TAB_STRIP_START_X) + m.scaled_px(PIN_BUTTON_SIZE) + m.scaled_px(PIN_BUTTON_GAP)
+        m.scaled_px(TAB_STRIP_START_X)
+            + m.scaled_px(PIN_BUTTON_SIZE)
+            + m.scaled_px(PIN_BUTTON_GAP)
+            + m.scaled_px(GEAR_BUTTON_SIZE)
+            + m.scaled_px(GEAR_BUTTON_GAP)
     }
 }
 
@@ -199,6 +210,23 @@ pub fn pin_button_rect(m: &TabLayoutMetrics) -> Rect {
         y,
         w: btn_size,
         h: btn_size,
+    }
+}
+
+/// Returns the rectangle for the gear (settings) button (non-macOS only).
+///
+/// Positioned to the right of the pin button.
+#[cfg(not(target_os = "macos"))]
+pub fn gear_button_rect(m: &TabLayoutMetrics) -> Rect {
+    let pin = pin_button_rect(m);
+    let x = pin.x + pin.w + m.scaled_px(GEAR_BUTTON_GAP);
+    let size = m.scaled_px(GEAR_BUTTON_SIZE);
+    let y = (m.tab_bar_height.saturating_sub(size)) / 2;
+    Rect {
+        x,
+        y,
+        w: size,
+        h: size,
     }
 }
 

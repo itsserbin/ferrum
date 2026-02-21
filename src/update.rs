@@ -77,12 +77,12 @@ fn check_for_update() -> Option<AvailableRelease> {
 
 fn fetch_latest_release(now_unix: u64) -> Option<UpdateCache> {
     let user_agent = format!("ferrum/{}", env!("CARGO_PKG_VERSION"));
-    let response = ureq::get(GITHUB_LATEST_RELEASE_URL)
-        .set("Accept", "application/vnd.github+json")
-        .set("User-Agent", &user_agent)
+    let mut response = ureq::get(GITHUB_LATEST_RELEASE_URL)
+        .header("Accept", "application/vnd.github+json")
+        .header("User-Agent", &user_agent)
         .call()
         .ok()?;
-    let release: GithubRelease = response.into_json().ok()?;
+    let release: GithubRelease = response.body_mut().read_json().ok()?;
     Some(UpdateCache {
         checked_at_unix: now_unix,
         tag_name: release.tag_name,
@@ -130,24 +130,8 @@ fn write_cache(cache: &UpdateCache) {
 }
 
 fn cache_path() -> Option<PathBuf> {
-    let base = config_base_dir()?;
+    let base = crate::config::config_base_dir()?;
     Some(base.join("ferrum").join("update-check.json"))
-}
-
-/// Returns the platform-specific base config directory.
-///
-/// Resolution order:
-/// 1. `XDG_CONFIG_HOME`
-/// 2. `$HOME/.config`
-/// 3. `%USERPROFILE%/.config`
-fn config_base_dir() -> Option<PathBuf> {
-    if let Some(xdg_config_home) = std::env::var_os("XDG_CONFIG_HOME") {
-        return Some(PathBuf::from(xdg_config_home));
-    }
-    if let Some(home) = std::env::var_os("HOME") {
-        return Some(PathBuf::from(home).join(".config"));
-    }
-    std::env::var_os("USERPROFILE").map(|home| PathBuf::from(home).join(".config"))
 }
 
 fn unix_now_secs() -> Option<u64> {
