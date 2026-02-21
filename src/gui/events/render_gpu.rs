@@ -36,7 +36,6 @@ impl FerrumWindow {
             mouse_pos: self.mouse_pos,
             pinned: self.pinned,
             security_popup: self.security_popup.as_ref(),
-            settings_overlay: self.settings_overlay.as_ref(),
         };
 
         draw_frame_content(

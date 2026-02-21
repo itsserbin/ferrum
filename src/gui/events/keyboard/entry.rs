@@ -16,14 +16,6 @@ impl FerrumWindow {
         // Reset blink phase so the cursor is immediately visible after keypress.
         self.cursor_blink_start = std::time::Instant::now();
 
-        // Settings overlay intercepts all keyboard input when open.
-        if self.settings_overlay.is_some() {
-            let key = Self::normalize_non_text_key(&event.logical_key, &event.physical_key);
-            if self.handle_settings_keyboard(&key) {
-                return;
-            }
-        }
-
         let key = Self::normalize_non_text_key(&event.logical_key, &event.physical_key);
 
         // Escape cancels tab drag.

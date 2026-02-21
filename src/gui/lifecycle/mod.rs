@@ -130,13 +130,6 @@ impl ApplicationHandler for App {
             win.window.request_redraw();
         }
 
-        // Pick up config updates from settings overlay.
-        if let Some(win) = self.windows.get_mut(&window_id)
-            && let Some(new_config) = win.pending_config.take()
-        {
-            self.config = new_config;
-        }
-
         // Process any pending window requests (detach, close).
         self.process_window_requests(event_loop, window_id);
     }
@@ -225,7 +218,6 @@ impl ApplicationHandler for App {
         }
 
         // Apply config changes from native settings window.
-        #[cfg(target_os = "macos")]
         while let Ok(new_config) = self.settings_rx.try_recv() {
             for win in self.windows.values_mut() {
                 win.apply_config_change(&new_config);

@@ -6,7 +6,6 @@ mod menus;
 mod pane;
 mod platform;
 mod renderer;
-mod settings;
 mod state;
 mod tabs;
 
@@ -97,9 +96,6 @@ impl FerrumWindow {
             divider_drag: None,
             last_cwd_poll: std::time::Instant::now(),
             cursor_blink_interval_ms: config.terminal.cursor_blink_interval_ms,
-            settings_overlay: None,
-            pending_config: None,
-            #[cfg(target_os = "macos")]
             settings_tx: std::sync::mpsc::channel().0,
         }
     }
@@ -231,7 +227,6 @@ impl App {
         let (update_tx, update_rx) = mpsc::channel::<update::AvailableRelease>();
         update::spawn_update_checker(update_tx);
         let config = crate::config::load_config();
-        #[cfg(target_os = "macos")]
         let (settings_tx, settings_rx) = std::sync::mpsc::channel();
         App {
             windows: std::collections::HashMap::new(),
@@ -242,9 +237,7 @@ impl App {
             update_rx,
             available_release: None,
             config,
-            #[cfg(target_os = "macos")]
             settings_tx,
-            #[cfg(target_os = "macos")]
             settings_rx,
         }
     }
@@ -313,10 +306,7 @@ impl App {
 
         let id = window.id();
         let mut ferrum_win = FerrumWindow::new(window, context, &self.config);
-        #[cfg(target_os = "macos")]
-        {
-            ferrum_win.settings_tx = self.settings_tx.clone();
-        }
+        ferrum_win.settings_tx = self.settings_tx.clone();
         ferrum_win.sync_window_title(self.available_release.as_ref());
         self.windows.insert(id, ferrum_win);
         Some(id)

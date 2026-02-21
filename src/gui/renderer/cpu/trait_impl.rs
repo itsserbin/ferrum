@@ -162,12 +162,4 @@ impl traits::Renderer for CpuRenderer {
     ) {
         CpuRenderer::draw_security_popup(self, target, popup);
     }
-
-    fn draw_settings_overlay(
-        &mut self,
-        target: &mut RenderTarget<'_>,
-        overlay: &crate::gui::settings::SettingsOverlay,
-    ) {
-        self.draw_settings_overlay(target, overlay);
-    }
 }
