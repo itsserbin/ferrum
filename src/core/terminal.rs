@@ -78,6 +78,8 @@ pub struct Terminal {
     scrollback_popped: usize,
     parser: Parser,
     pub cwd: Option<String>,
+    /// Window/icon title set by OSC 0/1/2.
+    pub title: Option<String>,
 }
 
 impl Terminal {
@@ -132,6 +134,7 @@ impl Terminal {
             scrollback_popped: 0,
             parser: Parser::new(),
             cwd: None,
+            title: None,
         }
     }
 
@@ -528,13 +531,30 @@ impl Perform for Terminal {
         if params.is_empty() {
             return;
         }
-        if params[0] == b"7" {
-            if params.len() < 2 || params[1].is_empty() {
-                self.cwd = None;
-                return;
+        match params[0] {
+            // OSC 0: set window title + icon name
+            // OSC 2: set window title
+            b"0" | b"2" => {
+                if params.len() >= 2 {
+                    self.title = Some(String::from_utf8_lossy(params[1]).into_owned());
+                }
             }
-            let uri = String::from_utf8_lossy(params[1]);
-            self.cwd = parse_osc7_uri(&uri);
+            // OSC 1: set icon name (treat as title)
+            b"1" => {
+                if params.len() >= 2 {
+                    self.title = Some(String::from_utf8_lossy(params[1]).into_owned());
+                }
+            }
+            // OSC 7: CWD notification
+            b"7" => {
+                if params.len() < 2 || params[1].is_empty() {
+                    self.cwd = None;
+                    return;
+                }
+                let uri = String::from_utf8_lossy(params[1]);
+                self.cwd = parse_osc7_uri(&uri);
+            }
+            _ => {}
         }
     }
     fn csi_dispatch(&mut self, params: &Params, intermediates: &[u8], _ignore: bool, action: char) {
