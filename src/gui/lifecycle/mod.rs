@@ -248,12 +248,25 @@ impl ApplicationHandler for App {
 
         // Apply config changes from native settings window.
         while let Ok(new_config) = self.settings_rx.try_recv() {
+            let language_changed = new_config.language != self.config.language;
             crate::i18n::set_locale(new_config.language);
             for win in self.windows.values_mut() {
                 win.apply_config_change(&new_config);
                 win.window.request_redraw();
             }
             self.config = new_config;
+
+            // Reopen the settings window so labels reflect the new locale.
+            #[cfg(target_os = "macos")]
+            if language_changed
+                && platform::macos::settings_window::is_settings_window_open()
+            {
+                platform::macos::settings_window::close_settings_window();
+                platform::macos::settings_window::open_settings_window(
+                    &self.config,
+                    self.settings_tx.clone(),
+                );
+            }
         }
 
         let now = std::time::Instant::now();
