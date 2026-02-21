@@ -82,8 +82,25 @@ jobs:
       - name: Install create-dmg
         run: brew install create-dmg
 
+      - name: Debug SDK info
+        run: |
+          echo "=== sw_vers ==="
+          sw_vers
+          echo "=== xcrun SDK ==="
+          xcrun --show-sdk-path
+          xcrun --show-sdk-version
+          echo "=== xcode-select ==="
+          xcode-select -p
+          echo "=== rustc deployment target ==="
+          rustc --print=deployment-target
+
       - name: Build release binary
         run: cargo build --release --locked --target "${{ matrix.target }}"
+
+      - name: Debug binary LC_BUILD_VERSION
+        run: |
+          echo "=== otool -l (LC_BUILD_VERSION) ==="
+          otool -l "target/${{ matrix.target }}/release/ferrum" | grep -A5 LC_BUILD_VERSION
 
       - name: Package .app bundle
         run: |
