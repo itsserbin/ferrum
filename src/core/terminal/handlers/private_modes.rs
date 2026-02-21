@@ -37,6 +37,9 @@ pub(in super::super) fn handle_private_mode(
             // SGR extended mouse format
             ('h', 1006) => term.set_sgr_mouse(true),
             ('l', 1006) => term.set_sgr_mouse(false),
+            // Focus reporting
+            ('h', 1004) => term.set_focus_reporting(true),
+            ('l', 1004) => term.set_focus_reporting(false),
             // Bracketed paste mode
             ('h', 2004) => term.set_bracketed_paste(true),
             ('l', 2004) => term.set_bracketed_paste(false),
@@ -214,6 +217,16 @@ mod tests {
         assert!(term.bracketed_paste);
         term.process(b"\x1b[?2004l");
         assert!(!term.bracketed_paste);
+    }
+
+    #[test]
+    fn focus_reporting_on_off() {
+        let mut term = Terminal::new(4, 10);
+        assert!(!term.focus_reporting);
+        term.process(b"\x1b[?1004h");
+        assert!(term.focus_reporting);
+        term.process(b"\x1b[?1004l");
+        assert!(!term.focus_reporting);
     }
 
     #[test]

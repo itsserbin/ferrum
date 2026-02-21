@@ -70,6 +70,7 @@ pub struct Terminal {
     pub mouse_mode: MouseMode,
     pub sgr_mouse: bool,
     pub bracketed_paste: bool,
+    pub focus_reporting: bool,
     pub security_config: SecurityConfig,
     pending_security_events: Vec<SecurityEventKind>,
     pub cursor_style: CursorStyle,
@@ -123,6 +124,7 @@ impl Terminal {
             mouse_mode: MouseMode::Off,
             sgr_mouse: false,
             bracketed_paste: false,
+            focus_reporting: false,
             security_config: SecurityConfig::default(),
             pending_security_events: Vec::new(),
             cursor_style: CursorStyle::default(),
@@ -196,6 +198,8 @@ impl Terminal {
     /// Clears transient mouse-tracking state when the PTY process exits.
     pub fn cleanup_after_process_exit(&mut self) {
         self.clear_mouse_tracking(self.security_config.clear_mouse_on_reset);
+        self.focus_reporting = false;
+        self.bracketed_paste = false;
     }
 
     fn reset_attributes(&mut self) {
@@ -252,6 +256,10 @@ impl Terminal {
 
     fn set_bracketed_paste(&mut self, enabled: bool) {
         self.bracketed_paste = enabled;
+    }
+
+    fn set_focus_reporting(&mut self, enabled: bool) {
+        self.focus_reporting = enabled;
     }
 
     fn set_cursor_style(&mut self, style: CursorStyle) {
