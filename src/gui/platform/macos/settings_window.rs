@@ -145,6 +145,40 @@ pub fn send_current_config() {
     let _ = state.sender.send(config);
 }
 
+/// Parses editable text field values and updates the corresponding steppers.
+/// Called before reading stepper values so manual text input is reflected.
+pub fn sync_text_fields_to_steppers() {
+    let guard = SETTINGS_STATE.lock().unwrap();
+    let Some(state) = guard.as_ref() else {
+        return;
+    };
+
+    // Helper: parse text field, clamp to stepper range, update stepper.
+    fn sync_float(field: &NSTextField, stepper: &NSStepper) {
+        let text = field.stringValue();
+        if let Ok(val) = text.to_string().parse::<f64>() {
+            let clamped = val.clamp(stepper.minValue(), stepper.maxValue());
+            stepper.setDoubleValue(clamped);
+        }
+    }
+    fn sync_int(field: &NSTextField, stepper: &NSStepper) {
+        let text = field.stringValue();
+        if let Ok(val) = text.to_string().parse::<f64>() {
+            let clamped = val.clamp(stepper.minValue(), stepper.maxValue());
+            stepper.setDoubleValue(clamped.round());
+        }
+    }
+
+    sync_float(&state.font_size_field, &state.font_size_stepper);
+    sync_int(&state.line_padding_field, &state.line_padding_stepper);
+    sync_int(&state.scrollback_field, &state.scrollback_stepper);
+    sync_int(&state.cursor_blink_field, &state.cursor_blink_stepper);
+    sync_int(&state.window_padding_field, &state.window_padding_stepper);
+    sync_int(&state.tab_bar_height_field, &state.tab_bar_height_stepper);
+    sync_int(&state.pane_padding_field, &state.pane_padding_stepper);
+    sync_int(&state.scrollbar_width_field, &state.scrollbar_width_stepper);
+}
+
 /// Updates all text fields to match the current stepper values.
 pub fn update_text_fields() {
     let guard = SETTINGS_STATE.lock().unwrap();
@@ -266,11 +300,13 @@ fn create_stepper_row(
     } else {
         format!("{}", value as i64)
     };
-    let value_field = NSTextField::labelWithString(&NSString::from_str(&value_str), mtm);
+    let value_field = NSTextField::textFieldWithString(&NSString::from_str(&value_str), mtm);
     value_field.setFrame(NSRect::new(
         NSPoint::new(200.0, y_offset),
         NSSize::new(80.0, 24.0),
     ));
+    value_field.setEditable(true);
+    value_field.setBezeled(true);
     parent.addSubview(&value_field);
 
     let stepper = NSStepper::initWithFrame(
@@ -358,6 +394,9 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
         )
     };
     window.setTitle(&NSString::from_str("Ferrum Settings"));
+    // SAFETY: We hold a Retained<NSWindow> (strong reference). Without this call,
+    // macOS releases the window when the user closes it, leaving a dangling pointer.
+    unsafe { window.setReleasedWhenClosed(false) };
     window.center();
 
     // ── NSTabView ─────────────────────────────────────────────────────
@@ -599,6 +638,24 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
         let _: () = msg_send![&pane_padding_stepper, setAction: sel_changed];
         let _: () = msg_send![&scrollbar_width_stepper, setTarget: &*window];
         let _: () = msg_send![&scrollbar_width_stepper, setAction: sel_changed];
+
+        // Wire all editable text fields to the settings-changed action.
+        let _: () = msg_send![&font_size_field, setTarget: &*window];
+        let _: () = msg_send![&font_size_field, setAction: sel_changed];
+        let _: () = msg_send![&line_padding_field, setTarget: &*window];
+        let _: () = msg_send![&line_padding_field, setAction: sel_changed];
+        let _: () = msg_send![&scrollback_field, setTarget: &*window];
+        let _: () = msg_send![&scrollback_field, setAction: sel_changed];
+        let _: () = msg_send![&cursor_blink_field, setTarget: &*window];
+        let _: () = msg_send![&cursor_blink_field, setAction: sel_changed];
+        let _: () = msg_send![&window_padding_field, setTarget: &*window];
+        let _: () = msg_send![&window_padding_field, setAction: sel_changed];
+        let _: () = msg_send![&tab_bar_height_field, setTarget: &*window];
+        let _: () = msg_send![&tab_bar_height_field, setAction: sel_changed];
+        let _: () = msg_send![&pane_padding_field, setTarget: &*window];
+        let _: () = msg_send![&pane_padding_field, setAction: sel_changed];
+        let _: () = msg_send![&scrollbar_width_field, setTarget: &*window];
+        let _: () = msg_send![&scrollbar_width_field, setAction: sel_changed];
 
         // Wire reset button.
         let _: () = msg_send![&reset_button, setTarget: &*window];

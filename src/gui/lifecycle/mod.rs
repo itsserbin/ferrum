@@ -204,6 +204,7 @@ impl ApplicationHandler for App {
         #[cfg(target_os = "macos")]
         {
             if platform::macos::settings_window::take_settings_changed() {
+                platform::macos::settings_window::sync_text_fields_to_steppers();
                 platform::macos::settings_window::update_text_fields();
                 platform::macos::settings_window::send_current_config();
             }
@@ -220,7 +221,7 @@ impl ApplicationHandler for App {
         // Apply config changes from native settings window.
         #[cfg(target_os = "macos")]
         while let Ok(new_config) = self.settings_rx.try_recv() {
-            if let Some((_id, win)) = self.windows.iter_mut().find(|(_, w)| w.window.has_focus()) {
+            for win in self.windows.values_mut() {
                 win.apply_config_change(&new_config);
                 win.window.request_redraw();
             }
