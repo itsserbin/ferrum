@@ -46,6 +46,7 @@ impl FerrumWindow {
     fn new(
         window: Arc<Window>,
         context: &Context<winit::event_loop::OwnedDisplayHandle>,
+        proxy: &winit::event_loop::EventLoopProxy<()>,
         config: &crate::config::AppConfig,
     ) -> Self {
         let mut backend = RendererBackend::new(window.clone(), context, config);
@@ -97,6 +98,7 @@ impl FerrumWindow {
             last_cwd_poll: std::time::Instant::now(),
             cursor_blink_interval_ms: config.terminal.cursor_blink_interval_ms,
             settings_tx: std::sync::mpsc::channel().0,
+            event_proxy: proxy.clone(),
         }
     }
 
@@ -222,7 +224,7 @@ impl FerrumWindow {
 }
 
 impl App {
-    fn new() -> Self {
+    fn new(proxy: winit::event_loop::EventLoopProxy<()>) -> Self {
         let (tx, rx) = mpsc::channel::<PtyEvent>();
         let (update_tx, update_rx) = mpsc::channel::<update::AvailableRelease>();
         update::spawn_update_checker(update_tx);
@@ -234,6 +236,7 @@ impl App {
             next_tab_id: 0,
             tx,
             rx,
+            proxy,
             update_rx,
             available_release: None,
             config,
@@ -305,7 +308,7 @@ impl App {
         platform::macos::setup_toolbar(&window);
 
         let id = window.id();
-        let mut ferrum_win = FerrumWindow::new(window, context, &self.config);
+        let mut ferrum_win = FerrumWindow::new(window, context, &self.proxy, &self.config);
         ferrum_win.settings_tx = self.settings_tx.clone();
         ferrum_win.sync_window_title(self.available_release.as_ref());
         self.windows.insert(id, ferrum_win);
@@ -336,14 +339,15 @@ impl App {
 }
 
 pub fn run() {
-    let event_loop = match EventLoop::new() {
+    let event_loop = match EventLoop::<()>::with_user_event().build() {
         Ok(loop_) => loop_,
         Err(err) => {
             eprintln!("Failed to create event loop: {err}");
             return;
         }
     };
-    let mut app = App::new();
+    let proxy = event_loop.create_proxy();
+    let mut app = App::new(proxy);
     if let Err(err) = event_loop.run_app(&mut app) {
         eprintln!("Application error: {err}");
     }
