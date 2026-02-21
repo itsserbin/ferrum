@@ -116,7 +116,7 @@ end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
-  if (CurStep = ssPostInstall) and IsTaskSelected('addtopath') then
+  if (CurStep = ssPostInstall) and WizardIsTaskSelected('addtopath') then
     EnvAddPath(ExpandConstant('{app}'), IsAdminInstallMode());
 end;
 

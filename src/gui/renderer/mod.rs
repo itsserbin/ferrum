@@ -28,10 +28,6 @@ pub const SCROLLBAR_HIT_ZONE: u32 = 14;
 /// Margin between the thumb right edge and the window right edge.
 pub const SCROLLBAR_MARGIN: u32 = 2;
 
-/// Tab bar height in pixels.
-#[cfg(not(target_os = "macos"))]
-pub const TAB_BAR_HEIGHT: u32 = 36;
-
 /// Minimum scrollbar thumb height in base UI pixels.
 pub(super) const SCROLLBAR_MIN_THUMB: u32 = 20;
 

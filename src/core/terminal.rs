@@ -374,8 +374,7 @@ impl Terminal {
         self.cursor_col = 0;
         self.saved_cursor = (0, 0);
         self.alt_saved_cursor = (0, 0);
-        self.scroll_top = 0;
-        self.scroll_bottom = rows.saturating_sub(1);
+        self.reset_scroll_region();
         self.saved_scroll_top = 0;
         self.saved_scroll_bottom = rows.saturating_sub(1);
         self.scrollback.clear();

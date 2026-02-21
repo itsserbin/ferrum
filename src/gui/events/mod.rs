@@ -1,4 +1,5 @@
 mod keyboard;
+#[cfg(not(target_os = "linux"))]
 mod menu_actions;
 mod mouse;
 mod pty;

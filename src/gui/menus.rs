@@ -2,6 +2,7 @@
 use muda::{ContextMenu, Menu, MenuId, MenuItem, PredefinedMenuItem};
 
 /// Identifiers for context menu actions.
+#[cfg(not(target_os = "linux"))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum MenuAction {
     // Terminal context menu

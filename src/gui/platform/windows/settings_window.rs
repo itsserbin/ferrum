@@ -60,7 +60,6 @@ unsafe extern "system" {
 #[link(name = "gdi32")]
 unsafe extern "system" {
     fn CreateFontIndirectW(lplf: *const LOGFONTW) -> HFONT;
-    fn DeleteObject(ho: *mut core::ffi::c_void) -> i32;
 }
 
 const SPI_GETNONCLIENTMETRICS: u32 = 0x0029;
@@ -166,7 +165,7 @@ fn dpi_scale(value: i32, dpi: u32) -> i32 {
 }
 
 /// Creates a DPI-aware font from NONCLIENTMETRICS, or falls back to DEFAULT_GUI_FONT.
-unsafe fn create_dpi_font(dpi: u32) -> *mut core::ffi::c_void {
+unsafe fn create_dpi_font(dpi: u32) -> *mut core::ffi::c_void { unsafe {
     let mut ncm: NONCLIENTMETRICSW = std::mem::zeroed();
     ncm.cbSize = std::mem::size_of::<NONCLIENTMETRICSW>() as u32;
     let ok = SystemParametersInfoW(
@@ -185,7 +184,7 @@ unsafe fn create_dpi_font(dpi: u32) -> *mut core::ffi::c_void {
         }
     }
     GetStockObject(DEFAULT_GUI_FONT) as *mut core::ffi::c_void
-}
+} }
 
 static WINDOW_OPEN: AtomicBool = AtomicBool::new(false);
 static JUST_CLOSED: AtomicBool = AtomicBool::new(false);
@@ -265,7 +264,6 @@ mod id {
 }
 
 struct Win32State {
-    hwnd: HWND,
     tx: mpsc::Sender<AppConfig>,
     // Tab control
     tab_ctrl: HWND,
@@ -406,7 +404,7 @@ fn run_win32_window(config: AppConfig, tx: mpsc::Sender<AppConfig>) {
 
 // ── Window procedure ─────────────────────────────────────────────────
 
-unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT { unsafe {
     let state_ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut Win32State;
 
     match msg {
@@ -454,7 +452,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
         }
         _ => DefWindowProcW(hwnd, msg, wparam, lparam),
     }
-}
+} }
 
 fn on_value_changed(state: &Win32State) {
     if SUPPRESS.load(Ordering::Relaxed) {
@@ -707,7 +705,6 @@ unsafe fn create_controls(
     }
 
     let state = Win32State {
-        hwnd,
         tx,
         tab_ctrl,
         font_size_updown,

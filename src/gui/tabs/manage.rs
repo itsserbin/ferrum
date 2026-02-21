@@ -68,6 +68,7 @@ impl FerrumWindow {
     }
 
     /// Duplicates a tab by creating a new session with copied title.
+    #[cfg(not(target_os = "linux"))]
     pub(in crate::gui) fn duplicate_tab(
         &mut self,
         index: usize,
