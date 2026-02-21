@@ -275,6 +275,11 @@ fn run_win32_window(config: AppConfig, tx: mpsc::Sender<AppConfig>) {
             std::ptr::null(),
         );
 
+        if hwnd.is_null() {
+            WINDOW_OPEN.store(false, Ordering::Relaxed);
+            return;
+        }
+
         // Apply dark title bar.
         let dark: i32 = 1;
         let _ = DwmSetWindowAttribute(
