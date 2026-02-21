@@ -36,7 +36,27 @@ impl CpuRenderer {
         fg: Color,
     ) {
         if !self.glyph_cache.contains_key(&character) {
-            let (metrics, bitmap) = self.font.rasterize(character, self.metrics.font_size);
+            let is_primary = self.font.has_glyph(character);
+            let font = if is_primary {
+                &self.font
+            } else {
+                self.fallback_fonts
+                    .iter()
+                    .find(|f| f.has_glyph(character))
+                    .unwrap_or(&self.font)
+            };
+            let font_size = if is_primary {
+                self.metrics.font_size
+            } else {
+                // Scale down fallback glyphs that exceed cell width.
+                let m = font.metrics(character, self.metrics.font_size);
+                if m.advance_width > self.metrics.cell_width as f32 {
+                    self.metrics.font_size * (self.metrics.cell_width as f32 / m.advance_width)
+                } else {
+                    self.metrics.font_size
+                }
+            };
+            let (metrics, bitmap) = font.rasterize(character, font_size);
             let cached = super::super::types::GlyphBitmap {
                 data: bitmap,
                 width: metrics.width,

@@ -79,6 +79,7 @@ impl super::GpuRenderer {
                     let _ = self.atlas.get_or_insert(
                         codepoint,
                         &self.font,
+                        &self.fallback_fonts,
                         self.metrics.font_size,
                         &self.queue,
                     );
