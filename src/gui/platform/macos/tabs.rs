@@ -3,8 +3,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use objc2::msg_send;
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
-use objc2::{MainThreadMarker, MainThreadOnly};
-use objc2_app_kit::{NSToolbar, NSWindow, NSWindowTabbingMode, NSWindowToolbarStyle};
+use objc2_app_kit::{NSWindow, NSWindowTabbingMode};
 use objc2_foundation::ns_string;
 use winit::window::Window;
 
@@ -33,26 +32,33 @@ pub fn configure_native_tabs(window: &Window) {
     let Some(ns_window) = get_ns_window(window) else {
         return;
     };
-    let Some(mtm) = MainThreadMarker::new() else {
-        return;
-    };
     // SAFETY: `ns_window` is valid; all selectors exist on supported macOS and signatures match.
     unsafe {
         ns_window.setTabbingMode(NSWindowTabbingMode::Preferred);
-
-        // Hidden toolbar with Expanded style forces the tab bar into a
-        // separate row below the titlebar. Without a toolbar, bundled .app
-        // defaults to the compact style where tabs merge into the titlebar.
-        let toolbar = NSToolbar::initWithIdentifier(
-            NSToolbar::alloc(mtm),
-            ns_string!("com.ferrum.toolbar"),
-        );
-        toolbar.setVisible(false);
-        ns_window.setToolbar(Some(&toolbar));
-        ns_window.setToolbarStyle(NSWindowToolbarStyle::Expanded);
-
         let identifier = ns_string!("com.ferrum.terminal");
         let _: () = msg_send![&ns_window, setTabbingIdentifier: identifier];
+    }
+
+    // Diagnostic: print window properties to find what differs between
+    // `cargo run` and bundled .app.
+    {
+        let mask = ns_window.styleMask();
+        let toolbar_style = ns_window.toolbarStyle();
+        let title_vis = ns_window.titleVisibility();
+        let transparent = ns_window.titlebarAppearsTransparent();
+        let has_toolbar = ns_window.toolbar().is_some();
+        let tabbing_mode = ns_window.tabbingMode();
+
+        eprintln!("[ferrum-diag] styleMask: {:?}", mask);
+        eprintln!("[ferrum-diag] toolbarStyle: {:?}", toolbar_style.0);
+        eprintln!("[ferrum-diag] titleVisibility: {:?}", title_vis.0);
+        eprintln!("[ferrum-diag] titlebarAppearsTransparent: {}", transparent);
+        eprintln!("[ferrum-diag] hasToolbar: {}", has_toolbar);
+        eprintln!("[ferrum-diag] tabbingMode: {:?}", tabbing_mode.0);
+
+        // Check fullSizeContentView bit (1 << 15 = 32768)
+        let full_size = mask.0 & (1 << 15) != 0;
+        eprintln!("[ferrum-diag] fullSizeContentView: {}", full_size);
     }
 }
 
