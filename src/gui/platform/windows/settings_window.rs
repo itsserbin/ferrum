@@ -180,12 +180,12 @@ fn run_win32_window(config: AppConfig, tx: mpsc::Sender<AppConfig>) {
         );
 
         // Apply dark title bar.
-        let dark: BOOL = 1;
+        let dark: i32 = 1;
         let _ = DwmSetWindowAttribute(
             hwnd,
             DWMWA_USE_IMMERSIVE_DARK_MODE,
             &dark as *const _ as *const _,
-            std::mem::size_of::<BOOL>() as u32,
+            std::mem::size_of::<i32>() as u32,
         );
 
         let state = create_controls(hwnd, hinstance, &config, tx);
@@ -320,7 +320,7 @@ unsafe fn create_controls(
     hinstance: HINSTANCE,
     config: &AppConfig,
     tx: mpsc::Sender<AppConfig>,
-) -> Win32State {
+) -> Win32State { unsafe {
     // Create tab control.
     let tab_ctrl = create_window(
         0,
@@ -483,7 +483,7 @@ unsafe fn create_controls(
         0,
         to_wide("BUTTON").as_ptr(),
         reset_text.as_ptr(),
-        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON as u32,
+        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
         180,
         420,
         150,
@@ -534,11 +534,9 @@ unsafe fn create_controls(
 
     update_all_labels(&state);
     state
-}
+} }
 
 // ── Control builder helpers ──────────────────────────────────────────
-
-const WC_TABCONTROLW: *const u16 = windows_sys::Win32::UI::Controls::WC_TABCONTROLW;
 
 unsafe fn create_window(
     ex_style: u32,
@@ -552,7 +550,7 @@ unsafe fn create_window(
     parent: HWND,
     ctrl_id: i32,
     hinstance: HINSTANCE,
-) -> HWND {
+) -> HWND { unsafe {
     let text_ptr = if text.is_empty() {
         to_wide("").as_ptr()
     } else {
@@ -572,7 +570,7 @@ unsafe fn create_window(
         hinstance,
         std::ptr::null(),
     )
-}
+} }
 
 /// Creates a row with: static label | trackbar | value label.
 /// Returns (trackbar_hwnd, value_label_hwnd, vec_of_all_hwnds_for_page).
@@ -587,13 +585,13 @@ unsafe fn create_trackbar_row(
     initial: isize,
     track_id: i32,
     label_id: i32,
-) -> (HWND, HWND, Vec<HWND>) {
+) -> (HWND, HWND, Vec<HWND>) { unsafe {
     let label_wide = to_wide(label_text);
     let lbl = CreateWindowExW(
         0,
         to_wide("STATIC").as_ptr(),
         label_wide.as_ptr(),
-        WS_CHILD | WS_VISIBLE | SS_LEFT,
+        WS_CHILD | WS_VISIBLE | SS_LEFT as u32,
         x,
         y + 5,
         130,
@@ -608,7 +606,7 @@ unsafe fn create_trackbar_row(
         0,
         TRACKBAR_CLASSW,
         std::ptr::null(),
-        WS_CHILD | WS_VISIBLE | TBS_AUTOTICKS,
+        WS_CHILD | WS_VISIBLE | TBS_AUTOTICKS as u32,
         x + 140,
         y,
         250,
@@ -627,7 +625,7 @@ unsafe fn create_trackbar_row(
         0,
         to_wide("STATIC").as_ptr(),
         to_wide("").as_ptr(),
-        WS_CHILD | WS_VISIBLE | SS_LEFT,
+        WS_CHILD | WS_VISIBLE | SS_LEFT as u32,
         x + 400,
         y + 5,
         60,
@@ -639,7 +637,7 @@ unsafe fn create_trackbar_row(
     );
 
     (track, val_label, vec![lbl, track, val_label])
-}
+} }
 
 /// Creates a row with: static label | combobox.
 /// Returns (combo_hwnd, vec_of_all_hwnds_for_page).
@@ -652,13 +650,13 @@ unsafe fn create_combo_row(
     options: &[&str],
     selected: usize,
     combo_id: i32,
-) -> (HWND, Vec<HWND>) {
+) -> (HWND, Vec<HWND>) { unsafe {
     let label_wide = to_wide(label_text);
     let lbl = CreateWindowExW(
         0,
         to_wide("STATIC").as_ptr(),
         label_wide.as_ptr(),
-        WS_CHILD | WS_VISIBLE | SS_LEFT,
+        WS_CHILD | WS_VISIBLE | SS_LEFT as u32,
         x,
         y + 5,
         130,
@@ -673,7 +671,7 @@ unsafe fn create_combo_row(
         0,
         to_wide("COMBOBOX").as_ptr(),
         std::ptr::null(),
-        WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST as u32 | CBS_HASSTRINGS as u32,
+        WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | CBS_HASSTRINGS,
         x + 140,
         y,
         250,
@@ -691,7 +689,7 @@ unsafe fn create_combo_row(
     SendMessageW(combo, CB_SETCURSEL, selected, 0);
 
     (combo, vec![lbl, combo])
-}
+} }
 
 /// Creates a row with: checkbox.
 /// Returns (checkbox_hwnd, vec_of_all_hwnds_for_page).
@@ -704,13 +702,13 @@ unsafe fn create_checkbox_row(
     checked: bool,
     enabled: bool,
     check_id: i32,
-) -> (HWND, Vec<HWND>) {
+) -> (HWND, Vec<HWND>) { unsafe {
     let text = to_wide(label_text);
     let check = CreateWindowExW(
         0,
         to_wide("BUTTON").as_ptr(),
         text.as_ptr(),
-        WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX as u32,
+        WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
         x + 140,
         y + 5,
         250,
@@ -729,7 +727,7 @@ unsafe fn create_checkbox_row(
     }
 
     (check, vec![check])
-}
+} }
 
 // ── Config building ──────────────────────────────────────────────────
 
@@ -827,10 +825,10 @@ fn update_all_labels(state: &Win32State) {
     }
 }
 
-unsafe fn set_label_text(hwnd: HWND, text: &str) {
+unsafe fn set_label_text(hwnd: HWND, text: &str) { unsafe {
     let wide = to_wide(text);
     SetWindowTextW(hwnd, wide.as_ptr());
-}
+} }
 
 // ── Security sync ────────────────────────────────────────────────────
 
