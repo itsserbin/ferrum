@@ -37,11 +37,12 @@ pub enum SecurityEventKind {
 impl SecurityEventKind {
     /// Human-readable label used in the UI.
     pub fn label(self) -> &'static str {
+        let t = crate::i18n::t();
         match self {
-            Self::PasteInjection => "Paste with newlines detected",
-            Self::TitleQuery => "OSC/CSI title query blocked",
-            Self::CursorRewrite => "Cursor rewrite detected",
-            Self::MouseLeak => "Mouse reporting leak prevented",
+            Self::PasteInjection => t.security_event_paste_newlines,
+            Self::TitleQuery => t.security_event_title_query_blocked,
+            Self::CursorRewrite => t.security_event_cursor_rewrite,
+            Self::MouseLeak => t.security_event_mouse_leak_prevented,
         }
     }
 }

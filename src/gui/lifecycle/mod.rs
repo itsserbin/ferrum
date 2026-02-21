@@ -248,11 +248,49 @@ impl ApplicationHandler for App {
 
         // Apply config changes from native settings window.
         while let Ok(new_config) = self.settings_rx.try_recv() {
+            let language_changed = new_config.language != self.config.language;
+            crate::i18n::set_locale(new_config.language);
             for win in self.windows.values_mut() {
                 win.apply_config_change(&new_config);
                 win.window.request_redraw();
             }
             self.config = new_config;
+
+            // Reopen the settings window so labels reflect the new locale.
+            #[cfg(target_os = "macos")]
+            if language_changed
+                && platform::macos::settings_window::is_settings_window_open()
+            {
+                let tab_idx = platform::macos::settings_window::selected_tab_index();
+                platform::macos::settings_window::close_settings_window();
+                platform::macos::settings_window::open_settings_window(
+                    &self.config,
+                    self.settings_tx.clone(),
+                );
+                platform::macos::settings_window::select_tab(tab_idx);
+            }
+            #[cfg(target_os = "windows")]
+            if language_changed
+                && platform::windows::settings_window::is_settings_window_open()
+            {
+                let tab_idx = platform::windows::settings_window::selected_tab_index();
+                platform::windows::settings_window::request_reopen(
+                    &self.config,
+                    self.settings_tx.clone(),
+                    tab_idx,
+                );
+            }
+            #[cfg(target_os = "linux")]
+            if language_changed
+                && platform::linux::settings_window::is_settings_window_open()
+            {
+                let tab_idx = platform::linux::settings_window::selected_tab_index();
+                platform::linux::settings_window::request_reopen(
+                    &self.config,
+                    self.settings_tx.clone(),
+                    tab_idx,
+                );
+            }
         }
 
         let now = std::time::Instant::now();

@@ -163,7 +163,10 @@ impl FerrumWindow {
             })
             .unwrap_or_else(|| "Ferrum".to_string());
         match update {
-            Some(release) => format!("{base} - Update {} available", release.tag_name),
+            Some(release) => {
+                let tmpl = crate::i18n::t().update_available;
+                format!("{base} - {}", tmpl.replace("{}", &release.tag_name))
+            }
             None => base,
         }
     }
@@ -231,6 +234,7 @@ impl App {
         let (update_tx, update_rx) = mpsc::channel::<update::AvailableRelease>();
         update::spawn_update_checker(update_tx);
         let config = crate::config::load_config();
+        crate::i18n::set_locale(config.language);
         let (settings_tx, settings_rx) = std::sync::mpsc::channel();
         App {
             windows: std::collections::HashMap::new(),

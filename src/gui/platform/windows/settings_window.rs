@@ -2,8 +2,8 @@ use crate::config::{
     AppConfig, FontConfig, FontFamily, LayoutConfig, SecurityMode, SecuritySettings,
     TerminalConfig, ThemeChoice,
 };
-use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
-use std::sync::mpsc;
+use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicPtr, Ordering};
+use std::sync::{mpsc, Mutex};
 
 use windows_sys::Win32::Foundation::*;
 use windows_sys::Win32::Graphics::Dwm::*;
@@ -115,6 +115,7 @@ const TCIF_TEXT: u32 = 0x0001;
 const TCM_FIRST: u32 = 0x1300;
 const TCM_INSERTITEMW: u32 = TCM_FIRST + 62;
 const TCM_GETCURSEL: u32 = TCM_FIRST + 11;
+const TCM_SETCURSEL: u32 = TCM_FIRST + 12;
 const TCN_SELCHANGE: u32 = (-551i32) as u32;
 
 // UpDown control
@@ -196,6 +197,12 @@ static SETTINGS_HWND: AtomicPtr<core::ffi::c_void> = AtomicPtr::new(std::ptr::nu
 /// Tracks whether we are in a programmatic update (e.g. reset, display refresh).
 /// Prevents reentrant WM_COMMAND handlers from sending intermediate configs.
 static SUPPRESS: AtomicBool = AtomicBool::new(false);
+/// Tracks the currently selected tab (updated in on_tab_change).
+static CURRENT_TAB: AtomicIsize = AtomicIsize::new(0);
+/// When >= 0, the settings window should reopen at this tab after closing.
+static REOPEN_WITH_TAB: AtomicIsize = AtomicIsize::new(-1);
+/// Config + sender for the reopened window.
+static REOPEN_DATA: Mutex<Option<(AppConfig, mpsc::Sender<AppConfig>)>> = Mutex::new(None);
 
 pub fn is_settings_window_open() -> bool {
     WINDOW_OPEN.load(Ordering::Relaxed)
@@ -210,6 +217,18 @@ pub fn close_settings_window() {
     if !hwnd.is_null() {
         unsafe { PostMessageW(hwnd, WM_CLOSE, 0, 0) };
     }
+}
+
+/// Returns the index of the currently selected settings tab.
+pub fn selected_tab_index() -> usize {
+    CURRENT_TAB.load(Ordering::Relaxed).max(0) as usize
+}
+
+/// Closes the settings window and reopens it at the given tab with fresh translations.
+pub fn request_reopen(config: &AppConfig, tx: mpsc::Sender<AppConfig>, tab_index: usize) {
+    *REOPEN_DATA.lock().unwrap() = Some((config.clone(), tx));
+    REOPEN_WITH_TAB.store(tab_index as isize, Ordering::Relaxed);
+    close_settings_window();
 }
 
 pub fn open_settings_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>) {
@@ -245,6 +264,7 @@ mod id {
     // Theme
     pub const THEME_COMBO: i32 = 300;
     // Terminal
+    pub const LANGUAGE_COMBO: i32 = 408;
     pub const SCROLLBACK_UPDOWN: i32 = 400;
     pub const SCROLLBACK_EDIT: i32 = 401;
     pub const CURSOR_BLINK_UPDOWN: i32 = 402;
@@ -281,6 +301,7 @@ struct Win32State {
     // Theme tab
     theme_combo: HWND,
     // Terminal tab
+    language_combo: HWND,
     scrollback_updown: HWND,
     scrollback_edit: HWND,
     cursor_blink_updown: HWND,
@@ -334,76 +355,105 @@ fn run_win32_window(config: AppConfig, tx: mpsc::Sender<AppConfig>) {
         };
         RegisterClassExW(&wc);
 
-        let title = to_wide("Ferrum Settings");
-        let style = WS_OVERLAPPEDWINDOW & !WS_MAXIMIZEBOX & !WS_THICKFRAME;
+        let mut config = config;
+        let mut tx = tx;
+        let mut initial_tab: usize = 0;
 
-        // Create window first to get its DPI, then resize.
-        let hwnd = CreateWindowExW(
-            0,
-            class_name.as_ptr(),
-            title.as_ptr(),
-            style,
-            CW_USEDEFAULT,
-            CW_USEDEFAULT,
-            CW_USEDEFAULT,
-            CW_USEDEFAULT,
-            std::ptr::null_mut(),
-            std::ptr::null_mut(),
-            hinstance,
-            std::ptr::null(),
-        );
+        loop {
+            let t = crate::i18n::t();
+            let title = to_wide(t.settings_title);
+            let style = WS_OVERLAPPEDWINDOW & !WS_MAXIMIZEBOX & !WS_THICKFRAME;
 
-        let dpi = if !hwnd.is_null() { GetDpiForWindow(hwnd) } else { 96 };
-        let dpi = if dpi == 0 { 96 } else { dpi };
+            // Create window first to get its DPI, then resize.
+            let hwnd = CreateWindowExW(
+                0,
+                class_name.as_ptr(),
+                title.as_ptr(),
+                style,
+                CW_USEDEFAULT,
+                CW_USEDEFAULT,
+                CW_USEDEFAULT,
+                CW_USEDEFAULT,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                hinstance,
+                std::ptr::null(),
+            );
 
-        // Resize to DPI-scaled client area.
-        let mut rect = RECT {
-            left: 0,
-            top: 0,
-            right: dpi_scale(layout::CLIENT_W, dpi),
-            bottom: dpi_scale(layout::CLIENT_H, dpi),
-        };
-        AdjustWindowRectEx(&mut rect, style, 0, 0);
-        SetWindowPos(
-            hwnd,
-            std::ptr::null_mut(),
-            0, 0,
-            rect.right - rect.left,
-            rect.bottom - rect.top,
-            SWP_NOMOVE | SWP_NOZORDER,
-        );
+            let dpi = if !hwnd.is_null() { GetDpiForWindow(hwnd) } else { 96 };
+            let dpi = if dpi == 0 { 96 } else { dpi };
 
-        if hwnd.is_null() {
-            WINDOW_OPEN.store(false, Ordering::Relaxed);
-            return;
+            // Resize to DPI-scaled client area.
+            let mut rect = RECT {
+                left: 0,
+                top: 0,
+                right: dpi_scale(layout::CLIENT_W, dpi),
+                bottom: dpi_scale(layout::CLIENT_H, dpi),
+            };
+            AdjustWindowRectEx(&mut rect, style, 0, 0);
+            SetWindowPos(
+                hwnd,
+                std::ptr::null_mut(),
+                0, 0,
+                rect.right - rect.left,
+                rect.bottom - rect.top,
+                SWP_NOMOVE | SWP_NOZORDER,
+            );
+
+            if hwnd.is_null() {
+                WINDOW_OPEN.store(false, Ordering::Relaxed);
+                return;
+            }
+
+            // Apply dark title bar.
+            let dark: i32 = 1;
+            let _ = DwmSetWindowAttribute(
+                hwnd,
+                DWMWA_USE_IMMERSIVE_DARK_MODE as u32,
+                &dark as *const _ as *const _,
+                std::mem::size_of::<i32>() as u32,
+            );
+
+            let state = create_controls(hwnd, hinstance, &config, tx.clone(), dpi);
+
+            // Select the requested tab (non-zero after a language-change reopen).
+            if initial_tab > 0 {
+                SendMessageW(state.tab_ctrl, TCM_SETCURSEL, initial_tab, 0);
+                on_tab_change(&state);
+            }
+
+            // Store state on the window — accessible from wndproc without any mutex.
+            let state_ptr = Box::into_raw(Box::new(state));
+            SetWindowLongPtrW(hwnd, GWLP_USERDATA, state_ptr as isize);
+            SETTINGS_HWND.store(hwnd, Ordering::Release);
+
+            ShowWindow(hwnd, SW_SHOW);
+            UpdateWindow(hwnd);
+
+            // Message loop.
+            let mut msg: MSG = std::mem::zeroed();
+            while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+            // Cleanup done in WM_NCDESTROY handler.
+
+            // Check if a language change requested a reopen.
+            let tab = REOPEN_WITH_TAB.swap(-1, Ordering::Relaxed);
+            if tab < 0 {
+                break; // Normal close — exit thread.
+            }
+            if let Some((new_config, new_tx)) = REOPEN_DATA.lock().unwrap().take() {
+                config = new_config;
+                tx = new_tx;
+                initial_tab = tab as usize;
+                WINDOW_OPEN.store(true, Ordering::Relaxed);
+                JUST_CLOSED.store(false, Ordering::Relaxed);
+                // Loop back to create a new window with fresh translations.
+            } else {
+                break;
+            }
         }
-
-        // Apply dark title bar.
-        let dark: i32 = 1;
-        let _ = DwmSetWindowAttribute(
-            hwnd,
-            DWMWA_USE_IMMERSIVE_DARK_MODE as u32,
-            &dark as *const _ as *const _,
-            std::mem::size_of::<i32>() as u32,
-        );
-
-        let state = create_controls(hwnd, hinstance, &config, tx, dpi);
-
-        // Store state on the window — accessible from wndproc without any mutex.
-        let state_ptr = Box::into_raw(Box::new(state));
-        SetWindowLongPtrW(hwnd, GWLP_USERDATA, state_ptr as isize);
-        SETTINGS_HWND.store(hwnd, Ordering::Release);
-
-        ShowWindow(hwnd, SW_SHOW);
-        UpdateWindow(hwnd);
-
-        // Message loop.
-        let mut msg: MSG = std::mem::zeroed();
-        while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
-        }
-        // Cleanup done in WM_NCDESTROY handler.
     }
 }
 
@@ -503,7 +553,7 @@ fn on_command(state: &Win32State, wparam: WPARAM) {
             let config = build_config(state);
             let _ = state.tx.send(config);
         }
-        (id::FONT_FAMILY_COMBO | id::THEME_COMBO, CBN_SELCHANGE) => {
+        (id::FONT_FAMILY_COMBO | id::THEME_COMBO | id::LANGUAGE_COMBO, CBN_SELCHANGE) => {
             let config = build_config(state);
             let _ = state.tx.send(config);
         }
@@ -513,6 +563,7 @@ fn on_command(state: &Win32State, wparam: WPARAM) {
 
 fn on_tab_change(state: &Win32State) {
     let active = unsafe { SendMessageW(state.tab_ctrl, TCM_GETCURSEL, 0, 0) } as usize;
+    CURRENT_TAB.store(active as isize, Ordering::Relaxed);
     for (i, page) in state.tab_pages.iter().enumerate() {
         let show = if i == active { SW_SHOW } else { SW_HIDE };
         for &hwnd in page {
@@ -550,7 +601,8 @@ unsafe fn create_controls(
     SendMessageW(tab_ctrl, WM_SETFONT, font as usize, 0);
 
     // Add tabs.
-    for (i, name) in ["Font", "Theme", "Terminal", "Layout", "Security"].iter().enumerate() {
+    let t = crate::i18n::t();
+    for (i, name) in [t.settings_tab_font, t.settings_tab_theme, t.settings_tab_terminal, t.settings_tab_layout, t.settings_tab_security].iter().enumerate() {
         let text = to_wide(name);
         let mut item: TCITEMW = std::mem::zeroed();
         item.mask = TCIF_TEXT;
@@ -571,7 +623,7 @@ unsafe fn create_controls(
     let font_size_initial = ((config.font.size - FontConfig::SIZE_MIN) / FontConfig::SIZE_STEP).round() as i32;
     let font_size_range_max = ((FontConfig::SIZE_MAX - FontConfig::SIZE_MIN) / FontConfig::SIZE_STEP).round() as i32;
     let (font_size_updown, font_size_edit, mut ctrls) = create_spin_row(&ctx, &SpinRowParams {
-        label_text: "Font Size:", x: x0, y: y0,
+        label_text: t.font_size_label, x: x0, y: y0,
         range_min: 0, range_max: font_size_range_max, initial: font_size_initial,
         updown_id: id::FONT_SIZE_UPDOWN, edit_id: id::FONT_SIZE_EDIT,
     });
@@ -579,7 +631,7 @@ unsafe fn create_controls(
 
     // Font Family combo
     let (font_family_combo, mut ctrls) = create_combo_row(&ctx, &ComboRowParams {
-        label_text: "Font Family:", x: x0, y: y0 + sp,
+        label_text: t.font_family_label, x: x0, y: y0 + sp,
         options: FontFamily::DISPLAY_NAMES, selected: config.font.family.index(),
         combo_id: id::FONT_FAMILY_COMBO,
     });
@@ -587,7 +639,7 @@ unsafe fn create_controls(
 
     // Line Padding (updown: 0..10)
     let (line_padding_updown, line_padding_edit, mut ctrls) = create_spin_row(&ctx, &SpinRowParams {
-        label_text: "Line Padding:", x: x0, y: y0 + sp * 2,
+        label_text: t.font_line_padding_label, x: x0, y: y0 + sp * 2,
         range_min: 0, range_max: 10, initial: config.font.line_padding as i32,
         updown_id: id::LINE_PADDING_UPDOWN, edit_id: id::LINE_PADDING_EDIT,
     });
@@ -599,7 +651,7 @@ unsafe fn create_controls(
         ThemeChoice::FerrumLight => 1,
     };
     let (theme_combo, theme_page) = create_combo_row(&ctx, &ComboRowParams {
-        label_text: "Theme:", x: x0, y: y0,
+        label_text: t.theme_label, x: x0, y: y0,
         options: &["Ferrum Dark", "Ferrum Light"], selected: theme_selected,
         combo_id: id::THEME_COMBO,
     });
@@ -607,10 +659,21 @@ unsafe fn create_controls(
     // ── Terminal tab controls ────────────────────────────────────────
     let mut terminal_page = Vec::new();
 
+    // Language combo
+    let (language_combo, mut ctrls) = create_combo_row(&ctx, &ComboRowParams {
+        label_text: t.terminal_language_label,
+        x: x0,
+        y: y0,
+        options: crate::i18n::Locale::DISPLAY_NAMES,
+        selected: config.language.index(),
+        combo_id: id::LANGUAGE_COMBO,
+    });
+    terminal_page.append(&mut ctrls);
+
     // Scrollback (updown: 0..500 → 0..50000, step 100)
     let scrollback_initial = config.terminal.max_scrollback as i32 / 100;
     let (scrollback_updown, scrollback_edit, mut ctrls) = create_spin_row(&ctx, &SpinRowParams {
-        label_text: "Max Scrollback:", x: x0, y: y0,
+        label_text: t.terminal_max_scrollback_label, x: x0, y: y0 + sp,
         range_min: 0, range_max: 500, initial: scrollback_initial,
         updown_id: id::SCROLLBACK_UPDOWN, edit_id: id::SCROLLBACK_EDIT,
     });
@@ -620,7 +683,7 @@ unsafe fn create_controls(
     let blink_initial = (config.terminal.cursor_blink_interval_ms as i64 - TerminalConfig::BLINK_MS_MIN as i64) / TerminalConfig::BLINK_MS_STEP as i64;
     let blink_range_max = ((TerminalConfig::BLINK_MS_MAX - TerminalConfig::BLINK_MS_MIN) / TerminalConfig::BLINK_MS_STEP) as i32;
     let (cursor_blink_updown, cursor_blink_edit, mut ctrls) = create_spin_row(&ctx, &SpinRowParams {
-        label_text: "Cursor Blink (ms):", x: x0, y: y0 + sp,
+        label_text: t.terminal_cursor_blink_label, x: x0, y: y0 + sp * 2,
         range_min: 0, range_max: blink_range_max, initial: blink_initial as i32,
         updown_id: id::CURSOR_BLINK_UPDOWN, edit_id: id::CURSOR_BLINK_EDIT,
     });
@@ -630,28 +693,28 @@ unsafe fn create_controls(
     let mut layout_page = Vec::new();
 
     let (win_padding_updown, win_padding_edit, mut ctrls) = create_spin_row(&ctx, &SpinRowParams {
-        label_text: "Window Padding:", x: x0, y: y0,
+        label_text: t.layout_window_padding_label, x: x0, y: y0,
         range_min: 0, range_max: 32, initial: config.layout.window_padding as i32,
         updown_id: id::WIN_PADDING_UPDOWN, edit_id: id::WIN_PADDING_EDIT,
     });
     layout_page.append(&mut ctrls);
 
     let (pane_padding_updown, pane_padding_edit, mut ctrls) = create_spin_row(&ctx, &SpinRowParams {
-        label_text: "Pane Padding:", x: x0, y: y0 + sp,
+        label_text: t.layout_pane_padding_label, x: x0, y: y0 + sp,
         range_min: 0, range_max: 16, initial: config.layout.pane_inner_padding as i32,
         updown_id: id::PANE_PADDING_UPDOWN, edit_id: id::PANE_PADDING_EDIT,
     });
     layout_page.append(&mut ctrls);
 
     let (scrollbar_updown, scrollbar_edit, mut ctrls) = create_spin_row(&ctx, &SpinRowParams {
-        label_text: "Scrollbar Width:", x: x0, y: y0 + sp * 2,
+        label_text: t.layout_scrollbar_width_label, x: x0, y: y0 + sp * 2,
         range_min: 2, range_max: 16, initial: config.layout.scrollbar_width as i32,
         updown_id: id::SCROLLBAR_UPDOWN, edit_id: id::SCROLLBAR_EDIT,
     });
     layout_page.append(&mut ctrls);
 
     let (tab_bar_updown, tab_bar_edit, mut ctrls) = create_spin_row(&ctx, &SpinRowParams {
-        label_text: "Tab Bar Height:", x: x0, y: y0 + sp * 3,
+        label_text: t.layout_tab_bar_height_label, x: x0, y: y0 + sp * 3,
         range_min: 24, range_max: 48, initial: config.layout.tab_bar_height as i32,
         updown_id: id::TAB_BAR_UPDOWN, edit_id: id::TAB_BAR_EDIT,
     });
@@ -666,39 +729,39 @@ unsafe fn create_controls(
         SecurityMode::Custom => 2,
     };
     let (security_mode_combo, mut ctrls) = create_combo_row(&ctx, &ComboRowParams {
-        label_text: "Security Mode:", x: x0, y: y0,
-        options: &["Disabled", "Standard", "Custom"], selected: mode_index,
+        label_text: t.security_mode_label, x: x0, y: y0,
+        options: &[t.security_mode_disabled, t.security_mode_standard, t.security_mode_custom], selected: mode_index,
         combo_id: id::SECURITY_MODE_COMBO,
     });
     security_page.append(&mut ctrls);
 
     let enabled = !matches!(config.security.mode, SecurityMode::Disabled);
     let (paste_check, mut ctrls) = create_checkbox_row(&ctx, &CheckboxRowParams {
-        label_text: "Paste Protection", x: x0, y: y0 + sp,
+        label_text: t.security_paste_protection_label, x: x0, y: y0 + sp,
         checked: config.security.paste_protection, enabled, check_id: id::PASTE_CHECK,
     });
     security_page.append(&mut ctrls);
 
     let (block_title_check, mut ctrls) = create_checkbox_row(&ctx, &CheckboxRowParams {
-        label_text: "Block Title Query", x: x0, y: y0 + sp * 2,
+        label_text: t.security_block_title_query_label, x: x0, y: y0 + sp * 2,
         checked: config.security.block_title_query, enabled, check_id: id::BLOCK_TITLE_CHECK,
     });
     security_page.append(&mut ctrls);
 
     let (limit_cursor_check, mut ctrls) = create_checkbox_row(&ctx, &CheckboxRowParams {
-        label_text: "Limit Cursor Jumps", x: x0, y: y0 + sp * 3,
+        label_text: t.security_limit_cursor_jumps_label, x: x0, y: y0 + sp * 3,
         checked: config.security.limit_cursor_jumps, enabled, check_id: id::LIMIT_CURSOR_CHECK,
     });
     security_page.append(&mut ctrls);
 
     let (clear_mouse_check, mut ctrls) = create_checkbox_row(&ctx, &CheckboxRowParams {
-        label_text: "Clear Mouse on Reset", x: x0, y: y0 + sp * 4,
+        label_text: t.security_clear_mouse_on_reset_label, x: x0, y: y0 + sp * 4,
         checked: config.security.clear_mouse_on_reset, enabled, check_id: id::CLEAR_MOUSE_CHECK,
     });
     security_page.append(&mut ctrls);
 
     // ── Reset button (always visible, below tab control) ─────────────
-    let reset_text = to_wide("Reset to Defaults");
+    let reset_text = to_wide(t.settings_reset_to_defaults);
     let reset_btn = CreateWindowExW(
         0,
         to_wide("BUTTON").as_ptr(),
@@ -728,6 +791,7 @@ unsafe fn create_controls(
         line_padding_updown,
         line_padding_edit,
         theme_combo,
+        language_combo,
         scrollback_updown,
         scrollback_edit,
         cursor_blink_updown,
@@ -978,6 +1042,9 @@ fn build_config(state: &Win32State) -> AppConfig {
                 limit_cursor_jumps: limit_cursor,
                 clear_mouse_on_reset: clear_mouse,
             },
+            language: crate::i18n::Locale::from_index(
+                SendMessageW(state.language_combo, CB_GETCURSEL, 0, 0) as usize,
+            ),
         }
     }
 }
@@ -1103,6 +1170,7 @@ fn reset_controls(state: &Win32State) {
         SendMessageW(state.theme_combo, CB_SETCURSEL, theme_idx, 0);
 
         // Terminal
+        SendMessageW(state.language_combo, CB_SETCURSEL, crate::i18n::Locale::default().index(), 0);
         SendMessageW(state.scrollback_updown, UDM_SETPOS32, 0, (d.terminal.max_scrollback / 100) as LPARAM);
         let blink_pos = (d.terminal.cursor_blink_interval_ms as i64 - TerminalConfig::BLINK_MS_MIN as i64) / TerminalConfig::BLINK_MS_STEP as i64;
         SendMessageW(state.cursor_blink_updown, UDM_SETPOS32, 0, blink_pos as LPARAM);

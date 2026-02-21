@@ -10,7 +10,7 @@ use objc2_app_kit::{
     NSBackingStoreType, NSButton, NSPopUpButton, NSStepper, NSTabView, NSTabViewItem,
     NSTextField, NSView, NSWindow, NSWindowStyleMask,
 };
-use objc2_foundation::{NSPoint, NSRect, NSSize, NSString, ns_string};
+use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
 
 use super::ffi::{class_addMethod, class_replaceMethod, object_getClass, sel_registerName};
 use crate::config::{
@@ -29,6 +29,7 @@ use crate::config::{
 struct NativeSettingsState {
     window: Retained<NSWindow>,
     sender: mpsc::Sender<AppConfig>,
+    tab_view: Retained<NSTabView>,
     // Font
     font_size_stepper: Retained<NSStepper>,
     font_size_field: Retained<NSTextField>,
@@ -38,6 +39,7 @@ struct NativeSettingsState {
     // Theme
     theme_popup: Retained<NSPopUpButton>,
     // Terminal
+    language_popup: Retained<NSPopUpButton>,
     scrollback_stepper: Retained<NSStepper>,
     scrollback_field: Retained<NSTextField>,
     cursor_blink_stepper: Retained<NSStepper>,
@@ -174,6 +176,9 @@ fn build_config_from_controls(state: &NativeSettingsState) -> AppConfig {
             limit_cursor_jumps: is_checkbox_on(&state.limit_cursor_jumps_check),
             clear_mouse_on_reset: is_checkbox_on(&state.clear_mouse_on_reset_check),
         },
+        language: crate::i18n::Locale::from_index(
+            state.language_popup.indexOfSelectedItem() as usize,
+        ),
     }
 }
 
@@ -352,6 +357,7 @@ pub fn reset_controls_to_defaults() {
         .setIntegerValue(defaults.font.line_padding as isize);
     state.font_family_popup.selectItemAtIndex(0); // JetBrainsMono = default
     state.theme_popup.selectItemAtIndex(0); // FerrumDark = default
+    state.language_popup.selectItemAtIndex(crate::i18n::Locale::default().index() as isize);
     state
         .scrollback_stepper
         .setIntegerValue(defaults.terminal.max_scrollback as isize);
@@ -527,6 +533,29 @@ pub fn is_settings_window_open() -> bool {
     SETTINGS_STATE.lock().unwrap_or_else(|e| e.into_inner()).is_some()
 }
 
+/// Returns the index of the currently selected tab, or 0 if the window is closed.
+pub fn selected_tab_index() -> usize {
+    let guard = SETTINGS_STATE.lock().unwrap();
+    match guard.as_ref() {
+        Some(state) => {
+            let idx = state.tab_view.indexOfTabViewItem(state.tab_view.selectedTabViewItem().as_deref().unwrap());
+            idx as usize
+        }
+        None => 0,
+    }
+}
+
+/// Selects the tab at the given index. No-op if the window is closed or index is out of range.
+pub fn select_tab(index: usize) {
+    let guard = SETTINGS_STATE.lock().unwrap();
+    if let Some(state) = guard.as_ref() {
+        let count = state.tab_view.numberOfTabViewItems();
+        if (index as isize) < count {
+            state.tab_view.selectTabViewItemAtIndex(index as isize);
+        }
+    }
+}
+
 /// Opens the native macOS settings window. No-op if already open.
 pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>) {
     if is_settings_window_open() {
@@ -561,7 +590,8 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
             false,
         )
     };
-    window.setTitle(&NSString::from_str("Ferrum Settings"));
+    let t = crate::i18n::t();
+    window.setTitle(&NSString::from_str(t.settings_title));
     // SAFETY: We hold a Retained<NSWindow> (strong reference). Without this call,
     // macOS releases the window when the user closes it, leaving a dangling pointer.
     unsafe { window.setReleasedWhenClosed(false) };
@@ -578,7 +608,7 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
     // ── Font tab ──────────────────────────────────────────────────────
 
     let font_tab = NSTabViewItem::new();
-    font_tab.setLabel(&NSString::from_str("Font"));
+    font_tab.setLabel(&NSString::from_str(t.settings_tab_font));
     let font_view = NSView::initWithFrame(
         mtm.alloc(),
         NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(500.0, 320.0)),
@@ -588,7 +618,7 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
         mtm,
         &StepperRowParams {
             parent: &font_view,
-            label_text: "Font Size:",
+            label_text: t.font_size_label,
             value: f64::from(config.font.size),
             min: f64::from(FontConfig::SIZE_MIN),
             max: f64::from(FontConfig::SIZE_MAX),
@@ -600,7 +630,7 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
     let font_family_popup = create_popup_row(
         mtm,
         &font_view,
-        "Font Family:",
+        t.font_family_label,
         FontFamily::DISPLAY_NAMES,
         config.font.family.index(),
         230.0,
@@ -610,7 +640,7 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
         mtm,
         &StepperRowParams {
             parent: &font_view,
-            label_text: "Line Padding:",
+            label_text: t.font_line_padding_label,
             value: f64::from(config.font.line_padding),
             min: 0.0,
             max: 10.0,
@@ -625,7 +655,7 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
     // ── Theme tab ─────────────────────────────────────────────────────
 
     let theme_tab = NSTabViewItem::new();
-    theme_tab.setLabel(&NSString::from_str("Theme"));
+    theme_tab.setLabel(&NSString::from_str(t.settings_tab_theme));
     let theme_view = NSView::initWithFrame(
         mtm.alloc(),
         NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(500.0, 320.0)),
@@ -638,7 +668,7 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
     let theme_popup = create_popup_row(
         mtm,
         &theme_view,
-        "Theme:",
+        t.theme_label,
         &["Ferrum Dark", "Ferrum Light"],
         theme_selected,
         280.0,
@@ -650,22 +680,31 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
     // ── Terminal tab ──────────────────────────────────────────────────
 
     let terminal_tab = NSTabViewItem::new();
-    terminal_tab.setLabel(&NSString::from_str("Terminal"));
+    terminal_tab.setLabel(&NSString::from_str(t.settings_tab_terminal));
     let terminal_view = NSView::initWithFrame(
         mtm.alloc(),
         NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(500.0, 320.0)),
+    );
+
+    let language_popup = create_popup_row(
+        mtm,
+        &terminal_view,
+        t.terminal_language_label,
+        crate::i18n::Locale::DISPLAY_NAMES,
+        config.language.index(),
+        280.0,
     );
 
     let (scrollback_field, scrollback_stepper) = create_stepper_row(
         mtm,
         &StepperRowParams {
             parent: &terminal_view,
-            label_text: "Max Scrollback:",
+            label_text: t.terminal_max_scrollback_label,
             value: config.terminal.max_scrollback as f64,
             min: 0.0,
             max: 50000.0,
             step: 100.0,
-            y_offset: 280.0,
+            y_offset: 230.0,
         },
     );
 
@@ -673,12 +712,12 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
         mtm,
         &StepperRowParams {
             parent: &terminal_view,
-            label_text: "Cursor Blink (ms):",
+            label_text: t.terminal_cursor_blink_label,
             value: config.terminal.cursor_blink_interval_ms as f64,
             min: TerminalConfig::BLINK_MS_MIN as f64,
             max: TerminalConfig::BLINK_MS_MAX as f64,
             step: TerminalConfig::BLINK_MS_STEP as f64,
-            y_offset: 230.0,
+            y_offset: 180.0,
         },
     );
 
@@ -689,7 +728,7 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
     // Note: Tab Bar Height is omitted — macOS uses the native tab bar.
 
     let layout_tab = NSTabViewItem::new();
-    layout_tab.setLabel(&NSString::from_str("Layout"));
+    layout_tab.setLabel(&NSString::from_str(t.settings_tab_layout));
     let layout_view = NSView::initWithFrame(
         mtm.alloc(),
         NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(500.0, 320.0)),
@@ -699,7 +738,7 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
         mtm,
         &StepperRowParams {
             parent: &layout_view,
-            label_text: "Window Padding:",
+            label_text: t.layout_window_padding_label,
             value: f64::from(config.layout.window_padding),
             min: 0.0,
             max: 32.0,
@@ -712,7 +751,7 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
         mtm,
         &StepperRowParams {
             parent: &layout_view,
-            label_text: "Pane Padding:",
+            label_text: t.layout_pane_padding_label,
             value: f64::from(config.layout.pane_inner_padding),
             min: 0.0,
             max: 16.0,
@@ -725,7 +764,7 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
         mtm,
         &StepperRowParams {
             parent: &layout_view,
-            label_text: "Scrollbar Width:",
+            label_text: t.layout_scrollbar_width_label,
             value: f64::from(config.layout.scrollbar_width),
             min: 2.0,
             max: 16.0,
@@ -740,7 +779,7 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
     // ── Security tab ─────────────────────────────────────────────────
 
     let security_tab = NSTabViewItem::new();
-    security_tab.setLabel(&NSString::from_str("Security"));
+    security_tab.setLabel(&NSString::from_str(t.settings_tab_security));
     let security_view = NSView::initWithFrame(
         mtm.alloc(),
         NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(500.0, 320.0)),
@@ -754,8 +793,8 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
     let security_mode_popup = create_popup_row(
         mtm,
         &security_view,
-        "Security Mode:",
-        &["Disabled", "Standard", "Custom"],
+        t.security_mode_label,
+        &[t.security_mode_disabled, t.security_mode_standard, t.security_mode_custom],
         security_mode_selected,
         280.0,
     );
@@ -763,32 +802,32 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
     let paste_protection_check = create_checkbox_row(
         mtm,
         &security_view,
-        "Paste Protection",
-        "Warn before pasting text with suspicious control characters",
+        t.security_paste_protection_label,
+        t.security_paste_protection_desc,
         config.security.paste_protection,
         240.0,
     );
     let block_title_query_check = create_checkbox_row(
         mtm,
         &security_view,
-        "Block Title Query",
-        "Block programs from reading the terminal window title",
+        t.security_block_title_query_label,
+        t.security_block_title_query_desc,
         config.security.block_title_query,
         194.0,
     );
     let limit_cursor_jumps_check = create_checkbox_row(
         mtm,
         &security_view,
-        "Limit Cursor Jumps",
-        "Restrict how far escape sequences can move the cursor",
+        t.security_limit_cursor_jumps_label,
+        t.security_limit_cursor_jumps_desc,
         config.security.limit_cursor_jumps,
         148.0,
     );
     let clear_mouse_on_reset_check = create_checkbox_row(
         mtm,
         &security_view,
-        "Clear Mouse on Reset",
-        "Disable mouse tracking modes when the terminal resets",
+        t.security_clear_mouse_on_reset_label,
+        t.security_clear_mouse_on_reset_desc,
         config.security.clear_mouse_on_reset,
         102.0,
     );
@@ -802,7 +841,7 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
     // action below via class_addMethod + msg_send.
     let reset_button = unsafe {
         NSButton::buttonWithTitle_target_action(
-            ns_string!("Reset to Defaults"),
+            &NSString::from_str(t.settings_reset_to_defaults),
             None,
             None,
             mtm,
@@ -866,6 +905,8 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
         let _: () = msg_send![&line_padding_stepper, setAction: sel_stepper];
         let _: () = msg_send![&theme_popup, setTarget: &*window];
         let _: () = msg_send![&theme_popup, setAction: sel_stepper];
+        let _: () = msg_send![&language_popup, setTarget: &*window];
+        let _: () = msg_send![&language_popup, setAction: sel_stepper];
         let _: () = msg_send![&scrollback_stepper, setTarget: &*window];
         let _: () = msg_send![&scrollback_stepper, setAction: sel_stepper];
         let _: () = msg_send![&cursor_blink_stepper, setTarget: &*window];
@@ -931,12 +972,14 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
     let state = NativeSettingsState {
         window: window.clone(),
         sender,
+        tab_view,
         font_size_stepper,
         font_size_field,
         font_family_popup,
         line_padding_stepper,
         line_padding_field,
         theme_popup,
+        language_popup,
         scrollback_stepper,
         scrollback_field,
         cursor_blink_stepper,
