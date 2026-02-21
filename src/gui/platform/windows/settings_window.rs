@@ -9,8 +9,77 @@ use windows_sys::Win32::Foundation::*;
 use windows_sys::Win32::Graphics::Dwm::*;
 use windows_sys::Win32::Graphics::Gdi::*;
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows_sys::Win32::UI::Controls::*;
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
+
+// ── Win32 Common Controls — manual FFI definitions ──────────────────
+// Defined locally: windows-sys may not export every Controls symbol
+// under the enabled feature flags.  Local items shadow glob imports,
+// so any overlap with WindowsAndMessaging::* is harmless.
+
+#[allow(non_camel_case_types, non_snake_case)]
+#[repr(C)]
+struct INITCOMMONCONTROLSEX {
+    dwSize: u32,
+    dwICC: u32,
+}
+
+#[allow(non_camel_case_types, non_snake_case)]
+#[repr(C)]
+struct TCITEMW {
+    mask: u32,
+    dwState: u32,
+    dwStateMask: u32,
+    pszText: *mut u16,
+    cchTextMax: i32,
+    iImage: i32,
+    lParam: LPARAM,
+}
+
+#[allow(non_camel_case_types, non_snake_case)]
+#[repr(C)]
+struct NMHDR {
+    hwndFrom: HWND,
+    idFrom: usize,
+    code: u32,
+}
+
+#[allow(non_snake_case)]
+#[link(name = "comctl32")]
+extern "system" {
+    fn InitCommonControlsEx(picce: *const INITCOMMONCONTROLSEX) -> BOOL;
+}
+
+#[allow(non_snake_case)]
+#[link(name = "user32")]
+extern "system" {
+    fn EnableWindow(hwnd: HWND, enable: BOOL) -> BOOL;
+}
+
+const ICC_TAB_CLASSES: u32 = 0x0008;
+const ICC_BAR_CLASSES: u32 = 0x0004;
+const ICC_STANDARD_CLASSES: u32 = 0x4000;
+
+// Trackbar (slider) messages
+const TBS_AUTOTICKS: u32 = 0x0001;
+const TBM_GETPOS: u32 = 0x0400;
+const TBM_SETPOS: u32 = 0x0405;
+const TBM_SETRANGEMIN: u32 = 0x0407;
+const TBM_SETRANGEMAX: u32 = 0x0408;
+const TBM_SETTICFREQ: u32 = 0x0414;
+
+// Tab control
+const TCIF_TEXT: u32 = 0x0001;
+const TCM_FIRST: u32 = 0x1300;
+const TCM_INSERTITEMW: u32 = TCM_FIRST + 62;
+const TCM_GETCURSEL: u32 = TCM_FIRST + 11;
+const TCN_SELCHANGE: u32 = (-551i32) as u32;
+
+// Control styles — u32 to combine with WS_* window style constants.
+const SS_LEFT: u32 = 0x0000_0000;
+const CBS_DROPDOWNLIST: u32 = 0x0003;
+const CBS_HASSTRINGS: u32 = 0x0200;
+const BS_AUTOCHECKBOX: u32 = 0x0003;
+const BS_PUSHBUTTON: u32 = 0x0000_0000;
 
 static WINDOW_OPEN: AtomicBool = AtomicBool::new(false);
 static JUST_CLOSED: AtomicBool = AtomicBool::new(false);
@@ -322,9 +391,10 @@ unsafe fn create_controls(
     tx: mpsc::Sender<AppConfig>,
 ) -> Win32State { unsafe {
     // Create tab control.
+    let tab_ctrl_class = to_wide("SysTabControl32");
     let tab_ctrl = create_window(
         0,
-        WC_TABCONTROLW,
+        tab_ctrl_class.as_ptr(),
         &[],
         WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS,
         5,
@@ -591,7 +661,7 @@ unsafe fn create_trackbar_row(
         0,
         to_wide("STATIC").as_ptr(),
         label_wide.as_ptr(),
-        WS_CHILD | WS_VISIBLE | SS_LEFT as u32,
+        WS_CHILD | WS_VISIBLE | SS_LEFT,
         x,
         y + 5,
         130,
@@ -602,11 +672,12 @@ unsafe fn create_trackbar_row(
         std::ptr::null(),
     );
 
+    let trackbar_class = to_wide("msctls_trackbar32");
     let track = CreateWindowExW(
         0,
-        TRACKBAR_CLASSW,
+        trackbar_class.as_ptr(),
         std::ptr::null(),
-        WS_CHILD | WS_VISIBLE | TBS_AUTOTICKS as u32,
+        WS_CHILD | WS_VISIBLE | TBS_AUTOTICKS,
         x + 140,
         y,
         250,
@@ -625,7 +696,7 @@ unsafe fn create_trackbar_row(
         0,
         to_wide("STATIC").as_ptr(),
         to_wide("").as_ptr(),
-        WS_CHILD | WS_VISIBLE | SS_LEFT as u32,
+        WS_CHILD | WS_VISIBLE | SS_LEFT,
         x + 400,
         y + 5,
         60,
@@ -656,7 +727,7 @@ unsafe fn create_combo_row(
         0,
         to_wide("STATIC").as_ptr(),
         label_wide.as_ptr(),
-        WS_CHILD | WS_VISIBLE | SS_LEFT as u32,
+        WS_CHILD | WS_VISIBLE | SS_LEFT,
         x,
         y + 5,
         130,
