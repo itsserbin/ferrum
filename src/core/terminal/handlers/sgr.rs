@@ -15,11 +15,20 @@ pub(in super::super) fn handle_sgr(term: &mut Terminal, params: &Params) {
         match code {
             0 => term.reset_attributes(),
             1 => term.set_bold(true),
+            2 => term.set_dim(true),
+            3 => term.set_italic(true),
             4 => term.set_underline_style(UnderlineStyle::Single),
             7 => term.set_reverse(true),
-            22 => term.set_bold(false),
+            9 => term.set_strikethrough(true),
+            21 => term.set_underline_style(UnderlineStyle::Double),
+            22 => {
+                term.set_bold(false);
+                term.set_dim(false);
+            }
+            23 => term.set_italic(false),
             24 => term.set_underline_style(UnderlineStyle::None),
             27 => term.set_reverse(false),
+            29 => term.set_strikethrough(false),
             30..=37 => term.set_fg(term.ansi_palette[(code - 30) as usize]),
             38 => {
                 // Extended foreground: 38;5;N (256-color) or 38;2;R;G;B (true color)
@@ -260,5 +269,68 @@ mod tests {
         let b = cell_at(&term, 0, 1);
         assert!(!b.bold);
         assert_eq!(b.fg, Color::SENTINEL_FG);
+    }
+
+    #[test]
+    fn sgr_dim() {
+        let term = write_colored(b"\x1b[2m");
+        assert!(cell_at(&term, 0, 0).dim);
+    }
+
+    #[test]
+    fn sgr_dim_off() {
+        // SGR 22 resets both bold and dim
+        let mut term = Terminal::new(4, 20);
+        term.process(b"\x1b[1;2mA\x1b[22mB");
+        let a = cell_at(&term, 0, 0);
+        assert!(a.bold);
+        assert!(a.dim);
+        let b = cell_at(&term, 0, 1);
+        assert!(!b.bold);
+        assert!(!b.dim);
+    }
+
+    #[test]
+    fn sgr_italic() {
+        let term = write_colored(b"\x1b[3m");
+        assert!(cell_at(&term, 0, 0).italic);
+    }
+
+    #[test]
+    fn sgr_italic_off() {
+        let term = write_colored(b"\x1b[3m\x1b[23m");
+        assert!(!cell_at(&term, 0, 0).italic);
+    }
+
+    #[test]
+    fn sgr_strikethrough() {
+        let term = write_colored(b"\x1b[9m");
+        assert!(cell_at(&term, 0, 0).strikethrough);
+    }
+
+    #[test]
+    fn sgr_strikethrough_off() {
+        let term = write_colored(b"\x1b[9m\x1b[29m");
+        assert!(!cell_at(&term, 0, 0).strikethrough);
+    }
+
+    #[test]
+    fn sgr_double_underline() {
+        let term = write_colored(b"\x1b[21m");
+        assert_eq!(cell_at(&term, 0, 0).underline_style, UnderlineStyle::Double);
+    }
+
+    #[test]
+    fn sgr_reset_clears_all_new_attrs() {
+        let mut term = Terminal::new(4, 20);
+        term.process(b"\x1b[2;3;9mA\x1b[0mB");
+        let a = cell_at(&term, 0, 0);
+        assert!(a.dim);
+        assert!(a.italic);
+        assert!(a.strikethrough);
+        let b = cell_at(&term, 0, 1);
+        assert!(!b.dim);
+        assert!(!b.italic);
+        assert!(!b.strikethrough);
     }
 }
