@@ -47,13 +47,4 @@ impl FerrumWindow {
             });
         }
     }
-
-    /// Closes the settings overlay, persisting the config and signaling update.
-    pub(in crate::gui) fn close_settings_overlay(&mut self) {
-        if let Some(overlay) = self.settings_overlay.take() {
-            crate::config::save_config(&overlay.editing_config);
-            self.pending_config = Some(overlay.editing_config);
-        }
-        self.window.request_redraw();
-    }
 }

@@ -15,11 +15,6 @@ impl FerrumWindow {
     ) {
         self.apply_pending_resize();
 
-        // Settings overlay consumes all mouse input when open.
-        if self.settings_overlay.is_some() && button != winit::event::MouseButton::Left {
-            return;
-        }
-
         match button {
             winit::event::MouseButton::Left => self.on_left_mouse_input(state, next_tab_id, tx, config),
             winit::event::MouseButton::Middle => self.on_middle_mouse_input(state),
@@ -160,11 +155,6 @@ impl FerrumWindow {
         if state == ElementState::Released && self.divider_drag.take().is_some() {
             self.resize_all_panes();
             self.window.request_redraw();
-            return;
-        }
-
-        // Settings overlay consumes all clicks when open.
-        if self.handle_settings_left_click(state, mx, my) {
             return;
         }
 

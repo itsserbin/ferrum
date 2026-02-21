@@ -89,7 +89,6 @@ pub(in crate::gui::events) struct FrameParams<'a> {
     #[cfg_attr(target_os = "macos", allow(dead_code))]
     pub pinned: bool,
     pub security_popup: Option<&'a SecurityPopup>,
-    pub settings_overlay: Option<&'a crate::gui::settings::SettingsOverlay>,
 }
 
 impl FerrumWindow {
@@ -430,7 +429,7 @@ pub(in crate::gui::events) fn draw_frame_content(
                 params.mouse_pos,
                 tab_bar.tab_offsets.as_deref(),
                 params.pinned,
-                params.settings_overlay.is_some(),
+                false, // TODO: check is_settings_window_open() per platform
             );
 
             // 5) Draw drag overlay.
@@ -449,11 +448,6 @@ pub(in crate::gui::events) fn draw_frame_content(
     // 6) Draw popups/menus.
     if let Some(popup) = params.security_popup {
         renderer.draw_security_popup(&mut target, popup);
-    }
-
-    // 6b) Draw settings overlay.
-    if let Some(overlay) = params.settings_overlay {
-        renderer.draw_settings_overlay(&mut target, overlay);
     }
 
     // 7) Draw tooltip.

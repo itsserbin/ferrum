@@ -6,7 +6,6 @@ pub mod gpu;
 pub mod metrics;
 mod scrollbar;
 mod security;
-mod settings;
 pub mod shared;
 mod tab_bar;
 mod terminal;

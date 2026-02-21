@@ -15,7 +15,6 @@ mod hit_test;
 mod overlays;
 pub mod pipelines;
 mod scrollbar;
-mod settings;
 mod setup;
 mod tab_controls;
 mod tab_layout;

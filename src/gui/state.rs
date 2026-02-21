@@ -230,12 +230,7 @@ pub(super) struct FerrumWindow {
     pub(super) last_cwd_poll: std::time::Instant,
     /// Cursor blink interval from config.
     pub(super) cursor_blink_interval_ms: u64,
-    /// Settings overlay state (open when Some).
-    pub(super) settings_overlay: Option<crate::gui::settings::SettingsOverlay>,
-    /// Pending config update from settings overlay (picked up by App).
-    pub(super) pending_config: Option<crate::config::AppConfig>,
-    /// Sender for native settings window config updates (macOS only).
-    #[cfg(target_os = "macos")]
+    /// Sender for native settings window config updates.
     pub(super) settings_tx: std::sync::mpsc::Sender<crate::config::AppConfig>,
 }
 
@@ -249,8 +244,6 @@ pub(super) struct App {
     pub(super) update_rx: mpsc::Receiver<crate::update::AvailableRelease>,
     pub(super) available_release: Option<crate::update::AvailableRelease>,
     pub(super) config: crate::config::AppConfig,
-    #[cfg(target_os = "macos")]
     pub(super) settings_tx: std::sync::mpsc::Sender<crate::config::AppConfig>,
-    #[cfg(target_os = "macos")]
     pub(super) settings_rx: std::sync::mpsc::Receiver<crate::config::AppConfig>,
 }

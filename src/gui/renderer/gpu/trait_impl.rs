@@ -197,12 +197,4 @@ impl traits::Renderer for GpuRenderer {
     ) {
         self.draw_security_popup_impl(target.width, target.height, popup);
     }
-
-    fn draw_settings_overlay(
-        &mut self,
-        target: &mut RenderTarget<'_>,
-        overlay: &crate::gui::settings::SettingsOverlay,
-    ) {
-        self.draw_settings_overlay_impl(target.width, target.height, overlay);
-    }
 }
