@@ -30,8 +30,10 @@ impl FontMetrics {
         let line_metrics = font
             .horizontal_line_metrics(scaled_font_size)
             .expect("no horizontal line metrics");
-        let asc = line_metrics.ascent.round() as i32;
-        let desc = line_metrics.descent.round() as i32; // negative
+        // Use ceil for ascent (round up to not clip tops of glyphs)
+        // and ceil for descent magnitude (round towards zero to tighten cell).
+        let asc = line_metrics.ascent.ceil() as i32;
+        let desc = line_metrics.descent.ceil() as i32; // negative, ceil = towards zero
         self.ascent = asc + line_padding as i32 / 2;
         self.cell_height = ((asc - desc).max(1) as u32) + line_padding;
 
