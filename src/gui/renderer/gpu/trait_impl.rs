@@ -5,6 +5,8 @@ use super::super::traits;
 use super::super::{RenderTarget, ScrollbarState, SecurityPopup};
 #[cfg(not(target_os = "macos"))]
 use super::super::TabBarDrawParams;
+#[cfg(not(target_os = "macos"))]
+use super::super::TabInfo;
 use super::GpuRenderer;
 
 impl traits::Renderer for GpuRenderer {

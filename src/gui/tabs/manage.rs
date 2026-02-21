@@ -4,6 +4,7 @@ use crate::config::AppConfig;
 use crate::gui::pane::{
     DIVIDER_WIDTH, NavigateDirection, PaneLeaf, PaneNode, SplitDirection,
 };
+#[cfg(not(target_os = "linux"))]
 use crate::gui::tabs::create::NewTabParams;
 use crate::gui::tabs::normalized_active_index_after_remove;
 use crate::gui::tabs::pty_reader::spawn_pty_reader;

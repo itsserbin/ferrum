@@ -5,6 +5,8 @@ use super::super::traits;
 use super::super::types::SecurityPopup;
 #[cfg(not(target_os = "macos"))]
 use super::super::types::TabBarDrawParams;
+#[cfg(not(target_os = "macos"))]
+use super::super::TabInfo;
 use super::super::{RenderTarget, ScrollbarState};
 use super::CpuRenderer;
 
