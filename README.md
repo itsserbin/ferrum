@@ -57,7 +57,6 @@ sudo rpm -i ferrum-*.x86_64.rpm
 - **Native macOS tab bar** — each tab is a real NSWindow in a native tab group, not a custom-drawn strip
 - **Pane splitting** — binary tree layout, horizontal/vertical, arbitrary nesting, drag-to-resize dividers
 - **Detachable windows** — drag a tab out of the bar to open it as a standalone window (Windows/Linux)
-- **Catppuccin Mocha** — built-in color scheme; true color (24-bit), xterm-256color
 
 ## Keyboard Shortcuts
 
