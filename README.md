@@ -14,12 +14,10 @@ brew install --cask itsserbin/tap/ferrum && xattr -cr /Applications/Ferrum.app
 
 **DMG installer:**
 
-Download from [GitHub Releases](https://github.com/itsserbin/ferrum/releases/latest):
-
-| File | Architecture |
-|------|--------------|
-| `ferrum-aarch64-apple-darwin.dmg` | Apple Silicon (M1/M2/M3/M4) |
-| `ferrum-x86_64-apple-darwin.dmg` | Intel |
+| Download | Architecture |
+|----------|--------------|
+| [Ferrum for Apple Silicon](https://github.com/itsserbin/ferrum/releases/latest/download/ferrum-aarch64-apple-darwin.dmg) | M1 / M2 / M3 / M4 |
+| [Ferrum for Intel Mac](https://github.com/itsserbin/ferrum/releases/latest/download/ferrum-x86_64-apple-darwin.dmg) | x86_64 |
 
 Open the DMG, drag Ferrum to Applications. Ferrum is ad-hoc signed but not notarized — run once to remove macOS Gatekeeper's quarantine flag:
 
@@ -35,11 +33,11 @@ sudo ln -sf /Applications/Ferrum.app/Contents/MacOS/Ferrum /usr/local/bin/ferrum
 
 ### Windows
 
-Download `Ferrum-Setup-x64.exe` from [GitHub Releases](https://github.com/itsserbin/ferrum/releases/latest).
+[Download Ferrum for Windows (x64)](https://github.com/itsserbin/ferrum/releases/latest/download/Ferrum-Setup-x64.exe)
 
 ### Linux
 
-Download packages from [GitHub Releases](https://github.com/itsserbin/ferrum/releases/latest).
+Download `.deb` or `.rpm` from [GitHub Releases](https://github.com/itsserbin/ferrum/releases/latest).
 
 **Debian / Ubuntu:**
 
