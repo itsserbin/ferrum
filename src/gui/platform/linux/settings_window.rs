@@ -140,7 +140,8 @@ fn build_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>, initial_tab: us
     notebook.append_page(&security_box, Some(&Label::new(Some(t.settings_tab_security))));
 
     // ── Updates tab ──────────────────────────────────────────────────
-    let (updates_box, auto_check_switch) = build_updates_tab(config, t);
+    let (updates_box, auto_check_switch, check_now_btn, manual_status_label, manual_install_btn) =
+        build_updates_tab(config, t);
     notebook.append_page(&updates_box, Some(&Label::new(Some(t.settings_tab_updates))));
 
     // Track selected tab for cross-thread queries.
@@ -293,6 +294,77 @@ fn build_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>, initial_tab: us
                 send();
             }
             gtk4::glib::Propagation::Proceed
+        });
+    }
+
+    // Manual update check button and install button.
+    {
+        use std::rc::Rc;
+        use std::cell::RefCell;
+
+        // Shared: stores the tag name found by the last manual check.
+        let found_tag: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
+
+        // glib channel: check thread → GTK main context.
+        let (gtx, grx) =
+            gtk4::glib::MainContext::channel::<crate::update::ManualCheckResult>(
+                gtk4::glib::Priority::DEFAULT,
+            );
+
+        // Attach receiver: runs on GTK main thread when result arrives.
+        let status_lbl_recv = manual_status_label.clone();
+        let install_recv = manual_install_btn.clone();
+        let check_btn_recv = check_now_btn.clone();
+        let found_tag_recv = Rc::clone(&found_tag);
+        grx.attach(None, move |result| {
+            let t = crate::i18n::t();
+            match result {
+                crate::update::ManualCheckResult::UpToDate => {
+                    status_lbl_recv.set_label(t.update_up_to_date);
+                    status_lbl_recv.set_visible(true);
+                    install_recv.set_visible(false);
+                    *found_tag_recv.borrow_mut() = None;
+                }
+                crate::update::ManualCheckResult::Found(release) => {
+                    let text = t.update_available.replace("{}", &release.tag_name);
+                    status_lbl_recv.set_label(&text);
+                    status_lbl_recv.set_visible(true);
+                    install_recv.set_visible(true);
+                    *found_tag_recv.borrow_mut() = Some(release.tag_name.clone());
+                }
+            }
+            check_btn_recv.set_sensitive(true);
+            gtk4::glib::ControlFlow::Continue
+        });
+
+        // Check button handler: spawns check thread and bridges result to glib channel.
+        let status_lbl_check = manual_status_label.clone();
+        let install_check = manual_install_btn.clone();
+        check_now_btn.connect_clicked(move |btn| {
+            let t = crate::i18n::t();
+            btn.set_sensitive(false);
+            status_lbl_check.set_label(t.update_checking);
+            status_lbl_check.set_visible(true);
+            install_check.set_visible(false);
+            let (tx, rx) = std::sync::mpsc::channel();
+            crate::update::spawn_manual_check(tx);
+            let gtx2 = gtx.clone();
+            std::thread::Builder::new()
+                .name("ferrum-manual-check-bridge".to_string())
+                .spawn(move || {
+                    if let Ok(result) = rx.recv() {
+                        let _ = gtx2.send(result);
+                    }
+                })
+                .ok();
+        });
+
+        // Install button: launch installer for the found version.
+        let found_tag_install = Rc::clone(&found_tag);
+        manual_install_btn.connect_clicked(move |_| {
+            if let Some(tag) = found_tag_install.borrow().clone() {
+                crate::update_installer::spawn_installer(&tag);
+            }
         });
     }
 
@@ -513,7 +585,10 @@ fn build_security_tab(
     (vbox, mode_combo, paste, block_title, limit_cursor, clear_mouse)
 }
 
-fn build_updates_tab(config: &AppConfig, t: &crate::i18n::Translations) -> (gtk4::Box, Switch) {
+fn build_updates_tab(
+    config: &AppConfig,
+    t: &crate::i18n::Translations,
+) -> (gtk4::Box, Switch, gtk4::Button, Label, gtk4::Button) {
     let vbox = gtk4::Box::new(Orientation::Vertical, 12);
     vbox.set_margin_top(16);
     vbox.set_margin_start(16);
@@ -526,7 +601,24 @@ fn build_updates_tab(config: &AppConfig, t: &crate::i18n::Translations) -> (gtk4
 
     let auto_check = labeled_switch(&vbox, t.update_auto_check, config.updates.auto_check, true);
 
-    (vbox, auto_check)
+    // "Check for Updates" button.
+    let check_now_btn = gtk4::Button::with_label(t.update_check_now);
+    check_now_btn.set_halign(Align::Start);
+    vbox.append(&check_now_btn);
+
+    // Status label — initially hidden; set to "Checking…", "You're up to date", or tag.
+    let manual_status_label = Label::new(None);
+    manual_status_label.set_halign(Align::Start);
+    manual_status_label.set_visible(false);
+    vbox.append(&manual_status_label);
+
+    // "Install" button — initially hidden; shown when update is found.
+    let manual_install_btn = gtk4::Button::with_label(t.update_install);
+    manual_install_btn.set_halign(Align::Start);
+    manual_install_btn.set_visible(false);
+    vbox.append(&manual_install_btn);
+
+    (vbox, auto_check, check_now_btn, manual_status_label, manual_install_btn)
 }
 
 // ── Widget helpers ───────────────────────────────────────────────────

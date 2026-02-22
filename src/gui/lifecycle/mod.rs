@@ -232,10 +232,44 @@ impl ApplicationHandler for App {
                 platform::macos::settings_window::reset_controls_to_defaults();
                 platform::macos::settings_window::send_current_config();
             }
+            if platform::macos::settings_window::take_check_for_updates_requested() {
+                // User clicked "Check for Updates" — spawn manual check thread.
+                let (tx, rx) = std::sync::mpsc::channel();
+                crate::update::spawn_manual_check(tx);
+                self.manual_check_rx = Some(rx);
+                platform::macos::settings_window::set_manual_check_status_checking();
+            }
+            if platform::macos::settings_window::take_install_update_requested() {
+                // User clicked "Install" — launch installer for the found tag.
+                if let Some(tag) = platform::macos::settings_window::manual_check_found_tag() {
+                    crate::update_installer::spawn_installer(&tag);
+                }
+            }
             if platform::macos::settings_window::check_window_closed() {
                 platform::macos::settings_window::send_current_config();
                 platform::macos::settings_window::close_settings_window();
+                self.manual_check_rx = None;
             }
+        }
+
+        // Receive manual check result and update Settings UI.
+        #[cfg(target_os = "macos")]
+        if let Some(rx) = &self.manual_check_rx
+            && let Ok(result) = rx.try_recv()
+        {
+            platform::macos::settings_window::set_manual_check_result(&result);
+            // Also update the global available_release if a new version was found.
+            if let crate::update::ManualCheckResult::Found(release) = result {
+                self.available_release = Some(release);
+                for win in self.windows.values_mut() {
+                    win.pending_update_tag = self
+                        .available_release
+                        .as_ref()
+                        .map(|r| r.tag_name.clone());
+                    win.window.request_redraw();
+                }
+            }
+            self.manual_check_rx = None;
         }
 
         // Windows/Linux: config changes are sent directly through the channel

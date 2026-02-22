@@ -87,6 +87,8 @@ static UK: Translations = Translations {
     update_current_version: "Поточна версія",
     update_check_now: "Перевірити оновлення",
     update_auto_check: "Автоперевірка оновлень",
+    update_checking: "Перевіряємо…",
+    update_up_to_date: "У вас остання версія",
 };
 
 pub fn translations() -> &'static Translations {

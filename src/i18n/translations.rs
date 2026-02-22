@@ -97,6 +97,10 @@ pub struct Translations {
     pub update_check_now: &'static str,
     /// "Auto-check for updates" toggle label.
     pub update_auto_check: &'static str,
+    /// Status shown while the manual update check is running.
+    pub update_checking: &'static str,
+    /// Status shown when the manual check found no newer version.
+    pub update_up_to_date: &'static str,
 }
 
 impl Translations {
@@ -172,6 +176,8 @@ impl Translations {
             self.update_current_version,
             self.update_check_now,
             self.update_auto_check,
+            self.update_checking,
+            self.update_up_to_date,
         ];
         fields.iter().all(|s| !s.is_empty())
     }

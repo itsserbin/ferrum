@@ -37,6 +37,46 @@ struct UpdateCache {
     html_url: String,
 }
 
+/// Result of a manual (on-demand) update check.
+#[derive(Debug, Clone)]
+pub(crate) enum ManualCheckResult {
+    /// A newer version is available.
+    Found(AvailableRelease),
+    /// The current version is the latest.
+    UpToDate,
+}
+
+/// Spawns a background thread that checks for an update **bypassing the 24-hour cache**.
+///
+/// Sends exactly one `ManualCheckResult` to `tx` and exits.
+pub(crate) fn spawn_manual_check(tx: mpsc::Sender<ManualCheckResult>) {
+    let _ = std::thread::Builder::new()
+        .name("ferrum-manual-check".to_string())
+        .spawn(move || {
+            let result = run_manual_check();
+            let _ = tx.send(result);
+        });
+}
+
+fn run_manual_check() -> ManualCheckResult {
+    let Some(current) = parse_version(env!("CARGO_PKG_VERSION")) else {
+        return ManualCheckResult::UpToDate;
+    };
+    let Some(now) = unix_now_secs() else {
+        return ManualCheckResult::UpToDate;
+    };
+    match fetch_latest_release(now) {
+        Some(cache) => {
+            write_cache(&cache);
+            match available_release_if_newer(&cache, &current) {
+                Some(release) => ManualCheckResult::Found(release),
+                None => ManualCheckResult::UpToDate,
+            }
+        }
+        None => ManualCheckResult::UpToDate,
+    }
+}
+
 /// Spawns a detached background thread that checks for a newer release.
 ///
 /// If a newer version is found, it sends one `AvailableRelease` to `tx`.

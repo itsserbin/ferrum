@@ -267,4 +267,6 @@ pub(super) struct App {
     pub(super) config: crate::config::AppConfig,
     pub(super) settings_tx: std::sync::mpsc::Sender<crate::config::AppConfig>,
     pub(super) settings_rx: std::sync::mpsc::Receiver<crate::config::AppConfig>,
+    /// Receives the result of a manual "Check for Updates" triggered from Settings.
+    pub(super) manual_check_rx: Option<mpsc::Receiver<crate::update::ManualCheckResult>>,
 }

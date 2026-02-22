@@ -87,6 +87,8 @@ static EN: Translations = Translations {
     update_current_version: "Current version",
     update_check_now: "Check for Updates",
     update_auto_check: "Auto-check for updates",
+    update_checking: "Checking…",
+    update_up_to_date: "You're up to date",
 };
 
 pub fn translations() -> &'static Translations {

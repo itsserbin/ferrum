@@ -60,6 +60,9 @@ struct NativeSettingsState {
     clear_mouse_on_reset_check: Retained<NSButton>,
     // Updates tab
     auto_check_updates_check: Retained<NSButton>,
+    // Manual update check UI
+    manual_check_status_label: Retained<NSTextField>,
+    manual_check_install_button: Retained<NSButton>,
     // Reset (kept alive so ObjC retains the button; never read from Rust).
     _reset_button: Retained<NSButton>,
 }
@@ -85,6 +88,15 @@ static RESET_REQUESTED: AtomicBool = AtomicBool::new(false);
 /// can distinguish popup changes (apply presets) from checkbox changes (infer mode).
 /// Initialised to 1 = Standard (the default).
 static LAST_SECURITY_MODE_INDEX: AtomicIsize = AtomicIsize::new(1);
+
+/// Atomic flag: "Check for Updates" button was clicked on the Updates tab.
+static CHECK_FOR_UPDATES_REQUESTED: AtomicBool = AtomicBool::new(false);
+
+/// Atomic flag: "Install" button was clicked on the Updates tab.
+static INSTALL_UPDATE_REQUESTED: AtomicBool = AtomicBool::new(false);
+
+/// Tag name of the update found during the last manual check, or `None` if none found.
+static MANUAL_CHECK_FOUND_TAG: Mutex<Option<String>> = Mutex::new(None);
 
 /// ObjC action handler for steppers and popups.
 ///
@@ -128,6 +140,34 @@ unsafe extern "C" fn handle_reset_clicked(
     RESET_REQUESTED.store(true, Ordering::SeqCst);
 }
 
+/// ObjC action handler for the "Check for Updates" button.
+///
+/// # Safety
+///
+/// Called by the Objective-C runtime as a method implementation.
+/// Signature matches the type encoding "v@:@".
+unsafe extern "C" fn handle_check_for_updates_clicked(
+    _this: *mut core::ffi::c_void,
+    _cmd: *const core::ffi::c_void,
+    _sender: *mut core::ffi::c_void,
+) {
+    CHECK_FOR_UPDATES_REQUESTED.store(true, Ordering::SeqCst);
+}
+
+/// ObjC action handler for the "Install" button on the Updates tab.
+///
+/// # Safety
+///
+/// Called by the Objective-C runtime as a method implementation.
+/// Signature matches the type encoding "v@:@".
+unsafe extern "C" fn handle_install_update_clicked(
+    _this: *mut core::ffi::c_void,
+    _cmd: *const core::ffi::c_void,
+    _sender: *mut core::ffi::c_void,
+) {
+    INSTALL_UPDATE_REQUESTED.store(true, Ordering::SeqCst);
+}
+
 /// Returns and resets the stepper-changed flag.
 pub fn take_stepper_changed() -> bool {
     STEPPER_CHANGED.swap(false, Ordering::SeqCst)
@@ -141,6 +181,76 @@ pub fn take_text_field_changed() -> bool {
 /// Returns and resets the reset-requested flag.
 pub fn take_reset_requested() -> bool {
     RESET_REQUESTED.swap(false, Ordering::SeqCst)
+}
+
+/// Returns and resets the check-for-updates-requested flag.
+pub fn take_check_for_updates_requested() -> bool {
+    CHECK_FOR_UPDATES_REQUESTED.swap(false, Ordering::SeqCst)
+}
+
+/// Returns and resets the install-update-requested flag.
+pub fn take_install_update_requested() -> bool {
+    INSTALL_UPDATE_REQUESTED.swap(false, Ordering::SeqCst)
+}
+
+/// Returns the tag name of the update found during the last manual check, if any.
+pub fn manual_check_found_tag() -> Option<String> {
+    MANUAL_CHECK_FOUND_TAG.lock().unwrap_or_else(|e| e.into_inner()).clone()
+}
+
+/// Updates the status label to "Checking…" and hides the Install button.
+///
+/// Call this immediately after spawning `spawn_manual_check`.
+pub fn set_manual_check_status_checking() {
+    let guard = SETTINGS_STATE.lock().unwrap_or_else(|e| e.into_inner());
+    let Some(state) = guard.as_ref() else {
+        return;
+    };
+    let t = crate::i18n::t();
+    state
+        .manual_check_status_label
+        .setStringValue(&NSString::from_str(t.update_checking));
+    // SAFETY: setHidden: is a standard NSView method available on all NSView subclasses.
+    unsafe {
+        let _: () = msg_send![&state.manual_check_status_label, setHidden: false];
+        let _: () = msg_send![&state.manual_check_install_button, setHidden: true];
+    }
+    *MANUAL_CHECK_FOUND_TAG.lock().unwrap_or_else(|e| e.into_inner()) = None;
+}
+
+/// Updates the status label with the manual check result and shows/hides the Install button.
+pub fn set_manual_check_result(result: &crate::update::ManualCheckResult) {
+    let guard = SETTINGS_STATE.lock().unwrap_or_else(|e| e.into_inner());
+    let Some(state) = guard.as_ref() else {
+        return;
+    };
+    let t = crate::i18n::t();
+    match result {
+        crate::update::ManualCheckResult::UpToDate => {
+            state
+                .manual_check_status_label
+                .setStringValue(&NSString::from_str(t.update_up_to_date));
+            // SAFETY: setHidden: is a standard NSView method.
+            unsafe {
+                let _: () = msg_send![&state.manual_check_status_label, setHidden: false];
+                let _: () = msg_send![&state.manual_check_install_button, setHidden: true];
+            }
+            *MANUAL_CHECK_FOUND_TAG.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        }
+        crate::update::ManualCheckResult::Found(release) => {
+            let text = t.update_available.replace("{}", &release.tag_name);
+            state
+                .manual_check_status_label
+                .setStringValue(&NSString::from_str(&text));
+            // SAFETY: setHidden: is a standard NSView method.
+            unsafe {
+                let _: () = msg_send![&state.manual_check_status_label, setHidden: false];
+                let _: () = msg_send![&state.manual_check_install_button, setHidden: false];
+            }
+            *MANUAL_CHECK_FOUND_TAG.lock().unwrap_or_else(|e| e.into_inner()) =
+                Some(release.tag_name.clone());
+        }
+    }
 }
 
 /// Builds an `AppConfig` from the current control values.
@@ -876,6 +986,53 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
     ));
     updates_view.addSubview(&version_label);
 
+    // "Check for Updates" push button.
+    // SAFETY: Passing `None` for target and action; wired below via class_addMethod.
+    let check_now_button = unsafe {
+        NSButton::buttonWithTitle_target_action(
+            &NSString::from_str(t.update_check_now),
+            None,
+            None,
+            mtm,
+        )
+    };
+    check_now_button.setFrame(NSRect::new(
+        NSPoint::new(20.0, 200.0),
+        NSSize::new(150.0, 28.0),
+    ));
+    updates_view.addSubview(&check_now_button);
+
+    // Status label: initially hidden; updated to "Checking…", "You're up to date", or tag.
+    let manual_check_status_label = NSTextField::labelWithString(
+        &NSString::from_str(""),
+        mtm,
+    );
+    manual_check_status_label.setFrame(NSRect::new(
+        NSPoint::new(20.0, 167.0),
+        NSSize::new(400.0, 22.0),
+    ));
+    // SAFETY: setHidden: is a standard NSView method available on all NSView subclasses.
+    unsafe { let _: () = msg_send![&manual_check_status_label, setHidden: true]; }
+    updates_view.addSubview(&manual_check_status_label);
+
+    // "Install" button: initially hidden; appears only when a newer version is found.
+    // SAFETY: Passing `None` for target and action; wired below via class_addMethod.
+    let manual_check_install_button = unsafe {
+        NSButton::buttonWithTitle_target_action(
+            &NSString::from_str(t.update_install),
+            None,
+            None,
+            mtm,
+        )
+    };
+    manual_check_install_button.setFrame(NSRect::new(
+        NSPoint::new(20.0, 131.0),
+        NSSize::new(120.0, 28.0),
+    ));
+    // SAFETY: setHidden: is a standard NSView method available on all NSView subclasses.
+    unsafe { let _: () = msg_send![&manual_check_install_button, setHidden: true]; }
+    updates_view.addSubview(&manual_check_install_button);
+
     updates_tab.setView(Some(&updates_view));
     tab_view.addTabViewItem(&updates_tab);
 
@@ -940,6 +1097,30 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
             class_replaceMethod(win_cls, sel_reset_ptr, imp_reset, types);
         }
 
+        // Check for Updates action.
+        let sel_check_updates_ptr = sel_registerName(c"ferrumCheckForUpdates:".as_ptr());
+        let sel_check_updates = Sel::register(c"ferrumCheckForUpdates:");
+        let imp_check_updates: unsafe extern "C" fn() = core::mem::transmute(
+            handle_check_for_updates_clicked as unsafe extern "C" fn(_, _, _),
+        );
+        if !win_cls.is_null()
+            && !class_addMethod(win_cls, sel_check_updates_ptr, imp_check_updates, types)
+        {
+            class_replaceMethod(win_cls, sel_check_updates_ptr, imp_check_updates, types);
+        }
+
+        // Install update action.
+        let sel_install_update_ptr = sel_registerName(c"ferrumInstallUpdate:".as_ptr());
+        let sel_install_update = Sel::register(c"ferrumInstallUpdate:");
+        let imp_install_update: unsafe extern "C" fn() = core::mem::transmute(
+            handle_install_update_clicked as unsafe extern "C" fn(_, _, _),
+        );
+        if !win_cls.is_null()
+            && !class_addMethod(win_cls, sel_install_update_ptr, imp_install_update, types)
+        {
+            class_replaceMethod(win_cls, sel_install_update_ptr, imp_install_update, types);
+        }
+
         // Wire all steppers and popups to the stepper-changed action.
         let _: () = msg_send![&font_size_stepper, setTarget: &*window];
         let _: () = msg_send![&font_size_stepper, setAction: sel_stepper];
@@ -995,6 +1176,12 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
         // Wire reset button.
         let _: () = msg_send![&reset_button, setTarget: &*window];
         let _: () = msg_send![&reset_button, setAction: sel_reset];
+
+        // Wire check-now and install buttons.
+        let _: () = msg_send![&check_now_button, setTarget: &*window];
+        let _: () = msg_send![&check_now_button, setAction: sel_check_updates];
+        let _: () = msg_send![&manual_check_install_button, setTarget: &*window];
+        let _: () = msg_send![&manual_check_install_button, setAction: sel_install_update];
     }
 
     // ── Assemble content view ─────────────────────────────────────────
@@ -1043,6 +1230,8 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
         limit_cursor_jumps_check,
         clear_mouse_on_reset_check,
         auto_check_updates_check,
+        manual_check_status_label,
+        manual_check_install_button,
         _reset_button: reset_button,
     };
     *SETTINGS_STATE.lock().unwrap_or_else(|e| e.into_inner()) = Some(state);

@@ -256,6 +256,7 @@ impl App {
             config,
             settings_tx,
             settings_rx,
+            manual_check_rx: None,
         }
     }
 
