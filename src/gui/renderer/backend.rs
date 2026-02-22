@@ -5,7 +5,9 @@ use winit::window::Window;
 
 use crate::config::AppConfig;
 use super::traits::Renderer;
-use super::{CpuRenderer, SecurityPopup, TabBarHit, TabInfo};
+#[cfg(not(target_os = "macos"))]
+use super::TabInfo;
+use super::{CpuRenderer, SecurityPopup, TabBarHit};
 
 #[cfg(feature = "gpu")]
 use super::gpu::GpuRenderer;
@@ -84,7 +86,7 @@ impl RendererBackend {
         self.as_renderer_mut().set_scale(scale_factor);
     }
 
-    #[cfg_attr(target_os = "macos", allow(dead_code))]
+    #[cfg(not(target_os = "macos"))]
     pub fn set_tab_bar_visible(&mut self, visible: bool) {
         self.as_renderer_mut().set_tab_bar_visible(visible);
     }
@@ -150,6 +152,7 @@ impl RendererBackend {
         self.as_renderer().tab_origin_x(tab_index, tw)
     }
 
+    #[cfg(not(target_os = "macos"))]
     pub fn tab_insert_index_from_x(&self, x: f64, tab_count: usize, buf_width: u32) -> usize {
         self.as_renderer()
             .tab_insert_index_from_x(x, tab_count, buf_width)
@@ -182,6 +185,7 @@ impl RendererBackend {
             .hit_test_tab_hover(x, y, tab_count, buf_width)
     }
 
+    #[cfg(not(target_os = "macos"))]
     pub fn hit_test_tab_security_badge(
         &self,
         x: f64,
@@ -193,6 +197,7 @@ impl RendererBackend {
             .hit_test_tab_security_badge(x, y, tabs, buf_width)
     }
 
+    #[cfg(not(target_os = "macos"))]
     pub fn security_badge_rect(
         &self,
         tab_index: usize,

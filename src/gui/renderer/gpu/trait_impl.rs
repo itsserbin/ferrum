@@ -20,6 +20,7 @@ impl traits::Renderer for GpuRenderer {
         self.rebuild_atlas();
     }
 
+    #[cfg(not(target_os = "macos"))]
     fn set_tab_bar_visible(&mut self, visible: bool) {
         self.metrics.tab_bar_visible = super::super::resolve_tab_bar_visible(visible);
     }

@@ -1,12 +1,19 @@
+#[cfg(not(target_os = "macos"))]
 use crate::config::AppConfig;
+#[cfg(not(target_os = "macos"))]
 use crate::gui::renderer::shared::tab_math;
-use crate::gui::renderer::{TabBarHit, TabInfo};
+use crate::gui::renderer::TabBarHit;
+#[cfg(not(target_os = "macos"))]
+use crate::gui::renderer::TabInfo;
+#[cfg(not(target_os = "macos"))]
 use crate::gui::tabs::create::NewTabParams;
 use crate::gui::*;
 
 impl FerrumWindow {
+    #[cfg(not(target_os = "macos"))]
     fn tab_infos_for_hit_test(&self) -> Vec<TabInfo<'_>> {
-        self.tabs
+        #[cfg(not(target_os = "macos"))]
+        return self.tabs
             .iter()
             .enumerate()
             .map(|(idx, tab)| TabInfo {
@@ -27,9 +34,19 @@ impl FerrumWindow {
                 rename_cursor: 0,
                 rename_selection: None,
             })
+            .collect();
+
+        #[cfg(target_os = "macos")]
+        self.tabs
+            .iter()
+            .map(|tab| TabInfo {
+                title: &tab.title,
+                is_renaming: false,
+            })
             .collect()
     }
 
+    #[cfg(not(target_os = "macos"))]
     pub(in crate::gui::events) fn tab_close_button_visible(&self, tab_index: usize) -> bool {
         if self.tabs.get(tab_index).is_none() {
             return false;
@@ -53,11 +70,13 @@ impl FerrumWindow {
             .backend
             .hit_test_tab_bar(mx, my, self.tabs.len(), buf_width);
         match hit {
+            #[cfg(not(target_os = "macos"))]
             TabBarHit::CloseTab(idx) if !self.tab_close_button_visible(idx) => TabBarHit::Tab(idx),
             _ => hit,
         }
     }
 
+    #[cfg(not(target_os = "macos"))]
     pub(in crate::gui::events::mouse) fn tab_bar_security_hit(
         &self,
         mx: f64,
@@ -72,6 +91,55 @@ impl FerrumWindow {
             .hit_test_tab_security_badge(mx, my, &tab_infos, buf_width)
     }
 
+    #[cfg(target_os = "macos")]
+    pub(in crate::gui::events::mouse) fn handle_tab_bar_left_click(
+        &mut self,
+        state: ElementState,
+        mx: f64,
+        my: f64,
+    ) {
+        if state != ElementState::Pressed {
+            // Mouse release in tab bar area.
+            // End any active pointer selection state so terminal drag-selection doesn't stick.
+            if self.is_selecting && self.renaming_tab.is_none() && self.is_mouse_reporting() {
+                // If PTY owns mouse reporting, still emit release even when cursor is over tab bar.
+                let (row, col) = self.pixel_to_grid(mx, my);
+                self.send_mouse_event(0, col, row, false);
+            }
+            self.is_selecting = false;
+            self.selection_anchor = None;
+            return;
+        }
+
+        let hit = self.tab_bar_hit(mx, my);
+
+        // Check if the click landed inside the rename text field area.
+        // If so, handle cursor positioning instead of normal tab bar interaction.
+        if self.renaming_tab.is_some()
+            && let TabBarHit::Tab(idx) = hit
+            && self
+                .renaming_tab
+                .as_ref()
+                .is_some_and(|r| r.tab_index == idx)
+        {
+            self.handle_rename_field_click(mx);
+            return;
+        }
+
+        // Commit any active rename before processing the click (blur behavior).
+        self.commit_rename();
+
+        match hit {
+            TabBarHit::Tab(idx) => {
+                self.handle_tab_click(idx);
+            }
+            TabBarHit::Empty => {
+                self.handle_empty_bar_click();
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
     pub(in crate::gui::events::mouse) fn handle_tab_bar_left_click(
         &mut self,
         state: ElementState,
@@ -144,20 +212,17 @@ impl FerrumWindow {
                     config,
                 });
             }
-            #[cfg(not(target_os = "macos"))]
             TabBarHit::WindowButton(btn) => {
                 self.handle_window_button_click(btn);
             }
             TabBarHit::Empty => {
                 self.handle_empty_bar_click();
             }
-            #[cfg(not(target_os = "macos"))]
             TabBarHit::PinButton => {
                 self.last_topbar_empty_click = None;
                 self.last_tab_click = None;
                 self.toggle_pin();
             }
-            #[cfg(not(target_os = "macos"))]
             TabBarHit::SettingsButton => {
                 self.last_topbar_empty_click = None;
                 self.last_tab_click = None;

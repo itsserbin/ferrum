@@ -1,5 +1,3 @@
-#![cfg_attr(target_os = "macos", allow(dead_code))]
-
 //! Context menu and security popup drawing for the GPU renderer.
 
 use super::super::SecurityPopup;

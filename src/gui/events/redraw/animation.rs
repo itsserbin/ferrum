@@ -46,6 +46,7 @@ impl FerrumWindow {
         result
     }
 
+    #[cfg(not(target_os = "macos"))]
     fn tab_animation_schedule(&self, now: Instant) -> Option<(Instant, bool)> {
         let anim = self.tab_reorder_animation.as_ref()?;
         let elapsed = now.saturating_duration_since(anim.started);
@@ -54,6 +55,11 @@ impl FerrumWindow {
             return None; // Animation finished, will be cleaned up on next redraw.
         }
         Some((now + ANIMATION_FRAME_INTERVAL, true))
+    }
+
+    #[cfg(target_os = "macos")]
+    fn tab_animation_schedule(&self, _now: Instant) -> Option<(Instant, bool)> {
+        None
     }
 
     /// Returns current animation offsets for tab slide animation (or None if not animating).
@@ -113,40 +119,38 @@ impl FerrumWindow {
         None
     }
 
+    #[cfg(target_os = "macos")]
+    fn ui_animation_schedule(&self, _now: Instant) -> Option<(Instant, bool)> {
+        None
+    }
+
+    #[cfg(not(target_os = "macos"))]
     fn ui_animation_schedule(&self, now: Instant) -> Option<(Instant, bool)> {
-        #[cfg(target_os = "macos")]
-        {
-            let _ = now;
-            None
-        }
-        #[cfg(not(target_os = "macos"))]
-        {
-            let close_hover = self.close_hovered_tab();
-            let mut pending = false;
+        let close_hover = self.close_hovered_tab();
+        let mut pending = false;
 
-            for i in 0..self.tabs.len() {
-                let tab_target = if self.hovered_tab == Some(i) && i != self.active_tab {
-                    1.0
-                } else {
-                    0.0
-                };
-                let close_target = if close_hover == Some(i) { 1.0 } else { 0.0 };
-
-                let tab_value = self.tab_hover_progress.get(i).copied().unwrap_or(0.0);
-                let close_value = self.close_hover_progress.get(i).copied().unwrap_or(0.0);
-                if (tab_value - tab_target).abs() > UI_SETTLE_EPSILON
-                    || (close_value - close_target).abs() > UI_SETTLE_EPSILON
-                {
-                    pending = true;
-                    break;
-                }
-            }
-
-            if pending {
-                Some((now + ANIMATION_FRAME_INTERVAL, true))
+        for i in 0..self.tabs.len() {
+            let tab_target = if self.hovered_tab == Some(i) && i != self.active_tab {
+                1.0
             } else {
-                None
+                0.0
+            };
+            let close_target = if close_hover == Some(i) { 1.0 } else { 0.0 };
+
+            let tab_value = self.tab_hover_progress.get(i).copied().unwrap_or(0.0);
+            let close_value = self.close_hover_progress.get(i).copied().unwrap_or(0.0);
+            if (tab_value - tab_target).abs() > UI_SETTLE_EPSILON
+                || (close_value - close_target).abs() > UI_SETTLE_EPSILON
+            {
+                pending = true;
+                break;
             }
+        }
+
+        if pending {
+            Some((now + ANIMATION_FRAME_INTERVAL, true))
+        } else {
+            None
         }
     }
 

@@ -4,7 +4,6 @@
 //! for UI elements that are rendered identically by both backends: the shield
 //! icon, the pushpin button, window control buttons, and rename-field selection.
 
-#![cfg_attr(target_os = "macos", allow(dead_code))]
 
 // ── Shield icon ──────────────────────────────────────────────────────
 
@@ -17,6 +16,7 @@
 ///
 /// Returns a `Vec` of `(left_offset, right_offset)` pairs, one per row from
 /// `dy = 0` to `dy = size - 1`, where offsets are relative to the icon origin.
+#[cfg(not(target_os = "macos"))]
 pub fn shield_icon_spans(size: u32) -> Vec<(u32, u32)> {
     let mid = size / 2;
     let top_third = (size / 3).max(1);
@@ -49,6 +49,7 @@ pub fn shield_icon_spans(size: u32) -> Vec<(u32, u32)> {
 /// All coordinates are in physical pixels.  The rectangles are described as
 /// `(x, y, w, h)` tuples in `f32` so that both the CPU (which casts to `i32`)
 /// and the GPU renderer (which uses `f32` directly) can consume them.
+#[cfg(not(target_os = "macos"))]
 pub struct PinIconLayout {
     /// Top head rectangle `(x, y, w, h)`.
     pub head: (f32, f32, f32, f32),
@@ -72,6 +73,7 @@ pub struct PinIconLayout {
 /// * `pinned` — whether the window is currently pinned (always-on-top).
 /// * `hovered` — whether the mouse is over the pin button.
 /// * `colors` — pin button color triple (active, hover, inactive).
+#[cfg(not(target_os = "macos"))]
 pub fn pin_icon_layout(
     cx: f32,
     cy: f32,
@@ -131,6 +133,7 @@ pub fn pin_icon_layout(
 /// rectangular teeth around the perimeter, plus a hollow center circle.
 /// All coordinates are physical pixels as `f32` so that both the CPU
 /// renderer and the GPU renderer can consume them.
+#[cfg(not(target_os = "macos"))]
 pub struct GearIconLayout {
     /// Outer teeth: each tooth is a small filled rect `(x, y, w, h)`.
     pub teeth: [(f32, f32, f32, f32); 6],
@@ -158,6 +161,7 @@ pub struct GearIconLayout {
 /// * `cx`, `cy` — center of the gear icon (physical pixels).
 /// * `icon_size` — overall bounding size of the icon (physical pixels).
 /// * `color` — icon color as 0xRRGGBB.
+#[cfg(not(target_os = "macos"))]
 pub fn gear_icon_layout(cx: f32, cy: f32, icon_size: f32, color: u32) -> GearIconLayout {
     let outer_r = icon_size * 0.42;
     let inner_r = icon_size * 0.30;
@@ -190,6 +194,7 @@ pub fn gear_icon_layout(cx: f32, cy: f32, icon_size: f32, color: u32) -> GearIco
 
 /// Kind of window control button.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg(not(target_os = "macos"))]
 pub enum WindowButtonKind {
     Minimize,
     Maximize,
@@ -197,6 +202,7 @@ pub enum WindowButtonKind {
 }
 
 /// Pre-computed layout for a single window control button.
+#[cfg(not(target_os = "macos"))]
 pub struct WindowButtonLayout {
     /// Button x-origin (physical pixels).
     pub x: u32,
@@ -219,6 +225,7 @@ pub struct WindowButtonLayout {
 /// * `bar_height` — tab bar height (physical pixels).
 /// * `btn_width` — width of a single button (physical pixels).
 /// * `mouse_pos` — current pointer position `(x, y)`.
+#[cfg(not(target_os = "macos"))]
 pub fn window_buttons_layout(
     buf_width: u32,
     bar_height: u32,
@@ -258,6 +265,7 @@ pub fn window_buttons_layout(
 /// `max_chars`.
 ///
 /// Returns `None` when the selection is empty or `start >= end`.
+#[cfg(not(target_os = "macos"))]
 pub fn rename_selection_chars(
     text: &str,
     selection: Option<(usize, usize)>,
@@ -281,6 +289,7 @@ pub fn rename_selection_chars(
 /// based on the current HiDPI scale factor.
 ///
 /// Clamped to `[1.15, 2.2]` to remain crisp on both 1x and 2x+ displays.
+#[cfg(not(target_os = "macos"))]
 pub fn icon_stroke_thickness(ui_scale: f64) -> f32 {
     (1.25 * ui_scale as f32).clamp(1.15, 2.2)
 }
@@ -292,6 +301,7 @@ pub fn icon_stroke_thickness(ui_scale: f64) -> f32 {
 /// All coordinates are physical pixels as `f32` so that both the CPU renderer
 /// (which casts to integer) and the GPU renderer (which uses `f32` directly)
 /// can consume them.
+#[cfg(not(target_os = "macos"))]
 pub struct PlusIconLayout {
     /// Stroke thickness (physical pixels).
     pub thickness: f32,
@@ -306,6 +316,7 @@ pub struct PlusIconLayout {
 /// # Arguments
 /// * `rect` — `(x, y, w, h)` bounding rectangle (physical pixels).
 /// * `ui_scale` — HiDPI scale factor (e.g. 1.0, 2.0).
+#[cfg(not(target_os = "macos"))]
 pub fn compute_plus_icon_layout(rect: (u32, u32, u32, u32), ui_scale: f64) -> PlusIconLayout {
     let (x, y, w, h) = rect;
     let center_x = x as f32 + w as f32 * 0.5;
@@ -326,12 +337,14 @@ pub fn compute_plus_icon_layout(rect: (u32, u32, u32, u32), ui_scale: f64) -> Pl
 // ── Window button icon lines ─────────────────────────────────────────
 
 /// A single line segment described by two endpoints: `(x1, y1, x2, y2)`.
+#[cfg(not(target_os = "macos"))]
 pub type LineSegment = (f32, f32, f32, f32);
 
 /// Pre-computed icon line endpoints for a window control button.
 ///
 /// Contains all the line segments needed to draw the icon for a
 /// Minimize, Maximize, or Close button, plus the shared stroke thickness.
+#[cfg(not(target_os = "macos"))]
 pub struct WindowButtonIconLines {
     /// Line segments that make up this button's icon.
     pub lines: Vec<LineSegment>,
@@ -345,6 +358,7 @@ pub struct WindowButtonIconLines {
 /// * `btn` — the pre-computed `WindowButtonLayout` for this button.
 /// * `ui_scale` — HiDPI scale factor.
 /// * `half_w_px` — scaled half-width for minimize/maximize icons (from `scaled_px(5)`).
+#[cfg(not(target_os = "macos"))]
 pub fn compute_window_button_icon_lines(
     btn: &WindowButtonLayout,
     ui_scale: f64,
@@ -397,6 +411,7 @@ pub fn compute_window_button_icon_lines(
 /// Resolved colors for a window control button (hover background and icon).
 ///
 /// Ensures both CPU and GPU renderers use identical color logic.
+#[cfg(not(target_os = "macos"))]
 pub struct WindowButtonColors {
     /// Background color when hovered (0xRRGGBB), or `None` if not hovered.
     pub hover_bg: Option<u32>,
@@ -413,6 +428,7 @@ pub struct WindowButtonColors {
 /// * `close_hover_bg` — hover background for the close button (e.g. red).
 /// * `normal_icon_color` — icon color for non-hovered or non-close buttons.
 /// * `close_hover_icon_color` — icon color when the close button is hovered.
+#[cfg(not(target_os = "macos"))]
 pub fn window_button_colors(
     kind: WindowButtonKind,
     hovered: bool,
@@ -447,6 +463,7 @@ pub fn window_button_colors(
 /// "X" icon). All coordinates are physical pixels as `f32` so that both the
 /// CPU renderer (which casts to integer) and the GPU renderer (which uses
 /// `f32` directly) can consume them without recomputing.
+#[cfg(not(target_os = "macos"))]
 pub struct CloseButtonLayout {
     /// Whether the hover background circle should be drawn.
     pub show_hover_circle: bool,
@@ -480,6 +497,7 @@ pub struct CloseButtonLayout {
 /// * `hover_bg_color` — background color for the hover circle (0xRRGGBB).
 /// * `inactive_color` — text color when not hovered (0xRRGGBB).
 /// * `active_color` — text color when fully hovered (0xRRGGBB).
+#[cfg(not(target_os = "macos"))]
 pub fn compute_close_button_layout(
     rect: (u32, u32, u32, u32),
     hover_progress: f32,
@@ -535,6 +553,7 @@ pub fn compute_close_button_layout(
 }
 
 /// Linearly interpolates between two 0xRRGGBB colors by `t` (0.0 .. 1.0).
+#[cfg(not(target_os = "macos"))]
 pub fn mix_rgb(c0: u32, c1: u32, t: f32) -> u32 {
     let t = t.clamp(0.0, 1.0);
     let r0 = ((c0 >> 16) & 0xFF) as f32;
@@ -551,20 +570,24 @@ pub fn mix_rgb(c0: u32, c1: u32, t: f32) -> u32 {
 
 // ── Tests ────────────────────────────────────────────────────────────
 
-#[cfg(test)]
+#[cfg(all(test, not(target_os = "macos")))]
 mod tests {
     use super::*;
 
     // ── shield_icon_spans ────────────────────────────────────────────
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
+    #[cfg(not(target_os = "macos"))]
     fn shield_spans_length_matches_size() {
         let size = 12;
         let spans = shield_icon_spans(size);
         assert_eq!(spans.len(), size as usize);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
+    #[cfg(not(target_os = "macos"))]
     fn shield_spans_symmetric_around_midpoint() {
         let size = 15;
         let mid = size / 2;
@@ -576,7 +599,9 @@ mod tests {
         }
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
+    #[cfg(not(target_os = "macos"))]
     fn shield_spans_no_overflow() {
         let size = 10;
         let spans = shield_icon_spans(size);
@@ -586,7 +611,9 @@ mod tests {
         }
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
+    #[cfg(not(target_os = "macos"))]
     fn shield_spans_tapers_at_bottom() {
         let size = 18;
         let spans = shield_icon_spans(size);
@@ -596,7 +623,9 @@ mod tests {
         assert!((last.1 - last.0) <= (mid_row.1 - mid_row.0));
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
+    #[cfg(not(target_os = "macos"))]
     fn shield_spans_small_size() {
         // Edge case: very small shield.
         let spans = shield_icon_spans(3);
@@ -608,32 +637,41 @@ mod tests {
 
     // ── pin_icon_layout ──────────────────────────────────────────────
 
+    #[cfg(not(target_os = "macos"))]
     fn test_pin_colors(active: u32, hover: u32, inactive: u32) -> crate::gui::renderer::types::PinColors {
         crate::gui::renderer::types::PinColors { active, hover, inactive }
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
+    #[cfg(not(target_os = "macos"))]
     fn pin_layout_pinned_color() {
         let colors = test_pin_colors(0xAA, 0xBB, 0xCC);
         let layout = pin_icon_layout(50.0, 50.0, 1.0, true, false, &colors);
         assert_eq!(layout.color, 0xAA);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
+    #[cfg(not(target_os = "macos"))]
     fn pin_layout_hovered_color() {
         let colors = test_pin_colors(0xAA, 0xBB, 0xCC);
         let layout = pin_icon_layout(50.0, 50.0, 1.0, false, true, &colors);
         assert_eq!(layout.color, 0xBB);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
+    #[cfg(not(target_os = "macos"))]
     fn pin_layout_inactive_color() {
         let colors = test_pin_colors(0xAA, 0xBB, 0xCC);
         let layout = pin_icon_layout(50.0, 50.0, 1.0, false, false, &colors);
         assert_eq!(layout.color, 0xCC);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
+    #[cfg(not(target_os = "macos"))]
     fn pin_layout_head_above_body() {
         let colors = test_pin_colors(0, 0, 0);
         let layout = pin_icon_layout(100.0, 100.0, 2.0, false, false, &colors);
@@ -643,7 +681,9 @@ mod tests {
         assert!(layout.body.1 < layout.platform.1);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
+    #[cfg(not(target_os = "macos"))]
     fn pin_layout_needle_below_platform() {
         let colors = test_pin_colors(0, 0, 0);
         let layout = pin_icon_layout(100.0, 100.0, 1.0, false, false, &colors);
@@ -652,7 +692,9 @@ mod tests {
         assert!((layout.needle.1 - platform_bottom).abs() < 0.01);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
+    #[cfg(not(target_os = "macos"))]
     fn pin_layout_thickness_clamped() {
         let colors = test_pin_colors(0, 0, 0);
         // Very small scale — thickness should clamp to 1.0.
@@ -665,7 +707,9 @@ mod tests {
 
     // ── window_buttons_layout ────────────────────────────────────────
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
+    #[cfg(not(target_os = "macos"))]
     fn window_buttons_order() {
         let btns = window_buttons_layout(1200, 36, 46, (-1.0, -1.0));
         assert_eq!(btns[0].kind, WindowButtonKind::Minimize);
@@ -673,7 +717,9 @@ mod tests {
         assert_eq!(btns[2].kind, WindowButtonKind::Close);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
+    #[cfg(not(target_os = "macos"))]
     fn window_buttons_hover_detection() {
         let btn_w = 46u32;
         let bar_h = 36u32;
@@ -685,7 +731,9 @@ mod tests {
         assert!(btns[2].hovered, "Close should be hovered");
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
+    #[cfg(not(target_os = "macos"))]
     fn window_buttons_no_hover_outside_bar() {
         // Mouse y below bar height.
         let btns = window_buttons_layout(1200, 36, 46, (1170.0, 40.0));
@@ -694,7 +742,9 @@ mod tests {
         assert!(!btns[2].hovered);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
+    #[cfg(not(target_os = "macos"))]
     fn window_buttons_positioning() {
         let btn_w = 46u32;
         let btns = window_buttons_layout(1200, 36, btn_w, (-1.0, -1.0));
@@ -705,35 +755,47 @@ mod tests {
 
     // ── rename_selection_chars ────────────────────────────────────────
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
+    #[cfg(not(target_os = "macos"))]
     fn rename_selection_none_when_no_selection() {
         assert_eq!(rename_selection_chars("hello", None, 10), None);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
+    #[cfg(not(target_os = "macos"))]
     fn rename_selection_none_when_empty_range() {
         assert_eq!(rename_selection_chars("hello", Some((2, 2)), 10), None);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
+    #[cfg(not(target_os = "macos"))]
     fn rename_selection_none_when_inverted_range() {
         assert_eq!(rename_selection_chars("hello", Some((4, 2)), 10), None);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
+    #[cfg(not(target_os = "macos"))]
     fn rename_selection_ascii() {
         // "hello" — select bytes 1..4 = "ell" = chars 1..4
         let result = rename_selection_chars("hello", Some((1, 4)), 10);
         assert_eq!(result, Some((1, 4)));
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
+    #[cfg(not(target_os = "macos"))]
     fn rename_selection_clamped_to_max_chars() {
         let result = rename_selection_chars("hello", Some((0, 5)), 3);
         assert_eq!(result, Some((0, 3)));
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
+    #[cfg(not(target_os = "macos"))]
     fn rename_selection_multibyte() {
         // "aбв" — 'a' is 1 byte, 'б' is 2 bytes, 'в' is 2 bytes.
         // Byte offsets: a=0..1, б=1..3, в=3..5
@@ -745,16 +807,19 @@ mod tests {
 
     // ── mix_rgb ───────────────────────────────────────────────────────
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn mix_rgb_zero_returns_first() {
         assert_eq!(mix_rgb(0xFF0000, 0x00FF00, 0.0), 0xFF0000);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn mix_rgb_one_returns_second() {
         assert_eq!(mix_rgb(0xFF0000, 0x00FF00, 1.0), 0x00FF00);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn mix_rgb_half() {
         let result = mix_rgb(0x000000, 0xFEFEFE, 0.5);
@@ -762,12 +827,14 @@ mod tests {
         assert_eq!(result, 0x7F7F7F);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn mix_rgb_clamps_above_one() {
         // t > 1.0 should clamp to 1.0
         assert_eq!(mix_rgb(0xFF0000, 0x00FF00, 2.0), 0x00FF00);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn mix_rgb_clamps_below_zero() {
         // t < 0.0 should clamp to 0.0
@@ -776,6 +843,7 @@ mod tests {
 
     // ── compute_close_button_layout ───────────────────────────────────
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn close_btn_no_hover_hides_circle() {
         let layout =
@@ -783,6 +851,7 @@ mod tests {
         assert!(!layout.show_hover_circle);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn close_btn_full_hover_shows_circle() {
         let layout =
@@ -791,6 +860,7 @@ mod tests {
         assert!(layout.circle_alpha > 0.8);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn close_btn_center_computation() {
         let layout =
@@ -800,6 +870,7 @@ mod tests {
         assert!((layout.circle_cy - 28.0).abs() < 0.01);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn close_btn_radius_uses_min_dimension() {
         // Non-square rect: w=16, h=12 -> radius = 12/2 = 6
@@ -808,6 +879,7 @@ mod tests {
         assert!((layout.circle_radius - 6.0).abs() < 0.01);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn close_btn_icon_thickness_scales() {
         let layout_1x = compute_close_button_layout((0, 0, 16, 16), 0.5, 1.0, 0, 0, 0);
@@ -815,6 +887,7 @@ mod tests {
         assert!(layout_2x.icon_thickness > layout_1x.icon_thickness);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn close_btn_x_lines_symmetric() {
         let layout = compute_close_button_layout((100, 20, 16, 16), 0.5, 1.0, 0, 0, 0);
@@ -826,6 +899,7 @@ mod tests {
         assert!((layout.line_a.2 - layout.line_b.0).abs() < 0.01);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn close_btn_icon_color_at_zero_hover() {
         let layout = compute_close_button_layout(
@@ -842,6 +916,7 @@ mod tests {
 
     // ── icon_stroke_thickness ─────────────────────────────────────────
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn icon_stroke_at_1x() {
         // 1.25 * 1.0 = 1.25, clamped to [1.15, 2.2] => 1.25
@@ -849,6 +924,7 @@ mod tests {
         assert!((t - 1.25).abs() < 0.01);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn icon_stroke_at_2x() {
         // 1.25 * 2.0 = 2.5, clamped to 2.2
@@ -856,6 +932,7 @@ mod tests {
         assert!((t - 2.2).abs() < 0.01);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn icon_stroke_clamps_small_scale() {
         // 1.25 * 0.5 = 0.625, clamped to 1.15
@@ -865,7 +942,9 @@ mod tests {
 
     // ── compute_plus_icon_layout ──────────────────────────────────────
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
+    #[cfg(not(target_os = "macos"))]
     fn plus_icon_centered() {
         let layout = compute_plus_icon_layout((100, 20, 24, 24), 1.0);
         // Center should be at (100 + 12, 20 + 12) = (112, 32)
@@ -876,7 +955,9 @@ mod tests {
         assert!((center_y - 32.0).abs() < 0.01);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
+    #[cfg(not(target_os = "macos"))]
     fn plus_icon_half_clamped() {
         // Very small rect: min(4,4) * 0.25 = 1.0, clamped to 2.5
         let layout = compute_plus_icon_layout((0, 0, 4, 4), 1.0);
@@ -888,7 +969,9 @@ mod tests {
         assert!((half - 5.0).abs() < 0.01);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
+    #[cfg(not(target_os = "macos"))]
     fn plus_icon_lines_cross_at_center() {
         let layout = compute_plus_icon_layout((100, 20, 24, 24), 1.0);
         // Horizontal line y should be constant (both endpoints equal)
@@ -904,7 +987,9 @@ mod tests {
         assert!((center_y - v_mid_y).abs() < 0.01);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
+    #[cfg(not(target_os = "macos"))]
     fn plus_icon_uses_shared_thickness() {
         let layout = compute_plus_icon_layout((0, 0, 24, 24), 1.5);
         assert!((layout.thickness - icon_stroke_thickness(1.5)).abs() < 0.001);
@@ -912,7 +997,9 @@ mod tests {
 
     // ── compute_window_button_icon_lines ──────────────────────────────
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
+    #[cfg(not(target_os = "macos"))]
     fn minimize_icon_has_one_line() {
         let btn = WindowButtonLayout {
             x: 100,
@@ -928,7 +1015,9 @@ mod tests {
         assert!((y1 - y2).abs() < 0.01);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
+    #[cfg(not(target_os = "macos"))]
     fn maximize_icon_has_four_lines() {
         let btn = WindowButtonLayout {
             x: 100,
@@ -941,7 +1030,9 @@ mod tests {
         assert_eq!(icon.lines.len(), 4);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
+    #[cfg(not(target_os = "macos"))]
     fn close_icon_has_two_lines() {
         let btn = WindowButtonLayout {
             x: 100,
@@ -954,7 +1045,9 @@ mod tests {
         assert_eq!(icon.lines.len(), 2);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
+    #[cfg(not(target_os = "macos"))]
     fn window_button_icon_uses_shared_thickness() {
         let btn = WindowButtonLayout {
             x: 0,
@@ -969,7 +1062,9 @@ mod tests {
 
     // ── window_button_colors ─────────────────────────────────────────
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
+    #[cfg(not(target_os = "macos"))]
     fn window_button_colors_not_hovered() {
         let colors = window_button_colors(
             WindowButtonKind::Close,
@@ -983,7 +1078,9 @@ mod tests {
         assert_eq!(colors.icon_color, 0x6C7086);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
+    #[cfg(not(target_os = "macos"))]
     fn window_button_colors_close_hovered() {
         let colors = window_button_colors(
             WindowButtonKind::Close,
@@ -997,7 +1094,9 @@ mod tests {
         assert_eq!(colors.icon_color, 0xFFFFFF);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
+    #[cfg(not(target_os = "macos"))]
     fn window_button_colors_minimize_hovered() {
         let colors = window_button_colors(
             WindowButtonKind::Minimize,

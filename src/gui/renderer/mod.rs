@@ -7,6 +7,7 @@ pub mod metrics;
 mod scrollbar;
 mod security;
 pub mod shared;
+#[cfg(not(target_os = "macos"))]
 mod tab_bar;
 mod terminal;
 pub mod traits;
@@ -19,7 +20,7 @@ pub use cpu::CpuRenderer;
 pub use traits::Renderer;
 
 /// Scrollbar thumb width in pixels.
-#[cfg_attr(not(feature = "gpu"), allow(dead_code))]
+#[cfg(feature = "gpu")]
 pub const SCROLLBAR_WIDTH: u32 = 6;
 
 /// Scrollbar hit zone width from right edge (wider than thumb for easier targeting).
@@ -74,20 +75,9 @@ pub(crate) fn blend_rgb(dst: u32, src: u32, alpha: u8) -> u32 {
     (r << 16) | (g << 8) | b
 }
 
-/// Resolves the effective tab-bar visibility for the current platform.
-///
-/// On macOS the native tab bar is always used, so this returns `false`
-/// regardless of the requested value.
+#[cfg(not(target_os = "macos"))]
 pub(super) fn resolve_tab_bar_visible(visible: bool) -> bool {
-    #[cfg(target_os = "macos")]
-    {
-        let _ = visible;
-        false
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        visible
-    }
+    visible
 }
 
 pub use types::*;

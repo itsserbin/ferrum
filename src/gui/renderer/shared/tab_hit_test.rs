@@ -3,9 +3,9 @@
 //! Pure functions that determine what element is under a given point.
 //! Used by both CPU and GPU renderers to avoid duplicating hit-test logic.
 
-#![cfg_attr(target_os = "macos", allow(dead_code))]
-
-use super::super::{TabBarHit, TabInfo};
+#[cfg(not(target_os = "macos"))]
+use super::super::TabInfo;
+use super::super::TabBarHit;
 use super::tab_math::{self, TabLayoutMetrics};
 
 #[cfg(not(target_os = "macos"))]
@@ -95,6 +95,7 @@ pub fn hit_test_tab_hover(
     }
 }
 
+#[cfg(not(target_os = "macos"))]
 /// Returns tab index when pointer is over a security badge.
 pub fn hit_test_tab_security_badge(
     x: f64,
@@ -156,6 +157,7 @@ pub fn window_button_at_position(
     }
 }
 
+#[cfg(not(target_os = "macos"))]
 /// Returns full tab title when hover should show a tooltip.
 pub fn tab_hover_tooltip<'a>(
     tabs: &'a [TabInfo<'a>],
@@ -193,21 +195,32 @@ mod tests {
         }
     }
 
+    #[cfg(not(target_os = "macos"))]
     fn tab(title: &'static str, security_count: usize) -> TabInfo<'static> {
         TabInfo {
             title,
+            #[cfg(not(target_os = "macos"))]
             index: 0,
+            #[cfg(not(target_os = "macos"))]
             is_active: false,
+            #[cfg(not(target_os = "macos"))]
             security_count,
+            #[cfg(not(target_os = "macos"))]
             hover_progress: 0.0,
+            #[cfg(not(target_os = "macos"))]
             close_hover_progress: 0.0,
+            #[cfg(not(target_os = "macos"))]
             is_renaming: false,
+            #[cfg(not(target_os = "macos"))]
             rename_text: None,
+            #[cfg(not(target_os = "macos"))]
             rename_cursor: 0,
+            #[cfg(not(target_os = "macos"))]
             rename_selection: None,
         }
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn security_badge_hit_test_disabled_in_number_mode() {
         let m = metrics();
@@ -231,6 +244,7 @@ mod tests {
         assert_eq!(hit, None);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn security_badge_hit_test_works_in_title_mode() {
         let m = metrics();

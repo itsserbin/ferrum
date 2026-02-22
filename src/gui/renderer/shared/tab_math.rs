@@ -12,6 +12,7 @@ pub const MAX_TAB_WIDTH: u32 = 240;
 pub const MIN_TAB_WIDTH: u32 = 36;
 
 /// Minimum tab width before switching to number-only display.
+#[cfg(not(target_os = "macos"))]
 pub const MIN_TAB_WIDTH_FOR_TITLE: u32 = 60;
 
 /// Tab strip start offset for macOS (accounts for traffic light buttons).
@@ -30,19 +31,24 @@ pub const TAB_STRIP_START_X: u32 = 8;
 pub const PLUS_BUTTON_MARGIN: u32 = 20;
 
 /// Close button size in logical pixels.
+#[cfg(not(target_os = "macos"))]
 pub const CLOSE_BUTTON_SIZE: u32 = 20;
 
 /// Close button margin from tab edge.
+#[cfg(not(target_os = "macos"))]
 pub const CLOSE_BUTTON_MARGIN: u32 = 6;
+#[cfg(not(target_os = "macos"))]
 const CLOSE_BUTTON_VISIBILITY_THRESHOLD: f32 = 0.05;
 
 /// Plus button size in logical pixels.
+#[cfg(not(target_os = "macos"))]
 pub const PLUS_BUTTON_SIZE: u32 = 24;
 
 /// Plus button gap from last tab.
 pub const PLUS_BUTTON_GAP: u32 = 4;
 
 /// Tab padding horizontal (left/right spacing for text).
+#[cfg(not(target_os = "macos"))]
 pub const TAB_PADDING_H: u32 = 14;
 
 /// Pin button size in logical pixels (non-macOS).
@@ -65,6 +71,7 @@ pub const GEAR_BUTTON_GAP: u32 = 8;
 pub const WIN_BTN_WIDTH: u32 = 46;
 
 /// A rectangle defined by origin + size, all in physical (scaled) pixels.
+#[cfg(not(target_os = "macos"))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Rect {
     pub x: u32,
@@ -73,6 +80,7 @@ pub struct Rect {
     pub h: u32,
 }
 
+#[cfg(not(target_os = "macos"))]
 impl Rect {
     /// Converts to the `(x, y, w, h)` tuple used by existing renderer code.
     pub fn to_tuple(self) -> (u32, u32, u32, u32) {
@@ -98,6 +106,7 @@ pub struct TabLayoutMetrics {
     /// Scaled cell width (monospace character advance) in physical pixels.
     pub cell_width: u32,
     /// Scaled cell height in physical pixels.
+    #[cfg(not(target_os = "macos"))]
     pub cell_height: u32,
     /// UI scale factor (e.g. 1.0, 2.0 for Retina).
     pub ui_scale: f64,
@@ -172,6 +181,7 @@ pub fn tab_origin_x(m: &TabLayoutMetrics, tab_index: usize, tab_width: u32) -> u
 }
 
 /// Returns the rectangle for a per-tab close button.
+#[cfg(not(target_os = "macos"))]
 pub fn close_button_rect(m: &TabLayoutMetrics, tab_index: usize, tab_width: u32) -> Rect {
     let btn_size = m.scaled_px(CLOSE_BUTTON_SIZE);
     let x = tab_origin_x(m, tab_index, tab_width) + tab_width
@@ -187,6 +197,7 @@ pub fn close_button_rect(m: &TabLayoutMetrics, tab_index: usize, tab_width: u32)
 }
 
 /// Returns the rectangle for the new-tab (+) button.
+#[cfg(not(target_os = "macos"))]
 pub fn plus_button_rect(m: &TabLayoutMetrics, tab_count: usize, tab_width: u32) -> Rect {
     let btn_size = m.scaled_px(PLUS_BUTTON_SIZE);
     let x = tab_strip_start_x(m) + tab_count as u32 * tab_width + m.scaled_px(PLUS_BUTTON_GAP);
@@ -230,6 +241,7 @@ pub fn gear_button_rect(m: &TabLayoutMetrics) -> Rect {
     }
 }
 
+#[cfg(not(target_os = "macos"))]
 /// Returns the width (in physical pixels) reserved by the security badge
 /// for a tab with the given `security_count`.
 ///
@@ -253,6 +265,7 @@ pub fn security_badge_reserved_width(m: &TabLayoutMetrics, security_count: usize
     badge_icon_size + count_width + m.scaled_px(6)
 }
 
+#[cfg(not(target_os = "macos"))]
 /// Returns the icon size of the security badge shield.
 pub fn security_badge_icon_size(m: &TabLayoutMetrics) -> u32 {
     let badge_min = m.scaled_px(10);
@@ -262,6 +275,7 @@ pub fn security_badge_icon_size(m: &TabLayoutMetrics) -> u32 {
         .clamp(badge_min, badge_max)
 }
 
+#[cfg(not(target_os = "macos"))]
 /// Returns the bounding rectangle of the security badge within a tab.
 ///
 /// Returns `None` when `security_count` is 0 or `tab_index >= tab_count`.
@@ -301,16 +315,19 @@ pub fn security_badge_rect(
     })
 }
 
+#[cfg(not(target_os = "macos"))]
 /// Returns the width reserved by the close button when it is visible.
 pub fn close_button_reserved_width(m: &TabLayoutMetrics) -> u32 {
     m.scaled_px(CLOSE_BUTTON_SIZE) + m.scaled_px(CLOSE_BUTTON_MARGIN)
 }
 
 /// Returns `true` when the close button should be visible/interactable for a tab.
+#[cfg(not(target_os = "macos"))]
 pub fn should_show_close_button(is_active: bool, is_hovered: bool, hover_progress: f32) -> bool {
     is_active || is_hovered || hover_progress.clamp(0.0, 1.0) > CLOSE_BUTTON_VISIBILITY_THRESHOLD
 }
 
+#[cfg(not(target_os = "macos"))]
 /// Returns the maximum number of characters that fit in the tab title area.
 ///
 /// Accounts for horizontal padding, optional close button, and optional
@@ -334,10 +351,11 @@ pub fn tab_title_max_chars(
 
 /// Returns `true` when the tab width is too narrow to display a title,
 /// meaning the renderer should show a tab number instead.
+#[cfg(not(target_os = "macos"))]
 pub fn should_show_number(m: &TabLayoutMetrics, tab_width: u32) -> bool {
     tab_width < m.scaled_px(MIN_TAB_WIDTH_FOR_TITLE)
 }
-
+#[cfg(not(target_os = "macos"))]
 /// Returns the rectangle for the inline rename text field within a tab.
 pub fn rename_field_rect(m: &TabLayoutMetrics, tab_x: u32, tab_width: u32) -> Rect {
     let tab_padding_h = m.scaled_px(TAB_PADDING_H);
@@ -352,17 +370,20 @@ pub fn rename_field_rect(m: &TabLayoutMetrics, tab_x: u32, tab_width: u32) -> Re
 }
 
 /// Maximum number of characters that fit in the rename field.
+#[cfg(not(target_os = "macos"))]
 pub fn rename_field_max_chars(m: &TabLayoutMetrics, tab_width: u32) -> usize {
     let tab_padding_h = m.scaled_px(TAB_PADDING_H);
     (tab_width.saturating_sub(tab_padding_h * 2) / m.cell_width) as usize
 }
 
 /// Returns the y-coordinate for tab text (vertically centered in the bar).
+#[cfg(not(target_os = "macos"))]
 pub fn tab_text_y(m: &TabLayoutMetrics) -> u32 {
     (m.tab_bar_height.saturating_sub(m.cell_height)) / 2 + m.scaled_px(1)
 }
 
 /// Determines the insertion index when dragging a tab to position `x`.
+#[cfg(not(target_os = "macos"))]
 pub fn tab_insert_index_from_x(
     m: &TabLayoutMetrics,
     x: f64,
@@ -384,6 +405,7 @@ pub fn tab_insert_index_from_x(
 
 /// Point-in-rectangle hit test. Returns true when `(x, y)` falls inside
 /// the rectangle described by `(rx, ry, rw, rh)`.
+#[cfg(not(target_os = "macos"))]
 pub fn point_in_rect(x: f64, y: f64, rect: (u32, u32, u32, u32)) -> bool {
     let (rx, ry, rw, rh) = rect;
     x >= rx as f64 && x < (rx + rw) as f64 && y >= ry as f64 && y < (ry + rh) as f64
@@ -398,6 +420,7 @@ mod tests {
     fn default_metrics() -> TabLayoutMetrics {
         TabLayoutMetrics {
             cell_width: 9,
+            #[cfg(not(target_os = "macos"))]
             cell_height: 20,
             ui_scale: 1.0,
             tab_bar_height: 36,
@@ -408,6 +431,7 @@ mod tests {
     fn hidpi_metrics() -> TabLayoutMetrics {
         TabLayoutMetrics {
             cell_width: 18,
+            #[cfg(not(target_os = "macos"))]
             cell_height: 40,
             ui_scale: 2.0,
             tab_bar_height: 72,
@@ -476,6 +500,7 @@ mod tests {
         assert_eq!(tab_origin_x(&m, 1, tw), tab_strip_start_x(&m) + tw);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn close_button_within_tab_bounds() {
         let m = default_metrics();
@@ -486,6 +511,7 @@ mod tests {
         assert_eq!(rect.w, rect.h);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn close_button_size_matches_constant() {
         let m = default_metrics();
@@ -493,6 +519,7 @@ mod tests {
         assert_eq!(rect.w, m.scaled_px(CLOSE_BUTTON_SIZE));
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn plus_button_after_last_tab() {
         let m = default_metrics();
@@ -503,6 +530,7 @@ mod tests {
         assert!(rect.x > last_tab_end);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn plus_button_size_matches_constant() {
         let m = default_metrics();
@@ -527,12 +555,14 @@ mod tests {
         assert_eq!(rect.w, m.scaled_px(PIN_BUTTON_SIZE));
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn security_badge_zero_count_returns_zero() {
         let m = default_metrics();
         assert_eq!(security_badge_reserved_width(&m, 0), 0);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn security_badge_single_count_no_text() {
         let m = default_metrics();
@@ -541,6 +571,7 @@ mod tests {
         assert_eq!(w, icon + m.scaled_px(6));
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn security_badge_multi_count_includes_text() {
         let m = default_metrics();
@@ -549,18 +580,21 @@ mod tests {
         assert!(w5 > w1);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn security_badge_none_for_zero_count() {
         let m = default_metrics();
         assert!(security_badge_rect(&m, 0, 3, 1200, 0).is_none());
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn security_badge_none_for_invalid_index() {
         let m = default_metrics();
         assert!(security_badge_rect(&m, 5, 3, 1200, 1).is_none());
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn security_badge_some_for_valid() {
         let m = default_metrics();
@@ -572,6 +606,7 @@ mod tests {
         assert!(r.x + r.w <= tab_end);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn close_reserved_matches_components() {
         let m = default_metrics();
@@ -581,27 +616,32 @@ mod tests {
         );
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn close_button_visible_for_active_tab() {
         assert!(should_show_close_button(true, false, 0.0));
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn close_button_visible_for_hovered_tab() {
         assert!(should_show_close_button(false, true, 0.0));
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn close_button_hidden_when_not_active_not_hovered_and_no_animation() {
         assert!(!should_show_close_button(false, false, 0.0));
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn close_button_visible_while_hover_animation_decays() {
         assert!(should_show_close_button(false, false, 0.2));
         assert!(!should_show_close_button(false, false, 0.01));
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn title_chars_decrease_with_close_button() {
         let m = default_metrics();
@@ -611,6 +651,7 @@ mod tests {
         assert!(without_close >= with_close);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn title_chars_decrease_with_security_badge() {
         let m = default_metrics();
@@ -620,12 +661,14 @@ mod tests {
         assert!(without_badge >= with_badge);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn title_chars_zero_for_very_narrow_tab() {
         let m = default_metrics();
         assert_eq!(tab_title_max_chars(&m, 0, true, 0), 0);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn show_number_for_narrow_tab() {
         let m = default_metrics();
@@ -633,6 +676,7 @@ mod tests {
         assert!(should_show_number(&m, narrow));
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn no_show_number_for_wide_tab() {
         let m = default_metrics();
@@ -640,6 +684,7 @@ mod tests {
         assert!(!should_show_number(&m, wide));
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn rename_field_within_tab() {
         let m = default_metrics();
@@ -650,6 +695,7 @@ mod tests {
         assert!(rect.x + rect.w <= tab_x + tw + m.scaled_px(3) * 2);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn rename_field_max_chars_positive() {
         let m = default_metrics();
@@ -657,6 +703,7 @@ mod tests {
         assert!(chars > 0);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn text_y_vertically_centered() {
         let m = default_metrics();
@@ -665,6 +712,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_os = "macos"))]
     fn insert_index_before_first_tab() {
         let m = default_metrics();
         let idx = tab_insert_index_from_x(&m, 0.0, 3, 1200);
@@ -672,12 +720,14 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_os = "macos"))]
     fn insert_index_after_last_tab() {
         let m = default_metrics();
         let idx = tab_insert_index_from_x(&m, 10000.0, 3, 1200);
         assert_eq!(idx, 3);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn rect_contains_center() {
         let r = Rect {
@@ -689,6 +739,7 @@ mod tests {
         assert!(r.contains(20.0, 20.0));
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn rect_excludes_outside() {
         let r = Rect {
@@ -701,6 +752,7 @@ mod tests {
         assert!(!r.contains(31.0, 15.0));
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn rect_contains_top_left_edge() {
         let r = Rect {
@@ -712,6 +764,7 @@ mod tests {
         assert!(r.contains(10.0, 10.0));
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn rect_excludes_bottom_right_edge() {
         let r = Rect {
@@ -723,6 +776,7 @@ mod tests {
         assert!(!r.contains(30.0, 30.0));
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn rect_to_tuple_round_trip() {
         let r = Rect {
@@ -734,6 +788,7 @@ mod tests {
         assert_eq!(r.to_tuple(), (1, 2, 3, 4));
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn hidpi_close_button_scales() {
         let m1 = default_metrics();
@@ -743,6 +798,7 @@ mod tests {
         assert_eq!(r2.w, r1.w * 2);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn hidpi_plus_button_scales() {
         let m1 = default_metrics();

@@ -15,6 +15,7 @@ impl traits::Renderer for CpuRenderer {
         CpuRenderer::set_scale(self, scale_factor);
     }
 
+    #[cfg(not(target_os = "macos"))]
     fn set_tab_bar_visible(&mut self, visible: bool) {
         CpuRenderer::set_tab_bar_visible(self, visible);
     }

@@ -82,9 +82,9 @@ impl FerrumWindow {
 
         let cursor = if my < tab_bar_height {
             match self.tab_bar_hit(mx, my) {
-                TabBarHit::Tab(_) | TabBarHit::CloseTab(_) | TabBarHit::NewTab => {
-                    CursorIcon::Pointer
-                }
+                TabBarHit::Tab(_) => CursorIcon::Pointer,
+                #[cfg(not(target_os = "macos"))]
+                TabBarHit::CloseTab(_) | TabBarHit::NewTab => CursorIcon::Pointer,
                 #[cfg(not(target_os = "macos"))]
                 TabBarHit::WindowButton(_) => CursorIcon::Pointer,
                 #[cfg(not(target_os = "macos"))]

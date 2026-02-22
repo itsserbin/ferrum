@@ -1,4 +1,5 @@
 use super::*;
+#[cfg(not(target_os = "macos"))]
 use std::time::{Duration, Instant};
 
 #[test]
@@ -10,6 +11,7 @@ fn default_config_enables_all_protections() {
     assert!(config.clear_mouse_on_reset);
 }
 
+#[cfg(not(target_os = "macos"))]
 #[test]
 fn paste_payload_with_newline_records_event() {
     let mut guard = SecurityGuard::new();
@@ -22,6 +24,7 @@ fn paste_payload_with_newline_records_event() {
     );
 }
 
+#[cfg(not(target_os = "macos"))]
 #[test]
 fn active_event_count_ignores_expired_entries() {
     let mut guard = SecurityGuard::new();

@@ -8,7 +8,7 @@ impl FerrumWindow {
             .is_some_and(|leaf| leaf.selection.is_some())
             && Self::is_text_replacement_key(key, self.modifiers);
         if should_replace_selection {
-            let _ = self.delete_terminal_selection(false);
+            self.delete_terminal_selection(false);
         }
 
         if let Some(leaf) = self.active_leaf_mut() {

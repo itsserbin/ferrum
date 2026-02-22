@@ -1,3 +1,4 @@
+#![cfg(not(target_os = "macos"))]
 //! Pure layout computation for overlay elements (tooltip, drag overlay).
 //!
 //! Both the CPU and GPU renderers need identical geometry for these overlays.

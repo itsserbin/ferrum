@@ -1,11 +1,15 @@
-#![cfg_attr(target_os = "macos", allow(dead_code))]
 
+#[cfg(not(target_os = "macos"))]
 use super::super::shared::overlay_layout;
+#[cfg(not(target_os = "macos"))]
 use super::super::traits::Renderer;
+#[cfg(not(target_os = "macos"))]
 use super::super::types::{DragPosition, RoundedRectCmd};
+#[cfg(not(target_os = "macos"))]
 use super::super::TabInfo;
 
 impl super::GpuRenderer {
+    #[cfg(not(target_os = "macos"))]
     pub(super) fn draw_tab_drag_overlay_impl(
         &mut self,
         buf_width: usize,
@@ -79,6 +83,7 @@ impl super::GpuRenderer {
         );
     }
 
+    #[cfg(not(target_os = "macos"))]
     pub(super) fn draw_tab_tooltip_impl(
         &mut self,
         buf_width: usize,

@@ -1,4 +1,3 @@
-#![cfg_attr(target_os = "macos", allow(dead_code))]
 
 use crate::gui::renderer::CpuRenderer;
 use crate::gui::renderer::types::RenderTarget;

@@ -7,6 +7,7 @@
 pub mod overlay_layout;
 pub mod path_display;
 pub mod scrollbar_math;
+#[cfg(not(target_os = "macos"))]
 pub mod tab_hit_test;
 pub mod tab_math;
 pub mod ui_layout;

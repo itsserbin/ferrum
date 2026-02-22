@@ -1,3 +1,4 @@
+#[cfg(not(target_os = "macos"))]
 use super::shared::ui_layout;
 use super::*;
 use super::RenderTarget;
@@ -58,6 +59,7 @@ impl SecurityPopup {
 }
 
 impl CpuRenderer {
+    #[cfg(not(target_os = "macos"))]
     pub(super) fn draw_security_shield_icon(
         &self,
         target: &mut RenderTarget<'_>,

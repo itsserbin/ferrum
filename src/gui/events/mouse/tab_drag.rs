@@ -10,6 +10,7 @@ pub(in crate::gui::events::mouse) const DRAG_ACTIVATION_THRESHOLD: u32 = 5;
 
 impl FerrumWindow {
     /// Arms a potential tab drag if there are at least 2 tabs and no rename was just committed.
+    #[cfg(not(target_os = "macos"))]
     pub(in crate::gui::events::mouse) fn start_drag(
         &mut self,
         tab_index: usize,
@@ -70,6 +71,7 @@ impl FerrumWindow {
     }
 
     /// Handles mouse release: drops the tab at the new position or treats as normal click.
+    #[cfg(not(target_os = "macos"))]
     pub(in crate::gui::events::mouse) fn finish_drag(&mut self) {
         let Some(drag) = self.dragging_tab.take() else {
             return;
@@ -141,6 +143,7 @@ impl FerrumWindow {
         self.window.request_redraw();
     }
 
+    #[cfg(not(target_os = "macos"))]
     /// Cancels any in-progress drag without performing a reorder.
     pub(in crate::gui::events::mouse) fn cancel_drag(&mut self) {
         self.dragging_tab = None;

@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use anyhow::Context;
 use wgpu;
 use winit::window::Window;
 
@@ -14,7 +15,7 @@ use super::MAX_UI_COMMANDS;
 
 impl super::GpuRenderer {
     /// Creates a new GPU renderer, initializing wgpu device, pipelines, and textures.
-    pub fn new(window: Arc<Window>, config: &AppConfig) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(window: Arc<Window>, config: &AppConfig) -> anyhow::Result<Self> {
         let size = window.inner_size();
         let width = size.width.max(1);
         let height = size.height.max(1);
@@ -31,7 +32,7 @@ impl super::GpuRenderer {
             power_preference: wgpu::PowerPreference::HighPerformance,
             compatible_surface: Some(&surface),
             force_fallback_adapter: false,
-        }))?;
+        })).context("no suitable GPU adapter found")?;
 
         let (device, queue) =
             pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {

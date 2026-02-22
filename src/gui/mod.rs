@@ -38,9 +38,11 @@ const MIN_WINDOW_ROWS: u32 = 10;
 #[cfg(not(target_os = "linux"))]
 use self::state::MenuContext;
 use self::state::{
-    App, ClosedTabInfo, DividerDragState, DragState, FerrumWindow, PtyEvent,
-    RenameState, ScrollbarState, SelectionDragMode, TabReorderAnimation, TabState, WindowRequest,
+    App, ClosedTabInfo, DividerDragState, FerrumWindow, PtyEvent,
+    RenameState, ScrollbarState, SelectionDragMode, TabState, WindowRequest,
 };
+#[cfg(not(target_os = "macos"))]
+use self::state::{DragState, TabReorderAnimation};
 
 impl FerrumWindow {
     /// Creates a new FerrumWindow wrapping an already-created winit window and renderer backend.
@@ -82,7 +84,9 @@ impl FerrumWindow {
             ui_animation_last_tick: std::time::Instant::now(),
             closed_tabs: Vec::new(),
             renaming_tab: None,
+            #[cfg(not(target_os = "macos"))]
             dragging_tab: None,
+            #[cfg(not(target_os = "macos"))]
             tab_reorder_animation: None,
             last_tab_click: None,
             last_topbar_empty_click: None,

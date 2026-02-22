@@ -49,14 +49,22 @@ impl TabBarFrameTabInfo {
     fn as_tab_info(&self) -> TabInfo<'_> {
         TabInfo {
             title: &self.title,
+            #[cfg(not(target_os = "macos"))]
             index: self.index,
+            #[cfg(not(target_os = "macos"))]
             is_active: self.is_active,
+            #[cfg(not(target_os = "macos"))]
             security_count: self.security_count,
+            #[cfg(not(target_os = "macos"))]
             hover_progress: self.hover_progress,
+            #[cfg(not(target_os = "macos"))]
             close_hover_progress: self.close_hover_progress,
             is_renaming: self.is_renaming,
+            #[cfg(not(target_os = "macos"))]
             rename_text: self.rename_text.as_deref(),
+            #[cfg(not(target_os = "macos"))]
             rename_cursor: self.rename_cursor,
+            #[cfg(not(target_os = "macos"))]
             rename_selection: self.rename_selection,
         }
     }
@@ -82,11 +90,11 @@ pub(in crate::gui::events) struct FrameParams<'a> {
     pub tab: Option<&'a crate::gui::state::TabState>,
     pub cursor_blink_start: std::time::Instant,
     pub cursor_blink_interval_ms: u64,
-    #[cfg_attr(target_os = "macos", allow(dead_code))]
+    #[cfg(not(target_os = "macos"))]
     pub hovered_tab: Option<usize>,
-    #[cfg_attr(target_os = "macos", allow(dead_code))]
+    #[cfg(not(target_os = "macos"))]
     pub mouse_pos: (f64, f64),
-    #[cfg_attr(target_os = "macos", allow(dead_code))]
+    #[cfg(not(target_os = "macos"))]
     pub pinned: bool,
     pub security_popup: Option<&'a SecurityPopup>,
 }

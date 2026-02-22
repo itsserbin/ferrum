@@ -1,4 +1,3 @@
-#![cfg_attr(target_os = "macos", allow(dead_code))]
 
 //! Frame lifecycle: buffer upload, surface management, and presentation.
 
@@ -7,10 +6,11 @@ use wgpu;
 use super::MAX_UI_COMMANDS;
 use super::buffers::*;
 
+#[cfg(not(target_os = "macos"))]
 use super::super::shared::ui_layout;
-use super::super::traits::Renderer;
 
 impl super::GpuRenderer {
+    #[cfg(not(target_os = "macos"))]
     pub(super) fn draw_close_button_commands(
         &mut self,
         tab_index: usize,

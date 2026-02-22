@@ -20,7 +20,6 @@ pub(super) enum PtyEvent {
 }
 
 /// Metadata for recently closed tabs (Ctrl+Shift+T restore).
-#[cfg_attr(target_os = "macos", allow(dead_code))]
 pub(super) struct ClosedTabInfo {
     pub(super) title: String,
 }
@@ -110,7 +109,7 @@ pub(super) struct DividerDragState {
 }
 
 /// Drag-and-drop state for tab reordering.
-#[cfg_attr(target_os = "macos", allow(dead_code))]
+#[cfg(not(target_os = "macos"))]
 pub(super) struct DragState {
     pub(super) source_index: usize, // Which tab is being dragged.
     pub(super) start_x: f64,        // Mouse x at drag start.
@@ -122,7 +121,7 @@ pub(super) struct DragState {
 }
 
 /// Post-reorder slide animation for tabs.
-#[cfg_attr(target_os = "macos", allow(dead_code))]
+#[cfg(not(target_os = "macos"))]
 pub(super) struct TabReorderAnimation {
     pub(super) started: Instant,
     pub(super) duration_ms: u32,
@@ -131,7 +130,6 @@ pub(super) struct TabReorderAnimation {
 }
 
 /// Temporary inline rename state for the tab bar.
-#[cfg_attr(target_os = "macos", allow(dead_code))]
 pub(super) struct RenameState {
     pub(super) tab_index: usize,
     pub(super) text: String,
@@ -210,7 +208,9 @@ pub(super) struct FerrumWindow {
     pub(super) ui_animation_last_tick: std::time::Instant,
     pub(super) closed_tabs: Vec<ClosedTabInfo>,
     pub(super) renaming_tab: Option<RenameState>,
+    #[cfg(not(target_os = "macos"))]
     pub(super) dragging_tab: Option<DragState>,
+    #[cfg(not(target_os = "macos"))]
     pub(super) tab_reorder_animation: Option<TabReorderAnimation>,
     pub(super) last_tab_click: Option<(usize, std::time::Instant)>,
     pub(super) last_topbar_empty_click: Option<std::time::Instant>,

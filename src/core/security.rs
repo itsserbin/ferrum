@@ -35,6 +35,7 @@ pub enum SecurityEventKind {
 }
 
 impl SecurityEventKind {
+    #[cfg(not(target_os = "macos"))]
     /// Human-readable label used in the UI.
     pub fn label(self) -> &'static str {
         let t = crate::i18n::t();
@@ -118,6 +119,7 @@ impl SecurityGuard {
         }
     }
 
+    #[cfg(not(target_os = "macos"))]
     /// Counts currently active (non-expired) events.
     pub fn active_event_count(&self) -> usize {
         self.events
@@ -126,6 +128,7 @@ impl SecurityGuard {
             .count()
     }
 
+    #[cfg(not(target_os = "macos"))]
     /// Fast check for any active security events.
     pub fn has_events(&self) -> bool {
         self.events
@@ -133,6 +136,7 @@ impl SecurityGuard {
             .any(|e| e.timestamp.elapsed() <= Self::EVENT_TTL)
     }
 
+    #[cfg(not(target_os = "macos"))]
     /// Returns active events and clears the internal queue.
     pub fn take_active_events(&mut self) -> Vec<SecurityEvent> {
         let active: Vec<SecurityEvent> = self

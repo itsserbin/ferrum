@@ -2,16 +2,26 @@
 use crate::core::Color;
 
 /// Render-time tab metadata.
+#[cfg(not(target_os = "macos"))]
 pub struct TabInfo<'a> {
     pub title: &'a str,
+    #[cfg(not(target_os = "macos"))]
     pub index: usize,
+    #[cfg(not(target_os = "macos"))]
     pub is_active: bool,
+    #[cfg(not(target_os = "macos"))]
     pub security_count: usize,
+    #[cfg(not(target_os = "macos"))]
     pub hover_progress: f32,
+    #[cfg(not(target_os = "macos"))]
     pub close_hover_progress: f32,
+    #[cfg(not(target_os = "macos"))]
     pub is_renaming: bool,
+    #[cfg(not(target_os = "macos"))]
     pub rename_text: Option<&'a str>,
+    #[cfg(not(target_os = "macos"))]
     pub rename_cursor: usize,
+    #[cfg(not(target_os = "macos"))]
     pub rename_selection: Option<(usize, usize)>, // Byte range within rename_text.
 }
 
@@ -82,6 +92,7 @@ impl SecurityPopup {
             y: y + pad2,
             text: self.title.to_string(),
             color: colors.accent,
+            #[cfg(feature = "gpu")]
             opacity: 1.0,
         };
 
@@ -104,6 +115,7 @@ impl SecurityPopup {
                 y: y + line_h + pad4 + i as f32 * line_h,
                 text: format!("\u{2022} {}", line),
                 color: colors.default_fg,
+                #[cfg(feature = "gpu")]
                 opacity: 1.0,
             })
             .collect();
@@ -161,7 +173,7 @@ pub struct TextCmd {
     pub text: String,
     pub color: u32,
     /// Text opacity (used by the GPU renderer; the CPU renderer draws at full opacity).
-    #[cfg_attr(not(feature = "gpu"), allow(dead_code))]
+    #[cfg(feature = "gpu")]
     pub opacity: f32,
 }
 
@@ -185,8 +197,10 @@ pub enum TabBarHit {
     /// Clicked on a tab by index.
     Tab(usize),
     /// Clicked on a tab close button by index.
+    #[cfg(not(target_os = "macos"))]
     CloseTab(usize),
     /// Clicked on the new-tab button.
+    #[cfg(not(target_os = "macos"))]
     NewTab,
     /// Clicked on the pin button (non-macOS).
     #[cfg(not(target_os = "macos"))]
@@ -228,6 +242,7 @@ pub struct RenderTarget<'a> {
     pub height: usize,
 }
 
+#[cfg(not(target_os = "macos"))]
 /// Per-tab layout slot used during tab bar rendering.
 ///
 /// Groups the index, metadata reference, position, width, and hover state
@@ -235,12 +250,15 @@ pub struct RenderTarget<'a> {
 pub struct TabSlot<'a> {
     pub index: usize,
     pub tab: &'a TabInfo<'a>,
+    #[cfg(not(target_os = "macos"))]
     pub x: u32,
+    #[cfg(not(target_os = "macos"))]
     pub width: u32,
     pub is_hovered: bool,
 }
 
 /// Pin-button color triple for the three visual states.
+#[cfg(not(target_os = "macos"))]
 pub struct PinColors {
     pub active: u32,
     pub hover: u32,
@@ -272,7 +290,7 @@ pub struct ScrollbarState {
     pub opacity: f32,
     pub hover: bool,
 }
-
+#[cfg(not(target_os = "macos"))]
 /// Bundled parameters for tab bar drawing.
 ///
 /// Groups the arguments that `draw_tab_bar` / `draw_tab_bar_impl` need
@@ -291,6 +309,7 @@ pub struct TabBarDrawParams<'a> {
 ///
 /// Replaces the raw `(f64, f32)` tuple, giving names to the cursor
 /// position and the smoothed insertion indicator position.
+#[cfg(not(target_os = "macos"))]
 pub struct DragPosition {
     pub current_x: f64,
     pub indicator_x: f32,

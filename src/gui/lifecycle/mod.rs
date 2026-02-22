@@ -80,6 +80,7 @@ impl ApplicationHandler for App {
                 win.hovered_tab = None;
                 win.security_popup = None;
                 if !focused {
+                    #[cfg(not(target_os = "macos"))]
                     if win.dragging_tab.take().is_some() {
                         win.window.set_cursor(CursorIcon::Default);
                     }
@@ -118,6 +119,7 @@ impl ApplicationHandler for App {
             WindowEvent::CursorLeft { .. } => {
                 win.hovered_tab = None;
                 win.resize_direction = None;
+                #[cfg(not(target_os = "macos"))]
                 if win.dragging_tab.take().is_some() {
                     win.window.set_cursor(CursorIcon::Default);
                 }
@@ -128,6 +130,9 @@ impl ApplicationHandler for App {
                 should_redraw = true;
             }
             WindowEvent::MouseInput { state, button, .. } => {
+                #[cfg(target_os = "macos")]
+                win.on_mouse_input(state, button);
+                #[cfg(not(target_os = "macos"))]
                 win.on_mouse_input(state, button, &mut self.next_tab_id, &self.tx, &self.config);
                 should_redraw = true;
             }

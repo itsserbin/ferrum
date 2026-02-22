@@ -1,7 +1,9 @@
+#[cfg(not(target_os = "macos"))]
 use crate::gui::renderer::SecurityPopup;
 use crate::gui::*;
 
 impl FerrumWindow {
+    #[cfg(not(target_os = "macos"))]
     /// Opens the security event popup for the given tab index, positioning it
     /// near the security badge in the tab bar.
     pub(in crate::gui::events::mouse) fn open_security_popup_for_tab(&mut self, tab_index: usize) {

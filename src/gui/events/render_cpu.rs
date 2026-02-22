@@ -36,8 +36,11 @@ impl FerrumWindow {
             tab: self.tabs.get(self.active_tab),
             cursor_blink_start: self.cursor_blink_start,
             cursor_blink_interval_ms: self.cursor_blink_interval_ms,
+            #[cfg(not(target_os = "macos"))]
             hovered_tab: self.hovered_tab,
+            #[cfg(not(target_os = "macos"))]
             mouse_pos: self.mouse_pos,
+            #[cfg(not(target_os = "macos"))]
             pinned: self.pinned,
             security_popup: self.security_popup.as_ref(),
         };
@@ -54,6 +57,6 @@ impl FerrumWindow {
             &frame_tab_infos,
         );
 
-        let _ = buffer.present();
+        if let Err(e) = buffer.present() { eprintln!("[ferrum] buffer present failed: {e}"); }
     }
 }

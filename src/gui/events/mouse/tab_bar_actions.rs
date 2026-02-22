@@ -4,6 +4,27 @@ use crate::gui::*;
 
 impl FerrumWindow {
     /// Handles a click on a tab: double-click rename, switch, drag.
+    #[cfg(target_os = "macos")]
+    pub(in crate::gui::events::mouse) fn handle_tab_click(
+        &mut self,
+        idx: usize,
+    ) {
+        self.last_topbar_empty_click = None;
+        let now = std::time::Instant::now();
+        if self.last_tab_click.is_some_and(|(last_idx, last_time)| {
+            last_idx == idx
+                && now.duration_since(last_time).as_millis() < super::MULTI_CLICK_TIMEOUT_MS
+        }) {
+            self.start_rename(idx);
+            self.last_tab_click = None;
+            return;
+        }
+        self.last_tab_click = Some((idx, now));
+        self.switch_tab(idx);
+    }
+
+    /// Handles a click on a tab: double-click rename, switch, drag.
+    #[cfg(not(target_os = "macos"))]
     pub(in crate::gui::events::mouse) fn handle_tab_click(
         &mut self,
         idx: usize,
@@ -58,7 +79,7 @@ impl FerrumWindow {
             self.window.set_maximized(!maximized);
         } else {
             self.last_topbar_empty_click = Some(now);
-            let _ = self.window.drag_window();
+            if let Err(e) = self.window.drag_window() { eprintln!("[ferrum] drag_window failed: {e}"); }
         }
     }
 }
