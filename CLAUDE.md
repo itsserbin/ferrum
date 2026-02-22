@@ -2,12 +2,6 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-# Rules
-
-- Never use #[allow(clippy::too_many_arguments)]
-- Never use #[allow(clippy::too_many_lines)]
-- Never use #[allow(dead_code)]
-
 ## Project Overview
 
 Ferrum is a GPU-accelerated terminal emulator written in Rust. Cross-platform (Linux, macOS, Windows) with tab support, pane splitting, detachable windows, and dual CPU/GPU rendering backends.
@@ -45,7 +39,7 @@ Display ← Renderer (CPU/GPU) ← Terminal Grid ← VT Parser ← PTY Output
 - `grid.rs` — 2D cell array with soft/hard line wrap tracking
 - `cell.rs` — Cell struct: character + colors + text attributes
 - `selection.rs` — Text selection with char/word/line modes
-- `color.rs` — Catppuccin Mocha palette, ANSI 16 colors, `dimmed()`/`bold_bright()` methods
+- `color.rs` — color palette, ANSI 16 colors, `dimmed()`/`bold_bright()` methods
 
 **`src/pty/`** — PTY session management
 - `mod.rs` — `Session` spawning (portable-pty), shell integration injection (bash, zsh, fish, PowerShell, cmd.exe)
