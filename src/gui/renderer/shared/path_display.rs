@@ -3,6 +3,7 @@
 //! Replaces the home directory prefix with `~`, then truncates middle
 //! segments with `...` when the path exceeds the available character count.
 
+#[cfg(not(target_os = "macos"))]
 /// Formats a CWD path for display in a tab title.
 ///
 /// - Replaces home directory prefix with `~`
@@ -101,6 +102,7 @@ fn home_dir() -> String {
 mod tests {
     use super::*;
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn short_path_no_truncation() {
         let result = format_tab_path("/tmp/foo", 30, "#1");
@@ -136,6 +138,7 @@ mod tests {
         assert_eq!(result, "~");
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn long_path_gets_truncated() {
         // Create a path that's definitely longer than 20 chars
@@ -150,24 +153,28 @@ mod tests {
         assert!(result.chars().count() <= 20, "Too long: {result}");
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn very_narrow_returns_last_segment() {
         let result = format_tab_path("/very/long/path/to/mydir", 5, "#1");
         assert_eq!(result, "mydir");
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn extremely_narrow_returns_fallback() {
         let result = format_tab_path("/very/long/path/to/extremely_long_dirname", 3, "#1");
         assert_eq!(result, "#1");
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn zero_max_chars_returns_fallback() {
         let result = format_tab_path("/some/path", 0, "#2");
         assert_eq!(result, "#2");
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn root_path() {
         let result = format_tab_path("/", 10, "#1");
@@ -175,6 +182,7 @@ mod tests {
         assert!(!result.is_empty());
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn single_segment_path() {
         let result = format_tab_path("/usr", 30, "#1");

@@ -5,7 +5,9 @@ use winit::window::Window;
 
 use crate::config::AppConfig;
 use super::traits::Renderer;
-use super::{CpuRenderer, SecurityPopup, TabBarHit, TabInfo};
+#[cfg(not(target_os = "macos"))]
+use super::TabInfo;
+use super::{CpuRenderer, TabBarHit};
 
 #[cfg(feature = "gpu")]
 use super::gpu::GpuRenderer;
@@ -84,7 +86,7 @@ impl RendererBackend {
         self.as_renderer_mut().set_scale(scale_factor);
     }
 
-    #[cfg_attr(target_os = "macos", allow(dead_code))]
+    #[cfg(not(target_os = "macos"))]
     pub fn set_tab_bar_visible(&mut self, visible: bool) {
         self.as_renderer_mut().set_tab_bar_visible(visible);
     }
@@ -150,6 +152,7 @@ impl RendererBackend {
         self.as_renderer().tab_origin_x(tab_index, tw)
     }
 
+    #[cfg(not(target_os = "macos"))]
     pub fn tab_insert_index_from_x(&self, x: f64, tab_count: usize, buf_width: u32) -> usize {
         self.as_renderer()
             .tab_insert_index_from_x(x, tab_count, buf_width)
@@ -180,42 +183,6 @@ impl RendererBackend {
     ) -> Option<usize> {
         self.as_renderer()
             .hit_test_tab_hover(x, y, tab_count, buf_width)
-    }
-
-    pub fn hit_test_tab_security_badge(
-        &self,
-        x: f64,
-        y: f64,
-        tabs: &[TabInfo],
-        buf_width: u32,
-    ) -> Option<usize> {
-        self.as_renderer()
-            .hit_test_tab_security_badge(x, y, tabs, buf_width)
-    }
-
-    pub fn security_badge_rect(
-        &self,
-        tab_index: usize,
-        tab_count: usize,
-        buf_width: u32,
-        security_count: usize,
-    ) -> Option<(u32, u32, u32, u32)> {
-        self.as_renderer()
-            .security_badge_rect(tab_index, tab_count, buf_width, security_count)
-    }
-
-    // ── Security ────────────────────────────────────────────────────
-
-    pub fn hit_test_security_popup(
-        &self,
-        popup: &SecurityPopup,
-        x: f64,
-        y: f64,
-        buf_width: usize,
-        buf_height: usize,
-    ) -> bool {
-        self.as_renderer()
-            .hit_test_security_popup(popup, x, y, buf_width, buf_height)
     }
 
     pub(in crate::gui) fn palette(&self) -> &crate::config::ThemePalette {

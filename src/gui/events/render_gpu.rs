@@ -4,6 +4,10 @@ use crate::gui::renderer::backend::RendererBackend;
 use crate::gui::*;
 
 #[cfg(feature = "gpu")]
+use crate::gui::renderer::shared::banner_layout::compute_update_banner_layout;
+#[cfg(feature = "gpu")]
+use crate::gui::state::UpdateInstallState;
+#[cfg(feature = "gpu")]
 use super::render_shared::{FrameParams, draw_frame_content};
 
 #[cfg(feature = "gpu")]
@@ -32,10 +36,26 @@ impl FerrumWindow {
             tab: self.tabs.get(self.active_tab),
             cursor_blink_start: self.cursor_blink_start,
             cursor_blink_interval_ms: self.cursor_blink_interval_ms,
+            #[cfg(not(target_os = "macos"))]
             hovered_tab: self.hovered_tab,
+            #[cfg(not(target_os = "macos"))]
             mouse_pos: self.mouse_pos,
+            #[cfg(not(target_os = "macos"))]
             pinned: self.pinned,
-            security_popup: self.security_popup.as_ref(),
+            update_banner: if self.update_banner_dismissed
+                || self.update_install_state == UpdateInstallState::Done
+            {
+                None
+            } else {
+                self.pending_update_tag.as_deref().and_then(|tag| {
+                    let m = gpu.tab_layout_metrics();
+                    let tab_bar_h = gpu.tab_bar_height_px();
+                    compute_update_banner_layout(tag, &m, bw as u32, bh as u32, tab_bar_h).map(|mut layout| {
+                        layout.installing = self.update_install_state == UpdateInstallState::Installing;
+                        layout
+                    })
+                })
+            },
         };
 
         draw_frame_content(

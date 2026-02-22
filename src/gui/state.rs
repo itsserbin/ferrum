@@ -20,7 +20,6 @@ pub(super) enum PtyEvent {
 }
 
 /// Metadata for recently closed tabs (Ctrl+Shift+T restore).
-#[cfg_attr(target_os = "macos", allow(dead_code))]
 pub(super) struct ClosedTabInfo {
     pub(super) title: String,
 }
@@ -110,7 +109,7 @@ pub(super) struct DividerDragState {
 }
 
 /// Drag-and-drop state for tab reordering.
-#[cfg_attr(target_os = "macos", allow(dead_code))]
+#[cfg(not(target_os = "macos"))]
 pub(super) struct DragState {
     pub(super) source_index: usize, // Which tab is being dragged.
     pub(super) start_x: f64,        // Mouse x at drag start.
@@ -122,7 +121,7 @@ pub(super) struct DragState {
 }
 
 /// Post-reorder slide animation for tabs.
-#[cfg_attr(target_os = "macos", allow(dead_code))]
+#[cfg(not(target_os = "macos"))]
 pub(super) struct TabReorderAnimation {
     pub(super) started: Instant,
     pub(super) duration_ms: u32,
@@ -131,7 +130,6 @@ pub(super) struct TabReorderAnimation {
 }
 
 /// Temporary inline rename state for the tab bar.
-#[cfg_attr(target_os = "macos", allow(dead_code))]
 pub(super) struct RenameState {
     pub(super) tab_index: usize,
     pub(super) text: String,
@@ -145,6 +143,15 @@ pub(super) enum SelectionDragMode {
     Character,
     Word,
     Line,
+}
+
+/// Install state for the in-app update banner.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub(crate) enum UpdateInstallState {
+    #[default]
+    Idle,
+    Installing,
+    Done,
 }
 
 /// Request from a FerrumWindow to the App (window manager).
@@ -201,7 +208,6 @@ pub(super) struct FerrumWindow {
     pub(super) hovered_tab: Option<usize>,
     #[cfg(not(target_os = "linux"))]
     pub(super) pending_menu_context: Option<MenuContext>,
-    pub(super) security_popup: Option<SecurityPopup>,
     #[cfg(not(target_os = "macos"))]
     pub(super) tab_hover_progress: Vec<f32>,
     #[cfg(not(target_os = "macos"))]
@@ -210,7 +216,9 @@ pub(super) struct FerrumWindow {
     pub(super) ui_animation_last_tick: std::time::Instant,
     pub(super) closed_tabs: Vec<ClosedTabInfo>,
     pub(super) renaming_tab: Option<RenameState>,
+    #[cfg(not(target_os = "macos"))]
     pub(super) dragging_tab: Option<DragState>,
+    #[cfg(not(target_os = "macos"))]
     pub(super) tab_reorder_animation: Option<TabReorderAnimation>,
     pub(super) last_tab_click: Option<(usize, std::time::Instant)>,
     pub(super) last_topbar_empty_click: Option<std::time::Instant>,
@@ -237,6 +245,12 @@ pub(super) struct FerrumWindow {
     pub(super) settings_tx: std::sync::mpsc::Sender<crate::config::AppConfig>,
     /// Proxy to wake the event loop from PTY reader threads.
     pub(super) event_proxy: winit::event_loop::EventLoopProxy<()>,
+    /// Tag name of the latest available update, or `None` when up to date.
+    pub(super) pending_update_tag: Option<String>,
+    /// Whether the user dismissed the banner this session.
+    pub(super) update_banner_dismissed: bool,
+    /// Current state of the background install operation.
+    pub(super) update_install_state: UpdateInstallState,
 }
 
 /// App is now a window manager holding multiple FerrumWindows.
@@ -253,4 +267,6 @@ pub(super) struct App {
     pub(super) config: crate::config::AppConfig,
     pub(super) settings_tx: std::sync::mpsc::Sender<crate::config::AppConfig>,
     pub(super) settings_rx: std::sync::mpsc::Receiver<crate::config::AppConfig>,
+    /// Receives the result of a manual "Check for Updates" triggered from Settings.
+    pub(super) manual_check_rx: Option<mpsc::Receiver<crate::update::ManualCheckResult>>,
 }

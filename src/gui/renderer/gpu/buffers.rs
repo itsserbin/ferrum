@@ -62,7 +62,9 @@ pub struct GpuDrawCommand {
 /// Command type constants matching the WGSL shader.
 pub const CMD_RECT: u32 = 0;
 pub const CMD_ROUNDED_RECT: u32 = 1;
+#[cfg(not(target_os = "macos"))]
 pub const CMD_CIRCLE: u32 = 2;
+#[cfg(not(target_os = "macos"))]
 pub const CMD_LINE: u32 = 3;
 pub const CMD_GLYPH: u32 = 4;
 

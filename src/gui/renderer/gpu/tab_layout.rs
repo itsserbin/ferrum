@@ -1,4 +1,3 @@
-#![cfg_attr(target_os = "macos", allow(dead_code))]
 
 //! Tab bar layout math and drawing helpers for the GPU renderer.
 
@@ -31,7 +30,9 @@ impl super::GpuRenderer {
             let slot = TabSlot {
                 index: i,
                 tab,
+                #[cfg(not(target_os = "macos"))]
                 x: tab_x.round() as u32,
+                #[cfg(not(target_os = "macos"))]
                 width: tw,
                 is_hovered,
             };
@@ -43,7 +44,7 @@ impl super::GpuRenderer {
             } else if use_numbers {
                 self.tab_number_commands(&slot, tab_x, tw, text_y);
             } else {
-                self.tab_content_commands(&slot, tabs.len(), bw, tab_x, tw, text_y);
+                self.tab_content_commands(&slot, tab_x, tw, text_y);
             }
         }
 

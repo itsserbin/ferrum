@@ -11,7 +11,7 @@ pub struct FontMetrics {
     pub font_size: f32,
     pub ui_scale: f64,
     pub ascent: i32,
-    #[cfg_attr(target_os = "macos", allow(dead_code))]
+    #[cfg(not(target_os = "macos"))]
     pub tab_bar_visible: bool,
     // -- Configurable base values (from AppConfig) --
     pub base_font_size: f32,
@@ -31,6 +31,7 @@ impl FontMetrics {
             font_size: 1.0,
             ui_scale: 1.0,
             ascent: 0,
+            #[cfg(not(target_os = "macos"))]
             tab_bar_visible: false,
             base_font_size: config.font.size,
             base_line_padding: config.font.line_padding,

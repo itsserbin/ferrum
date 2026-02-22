@@ -1,4 +1,3 @@
-#![cfg_attr(target_os = "macos", allow(dead_code))]
 
 //! UI draw command helpers for pushing primitives into the GPU command buffer.
 
@@ -44,6 +43,7 @@ impl super::GpuRenderer {
         });
     }
 
+    #[cfg(not(target_os = "macos"))]
     pub(super) fn push_line(
         &mut self,
         p0: (f32, f32),
@@ -69,6 +69,7 @@ impl super::GpuRenderer {
         });
     }
 
+    #[cfg(not(target_os = "macos"))]
     pub(super) fn push_circle(&mut self, cx: f32, cy: f32, r: f32, color: u32, alpha: f32) {
         if self.commands.len() >= MAX_UI_COMMANDS {
             return;

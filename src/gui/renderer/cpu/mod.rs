@@ -1,3 +1,4 @@
+mod banner;
 pub(in crate::gui::renderer) mod primitives;
 mod trait_impl;
 
@@ -70,7 +71,7 @@ impl CpuRenderer {
         self.metrics.tab_bar_height_px()
     }
 
-    #[cfg_attr(target_os = "macos", allow(dead_code))]
+    #[cfg(not(target_os = "macos"))]
     pub(crate) fn set_tab_bar_visible(&mut self, visible: bool) {
         self.metrics.tab_bar_visible = super::resolve_tab_bar_visible(visible);
     }

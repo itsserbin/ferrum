@@ -1,6 +1,8 @@
 use crate::core::Color;
 
-use super::super::types::{FlatRectCmd, RenderTarget, RoundedRectCmd, RoundedShape};
+#[cfg(not(target_os = "macos"))]
+use super::super::types::RoundedShape;
+use super::super::types::RenderTarget;
 use super::CpuRenderer;
 
 impl CpuRenderer {
@@ -102,6 +104,7 @@ impl CpuRenderer {
         }
     }
 
+    #[cfg(not(target_os = "macos"))]
     pub(in crate::gui::renderer) fn draw_rounded_rect(
         &self,
         target: &mut RenderTarget<'_>,
@@ -112,6 +115,7 @@ impl CpuRenderer {
 
     /// Shared pixel iteration for rounded rectangle drawing.
     /// The `coverage_fn` determines which corners are rounded.
+    #[cfg(not(target_os = "macos"))]
     pub(in crate::gui::renderer) fn draw_rounded_impl(
         target: &mut RenderTarget<'_>,
         shape: &RoundedShape,
@@ -162,6 +166,7 @@ impl CpuRenderer {
         }
     }
 
+    #[cfg(not(target_os = "macos"))]
     fn rounded_coverage(px: i32, py: i32, w: i32, h: i32, r: i32) -> f32 {
         if px < 0 || py < 0 || px >= w || py >= h {
             return 0.0;
@@ -196,54 +201,5 @@ impl CpuRenderer {
         (rr + 0.5 - dist).clamp(0.0, 1.0)
     }
 
-    /// Draws a rounded rectangle from a layout command.
-    pub(in crate::gui::renderer) fn draw_rounded_rect_cmd(
-        &self,
-        target: &mut RenderTarget<'_>,
-        cmd: &RoundedRectCmd,
-    ) {
-        let alpha = (cmd.opacity * 255.0).round().clamp(0.0, 255.0) as u8;
-        let shape = RoundedShape {
-            x: cmd.x as i32,
-            y: cmd.y as i32,
-            w: cmd.w as u32,
-            h: cmd.h as u32,
-            radius: cmd.radius as u32,
-            color: cmd.color,
-            alpha,
-        };
-        self.draw_rounded_rect(target, &shape);
-    }
 
-    /// Draws a flat (non-rounded) rectangle from a layout command using per-pixel blending.
-    pub(in crate::gui::renderer) fn draw_flat_rect_cmd(
-        &self,
-        target: &mut RenderTarget<'_>,
-        cmd: &FlatRectCmd,
-    ) {
-        let alpha = (cmd.opacity * 255.0).round().clamp(0.0, 255.0) as u8;
-        if alpha == 0 {
-            return;
-        }
-        let x = cmd.x as usize;
-        let y = cmd.y as usize;
-        let w = cmd.w as usize;
-        let h = cmd.h as usize;
-        for dy in 0..h {
-            let py = y + dy;
-            if py >= target.height {
-                break;
-            }
-            for dx in 0..w {
-                let px = x + dx;
-                if px >= target.width {
-                    break;
-                }
-                let idx = py * target.width + px;
-                if idx < target.buffer.len() {
-                    target.buffer[idx] = crate::gui::renderer::blend_rgb(target.buffer[idx], cmd.color, alpha);
-                }
-            }
-        }
-    }
 }

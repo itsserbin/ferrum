@@ -1,4 +1,3 @@
-#![cfg_attr(target_os = "macos", allow(dead_code))]
 
 mod buttons;
 mod drag_overlay;
@@ -69,7 +68,7 @@ impl CpuRenderer {
             } else if use_numbers {
                 self.draw_tab_number(target, &slot);
             } else {
-                self.draw_tab_content(target, &slot, tabs.len());
+                self.draw_tab_content(target, &slot);
             }
         }
 

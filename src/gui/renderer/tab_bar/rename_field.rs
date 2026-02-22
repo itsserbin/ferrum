@@ -1,4 +1,3 @@
-#![cfg_attr(target_os = "macos", allow(dead_code))]
 
 use super::super::RoundedShape;
 use super::super::shared::{tab_math, ui_layout};

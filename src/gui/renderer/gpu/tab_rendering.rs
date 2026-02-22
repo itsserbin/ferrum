@@ -1,4 +1,3 @@
-#![cfg_attr(target_os = "macos", allow(dead_code))]
 
 use super::super::shared::{tab_math, ui_layout};
 use super::super::traits::Renderer;
@@ -140,12 +139,9 @@ impl super::GpuRenderer {
     }
 
     /// Draws a tab in normal mode: title text + optional close button.
-    /// Delegates to title, security badge, and close button helpers.
     pub(super) fn tab_content_commands(
         &mut self,
         slot: &TabSlot,
-        tab_count: usize,
-        buf_width: u32,
         tab_x: f32,
         tw: u32,
         text_y: u32,
@@ -157,7 +153,6 @@ impl super::GpuRenderer {
         );
 
         self.tab_title_commands(slot.tab, tab_x, tw, text_y, show_close);
-        self.tab_security_badge_commands(slot.index, slot.tab, tab_count, buf_width, text_y);
 
         if show_close {
             self.draw_close_button_commands(slot.index, tw, slot.tab.close_hover_progress);
@@ -181,7 +176,7 @@ impl super::GpuRenderer {
         };
 
         let m = self.tab_layout_metrics();
-        let max_chars = tab_math::tab_title_max_chars(&m, tw, show_close, tab.security_count);
+        let max_chars = tab_math::tab_title_max_chars(&m, tw, show_close);
         let tab_padding_h = self.metrics.scaled_px(tab_math::TAB_PADDING_H);
         let fallback = format!("#{}", tab.index + 1);
         let title = format_tab_path(tab.title, max_chars, &fallback);
@@ -189,41 +184,4 @@ impl super::GpuRenderer {
         self.push_text(tx, text_y as f32, &title, fg_color, 1.0);
     }
 
-    /// Draws the security badge icon and optional numeric count.
-    fn tab_security_badge_commands(
-        &mut self,
-        tab_index: usize,
-        tab: &TabInfo,
-        tab_count: usize,
-        buf_width: u32,
-        text_y: u32,
-    ) {
-        let Some((sx, sy, sw, _)) =
-            self.security_badge_rect(tab_index, tab_count, buf_width, tab.security_count)
-        else {
-            return;
-        };
-
-        let color = self.palette.security_accent.to_pixel();
-        let spans = ui_layout::shield_icon_spans(sw);
-
-        for (dy, &(left, right)) in spans.iter().enumerate() {
-            let row_x = sx + left;
-            let row_w = right.saturating_sub(left) + 1;
-            self.push_rect(
-                row_x as f32,
-                (sy + dy as u32) as f32,
-                row_w as f32,
-                1.0,
-                color,
-                1.0,
-            );
-        }
-
-        if tab.security_count > 1 {
-            let count_text = tab.security_count.min(99).to_string();
-            let count_x = sx + sw + self.metrics.scaled_px(2);
-            self.push_text(count_x as f32, text_y as f32, &count_text, color, 1.0);
-        }
-    }
 }

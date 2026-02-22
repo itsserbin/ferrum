@@ -1,6 +1,6 @@
 use crate::config::{
     AppConfig, FontConfig, FontFamily, LayoutConfig, SecurityMode, SecuritySettings,
-    TerminalConfig, ThemeChoice,
+    TerminalConfig, ThemeChoice, UpdatesConfig,
 };
 use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicPtr, Ordering};
 use std::sync::{mpsc, Mutex};
@@ -204,6 +204,11 @@ static REOPEN_WITH_TAB: AtomicIsize = AtomicIsize::new(-1);
 /// Config + sender for the reopened window.
 static REOPEN_DATA: Mutex<Option<(AppConfig, mpsc::Sender<AppConfig>)>> = Mutex::new(None);
 
+/// Result of the last manual update check (set by the check thread before posting WM_APP_MANUAL_CHECK_RESULT).
+static WIN_MANUAL_RESULT: Mutex<Option<crate::update::ManualCheckResult>> = Mutex::new(None);
+/// Tag name found by the last manual check (set when ManualCheckResult::Found).
+static WIN_FOUND_TAG: Mutex<Option<String>> = Mutex::new(None);
+
 pub fn is_settings_window_open() -> bool {
     WINDOW_OPEN.load(Ordering::Relaxed)
 }
@@ -284,9 +289,16 @@ mod id {
     pub const BLOCK_TITLE_CHECK: i32 = 602;
     pub const LIMIT_CURSOR_CHECK: i32 = 603;
     pub const CLEAR_MOUSE_CHECK: i32 = 604;
-    // Reset
+    // Reset (global, not tab-scoped)
     pub const RESET_BUTTON: i32 = 700;
+    // Updates
+    pub const AUTO_CHECK_CHECK: i32 = 800;
+    pub const CHECK_NOW_BTN: i32 = 801;
+    pub const MANUAL_INSTALL_BTN: i32 = 802;
 }
+
+/// WM_APP + 1: manual check thread finished — read result from WIN_MANUAL_RESULT.
+const WM_APP_MANUAL_CHECK_RESULT: u32 = 0x8001;
 
 struct Win32State {
     tx: mpsc::Sender<AppConfig>,
@@ -321,8 +333,13 @@ struct Win32State {
     block_title_check: HWND,
     limit_cursor_check: HWND,
     clear_mouse_check: HWND,
+    // Updates tab
+    auto_check_check: HWND,
+    check_now_btn: HWND,
+    manual_status_label: HWND,
+    manual_install_btn: HWND,
     // Tab groups (for show/hide)
-    tab_pages: [Vec<HWND>; 5],
+    tab_pages: [Vec<HWND>; 6],
 }
 
 // ── Win32 window ─────────────────────────────────────────────────────
@@ -479,6 +496,10 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
                 on_value_changed(&*state_ptr);
                 0
             }
+            WM_APP_MANUAL_CHECK_RESULT if !state_ptr.is_null() => {
+                on_manual_check_result(&*state_ptr);
+                0
+            }
             WM_COMMAND if !state_ptr.is_null() => {
                 on_command(&*state_ptr, wparam);
                 0
@@ -503,6 +524,9 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
                 SETTINGS_HWND.store(std::ptr::null_mut(), Ordering::Release);
                 WINDOW_OPEN.store(false, Ordering::Relaxed);
                 JUST_CLOSED.store(true, Ordering::Relaxed);
+                // Clear check result state so reopened window starts fresh.
+                *WIN_MANUAL_RESULT.lock().unwrap_or_else(|e| e.into_inner()) = None;
+                *WIN_FOUND_TAG.lock().unwrap_or_else(|e| e.into_inner()) = None;
                 PostQuitMessage(0);
                 0
             }
@@ -522,6 +546,37 @@ fn on_value_changed(state: &Win32State) {
     SUPPRESS.store(false, Ordering::Relaxed);
     let config = build_config(state);
     let _ = state.tx.send(config);
+}
+
+fn on_manual_check_result(state: &Win32State) {
+    let result = WIN_MANUAL_RESULT.lock().unwrap_or_else(|e| e.into_inner()).take();
+    let t = crate::i18n::t();
+    if let Some(result) = result {
+        match &result {
+            crate::update::ManualCheckResult::UpToDate => {
+                unsafe {
+                    let wide = to_wide(t.update_up_to_date);
+                    SetWindowTextW(state.manual_status_label, wide.as_ptr());
+                    ShowWindow(state.manual_status_label, SW_SHOW);
+                    ShowWindow(state.manual_install_btn, SW_HIDE);
+                    EnableWindow(state.check_now_btn, 1);
+                }
+                *WIN_FOUND_TAG.lock().unwrap_or_else(|e| e.into_inner()) = None;
+            }
+            crate::update::ManualCheckResult::Found(release) => {
+                let text = t.update_available.replace("{}", &release.tag_name);
+                unsafe {
+                    let wide = to_wide(&text);
+                    SetWindowTextW(state.manual_status_label, wide.as_ptr());
+                    ShowWindow(state.manual_status_label, SW_SHOW);
+                    ShowWindow(state.manual_install_btn, SW_SHOW);
+                    EnableWindow(state.check_now_btn, 1);
+                }
+                *WIN_FOUND_TAG.lock().unwrap_or_else(|e| e.into_inner()) =
+                    Some(release.tag_name.clone());
+            }
+        }
+    }
 }
 
 fn on_command(state: &Win32State, wparam: WPARAM) {
@@ -553,6 +608,52 @@ fn on_command(state: &Win32State, wparam: WPARAM) {
             let config = build_config(state);
             let _ = state.tx.send(config);
         }
+        (id::AUTO_CHECK_CHECK, BN_CLICKED) => {
+            let config = build_config(state);
+            let _ = state.tx.send(config);
+        }
+        (id::CHECK_NOW_BTN, BN_CLICKED) => {
+            // Disable the button and show "Checking…" while check runs.
+            let t = crate::i18n::t();
+            unsafe {
+                let wide = to_wide(t.update_checking);
+                SetWindowTextW(state.manual_status_label, wide.as_ptr());
+                ShowWindow(state.manual_status_label, SW_SHOW);
+                ShowWindow(state.manual_install_btn, SW_HIDE);
+                EnableWindow(state.check_now_btn, 0);
+            }
+            // Cast to usize so the closure is Send (raw pointers are not Send).
+            let hwnd_usize = SETTINGS_HWND.load(Ordering::Acquire) as usize;
+            let (tx, rx) = std::sync::mpsc::channel();
+            crate::update::spawn_manual_check(tx);
+            // Bridge thread: wait for result, store it, post message to settings window.
+            std::thread::Builder::new()
+                .name("ferrum-manual-check-bridge".to_string())
+                .spawn(move || {
+                    if let Ok(result) = rx.recv() {
+                        *WIN_MANUAL_RESULT.lock().unwrap_or_else(|e| e.into_inner()) =
+                            Some(result);
+                        if hwnd_usize != 0 {
+                            unsafe {
+                                PostMessageW(
+                                    hwnd_usize as HWND,
+                                    WM_APP_MANUAL_CHECK_RESULT,
+                                    0,
+                                    0,
+                                )
+                            };
+                        }
+                    }
+                })
+                .ok();
+        }
+        (id::MANUAL_INSTALL_BTN, BN_CLICKED) => {
+            if let Some(tag) =
+                WIN_FOUND_TAG.lock().unwrap_or_else(|e| e.into_inner()).clone()
+            {
+                crate::update_installer::spawn_installer(&tag);
+            }
+        }
         (id::FONT_FAMILY_COMBO | id::THEME_COMBO | id::LANGUAGE_COMBO, CBN_SELCHANGE) => {
             let config = build_config(state);
             let _ = state.tx.send(config);
@@ -570,6 +671,18 @@ fn on_tab_change(state: &Win32State) {
             unsafe { ShowWindow(hwnd, show) };
         }
     }
+    // Install button is managed separately: only visible on Updates tab AND if a tag is found.
+    let install_show = if active == 5
+        && WIN_FOUND_TAG
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_some()
+    {
+        SW_SHOW
+    } else {
+        SW_HIDE
+    };
+    unsafe { ShowWindow(state.manual_install_btn, install_show) };
 }
 
 // ── Control creation ─────────────────────────────────────────────────
@@ -602,7 +715,7 @@ unsafe fn create_controls(
 
     // Add tabs.
     let t = crate::i18n::t();
-    for (i, name) in [t.settings_tab_font, t.settings_tab_theme, t.settings_tab_terminal, t.settings_tab_layout, t.settings_tab_security].iter().enumerate() {
+    for (i, name) in [t.settings_tab_font, t.settings_tab_theme, t.settings_tab_terminal, t.settings_tab_layout, t.settings_tab_security, t.settings_tab_updates].iter().enumerate() {
         let text = to_wide(name);
         let mut item: TCITEMW = std::mem::zeroed();
         item.mask = TCIF_TEXT;
@@ -760,6 +873,78 @@ unsafe fn create_controls(
     });
     security_page.append(&mut ctrls);
 
+    // ── Updates tab controls ─────────────────────────────────────────
+    let mut updates_page = Vec::new();
+
+    let (auto_check_check, mut ctrls) = create_checkbox_row(&ctx, &CheckboxRowParams {
+        label_text: t.update_auto_check, x: x0, y: y0,
+        checked: config.updates.auto_check, enabled: true, check_id: id::AUTO_CHECK_CHECK,
+    });
+    updates_page.append(&mut ctrls);
+
+    let version_text = format!("{}: {}", t.update_current_version, env!("CARGO_PKG_VERSION"));
+    let version_label_wide = to_wide(&version_text);
+    let version_label = CreateWindowExW(
+        0,
+        to_wide("STATIC").as_ptr(),
+        version_label_wide.as_ptr(),
+        WS_CHILD | WS_VISIBLE | SS_LEFT,
+        x0, y0 + sp, s(350), s(20),
+        hwnd,
+        std::ptr::null_mut(),
+        hinstance,
+        std::ptr::null(),
+    );
+    SendMessageW(version_label, WM_SETFONT, font as usize, 0);
+    updates_page.push(version_label);
+
+    // "Check for Updates" push button.
+    let check_now_text = to_wide(t.update_check_now);
+    let check_now_btn = CreateWindowExW(
+        0,
+        to_wide("BUTTON").as_ptr(),
+        check_now_text.as_ptr(),
+        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        x0, y0 + sp * 2, s(150), s(26),
+        hwnd,
+        id::CHECK_NOW_BTN as isize as HMENU,
+        hinstance,
+        std::ptr::null(),
+    );
+    SendMessageW(check_now_btn, WM_SETFONT, font as usize, 0);
+    updates_page.push(check_now_btn);
+
+    // Status label — initially empty, shown after check.
+    let manual_status_label = CreateWindowExW(
+        0,
+        to_wide("STATIC").as_ptr(),
+        to_wide("").as_ptr(),
+        WS_CHILD | WS_VISIBLE | SS_LEFT,
+        x0, y0 + sp * 3, s(350), s(20),
+        hwnd,
+        std::ptr::null_mut(),
+        hinstance,
+        std::ptr::null(),
+    );
+    SendMessageW(manual_status_label, WM_SETFONT, font as usize, 0);
+    updates_page.push(manual_status_label);
+
+    // "Install" push button — initially hidden; shown only when update is found.
+    let install_text = to_wide(t.update_install);
+    let manual_install_btn = CreateWindowExW(
+        0,
+        to_wide("BUTTON").as_ptr(),
+        install_text.as_ptr(),
+        WS_CHILD | BS_PUSHBUTTON,  // no WS_VISIBLE — starts hidden
+        x0, y0 + sp * 4, s(120), s(26),
+        hwnd,
+        id::MANUAL_INSTALL_BTN as isize as HMENU,
+        hinstance,
+        std::ptr::null(),
+    );
+    SendMessageW(manual_install_btn, WM_SETFONT, font as usize, 0);
+    // Not added to updates_page — managed separately by on_tab_change.
+
     // ── Reset button (always visible, below tab control) ─────────────
     let reset_text = to_wide(t.settings_reset_to_defaults);
     let reset_btn = CreateWindowExW(
@@ -776,7 +961,7 @@ unsafe fn create_controls(
     SendMessageW(reset_btn, WM_SETFONT, font as usize, 0);
 
     // Initially show only Font tab.
-    for page in [&theme_page, &terminal_page, &layout_page, &security_page] {
+    for page in [&theme_page, &terminal_page, &layout_page, &security_page, &updates_page] {
         for &h in page {
             ShowWindow(h, SW_HIDE);
         }
@@ -809,7 +994,11 @@ unsafe fn create_controls(
         block_title_check,
         limit_cursor_check,
         clear_mouse_check,
-        tab_pages: [font_page, theme_page, terminal_page, layout_page, security_page],
+        auto_check_check,
+        check_now_btn,
+        manual_status_label,
+        manual_install_btn,
+        tab_pages: [font_page, theme_page, terminal_page, layout_page, security_page, updates_page],
     };
 
         update_all_displays(&state);
@@ -961,7 +1150,7 @@ unsafe fn create_checkbox_row(ctx: &RowContext, p: &CheckboxRowParams) -> (HWND,
         to_wide("BUTTON").as_ptr(),
         text.as_ptr(),
         WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
-        p.x + s(160), p.y + s(5), s(250), s(20),
+        p.x, p.y + s(5), s(250), s(20),
         ctx.parent,
         p.check_id as isize as HMENU,
         ctx.hinstance,
@@ -1015,6 +1204,8 @@ fn build_config(state: &Win32State) -> AppConfig {
         let limit_cursor = SendMessageW(state.limit_cursor_check, BM_GETCHECK, 0, 0) == BST_CHECKED as isize;
         let clear_mouse = SendMessageW(state.clear_mouse_check, BM_GETCHECK, 0, 0) == BST_CHECKED as isize;
 
+        let auto_check = SendMessageW(state.auto_check_check, BM_GETCHECK, 0, 0) == BST_CHECKED as isize;
+
         AppConfig {
             font: FontConfig {
                 size: font_size,
@@ -1045,6 +1236,7 @@ fn build_config(state: &Win32State) -> AppConfig {
             language: crate::i18n::Locale::from_index(
                 SendMessageW(state.language_combo, CB_GETCURSEL, 0, 0) as usize,
             ),
+            updates: UpdatesConfig { auto_check },
         }
     }
 }
@@ -1189,6 +1381,10 @@ fn reset_controls(state: &Win32State) {
         };
         SendMessageW(state.security_mode_combo, CB_SETCURSEL, mode_idx, 0);
         apply_security_preset(state);
+
+        // Updates
+        let auto_check_state = if d.updates.auto_check { BST_CHECKED } else { BST_UNCHECKED };
+        SendMessageW(state.auto_check_check, BM_SETCHECK, auto_check_state, 0);
     }
 
     update_all_displays(state);

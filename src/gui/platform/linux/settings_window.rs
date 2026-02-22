@@ -1,9 +1,9 @@
 use crate::config::{
     AppConfig, FontConfig, FontFamily, LayoutConfig, SecurityMode, SecuritySettings,
-    TerminalConfig, ThemeChoice,
+    TerminalConfig, ThemeChoice, UpdatesConfig,
 };
 use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
-use std::sync::{mpsc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 
 use gtk4::prelude::*;
 use gtk4::{
@@ -139,6 +139,11 @@ fn build_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>, initial_tab: us
     ) = build_security_tab(config, t);
     notebook.append_page(&security_box, Some(&Label::new(Some(t.settings_tab_security))));
 
+    // ── Updates tab ──────────────────────────────────────────────────
+    let (updates_box, auto_check_switch, check_now_btn, manual_status_label, manual_install_btn) =
+        build_updates_tab(config, t);
+    notebook.append_page(&updates_box, Some(&Label::new(Some(t.settings_tab_updates))));
+
     // Track selected tab for cross-thread queries.
     notebook.connect_switch_page(|_, _, page| {
         NOTEBOOK_PAGE.store(page as isize, Ordering::Relaxed);
@@ -181,6 +186,7 @@ fn build_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>, initial_tab: us
         block_title: block_title_switch,
         limit_cursor: limit_cursor_switch,
         clear_mouse: clear_mouse_switch,
+        auto_check: auto_check_switch,
     });
 
     // Tracks whether we're in a programmatic update (e.g. security sync or reset).
@@ -279,6 +285,61 @@ fn build_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>, initial_tab: us
         });
     }
 
+    // Updates auto_check switch.
+    {
+        let suppress = Rc::clone(&suppress);
+        let send = build_and_send.clone();
+        controls.auto_check.connect_state_set(move |_, _| {
+            if !*suppress.borrow() {
+                send();
+            }
+            gtk4::glib::Propagation::Proceed
+        });
+    }
+
+    // Manual update check button and install button.
+    // Arc<Mutex<>> is used for cross-thread communication (glib channel API not available in glib 0.22).
+    let manual_result: Arc<Mutex<Option<crate::update::ManualCheckResult>>> =
+        Arc::new(Mutex::new(None));
+    let manual_found_tag: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+
+    // Check button: spawn check thread; result stored in manual_result, polled by the timer below.
+    {
+        let status_lbl = manual_status_label.clone();
+        let install_btn = manual_install_btn.clone();
+        let result_arc = Arc::clone(&manual_result);
+        check_now_btn.connect_clicked(move |btn| {
+            let t = crate::i18n::t();
+            btn.set_sensitive(false);
+            status_lbl.set_label(t.update_checking);
+            status_lbl.set_visible(true);
+            install_btn.set_visible(false);
+            // Clear any stale result from a previous check.
+            *result_arc.lock().unwrap() = None;
+            let (tx, rx) = std::sync::mpsc::channel();
+            crate::update::spawn_manual_check(tx);
+            let result_arc2 = Arc::clone(&result_arc);
+            std::thread::Builder::new()
+                .name("ferrum-manual-check-bridge".to_string())
+                .spawn(move || {
+                    if let Ok(result) = rx.recv() {
+                        *result_arc2.lock().unwrap() = Some(result);
+                    }
+                })
+                .ok();
+        });
+    }
+
+    // Install button: read the found tag from manual_found_tag (set by the timer on success).
+    {
+        let found_tag_install = Arc::clone(&manual_found_tag);
+        manual_install_btn.connect_clicked(move |_| {
+            if let Some(tag) = found_tag_install.lock().unwrap().clone() {
+                crate::update_installer::spawn_installer(&tag);
+            }
+        });
+    }
+
     // Reset button.
     {
         let controls = Rc::clone(&controls);
@@ -305,9 +366,14 @@ fn build_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>, initial_tab: us
         });
     }
 
-    // Poll CLOSE_REQUESTED and PRESENT_REQUESTED so the main thread can control us.
+    // Poll CLOSE_REQUESTED, PRESENT_REQUESTED, and manual update check results.
     {
         let w = window.clone();
+        let status_lbl_timer = manual_status_label.clone();
+        let install_btn_timer = manual_install_btn.clone();
+        let check_btn_timer = check_now_btn.clone();
+        let result_arc = Arc::clone(&manual_result);
+        let found_tag_arc = Arc::clone(&manual_found_tag);
         gtk4::glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
             if CLOSE_REQUESTED.swap(false, Ordering::Relaxed) {
                 w.close();
@@ -324,6 +390,26 @@ fn build_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>, initial_tab: us
             }
             if PRESENT_REQUESTED.swap(false, Ordering::Relaxed) {
                 w.present();
+            }
+            // Poll for manual update check result (set by background thread).
+            if let Some(result) = result_arc.lock().unwrap().take() {
+                let t = crate::i18n::t();
+                match result {
+                    crate::update::ManualCheckResult::UpToDate => {
+                        status_lbl_timer.set_label(t.update_up_to_date);
+                        status_lbl_timer.set_visible(true);
+                        install_btn_timer.set_visible(false);
+                        *found_tag_arc.lock().unwrap() = None;
+                    }
+                    crate::update::ManualCheckResult::Found(release) => {
+                        let text = t.update_available.replace("{}", &release.tag_name);
+                        status_lbl_timer.set_label(&text);
+                        status_lbl_timer.set_visible(true);
+                        install_btn_timer.set_visible(true);
+                        *found_tag_arc.lock().unwrap() = Some(release.tag_name);
+                    }
+                }
+                check_btn_timer.set_sensitive(true);
             }
             gtk4::glib::ControlFlow::Continue
         });
@@ -496,6 +582,42 @@ fn build_security_tab(
     (vbox, mode_combo, paste, block_title, limit_cursor, clear_mouse)
 }
 
+fn build_updates_tab(
+    config: &AppConfig,
+    t: &crate::i18n::Translations,
+) -> (gtk4::Box, Switch, gtk4::Button, Label, gtk4::Button) {
+    let vbox = gtk4::Box::new(Orientation::Vertical, 12);
+    vbox.set_margin_top(16);
+    vbox.set_margin_start(16);
+    vbox.set_margin_end(16);
+
+    let version_text = format!("{}: {}", t.update_current_version, env!("CARGO_PKG_VERSION"));
+    let version_label = Label::new(Some(&version_text));
+    version_label.set_halign(Align::Start);
+    vbox.append(&version_label);
+
+    let auto_check = labeled_switch(&vbox, t.update_auto_check, config.updates.auto_check, true);
+
+    // "Check for Updates" button.
+    let check_now_btn = gtk4::Button::with_label(t.update_check_now);
+    check_now_btn.set_halign(Align::Start);
+    vbox.append(&check_now_btn);
+
+    // Status label — initially hidden; set to "Checking…", "You're up to date", or tag.
+    let manual_status_label = Label::new(None);
+    manual_status_label.set_halign(Align::Start);
+    manual_status_label.set_visible(false);
+    vbox.append(&manual_status_label);
+
+    // "Install" button — initially hidden; shown when update is found.
+    let manual_install_btn = gtk4::Button::with_label(t.update_install);
+    manual_install_btn.set_halign(Align::Start);
+    manual_install_btn.set_visible(false);
+    vbox.append(&manual_install_btn);
+
+    (vbox, auto_check, check_now_btn, manual_status_label, manual_install_btn)
+}
+
 // ── Widget helpers ───────────────────────────────────────────────────
 
 fn labeled_spin(
@@ -590,6 +712,7 @@ struct Controls {
     block_title: Switch,
     limit_cursor: Switch,
     clear_mouse: Switch,
+    auto_check: Switch,
 }
 
 fn build_config(c: &Controls) -> AppConfig {
@@ -627,6 +750,7 @@ fn build_config(c: &Controls) -> AppConfig {
             clear_mouse_on_reset: c.clear_mouse.is_active(),
         },
         language: crate::i18n::Locale::from_index(c.language.selected() as usize),
+        updates: UpdatesConfig { auto_check: c.auto_check.is_active() },
     }
 }
 
@@ -710,4 +834,6 @@ fn reset_controls(c: &Controls) {
     };
     c.security_mode.set_selected(mode_idx);
     apply_security_preset(c, Some(mode_idx as usize));
+
+    c.auto_check.set_active(d.updates.auto_check);
 }

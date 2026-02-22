@@ -1,10 +1,14 @@
 use crate::core::{CursorStyle, Grid, Selection};
 use crate::gui::pane::PaneRect;
 
+use super::shared::banner_layout::UpdateBannerLayout;
 use super::shared::scrollbar_math;
+#[cfg(not(target_os = "macos"))]
 use super::shared::tab_hit_test;
 use super::shared::tab_math::{self, TabLayoutMetrics};
-use super::{SCROLLBAR_MIN_THUMB, SecurityPopup, TabBarHit, TabInfo};
+#[cfg(not(target_os = "macos"))]
+use super::TabInfo;
+use super::{SCROLLBAR_MIN_THUMB, TabBarHit};
 use super::{RenderTarget, ScrollbarState};
 
 /// Trait defining the full renderer interface used by the GUI layer.
@@ -15,6 +19,7 @@ pub trait Renderer {
     // ── Lifecycle ────────────────────────────────────────────────────
 
     fn set_scale(&mut self, scale_factor: f64);
+    #[cfg(not(target_os = "macos"))]
     fn set_tab_bar_visible(&mut self, visible: bool);
 
     // ── Metrics ─────────────────────────────────────────────────────
@@ -184,6 +189,7 @@ pub trait Renderer {
         tab_hit_test::tab_hover_tooltip(tabs, hovered_tab, buf_width, &m)
     }
 
+    #[cfg(not(target_os = "macos"))]
     fn tab_insert_index_from_x(&self, x: f64, tab_count: usize, buf_width: u32) -> usize {
         let m = self.tab_layout_metrics();
         tab_math::tab_insert_index_from_x(&m, x, tab_count, buf_width)
@@ -199,12 +205,13 @@ pub trait Renderer {
         tab_math::tab_origin_x(&m, tab_index, tw)
     }
 
+    #[cfg(not(target_os = "macos"))]
     /// Returns the close-button rectangle for a tab as `(x, y, w, h)`.
     fn close_button_rect(&self, tab_index: usize, tw: u32) -> (u32, u32, u32, u32) {
         let m = self.tab_layout_metrics();
         tab_math::close_button_rect(&m, tab_index, tw).to_tuple()
     }
-
+    #[cfg(not(target_os = "macos"))]
     /// Returns the new-tab (+) button rectangle as `(x, y, w, h)`.
     fn plus_button_rect(&self, tab_count: usize, tw: u32) -> (u32, u32, u32, u32) {
         let m = self.tab_layout_metrics();
@@ -224,7 +231,7 @@ pub trait Renderer {
         let m = self.tab_layout_metrics();
         tab_math::gear_button_rect(&m).to_tuple()
     }
-
+    #[cfg(not(target_os = "macos"))]
     /// Returns `true` when the tab width is too narrow to display a title.
     fn should_show_number(&self, tw: u32) -> bool {
         let m = self.tab_layout_metrics();
@@ -233,11 +240,33 @@ pub trait Renderer {
 
     // ── Hit testing ─────────────────────────────────────────────────
 
+    #[cfg(not(target_os = "macos"))]
     fn hit_test_tab_bar(&self, x: f64, y: f64, tab_count: usize, buf_width: u32) -> TabBarHit {
         let m = self.tab_layout_metrics();
         tab_hit_test::hit_test_tab_bar(x, y, tab_count, buf_width, &m)
     }
 
+    #[cfg(target_os = "macos")]
+    fn hit_test_tab_bar(&self, x: f64, y: f64, tab_count: usize, buf_width: u32) -> TabBarHit {
+        let m = self.tab_layout_metrics();
+        if y >= m.tab_bar_height as f64 || tab_count == 0 {
+            return TabBarHit::Empty;
+        }
+        let tw = tab_math::calculate_tab_width(&m, tab_count, buf_width);
+        let tab_strip_start = tab_math::tab_strip_start_x(&m);
+        if x < tab_strip_start as f64 {
+            return TabBarHit::Empty;
+        }
+        let rel_x = x as u32 - tab_strip_start;
+        let tab_index = (rel_x / tw) as usize;
+        if tab_index < tab_count {
+            TabBarHit::Tab(tab_index)
+        } else {
+            TabBarHit::Empty
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
     fn hit_test_tab_hover(
         &self,
         x: f64,
@@ -249,52 +278,44 @@ pub trait Renderer {
         tab_hit_test::hit_test_tab_hover(x, y, tab_count, buf_width, &m)
     }
 
-    fn hit_test_tab_security_badge(
+    #[cfg(target_os = "macos")]
+    fn hit_test_tab_hover(
         &self,
         x: f64,
         y: f64,
-        tabs: &[TabInfo],
+        tab_count: usize,
         buf_width: u32,
     ) -> Option<usize> {
         let m = self.tab_layout_metrics();
-        tab_hit_test::hit_test_tab_security_badge(x, y, tabs, buf_width, &m)
+        if y >= m.tab_bar_height as f64 || tab_count == 0 {
+            return None;
+        }
+        let tw = tab_math::calculate_tab_width(&m, tab_count, buf_width);
+        let tab_strip_start = tab_math::tab_strip_start_x(&m);
+        if x < tab_strip_start as f64 {
+            return None;
+        }
+        let rel_x = x as u32 - tab_strip_start;
+        let idx = (rel_x / tw) as usize;
+        if idx < tab_count { Some(idx) } else { None }
     }
 
-    // ── Security ────────────────────────────────────────────────────
+    // ── Update banner ────────────────────────────────────────────────
 
-    fn draw_security_popup(
-        &mut self,
-        target: &mut RenderTarget<'_>,
-        popup: &SecurityPopup,
-    );
-
-    fn hit_test_security_popup(
-        &self,
-        popup: &SecurityPopup,
-        x: f64,
-        y: f64,
-        buf_width: usize,
-        buf_height: usize,
-    ) -> bool {
-        popup.hit_test(
-            x,
-            y,
-            self.cell_width(),
-            self.cell_height(),
-            buf_width as u32,
-            buf_height as u32,
-        )
-    }
-
-    fn security_badge_rect(
-        &self,
-        tab_index: usize,
-        tab_count: usize,
-        buf_width: u32,
-        security_count: usize,
-    ) -> Option<(u32, u32, u32, u32)> {
-        let m = self.tab_layout_metrics();
-        tab_math::security_badge_rect(&m, tab_index, tab_count, buf_width, security_count)
-            .map(|r| r.to_tuple())
+    /// Draws the update-available banner overlay.
+    ///
+    /// Default implementation is a no-op; backends will fill this in when
+    /// banner rendering is implemented.
+    fn draw_update_banner(&mut self, _target: &mut RenderTarget<'_>, layout: &UpdateBannerLayout) {
+        // Default no-op: backends override this once banner rendering is implemented.
+        // Touch all layout accessors so the struct fields are considered live.
+        let _ = (
+            layout.bg_rect(),
+            layout.corner_radius(),
+            layout.label(),
+            layout.details_rect(),
+            layout.install_rect(),
+            layout.dismiss_rect(),
+        );
     }
 }

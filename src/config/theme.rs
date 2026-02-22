@@ -21,28 +21,35 @@ pub(crate) struct ThemePalette {
     pub scrollbar_base_alpha: u8,
 
     // -- Accents --
+    #[cfg(not(target_os = "macos"))]
     pub active_accent: Color,
-    #[cfg_attr(target_os = "macos", allow(dead_code))]
+    #[cfg(not(target_os = "macos"))]
     pub pin_active_color: Color,
-    pub security_accent: Color,
-
-    // -- Overlay / menu --
-    pub menu_bg: Color,
 
     // -- Tab bar --
+    #[cfg(not(target_os = "macos"))]
     pub bar_bg: Color,
+    #[cfg(any(not(target_os = "macos"), feature = "gpu"))]
     pub active_tab_bg: Color,
+    #[cfg(not(target_os = "macos"))]
     pub inactive_tab_hover: Color,
+    #[cfg(any(not(target_os = "macos"), feature = "gpu"))]
     pub tab_text_active: Color,
+    #[cfg(not(target_os = "macos"))]
     pub tab_text_inactive: Color,
+    #[cfg(any(not(target_os = "macos"), feature = "gpu"))]
     pub tab_border: Color,
+    #[cfg(not(target_os = "macos"))]
     pub close_hover_bg: Color,
+    #[cfg(not(target_os = "macos"))]
     pub rename_field_bg: Color,
+    #[cfg(not(target_os = "macos"))]
     pub rename_field_border: Color,
-    #[cfg_attr(not(feature = "gpu"), allow(dead_code))]
+    #[cfg(all(feature = "gpu", not(target_os = "macos")))]
     pub rename_selection_bg: Color,
+    #[cfg(not(target_os = "macos"))]
     pub insertion_color: Color,
-    #[cfg_attr(target_os = "macos", allow(dead_code))]
+    #[cfg(not(target_os = "macos"))]
     pub win_btn_close_hover: Color,
 
     // -- Pane divider --
@@ -88,21 +95,33 @@ impl ThemePalette {
             scrollbar_color: Color { r: 108, g: 112, b: 134 },  // #6C7086
             scrollbar_hover_color: Color { r: 127, g: 132, b: 156 }, // #7F849C
             scrollbar_base_alpha: 180,
+            #[cfg(not(target_os = "macos"))]
             active_accent: Color { r: 180, g: 190, b: 254 },    // #B4BEFE
+            #[cfg(not(target_os = "macos"))]
             pin_active_color: Color::from_pixel(0xB4BEFE),
-            security_accent: Color { r: 249, g: 226, b: 175 },  // #F9E2AF
-            menu_bg: Color::from_pixel(0x1E2433),
+            #[cfg(not(target_os = "macos"))]
             bar_bg: Color::from_pixel(0x1E2127),
+            #[cfg(any(not(target_os = "macos"), feature = "gpu"))]
             active_tab_bg: Color::from_pixel(0x282C34),
+            #[cfg(not(target_os = "macos"))]
             inactive_tab_hover: Color::from_pixel(0x2E333C),
+            #[cfg(any(not(target_os = "macos"), feature = "gpu"))]
             tab_text_active: Color::from_pixel(0xD2DBEB),
+            #[cfg(not(target_os = "macos"))]
             tab_text_inactive: Color::from_pixel(0x6C7480),
+            #[cfg(any(not(target_os = "macos"), feature = "gpu"))]
             tab_border: Color::from_pixel(0x2E333C),
+            #[cfg(not(target_os = "macos"))]
             close_hover_bg: Color::from_pixel(0x454B59),
+            #[cfg(not(target_os = "macos"))]
             rename_field_bg: Color::from_pixel(0x1E2127),
+            #[cfg(not(target_os = "macos"))]
             rename_field_border: Color::from_pixel(0x6C7480),
+            #[cfg(all(feature = "gpu", not(target_os = "macos")))]
             rename_selection_bg: Color::from_pixel(0xB4BEFE),
+            #[cfg(not(target_os = "macos"))]
             insertion_color: Color::from_pixel(0xCBA6F7),
+            #[cfg(not(target_os = "macos"))]
             win_btn_close_hover: Color::from_pixel(0xF38BA8),
             split_divider_color: Color::from_pixel(0x585B70),
         }
@@ -136,21 +155,33 @@ impl ThemePalette {
             scrollbar_color: Color::from_pixel(0xA8A2A0),
             scrollbar_hover_color: Color::from_pixel(0x8F8985),
             scrollbar_base_alpha: 160,
+            #[cfg(not(target_os = "macos"))]
             active_accent: Color::from_pixel(0x4A6FA5),          // Deep steel blue
+            #[cfg(not(target_os = "macos"))]
             pin_active_color: Color::from_pixel(0x4A6FA5),
-            security_accent: Color::from_pixel(0xA6710A),        // Amber
-            menu_bg: Color::from_pixel(0xEBE6E1),
+            #[cfg(not(target_os = "macos"))]
             bar_bg: Color::from_pixel(0xE5DFD9),
+            #[cfg(any(not(target_os = "macos"), feature = "gpu"))]
             active_tab_bg: Color::from_pixel(0xF5F0EB),         // = default_bg
+            #[cfg(not(target_os = "macos"))]
             inactive_tab_hover: Color::from_pixel(0xECE7E2),
+            #[cfg(any(not(target_os = "macos"), feature = "gpu"))]
             tab_text_active: Color::from_pixel(0x2E3440),       // = default_fg
+            #[cfg(not(target_os = "macos"))]
             tab_text_inactive: Color::from_pixel(0x8A8480),
+            #[cfg(any(not(target_os = "macos"), feature = "gpu"))]
             tab_border: Color::from_pixel(0xDDD7D1),
+            #[cfg(not(target_os = "macos"))]
             close_hover_bg: Color::from_pixel(0xDDD7D1),
+            #[cfg(not(target_os = "macos"))]
             rename_field_bg: Color::from_pixel(0xFFFFFF),
+            #[cfg(not(target_os = "macos"))]
             rename_field_border: Color::from_pixel(0xA8A2A0),
+            #[cfg(all(feature = "gpu", not(target_os = "macos")))]
             rename_selection_bg: Color::from_pixel(0x4A6FA5),
+            #[cfg(not(target_os = "macos"))]
             insertion_color: Color::from_pixel(0x9B3BB5),        // Magenta hue
+            #[cfg(not(target_os = "macos"))]
             win_btn_close_hover: Color::from_pixel(0xD93B3B),
             split_divider_color: Color::from_pixel(0xC8C2BC),
         }
@@ -167,7 +198,9 @@ mod tests {
         assert_eq!(palette.default_fg, Color { r: 210, g: 219, b: 235 });
         assert_eq!(palette.default_bg, Color { r: 40, g: 44, b: 52 });
         assert_eq!(palette.ansi.len(), 16);
+        #[cfg(not(target_os = "macos"))]
         assert_eq!(palette.bar_bg.to_pixel(), 0x1E2127);
+        #[cfg(not(target_os = "macos"))]
         assert_eq!(palette.active_tab_bg.to_pixel(), 0x282C34);
     }
 

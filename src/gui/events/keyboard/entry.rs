@@ -19,6 +19,7 @@ impl FerrumWindow {
         let key = Self::normalize_non_text_key(&event.logical_key, &event.physical_key);
 
         // Escape cancels tab drag.
+        #[cfg(not(target_os = "macos"))]
         if matches!(key, Key::Named(NamedKey::Escape)) && self.dragging_tab.is_some() {
             self.dragging_tab = None;
             self.window.set_cursor(CursorIcon::Default);

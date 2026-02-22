@@ -303,25 +303,25 @@ jobs:
             $PRERELEASE \
             artifacts/*
 
-      - name: Generate and publish Homebrew formula
+      - name: Generate and publish Homebrew Cask
         if: needs.resolve-version.outputs.is-prerelease != 'true'
         env:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
           set -euo pipefail
           export VERSION="${TAG#v}"
-          export BASE="https://github.com/${{ github.repository }}/releases/download/$TAG"
-          export SHA_ARM64=$(sha256sum artifacts/ferrum-aarch64-apple-darwin.zip | awk '{print $1}')
-          export SHA_INTEL=$(sha256sum artifacts/ferrum-x86_64-apple-darwin.zip | awk '{print $1}')
-          export SHA_LINUX=$(sha256sum artifacts/ferrum-x86_64-unknown-linux-gnu.zip | awk '{print $1}')
+          export SHA_ARM64=$(sha256sum artifacts/ferrum-aarch64-apple-darwin.dmg | awk '{print $1}')
+          export SHA_INTEL=$(sha256sum artifacts/ferrum-x86_64-apple-darwin.dmg | awk '{print $1}')
 
-          envsubst < installer/homebrew/ferrum.rb.template > ferrum.rb
+          envsubst < installer/homebrew/ferrum.cask.rb.template > ferrum.rb
 
           git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/itsserbin/homebrew-tap.git" tap
-          cp ferrum.rb tap/Formula/ferrum.rb
+          mkdir -p tap/Casks
+          cp ferrum.rb tap/Casks/ferrum.rb
           cd tap
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Formula/ferrum.rb
-          git commit -m "ferrum $VERSION"
+          git rm --ignore-unmatch Formula/ferrum.rb
+          git add Casks/ferrum.rb
+          git diff --cached --quiet && echo "Nothing to commit, skipping." || git commit -m "ferrum $VERSION"
           git push

@@ -26,7 +26,7 @@ use winit::window::{CursorIcon, ResizeDirection, Window, WindowId};
 
 use crate::core::terminal::Terminal;
 use crate::core::{MouseMode, Position, SecurityGuard, Selection};
-use crate::gui::renderer::{CpuRenderer, Renderer as _, RendererBackend, SecurityPopup};
+use crate::gui::renderer::{CpuRenderer, Renderer as _, RendererBackend};
 use crate::pty;
 use crate::update;
 
@@ -38,9 +38,11 @@ const MIN_WINDOW_ROWS: u32 = 10;
 #[cfg(not(target_os = "linux"))]
 use self::state::MenuContext;
 use self::state::{
-    App, ClosedTabInfo, DividerDragState, DragState, FerrumWindow, PtyEvent,
-    RenameState, ScrollbarState, SelectionDragMode, TabReorderAnimation, TabState, WindowRequest,
+    App, ClosedTabInfo, DividerDragState, FerrumWindow, PtyEvent,
+    RenameState, ScrollbarState, SelectionDragMode, TabState, UpdateInstallState, WindowRequest,
 };
+#[cfg(not(target_os = "macos"))]
+use self::state::{DragState, TabReorderAnimation};
 
 impl FerrumWindow {
     /// Creates a new FerrumWindow wrapping an already-created winit window and renderer backend.
@@ -73,7 +75,6 @@ impl FerrumWindow {
             hovered_tab: None,
             #[cfg(not(target_os = "linux"))]
             pending_menu_context: None,
-            security_popup: None,
             #[cfg(not(target_os = "macos"))]
             tab_hover_progress: Vec::new(),
             #[cfg(not(target_os = "macos"))]
@@ -82,7 +83,9 @@ impl FerrumWindow {
             ui_animation_last_tick: std::time::Instant::now(),
             closed_tabs: Vec::new(),
             renaming_tab: None,
+            #[cfg(not(target_os = "macos"))]
             dragging_tab: None,
+            #[cfg(not(target_os = "macos"))]
             tab_reorder_animation: None,
             last_tab_click: None,
             last_topbar_empty_click: None,
@@ -101,6 +104,9 @@ impl FerrumWindow {
             cursor_blink_interval_ms: config.terminal.cursor_blink_interval_ms,
             settings_tx: std::sync::mpsc::channel().0,
             event_proxy: proxy.clone(),
+            pending_update_tag: None,
+            update_banner_dismissed: false,
+            update_install_state: UpdateInstallState::Idle,
         }
     }
 
@@ -232,8 +238,10 @@ impl App {
     fn new(proxy: winit::event_loop::EventLoopProxy<()>) -> Self {
         let (tx, rx) = mpsc::channel::<PtyEvent>();
         let (update_tx, update_rx) = mpsc::channel::<update::AvailableRelease>();
-        update::spawn_update_checker(update_tx);
         let config = crate::config::load_config();
+        if config.updates.auto_check {
+            update::spawn_update_checker(update_tx);
+        }
         crate::i18n::set_locale(config.language);
         let (settings_tx, settings_rx) = std::sync::mpsc::channel();
         App {
@@ -248,6 +256,7 @@ impl App {
             config,
             settings_tx,
             settings_rx,
+            manual_check_rx: None,
         }
     }
 

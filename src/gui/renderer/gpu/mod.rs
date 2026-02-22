@@ -11,13 +11,15 @@ mod cursors;
 mod frame;
 mod gpu_passes;
 mod grid_packing;
-mod hit_test;
 mod overlays;
 pub mod pipelines;
 mod scrollbar;
 mod setup;
+#[cfg(not(target_os = "macos"))]
 mod tab_controls;
+#[cfg(not(target_os = "macos"))]
 mod tab_layout;
+#[cfg(not(target_os = "macos"))]
 mod tab_rendering;
 mod trait_impl;
 mod ui_commands;

@@ -61,7 +61,6 @@ impl FerrumWindow {
         self.closed_tabs.push(ClosedTabInfo { title });
 
         self.adjust_rename_after_tab_remove(index);
-        self.adjust_security_popup_after_tab_remove(index);
         self.tabs.remove(index);
         self.refresh_tab_bar_visibility();
 
@@ -103,7 +102,6 @@ impl FerrumWindow {
     pub(in crate::gui) fn switch_tab(&mut self, index: usize) {
         if index < self.tabs.len() {
             self.active_tab = index;
-            self.security_popup = None;
             // Recalculate pane layout for the newly active tab so each pane
             // gets correct dimensions (they may have been stale since the last
             // window resize happened while a different tab was active).
@@ -192,17 +190,6 @@ impl FerrumWindow {
         }
     }
 
-    pub(in crate::gui) fn adjust_security_popup_after_tab_remove(&mut self, removed_index: usize) {
-        let Some(popup) = self.security_popup.as_mut() else {
-            return;
-        };
-
-        if popup.tab_index == removed_index {
-            self.security_popup = None;
-        } else if popup.tab_index > removed_index {
-            popup.tab_index -= 1;
-        }
-    }
 
     /// Splits the focused pane in the active tab, creating a new terminal pane.
     ///

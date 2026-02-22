@@ -1,5 +1,19 @@
 use serde::{Deserialize, Serialize};
 
+/// Configuration for the update checker.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub(crate) struct UpdatesConfig {
+    /// Whether Ferrum should automatically check for updates in the background.
+    #[serde(default = "defaults::updates_auto_check")]
+    pub auto_check: bool,
+}
+
+impl Default for UpdatesConfig {
+    fn default() -> Self {
+        Self { auto_check: defaults::updates_auto_check() }
+    }
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub(crate) struct AppConfig {
@@ -8,6 +22,8 @@ pub(crate) struct AppConfig {
     pub terminal: TerminalConfig,
     pub layout: LayoutConfig,
     pub security: SecuritySettings,
+    #[serde(default)]
+    pub updates: UpdatesConfig,
     pub language: crate::i18n::Locale,
 }
 
@@ -193,6 +209,12 @@ impl SecuritySettings {
         } else {
             SecurityMode::Custom
         }
+    }
+}
+
+mod defaults {
+    pub(super) fn updates_auto_check() -> bool {
+        true
     }
 }
 
