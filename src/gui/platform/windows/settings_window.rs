@@ -284,10 +284,10 @@ mod id {
     pub const BLOCK_TITLE_CHECK: i32 = 602;
     pub const LIMIT_CURSOR_CHECK: i32 = 603;
     pub const CLEAR_MOUSE_CHECK: i32 = 604;
+    // Reset (global, not tab-scoped)
+    pub const RESET_BUTTON: i32 = 700;
     // Updates
     pub const AUTO_CHECK_CHECK: i32 = 800;
-    // Reset
-    pub const RESET_BUTTON: i32 = 700;
 }
 
 struct Win32State {
