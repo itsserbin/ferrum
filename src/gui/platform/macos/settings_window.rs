@@ -58,6 +58,8 @@ struct NativeSettingsState {
     block_title_query_check: Retained<NSButton>,
     limit_cursor_jumps_check: Retained<NSButton>,
     clear_mouse_on_reset_check: Retained<NSButton>,
+    // Updates tab
+    auto_check_updates_check: Retained<NSButton>,
     // Reset (kept alive so ObjC retains the button; never read from Rust).
     _reset_button: Retained<NSButton>,
 }
@@ -180,7 +182,9 @@ fn build_config_from_controls(state: &NativeSettingsState) -> AppConfig {
         language: crate::i18n::Locale::from_index(
             state.language_popup.indexOfSelectedItem() as usize,
         ),
-        updates: UpdatesConfig::default(),
+        updates: UpdatesConfig {
+            auto_check: is_checkbox_on(&state.auto_check_updates_check),
+        },
     }
 }
 
@@ -386,6 +390,8 @@ pub fn reset_controls_to_defaults() {
     state.block_title_query_check.setEnabled(true);
     state.limit_cursor_jumps_check.setEnabled(true);
     state.clear_mouse_on_reset_check.setEnabled(true);
+    // Updates: reset to default.
+    set_checkbox(&state.auto_check_updates_check, UpdatesConfig::default().auto_check);
 
     drop(guard);
     update_text_fields();
@@ -837,6 +843,42 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
     security_tab.setView(Some(&security_view));
     tab_view.addTabViewItem(&security_tab);
 
+    // ── Updates tab ───────────────────────────────────────────────────
+
+    let updates_tab = NSTabViewItem::new();
+    updates_tab.setLabel(&NSString::from_str(t.settings_tab_updates));
+    let updates_view = NSView::initWithFrame(
+        mtm.alloc(),
+        NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(500.0, 320.0)),
+    );
+
+    let auto_check_updates_check = create_checkbox_row(
+        mtm,
+        &updates_view,
+        t.update_auto_check,
+        "",
+        config.updates.auto_check,
+        280.0,
+    );
+
+    let version_label_text = format!(
+        "{}: {}",
+        t.update_current_version,
+        env!("CARGO_PKG_VERSION"),
+    );
+    let version_label = NSTextField::labelWithString(
+        &NSString::from_str(&version_label_text),
+        mtm,
+    );
+    version_label.setFrame(NSRect::new(
+        NSPoint::new(20.0, 240.0),
+        NSSize::new(400.0, 24.0),
+    ));
+    updates_view.addSubview(&version_label);
+
+    updates_tab.setView(Some(&updates_view));
+    tab_view.addTabViewItem(&updates_tab);
+
     // ── Reset button ──────────────────────────────────────────────────
 
     // SAFETY: Passing `None` for target and action is valid; we wire the
@@ -930,6 +972,9 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
         let _: () = msg_send![&limit_cursor_jumps_check, setAction: sel_stepper];
         let _: () = msg_send![&clear_mouse_on_reset_check, setTarget: &*window];
         let _: () = msg_send![&clear_mouse_on_reset_check, setAction: sel_stepper];
+        // Updates checkbox also triggers stepper-changed.
+        let _: () = msg_send![&auto_check_updates_check, setTarget: &*window];
+        let _: () = msg_send![&auto_check_updates_check, setAction: sel_stepper];
 
         // Wire all editable text fields to the text-field-changed action.
         let _: () = msg_send![&font_size_field, setTarget: &*window];
@@ -997,6 +1042,7 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
         block_title_query_check,
         limit_cursor_jumps_check,
         clear_mouse_on_reset_check,
+        auto_check_updates_check,
         _reset_button: reset_button,
     };
     *SETTINGS_STATE.lock().unwrap_or_else(|e| e.into_inner()) = Some(state);
