@@ -1,6 +1,6 @@
 use crate::config::{
     AppConfig, FontConfig, FontFamily, LayoutConfig, SecurityMode, SecuritySettings,
-    TerminalConfig, ThemeChoice,
+    TerminalConfig, ThemeChoice, UpdatesConfig,
 };
 use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
 use std::sync::{mpsc, Mutex};
@@ -139,6 +139,10 @@ fn build_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>, initial_tab: us
     ) = build_security_tab(config, t);
     notebook.append_page(&security_box, Some(&Label::new(Some(t.settings_tab_security))));
 
+    // ── Updates tab ──────────────────────────────────────────────────
+    let (updates_box, auto_check_switch) = build_updates_tab(config, t);
+    notebook.append_page(&updates_box, Some(&Label::new(Some(t.settings_tab_updates))));
+
     // Track selected tab for cross-thread queries.
     notebook.connect_switch_page(|_, _, page| {
         NOTEBOOK_PAGE.store(page as isize, Ordering::Relaxed);
@@ -181,6 +185,7 @@ fn build_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>, initial_tab: us
         block_title: block_title_switch,
         limit_cursor: limit_cursor_switch,
         clear_mouse: clear_mouse_switch,
+        auto_check: auto_check_switch,
     });
 
     // Tracks whether we're in a programmatic update (e.g. security sync or reset).
@@ -275,6 +280,18 @@ fn build_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>, initial_tab: us
                 *suppress.borrow_mut() = false;
                 send();
             });
+            gtk4::glib::Propagation::Proceed
+        });
+    }
+
+    // Updates auto_check switch.
+    {
+        let suppress = Rc::clone(&suppress);
+        let send = build_and_send.clone();
+        controls.auto_check.connect_state_set(move |_, _| {
+            if !*suppress.borrow() {
+                send();
+            }
             gtk4::glib::Propagation::Proceed
         });
     }
@@ -496,6 +513,22 @@ fn build_security_tab(
     (vbox, mode_combo, paste, block_title, limit_cursor, clear_mouse)
 }
 
+fn build_updates_tab(config: &AppConfig, t: &crate::i18n::Translations) -> (gtk4::Box, Switch) {
+    let vbox = gtk4::Box::new(Orientation::Vertical, 12);
+    vbox.set_margin_top(16);
+    vbox.set_margin_start(16);
+    vbox.set_margin_end(16);
+
+    let version_text = format!("{}: {}", t.update_current_version, env!("CARGO_PKG_VERSION"));
+    let version_label = Label::new(Some(&version_text));
+    version_label.set_halign(Align::Start);
+    vbox.append(&version_label);
+
+    let auto_check = labeled_switch(&vbox, t.update_auto_check, config.updates.auto_check, true);
+
+    (vbox, auto_check)
+}
+
 // ── Widget helpers ───────────────────────────────────────────────────
 
 fn labeled_spin(
@@ -590,6 +623,7 @@ struct Controls {
     block_title: Switch,
     limit_cursor: Switch,
     clear_mouse: Switch,
+    auto_check: Switch,
 }
 
 fn build_config(c: &Controls) -> AppConfig {
@@ -627,6 +661,7 @@ fn build_config(c: &Controls) -> AppConfig {
             clear_mouse_on_reset: c.clear_mouse.is_active(),
         },
         language: crate::i18n::Locale::from_index(c.language.selected() as usize),
+        updates: UpdatesConfig { auto_check: c.auto_check.is_active() },
     }
 }
 
@@ -710,4 +745,6 @@ fn reset_controls(c: &Controls) {
     };
     c.security_mode.set_selected(mode_idx);
     apply_security_preset(c, Some(mode_idx as usize));
+
+    c.auto_check.set_active(d.updates.auto_check);
 }
