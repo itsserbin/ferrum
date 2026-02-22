@@ -15,6 +15,7 @@ use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
 use super::ffi::{class_addMethod, class_replaceMethod, object_getClass, sel_registerName};
 use crate::config::{
     AppConfig, FontConfig, FontFamily, LayoutConfig, SecurityMode, SecuritySettings, TerminalConfig,
+    UpdatesConfig,
     ThemeChoice,
 };
 
@@ -179,6 +180,7 @@ fn build_config_from_controls(state: &NativeSettingsState) -> AppConfig {
         language: crate::i18n::Locale::from_index(
             state.language_popup.indexOfSelectedItem() as usize,
         ),
+        updates: UpdatesConfig::default(),
     }
 }
 
