@@ -39,22 +39,6 @@ pub(in crate::gui) struct UpdateBannerLayout {
     pub installing: bool,
 }
 
-/// Returns the cell height to use for banner layout.
-///
-/// On non-macOS platforms, `TabLayoutMetrics` carries a `cell_height` field
-/// directly.  On macOS the field is absent; we approximate with half the
-/// tab-bar height, which gives a visually similar result.
-fn banner_cell_height(m: &TabLayoutMetrics) -> u32 {
-    #[cfg(not(target_os = "macos"))]
-    {
-        m.cell_height
-    }
-    #[cfg(target_os = "macos")]
-    {
-        m.tab_bar_height / 2
-    }
-}
-
 /// Computes the banner layout.
 ///
 /// Returns `None` when the buffer is too small to fit anything.
@@ -72,7 +56,7 @@ pub(in crate::gui) fn compute_update_banner_layout(
         return None;
     }
 
-    let cell_height = banner_cell_height(m);
+    let cell_height = m.cell_height;
 
     let pad_x = m.scaled_px(10);
     let pad_y = m.scaled_px(6);
@@ -175,7 +159,6 @@ mod tests {
     fn metrics_1x() -> TabLayoutMetrics {
         TabLayoutMetrics {
             cell_width: 9,
-            #[cfg(not(target_os = "macos"))]
             cell_height: 20,
             ui_scale: 1.0,
             tab_bar_height: 36,
@@ -185,7 +168,6 @@ mod tests {
     fn metrics_2x() -> TabLayoutMetrics {
         TabLayoutMetrics {
             cell_width: 18,
-            #[cfg(not(target_os = "macos"))]
             cell_height: 40,
             ui_scale: 2.0,
             tab_bar_height: 72,

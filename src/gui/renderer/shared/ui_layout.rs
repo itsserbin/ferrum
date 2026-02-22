@@ -5,43 +5,6 @@
 //! icon, the pushpin button, window control buttons, and rename-field selection.
 
 
-// ── Shield icon ──────────────────────────────────────────────────────
-
-/// Computes the horizontal span (left, right) for each row of the shield icon.
-///
-/// The shield is drawn as three vertical zones:
-/// 1. Top third — widening outward
-/// 2. Middle third — full width
-/// 3. Bottom third — tapering to a point
-///
-/// Returns a `Vec` of `(left_offset, right_offset)` pairs, one per row from
-/// `dy = 0` to `dy = size - 1`, where offsets are relative to the icon origin.
-#[cfg(not(target_os = "macos"))]
-pub fn shield_icon_spans(size: u32) -> Vec<(u32, u32)> {
-    let mid = size / 2;
-    let top_third = (size / 3).max(1);
-    let bottom_start = (size * 2 / 3).max(top_third + 1);
-
-    (0..size)
-        .map(|dy| {
-            let half_span = if dy < top_third {
-                1 + dy / 2
-            } else if dy < bottom_start {
-                mid.saturating_sub(1).max(1)
-            } else {
-                let progress = dy - bottom_start;
-                let denom = (size - bottom_start).max(1);
-                let shrink = progress * mid.saturating_sub(1) / denom;
-                mid.saturating_sub(shrink).max(1)
-            };
-
-            let left = mid.saturating_sub(half_span);
-            let right = (mid + half_span).min(size.saturating_sub(1));
-            (left, right)
-        })
-        .collect()
-}
-
 // ── Pin icon ─────────────────────────────────────────────────────────
 
 /// Layout geometry for a Bootstrap-style vertical pushpin icon.
@@ -573,67 +536,6 @@ pub fn mix_rgb(c0: u32, c1: u32, t: f32) -> u32 {
 #[cfg(all(test, not(target_os = "macos")))]
 mod tests {
     use super::*;
-
-    // ── shield_icon_spans ────────────────────────────────────────────
-
-    #[cfg(not(target_os = "macos"))]
-    #[test]
-    #[cfg(not(target_os = "macos"))]
-    fn shield_spans_length_matches_size() {
-        let size = 12;
-        let spans = shield_icon_spans(size);
-        assert_eq!(spans.len(), size as usize);
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    #[test]
-    #[cfg(not(target_os = "macos"))]
-    fn shield_spans_symmetric_around_midpoint() {
-        let size = 15;
-        let mid = size / 2;
-        let spans = shield_icon_spans(size);
-        for &(left, right) in &spans {
-            // The span should be roughly symmetric around `mid`.
-            assert!(left <= mid);
-            assert!(right >= mid);
-        }
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    #[test]
-    #[cfg(not(target_os = "macos"))]
-    fn shield_spans_no_overflow() {
-        let size = 10;
-        let spans = shield_icon_spans(size);
-        for &(left, right) in &spans {
-            assert!(right < size, "right={right} must be < size={size}");
-            assert!(left <= right);
-        }
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    #[test]
-    #[cfg(not(target_os = "macos"))]
-    fn shield_spans_tapers_at_bottom() {
-        let size = 18;
-        let spans = shield_icon_spans(size);
-        let last = spans.last().unwrap();
-        let mid_row = &spans[size as usize / 2];
-        // The bottom row should be narrower than or equal to the middle row.
-        assert!((last.1 - last.0) <= (mid_row.1 - mid_row.0));
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    #[test]
-    #[cfg(not(target_os = "macos"))]
-    fn shield_spans_small_size() {
-        // Edge case: very small shield.
-        let spans = shield_icon_spans(3);
-        assert_eq!(spans.len(), 3);
-        for &(left, right) in &spans {
-            assert!(left <= right);
-        }
-    }
 
     // ── pin_icon_layout ──────────────────────────────────────────────
 

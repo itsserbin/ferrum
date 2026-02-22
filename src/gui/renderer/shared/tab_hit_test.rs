@@ -95,40 +95,6 @@ pub fn hit_test_tab_hover(
     }
 }
 
-#[cfg(not(target_os = "macos"))]
-/// Returns tab index when pointer is over a security badge.
-pub fn hit_test_tab_security_badge(
-    x: f64,
-    y: f64,
-    tabs: &[TabInfo],
-    buf_width: u32,
-    m: &TabLayoutMetrics,
-) -> Option<usize> {
-    if tabs.is_empty() {
-        return None;
-    }
-
-    // Security badges are not rendered when tabs collapse to number mode.
-    let tw = tab_math::calculate_tab_width(m, tabs.len(), buf_width);
-    if tab_math::should_show_number(m, tw) {
-        return None;
-    }
-
-    for (idx, tab) in tabs.iter().enumerate() {
-        if tab.security_count == 0 {
-            continue;
-        }
-        let Some(rect) =
-            tab_math::security_badge_rect(m, idx, tabs.len(), buf_width, tab.security_count)
-        else {
-            continue;
-        };
-        if tab_math::point_in_rect(x, y, rect.to_tuple()) {
-            return Some(idx);
-        }
-    }
-    None
-}
 
 /// Hit-test window control buttons (non-macOS only).
 #[cfg(not(target_os = "macos"))]
@@ -177,7 +143,7 @@ pub fn tab_hover_tooltip<'a>(
     }
 
     // When hovered, close button is always shown.
-    let max_chars = tab_math::tab_title_max_chars(m, tw, true, tab.security_count);
+    let max_chars = tab_math::tab_title_max_chars(m, tw, true);
     let title_chars = tab.title.chars().count();
     (title_chars > max_chars).then_some(tab.title)
 }
@@ -196,15 +162,13 @@ mod tests {
     }
 
     #[cfg(not(target_os = "macos"))]
-    fn tab(title: &'static str, security_count: usize) -> TabInfo<'static> {
+    fn tab(title: &'static str) -> TabInfo<'static> {
         TabInfo {
             title,
             #[cfg(not(target_os = "macos"))]
             index: 0,
             #[cfg(not(target_os = "macos"))]
             is_active: false,
-            #[cfg(not(target_os = "macos"))]
-            security_count,
             #[cfg(not(target_os = "macos"))]
             hover_progress: 0.0,
             #[cfg(not(target_os = "macos"))]
@@ -220,49 +184,5 @@ mod tests {
         }
     }
 
-    #[cfg(not(target_os = "macos"))]
-    #[test]
-    fn security_badge_hit_test_disabled_in_number_mode() {
-        let m = metrics();
-        let tabs = [tab("a", 3), tab("b", 1)];
-        // Force narrow tabs => number mode.
-        let buf_width = 220;
-        let tw = tab_math::calculate_tab_width(&m, tabs.len(), buf_width);
-        assert!(tab_math::should_show_number(&m, tw));
 
-        // Even if geometry exists, hit-test should be disabled when badge is not rendered.
-        let rect =
-            tab_math::security_badge_rect(&m, 0, tabs.len(), buf_width, tabs[0].security_count)
-                .expect("badge rect should exist geometrically");
-        let hit = hit_test_tab_security_badge(
-            rect.x as f64 + rect.w as f64 / 2.0,
-            rect.y as f64 + rect.h as f64 / 2.0,
-            &tabs,
-            buf_width,
-            &m,
-        );
-        assert_eq!(hit, None);
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    #[test]
-    fn security_badge_hit_test_works_in_title_mode() {
-        let m = metrics();
-        let tabs = [tab("long title", 2), tab("other", 0)];
-        let buf_width = 1200;
-        let tw = tab_math::calculate_tab_width(&m, tabs.len(), buf_width);
-        assert!(!tab_math::should_show_number(&m, tw));
-
-        let rect =
-            tab_math::security_badge_rect(&m, 0, tabs.len(), buf_width, tabs[0].security_count)
-                .expect("badge rect should exist");
-        let hit = hit_test_tab_security_badge(
-            rect.x as f64 + rect.w as f64 / 2.0,
-            rect.y as f64 + rect.h as f64 / 2.0,
-            &tabs,
-            buf_width,
-            &m,
-        );
-        assert_eq!(hit, Some(0));
-    }
 }

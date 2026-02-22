@@ -4,48 +4,10 @@ use crate::config::AppConfig;
 use crate::gui::renderer::shared::tab_math;
 use crate::gui::renderer::TabBarHit;
 #[cfg(not(target_os = "macos"))]
-use crate::gui::renderer::TabInfo;
-#[cfg(not(target_os = "macos"))]
 use crate::gui::tabs::create::NewTabParams;
 use crate::gui::*;
 
 impl FerrumWindow {
-    #[cfg(not(target_os = "macos"))]
-    fn tab_infos_for_hit_test(&self) -> Vec<TabInfo<'_>> {
-        #[cfg(not(target_os = "macos"))]
-        return self.tabs
-            .iter()
-            .enumerate()
-            .map(|(idx, tab)| TabInfo {
-                title: &tab.title,
-                index: idx,
-                is_active: idx == self.active_tab,
-                security_count: tab.focused_leaf().map_or(0, |leaf| {
-                    if leaf.security.has_events() {
-                        leaf.security.active_event_count()
-                    } else {
-                        0
-                    }
-                }),
-                hover_progress: 0.0,
-                close_hover_progress: 0.0,
-                is_renaming: false,
-                rename_text: None,
-                rename_cursor: 0,
-                rename_selection: None,
-            })
-            .collect();
-
-        #[cfg(target_os = "macos")]
-        self.tabs
-            .iter()
-            .map(|tab| TabInfo {
-                title: &tab.title,
-                is_renaming: false,
-            })
-            .collect()
-    }
-
     #[cfg(not(target_os = "macos"))]
     pub(in crate::gui::events) fn tab_close_button_visible(&self, tab_index: usize) -> bool {
         if self.tabs.get(tab_index).is_none() {
@@ -74,21 +36,6 @@ impl FerrumWindow {
             TabBarHit::CloseTab(idx) if !self.tab_close_button_visible(idx) => TabBarHit::Tab(idx),
             _ => hit,
         }
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    pub(in crate::gui::events::mouse) fn tab_bar_security_hit(
-        &self,
-        mx: f64,
-        my: f64,
-    ) -> Option<usize> {
-        let tab_infos = self.tab_infos_for_hit_test();
-        if tab_infos.is_empty() {
-            return None;
-        }
-        let buf_width = self.window.inner_size().width;
-        self.backend
-            .hit_test_tab_security_badge(mx, my, &tab_infos, buf_width)
     }
 
     #[cfg(target_os = "macos")]
@@ -160,14 +107,6 @@ impl FerrumWindow {
             self.is_selecting = false;
             self.selection_anchor = None;
             self.finish_drag();
-            return;
-        }
-
-        if let Some(tab_idx) = self.tab_bar_security_hit(mx, my) {
-            self.cancel_drag();
-            self.commit_rename();
-            self.last_topbar_empty_click = None;
-            self.open_security_popup_for_tab(tab_idx);
             return;
         }
 

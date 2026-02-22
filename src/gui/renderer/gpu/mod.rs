@@ -11,7 +11,6 @@ mod cursors;
 mod frame;
 mod gpu_passes;
 mod grid_packing;
-mod hit_test;
 mod overlays;
 pub mod pipelines;
 mod scrollbar;

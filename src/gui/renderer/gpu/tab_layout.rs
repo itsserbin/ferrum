@@ -44,7 +44,7 @@ impl super::GpuRenderer {
             } else if use_numbers {
                 self.tab_number_commands(&slot, tab_x, tw, text_y);
             } else {
-                self.tab_content_commands(&slot, tabs.len(), bw, tab_x, tw, text_y);
+                self.tab_content_commands(&slot, tab_x, tw, text_y);
             }
         }
 

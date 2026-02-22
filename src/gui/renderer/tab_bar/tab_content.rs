@@ -50,12 +50,11 @@ impl CpuRenderer {
         }
     }
 
-    /// Renders normal tab content: title, security badge, and close button.
+    /// Renders normal tab content: title and close button.
     pub(super) fn draw_tab_content(
         &mut self,
         target: &mut RenderTarget<'_>,
         slot: &TabSlot,
-        tab_count: usize,
     ) {
         let m = self.tab_layout_metrics();
         let text_y = tab_math::tab_text_y(&m);
@@ -75,13 +74,11 @@ impl CpuRenderer {
             &m,
             slot.width,
             show_close,
-            slot.tab.security_count,
         );
 
         let text_x = slot.x + tab_padding_h;
         self.draw_tab_title(target, slot.tab, text_x, text_y, fg, max_chars);
 
-        self.draw_security_badge(target, slot.index, slot.tab, tab_count, text_y);
 
         if show_close {
             self.draw_close_button(
@@ -113,29 +110,6 @@ impl CpuRenderer {
         }
     }
 
-    /// Renders the security badge icon and optional count text.
-    fn draw_security_badge(
-        &mut self,
-        target: &mut RenderTarget<'_>,
-        tab_index: usize,
-        tab: &super::super::TabInfo,
-        tab_count: usize,
-        text_y: u32,
-    ) {
-        if let Some((sx, sy, sw, _)) =
-            self.security_badge_rect(tab_index, tab_count, target.width as u32, tab.security_count)
-        {
-            self.draw_security_shield_icon(target, sx, sy, sw, self.palette.security_accent);
-            if tab.security_count > 1 {
-                let count_text = tab.security_count.min(99).to_string();
-                let count_x = sx + sw + self.scaled_px(2);
-                for (ci, ch) in count_text.chars().enumerate() {
-                    let cx = count_x + ci as u32 * self.metrics.cell_width;
-                    self.draw_char(target, cx, text_y, ch, self.palette.security_accent);
-                }
-            }
-        }
-    }
 
     /// Draws the close button with a circular hover effect.
     fn draw_close_button(

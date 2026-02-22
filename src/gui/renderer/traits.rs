@@ -47,7 +47,6 @@ pub trait Renderer {
     fn tab_layout_metrics(&self) -> TabLayoutMetrics {
         TabLayoutMetrics {
             cell_width: self.cell_width(),
-            #[cfg(not(target_os = "macos"))]
             cell_height: self.cell_height(),
             ui_scale: self.ui_scale(),
             tab_bar_height: self.tab_bar_height_px(),

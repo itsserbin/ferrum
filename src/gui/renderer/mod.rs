@@ -5,7 +5,6 @@ mod cursor;
 pub mod gpu;
 pub mod metrics;
 mod scrollbar;
-mod security;
 pub mod shared;
 #[cfg(not(target_os = "macos"))]
 mod tab_bar;
@@ -13,7 +12,7 @@ mod terminal;
 pub mod traits;
 pub mod types;
 
-use crate::core::{Color, CursorStyle, Grid, Selection};
+use crate::core::{CursorStyle, Grid, Selection};
 
 pub use backend::RendererBackend;
 pub use cpu::CpuRenderer;

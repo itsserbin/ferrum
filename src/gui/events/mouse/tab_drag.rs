@@ -168,7 +168,6 @@ impl FerrumWindow {
         });
 
         self.adjust_rename_after_tab_remove(drag.source_index);
-        self.adjust_security_popup_after_tab_remove(drag.source_index);
         let tab = self.tabs.remove(drag.source_index);
         self.refresh_tab_bar_visibility();
 

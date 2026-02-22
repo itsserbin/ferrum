@@ -106,7 +106,6 @@ pub struct TabLayoutMetrics {
     /// Scaled cell width (monospace character advance) in physical pixels.
     pub cell_width: u32,
     /// Scaled cell height in physical pixels.
-    #[cfg(not(target_os = "macos"))]
     pub cell_height: u32,
     /// UI scale factor (e.g. 1.0, 2.0 for Retina).
     pub ui_scale: f64,
@@ -241,79 +240,8 @@ pub fn gear_button_rect(m: &TabLayoutMetrics) -> Rect {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
-/// Returns the width (in physical pixels) reserved by the security badge
-/// for a tab with the given `security_count`.
-///
-/// Returns 0 when `security_count` is 0.
-pub fn security_badge_reserved_width(m: &TabLayoutMetrics, security_count: usize) -> u32 {
-    if security_count == 0 {
-        return 0;
-    }
-    let count_chars = security_count.min(99).to_string().len() as u32;
-    let count_width = if security_count > 1 {
-        count_chars * m.cell_width + m.scaled_px(2)
-    } else {
-        0
-    };
-    let badge_min = m.scaled_px(10);
-    let badge_max = m.scaled_px(15);
-    let badge_icon_size = m
-        .cell_height
-        .saturating_sub(m.scaled_px(10))
-        .clamp(badge_min, badge_max);
-    badge_icon_size + count_width + m.scaled_px(6)
-}
 
-#[cfg(not(target_os = "macos"))]
-/// Returns the icon size of the security badge shield.
-pub fn security_badge_icon_size(m: &TabLayoutMetrics) -> u32 {
-    let badge_min = m.scaled_px(10);
-    let badge_max = m.scaled_px(15);
-    m.cell_height
-        .saturating_sub(m.scaled_px(10))
-        .clamp(badge_min, badge_max)
-}
 
-#[cfg(not(target_os = "macos"))]
-/// Returns the bounding rectangle of the security badge within a tab.
-///
-/// Returns `None` when `security_count` is 0 or `tab_index >= tab_count`.
-pub fn security_badge_rect(
-    m: &TabLayoutMetrics,
-    tab_index: usize,
-    tab_count: usize,
-    buf_width: u32,
-    security_count: usize,
-) -> Option<Rect> {
-    if security_count == 0 || tab_index >= tab_count {
-        return None;
-    }
-    let tw = calculate_tab_width(m, tab_count, buf_width);
-    let tab_x = tab_origin_x(m, tab_index, tw);
-    let badge_size = security_badge_icon_size(m);
-    let count_chars = if security_count > 1 {
-        security_count.min(99).to_string().len() as u32
-    } else {
-        0
-    };
-    let count_width = if count_chars > 0 {
-        count_chars * m.cell_width + m.scaled_px(2)
-    } else {
-        0
-    };
-    let indicator_width = badge_size + count_width;
-    let right_gutter = m.cell_width + m.scaled_px(10);
-    let indicator_right = tab_x + tw.saturating_sub(right_gutter);
-    let x = indicator_right.saturating_sub(indicator_width + m.scaled_px(2));
-    let y = (m.tab_bar_height.saturating_sub(badge_size)) / 2;
-    Some(Rect {
-        x,
-        y,
-        w: badge_size,
-        h: badge_size,
-    })
-}
 
 #[cfg(not(target_os = "macos"))]
 /// Returns the width reserved by the close button when it is visible.
@@ -330,13 +258,11 @@ pub fn should_show_close_button(is_active: bool, is_hovered: bool, hover_progres
 #[cfg(not(target_os = "macos"))]
 /// Returns the maximum number of characters that fit in the tab title area.
 ///
-/// Accounts for horizontal padding, optional close button, and optional
-/// security badge.
+/// Accounts for horizontal padding and the optional close button.
 pub fn tab_title_max_chars(
     m: &TabLayoutMetrics,
     tab_width: u32,
     show_close: bool,
-    security_count: usize,
 ) -> usize {
     let tab_padding_h = m.scaled_px(TAB_PADDING_H);
     let close_reserved = if show_close {
@@ -344,8 +270,7 @@ pub fn tab_title_max_chars(
     } else {
         0
     };
-    let security_reserved = security_badge_reserved_width(m, security_count);
-    (tab_width.saturating_sub(tab_padding_h * 2 + close_reserved + security_reserved)
+    (tab_width.saturating_sub(tab_padding_h * 2 + close_reserved)
         / m.cell_width) as usize
 }
 
@@ -420,7 +345,6 @@ mod tests {
     fn default_metrics() -> TabLayoutMetrics {
         TabLayoutMetrics {
             cell_width: 9,
-            #[cfg(not(target_os = "macos"))]
             cell_height: 20,
             ui_scale: 1.0,
             tab_bar_height: 36,
@@ -431,7 +355,6 @@ mod tests {
     fn hidpi_metrics() -> TabLayoutMetrics {
         TabLayoutMetrics {
             cell_width: 18,
-            #[cfg(not(target_os = "macos"))]
             cell_height: 40,
             ui_scale: 2.0,
             tab_bar_height: 72,
@@ -555,56 +478,11 @@ mod tests {
         assert_eq!(rect.w, m.scaled_px(PIN_BUTTON_SIZE));
     }
 
-    #[cfg(not(target_os = "macos"))]
-    #[test]
-    fn security_badge_zero_count_returns_zero() {
-        let m = default_metrics();
-        assert_eq!(security_badge_reserved_width(&m, 0), 0);
-    }
 
-    #[cfg(not(target_os = "macos"))]
-    #[test]
-    fn security_badge_single_count_no_text() {
-        let m = default_metrics();
-        let w = security_badge_reserved_width(&m, 1);
-        let icon = security_badge_icon_size(&m);
-        assert_eq!(w, icon + m.scaled_px(6));
-    }
 
-    #[cfg(not(target_os = "macos"))]
-    #[test]
-    fn security_badge_multi_count_includes_text() {
-        let m = default_metrics();
-        let w1 = security_badge_reserved_width(&m, 1);
-        let w5 = security_badge_reserved_width(&m, 5);
-        assert!(w5 > w1);
-    }
 
-    #[cfg(not(target_os = "macos"))]
-    #[test]
-    fn security_badge_none_for_zero_count() {
-        let m = default_metrics();
-        assert!(security_badge_rect(&m, 0, 3, 1200, 0).is_none());
-    }
 
-    #[cfg(not(target_os = "macos"))]
-    #[test]
-    fn security_badge_none_for_invalid_index() {
-        let m = default_metrics();
-        assert!(security_badge_rect(&m, 5, 3, 1200, 1).is_none());
-    }
 
-    #[cfg(not(target_os = "macos"))]
-    #[test]
-    fn security_badge_some_for_valid() {
-        let m = default_metrics();
-        let rect = security_badge_rect(&m, 0, 3, 1200, 2);
-        assert!(rect.is_some());
-        let r = rect.unwrap();
-        let tw = calculate_tab_width(&m, 3, 1200);
-        let tab_end = tab_origin_x(&m, 0, tw) + tw;
-        assert!(r.x + r.w <= tab_end);
-    }
 
     #[cfg(not(target_os = "macos"))]
     #[test]
@@ -651,15 +529,6 @@ mod tests {
         assert!(without_close >= with_close);
     }
 
-    #[cfg(not(target_os = "macos"))]
-    #[test]
-    fn title_chars_decrease_with_security_badge() {
-        let m = default_metrics();
-        let tw = 240;
-        let without_badge = tab_title_max_chars(&m, tw, true, 0);
-        let with_badge = tab_title_max_chars(&m, tw, true, 5);
-        assert!(without_badge >= with_badge);
-    }
 
     #[cfg(not(target_os = "macos"))]
     #[test]
