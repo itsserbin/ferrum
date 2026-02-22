@@ -1,6 +1,6 @@
 use crate::config::{
     AppConfig, FontConfig, FontFamily, LayoutConfig, SecurityMode, SecuritySettings,
-    TerminalConfig, ThemeChoice,
+    TerminalConfig, ThemeChoice, UpdatesConfig,
 };
 use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicPtr, Ordering};
 use std::sync::{mpsc, Mutex};
@@ -284,6 +284,8 @@ mod id {
     pub const BLOCK_TITLE_CHECK: i32 = 602;
     pub const LIMIT_CURSOR_CHECK: i32 = 603;
     pub const CLEAR_MOUSE_CHECK: i32 = 604;
+    // Updates
+    pub const AUTO_CHECK_CHECK: i32 = 800;
     // Reset
     pub const RESET_BUTTON: i32 = 700;
 }
@@ -321,8 +323,10 @@ struct Win32State {
     block_title_check: HWND,
     limit_cursor_check: HWND,
     clear_mouse_check: HWND,
+    // Updates tab
+    auto_check_check: HWND,
     // Tab groups (for show/hide)
-    tab_pages: [Vec<HWND>; 5],
+    tab_pages: [Vec<HWND>; 6],
 }
 
 // ── Win32 window ─────────────────────────────────────────────────────
@@ -553,6 +557,10 @@ fn on_command(state: &Win32State, wparam: WPARAM) {
             let config = build_config(state);
             let _ = state.tx.send(config);
         }
+        (id::AUTO_CHECK_CHECK, BN_CLICKED) => {
+            let config = build_config(state);
+            let _ = state.tx.send(config);
+        }
         (id::FONT_FAMILY_COMBO | id::THEME_COMBO | id::LANGUAGE_COMBO, CBN_SELCHANGE) => {
             let config = build_config(state);
             let _ = state.tx.send(config);
@@ -602,7 +610,7 @@ unsafe fn create_controls(
 
     // Add tabs.
     let t = crate::i18n::t();
-    for (i, name) in [t.settings_tab_font, t.settings_tab_theme, t.settings_tab_terminal, t.settings_tab_layout, t.settings_tab_security].iter().enumerate() {
+    for (i, name) in [t.settings_tab_font, t.settings_tab_theme, t.settings_tab_terminal, t.settings_tab_layout, t.settings_tab_security, t.settings_tab_updates].iter().enumerate() {
         let text = to_wide(name);
         let mut item: TCITEMW = std::mem::zeroed();
         item.mask = TCIF_TEXT;
@@ -760,6 +768,31 @@ unsafe fn create_controls(
     });
     security_page.append(&mut ctrls);
 
+    // ── Updates tab controls ─────────────────────────────────────────
+    let mut updates_page = Vec::new();
+
+    let (auto_check_check, mut ctrls) = create_checkbox_row(&ctx, &CheckboxRowParams {
+        label_text: t.update_auto_check, x: x0, y: y0,
+        checked: config.updates.auto_check, enabled: true, check_id: id::AUTO_CHECK_CHECK,
+    });
+    updates_page.append(&mut ctrls);
+
+    let version_text = format!("{}: {}", t.update_current_version, env!("CARGO_PKG_VERSION"));
+    let version_label_wide = to_wide(&version_text);
+    let version_label = CreateWindowExW(
+        0,
+        to_wide("STATIC").as_ptr(),
+        version_label_wide.as_ptr(),
+        WS_CHILD | WS_VISIBLE | SS_LEFT,
+        x0, y0 + sp, s(350), s(20),
+        hwnd,
+        std::ptr::null_mut(),
+        hinstance,
+        std::ptr::null(),
+    );
+    SendMessageW(version_label, WM_SETFONT, font as usize, 0);
+    updates_page.push(version_label);
+
     // ── Reset button (always visible, below tab control) ─────────────
     let reset_text = to_wide(t.settings_reset_to_defaults);
     let reset_btn = CreateWindowExW(
@@ -776,7 +809,7 @@ unsafe fn create_controls(
     SendMessageW(reset_btn, WM_SETFONT, font as usize, 0);
 
     // Initially show only Font tab.
-    for page in [&theme_page, &terminal_page, &layout_page, &security_page] {
+    for page in [&theme_page, &terminal_page, &layout_page, &security_page, &updates_page] {
         for &h in page {
             ShowWindow(h, SW_HIDE);
         }
@@ -809,7 +842,8 @@ unsafe fn create_controls(
         block_title_check,
         limit_cursor_check,
         clear_mouse_check,
-        tab_pages: [font_page, theme_page, terminal_page, layout_page, security_page],
+        auto_check_check,
+        tab_pages: [font_page, theme_page, terminal_page, layout_page, security_page, updates_page],
     };
 
         update_all_displays(&state);
@@ -1015,6 +1049,8 @@ fn build_config(state: &Win32State) -> AppConfig {
         let limit_cursor = SendMessageW(state.limit_cursor_check, BM_GETCHECK, 0, 0) == BST_CHECKED as isize;
         let clear_mouse = SendMessageW(state.clear_mouse_check, BM_GETCHECK, 0, 0) == BST_CHECKED as isize;
 
+        let auto_check = SendMessageW(state.auto_check_check, BM_GETCHECK, 0, 0) == BST_CHECKED as isize;
+
         AppConfig {
             font: FontConfig {
                 size: font_size,
@@ -1045,6 +1081,7 @@ fn build_config(state: &Win32State) -> AppConfig {
             language: crate::i18n::Locale::from_index(
                 SendMessageW(state.language_combo, CB_GETCURSEL, 0, 0) as usize,
             ),
+            updates: UpdatesConfig { auto_check },
         }
     }
 }
@@ -1189,6 +1226,10 @@ fn reset_controls(state: &Win32State) {
         };
         SendMessageW(state.security_mode_combo, CB_SETCURSEL, mode_idx, 0);
         apply_security_preset(state);
+
+        // Updates
+        let auto_check_state = if d.updates.auto_check { BST_CHECKED } else { BST_UNCHECKED };
+        SendMessageW(state.auto_check_check, BM_SETCHECK, auto_check_state, 0);
     }
 
     update_all_displays(state);
