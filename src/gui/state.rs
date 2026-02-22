@@ -145,6 +145,15 @@ pub(super) enum SelectionDragMode {
     Line,
 }
 
+/// Install state for the in-app update banner.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub(crate) enum UpdateInstallState {
+    #[default]
+    Idle,
+    Installing,
+    Done,
+}
+
 /// Request from a FerrumWindow to the App (window manager).
 pub(super) enum WindowRequest {
     /// Detach a tab into a new window at the given screen position.
@@ -238,6 +247,10 @@ pub(super) struct FerrumWindow {
     pub(super) event_proxy: winit::event_loop::EventLoopProxy<()>,
     /// Tag name of the latest available update, or `None` when up to date.
     pub(super) pending_update_tag: Option<String>,
+    /// Whether the user dismissed the banner this session.
+    pub(super) update_banner_dismissed: bool,
+    /// Current state of the background install operation.
+    pub(super) update_install_state: UpdateInstallState,
 }
 
 /// App is now a window manager holding multiple FerrumWindows.

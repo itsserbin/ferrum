@@ -35,6 +35,8 @@ pub(in crate::gui) struct UpdateBannerLayout {
     pub dismiss_x: u32,
     pub dismiss_y: u32,
     pub dismiss_w: u32,
+    /// When true, only the label is shown (with "Installing…" text), no buttons.
+    pub installing: bool,
 }
 
 /// Returns the cell height to use for banner layout.
@@ -130,6 +132,7 @@ pub(in crate::gui) fn compute_update_banner_layout(
         dismiss_x,
         dismiss_y,
         dismiss_w,
+        installing: false,
     })
 }
 

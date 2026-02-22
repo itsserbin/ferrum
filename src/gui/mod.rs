@@ -39,7 +39,7 @@ const MIN_WINDOW_ROWS: u32 = 10;
 use self::state::MenuContext;
 use self::state::{
     App, ClosedTabInfo, DividerDragState, FerrumWindow, PtyEvent,
-    RenameState, ScrollbarState, SelectionDragMode, TabState, WindowRequest,
+    RenameState, ScrollbarState, SelectionDragMode, TabState, UpdateInstallState, WindowRequest,
 };
 #[cfg(not(target_os = "macos"))]
 use self::state::{DragState, TabReorderAnimation};
@@ -105,6 +105,8 @@ impl FerrumWindow {
             settings_tx: std::sync::mpsc::channel().0,
             event_proxy: proxy.clone(),
             pending_update_tag: None,
+            update_banner_dismissed: false,
+            update_install_state: UpdateInstallState::Idle,
         }
     }
 
