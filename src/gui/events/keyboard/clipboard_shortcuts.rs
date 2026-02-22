@@ -21,6 +21,10 @@ impl FerrumWindow {
             return Some(false);
         }
 
+        #[cfg(target_os = "macos")]
+        let is_paste_key = matches!(key, Key::Named(NamedKey::Paste))
+            || (Self::physical_key_is(physical, KeyCode::KeyV) && self.modifiers.super_key());
+        #[cfg(not(target_os = "macos"))]
         let is_paste_key = matches!(key, Key::Named(NamedKey::Paste))
             || Self::physical_key_is(physical, KeyCode::KeyV);
         if is_paste_key {

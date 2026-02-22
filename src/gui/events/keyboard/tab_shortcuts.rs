@@ -15,13 +15,13 @@ impl FerrumWindow {
         _tx: &mpsc::Sender<PtyEvent>,
         _config: &AppConfig,
     ) -> Option<bool> {
-        if Self::physical_key_is(physical, KeyCode::KeyT) {
+        if Self::physical_key_is(physical, KeyCode::KeyT) && self.modifiers.super_key() {
             let cwd = self.active_leaf_ref().and_then(|l| l.cwd());
             self.pending_requests.push(WindowRequest::NewTab { cwd });
             return Some(true);
         }
 
-        if Self::physical_key_is(physical, KeyCode::KeyW) {
+        if Self::physical_key_is(physical, KeyCode::KeyW) && self.modifiers.super_key() {
             // Cmd+W: close focused pane first, then tab, then window.
             if self
                 .active_tab_ref()
@@ -34,7 +34,7 @@ impl FerrumWindow {
             return Some(true);
         }
 
-        if Self::physical_key_is(physical, KeyCode::KeyN) {
+        if Self::physical_key_is(physical, KeyCode::KeyN) && self.modifiers.super_key() {
             let cwd = self.active_leaf_ref().and_then(|l| l.cwd());
             self.pending_requests.push(WindowRequest::NewWindow { cwd });
             return Some(true);

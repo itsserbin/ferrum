@@ -1,6 +1,9 @@
 # Ferrum
 
-GPU-accelerated terminal emulator written in Rust. Inspired by [Ghostty](https://ghostty.org).
+GPU-accelerated terminal emulator written in Rust.
+Cross-platform: macOS (Apple Silicon + Intel), Linux, Windows.
+
+Inspired by [Ghostty](https://ghostty.org). Assisted by [YouScan](https://youscan.io).
 
 ## Install
 
@@ -53,10 +56,25 @@ sudo rpm -i ferrum-*.x86_64.rpm
 
 ## Features
 
-- **GPU rendering** — wgpu-based with automatic CPU fallback; no GPU, no problem
-- **Native macOS tab bar** — each tab is a real NSWindow in a native tab group, not a custom-drawn strip
-- **Pane splitting** — binary tree layout, horizontal/vertical, arbitrary nesting, drag-to-resize dividers
-- **Detachable windows** — drag a tab out of the bar to open it as a standalone window (Windows/Linux)
+- **GPU/CPU rendering** — wgpu compute shader renders the terminal grid on the GPU; automatically falls
+  back to software rendering if no GPU is available
+- **Correct colors** — non-sRGB surface ensures palette and ANSI colors render without gamma distortion;
+  what you configure is what you see
+- **Scrollback survives resize** — logical lines are reflowed on width change; content is never lost
+  when you resize the terminal
+- **Pane splitting** — binary tree layout, four directions (left/right/up/down), drag-to-resize dividers
+  with live reflow, spatial keyboard navigation
+- **Tab CWD titles** — tab titles update as you navigate the filesystem; works with any shell via OS API
+  (proc_pidinfo on macOS, /proc on Linux), no shell integration required
+- **Shell integration** — optional OSC 7 scripts for zsh, bash, fish, PowerShell; auto-injected at
+  startup, no manual setup
+- **Tab detach** — drag a tab out of the bar to tear it off into a standalone window; the new window
+  follows the cursor without release-and-re-grab
+- **Always-on-top** — pin a window to float above all other apps
+- **Windows Unix aliases** — `ls`, `grep`, `cat`, `rm`, `find` and more work in cmd.exe out of the box;
+  embedded in the binary, no external tools needed
+- **Built-in security** — paste injection detection, OSC title query blocking, cursor spoofing and mouse
+  mode leak prevention
 
 ## Keyboard Shortcuts
 
