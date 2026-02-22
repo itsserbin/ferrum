@@ -2,7 +2,7 @@ use crate::core::{CursorStyle, Grid, Selection};
 use crate::gui::pane::PaneRect;
 
 use super::super::traits;
-use super::super::{RenderTarget, ScrollbarState, SecurityPopup};
+use super::super::{RenderTarget, ScrollbarState};
 #[cfg(not(target_os = "macos"))]
 use super::super::TabBarDrawParams;
 #[cfg(not(target_os = "macos"))]
@@ -186,13 +186,12 @@ impl traits::Renderer for GpuRenderer {
         self.draw_tab_tooltip_impl(target.width, target.height, mouse_pos, title);
     }
 
-    // ── Security ──────────────────────────────────────────────────────
-
-    fn draw_security_popup(
+    #[cfg(not(target_os = "macos"))]
+    fn draw_update_banner(
         &mut self,
-        target: &mut RenderTarget<'_>,
-        popup: &SecurityPopup,
+        _target: &mut RenderTarget<'_>,
+        layout: &super::super::shared::banner_layout::UpdateBannerLayout,
     ) {
-        self.draw_security_popup_impl(target.width, target.height, popup);
+        self.draw_update_banner_impl(layout);
     }
 }
