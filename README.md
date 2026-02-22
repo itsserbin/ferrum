@@ -57,7 +57,7 @@ GPU-accelerated terminal emulator written in Rust. Cross-platform: macOS, Window
 |----------|--------|
 | `Cmd/Ctrl+,` | Settings |
 | `Cmd/Ctrl+Shift+P` | Toggle always-on-top |
-| `Cmd/↑` / `Cmd/↓` | Scroll to top / bottom |
+| `Cmd/Ctrl+↑` / `Cmd/Ctrl+↓` | Scroll to top / bottom |
 
 ## Install
 
@@ -78,7 +78,7 @@ Download from [GitHub Releases](https://github.com/itsserbin/ferrum/releases/lat
 | `ferrum-aarch64-apple-darwin.dmg` | Apple Silicon (M1/M2/M3/M4) |
 | `ferrum-x86_64-apple-darwin.dmg` | Intel |
 
-Open the DMG, drag Ferrum to Applications, then run once in Terminal:
+Open the DMG, drag Ferrum to Applications. Ferrum is ad-hoc signed but not notarized — run once to remove macOS Gatekeeper's quarantine flag:
 
 ```bash
 xattr -cr /Applications/Ferrum.app
@@ -96,6 +96,8 @@ Download `Ferrum-Setup-x64.exe` from [GitHub Releases](https://github.com/itsser
 
 ### Linux
 
+Download packages from [GitHub Releases](https://github.com/itsserbin/ferrum/releases/latest).
+
 **Debian / Ubuntu:**
 
 ```bash
@@ -107,8 +109,6 @@ sudo dpkg -i ferrum_*_amd64.deb
 ```bash
 sudo rpm -i ferrum-*.x86_64.rpm
 ```
-
-Download packages from [GitHub Releases](https://github.com/itsserbin/ferrum/releases/latest).
 
 ## Build from source
 
