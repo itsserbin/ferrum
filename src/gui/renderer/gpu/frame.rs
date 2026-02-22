@@ -8,6 +8,8 @@ use super::buffers::*;
 
 #[cfg(not(target_os = "macos"))]
 use super::super::shared::ui_layout;
+#[cfg(not(target_os = "macos"))]
+use crate::gui::renderer::traits::Renderer;
 
 impl super::GpuRenderer {
     #[cfg(not(target_os = "macos"))]
