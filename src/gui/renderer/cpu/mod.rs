@@ -1,3 +1,4 @@
+mod banner;
 pub(in crate::gui::renderer) mod primitives;
 mod trait_impl;
 

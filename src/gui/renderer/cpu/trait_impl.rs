@@ -2,7 +2,6 @@ use crate::core::{CursorStyle, Grid, Selection};
 use crate::gui::pane::PaneRect;
 
 use super::super::traits;
-use super::super::types::SecurityPopup;
 #[cfg(not(target_os = "macos"))]
 use super::super::types::TabBarDrawParams;
 #[cfg(not(target_os = "macos"))]
@@ -153,11 +152,11 @@ impl traits::Renderer for CpuRenderer {
         CpuRenderer::draw_tab_tooltip(self, target, mouse_pos, title);
     }
 
-    fn draw_security_popup(
+    fn draw_update_banner(
         &mut self,
         target: &mut RenderTarget<'_>,
-        popup: &SecurityPopup,
+        layout: &super::super::shared::banner_layout::UpdateBannerLayout,
     ) {
-        CpuRenderer::draw_security_popup(self, target, popup);
+        CpuRenderer::draw_update_banner(self, target, layout);
     }
 }
