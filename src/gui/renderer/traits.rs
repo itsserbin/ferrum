@@ -1,13 +1,14 @@
 use crate::core::{CursorStyle, Grid, Selection};
 use crate::gui::pane::PaneRect;
 
+use super::shared::banner_layout::UpdateBannerLayout;
 use super::shared::scrollbar_math;
 #[cfg(not(target_os = "macos"))]
 use super::shared::tab_hit_test;
 use super::shared::tab_math::{self, TabLayoutMetrics};
 #[cfg(not(target_os = "macos"))]
 use super::TabInfo;
-use super::{SCROLLBAR_MIN_THUMB, SecurityPopup, TabBarHit};
+use super::{SCROLLBAR_MIN_THUMB, TabBarHit};
 use super::{RenderTarget, ScrollbarState};
 
 /// Trait defining the full renderer interface used by the GUI layer.
@@ -300,54 +301,22 @@ pub trait Renderer {
         if idx < tab_count { Some(idx) } else { None }
     }
 
-    #[cfg(not(target_os = "macos"))]
-    fn hit_test_tab_security_badge(
-        &self,
-        x: f64,
-        y: f64,
-        tabs: &[TabInfo],
-        buf_width: u32,
-    ) -> Option<usize> {
-        let m = self.tab_layout_metrics();
-        tab_hit_test::hit_test_tab_security_badge(x, y, tabs, buf_width, &m)
-    }
+    // ── Update banner ────────────────────────────────────────────────
 
-    // ── Security ────────────────────────────────────────────────────
-
-    fn draw_security_popup(
-        &mut self,
-        target: &mut RenderTarget<'_>,
-        popup: &SecurityPopup,
-    );
-
-    fn hit_test_security_popup(
-        &self,
-        popup: &SecurityPopup,
-        x: f64,
-        y: f64,
-        buf_width: usize,
-        buf_height: usize,
-    ) -> bool {
-        popup.hit_test(
-            x,
-            y,
-            self.cell_width(),
-            self.cell_height(),
-            buf_width as u32,
-            buf_height as u32,
-        )
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    fn security_badge_rect(
-        &self,
-        tab_index: usize,
-        tab_count: usize,
-        buf_width: u32,
-        security_count: usize,
-    ) -> Option<(u32, u32, u32, u32)> {
-        let m = self.tab_layout_metrics();
-        tab_math::security_badge_rect(&m, tab_index, tab_count, buf_width, security_count)
-            .map(|r| r.to_tuple())
+    /// Draws the update-available banner overlay.
+    ///
+    /// Default implementation is a no-op; backends will fill this in when
+    /// banner rendering is implemented.
+    fn draw_update_banner(&mut self, _target: &mut RenderTarget<'_>, layout: &UpdateBannerLayout) {
+        // Default no-op: backends override this once banner rendering is implemented.
+        // Touch all layout accessors so the struct fields are considered live.
+        let _ = (
+            layout.bg_rect(),
+            layout.corner_radius(),
+            layout.label(),
+            layout.details_rect(),
+            layout.install_rect(),
+            layout.dismiss_rect(),
+        );
     }
 }

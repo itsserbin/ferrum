@@ -4,6 +4,7 @@
 //! positions, sizes, and hit-test geometry for the tab bar.  By centralizing
 //! these calculations we eliminate duplication between renderer backends.
 
+pub mod banner_layout;
 pub mod overlay_layout;
 pub mod path_display;
 pub mod scrollbar_math;

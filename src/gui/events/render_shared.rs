@@ -7,6 +7,7 @@ use crate::core::terminal::CursorStyle;
 use crate::gui::pane::{DIVIDER_WIDTH, PaneNode, PaneRect, SplitDirection, split_rect};
 use crate::gui::renderer::traits::Renderer;
 use crate::gui::renderer::{RenderTarget, ScrollbarState};
+use crate::gui::renderer::shared::banner_layout::UpdateBannerLayout;
 use crate::gui::*;
 
 #[cfg(not(target_os = "macos"))]
@@ -35,7 +36,6 @@ pub(in crate::gui) struct TabBarFrameTabInfo {
     pub title: String,
     pub index: usize,
     pub is_active: bool,
-    pub security_count: usize,
     pub hover_progress: f32,
     pub close_hover_progress: f32,
     pub is_renaming: bool,
@@ -53,8 +53,6 @@ impl TabBarFrameTabInfo {
             index: self.index,
             #[cfg(not(target_os = "macos"))]
             is_active: self.is_active,
-            #[cfg(not(target_os = "macos"))]
-            security_count: self.security_count,
             #[cfg(not(target_os = "macos"))]
             hover_progress: self.hover_progress,
             #[cfg(not(target_os = "macos"))]
@@ -96,7 +94,8 @@ pub(in crate::gui::events) struct FrameParams<'a> {
     pub mouse_pos: (f64, f64),
     #[cfg(not(target_os = "macos"))]
     pub pinned: bool,
-    pub security_popup: Option<&'a SecurityPopup>,
+    /// Pre-computed update banner geometry, or `None` when the banner is not shown.
+    pub update_banner: Option<UpdateBannerLayout>,
 }
 
 impl FerrumWindow {
@@ -127,13 +126,6 @@ impl FerrumWindow {
             .enumerate()
             .map(|(i, t)| {
                 let is_renaming = renaming.as_ref().is_some_and(|(ri, _, _, _)| *ri == i);
-                let security_count = t.focused_leaf().map_or(0, |leaf| {
-                    if leaf.security.has_events() {
-                        leaf.security.active_event_count()
-                    } else {
-                        0
-                    }
-                });
                 let display_title = if t.is_renamed {
                     t.title.clone()
                 } else {
@@ -145,7 +137,6 @@ impl FerrumWindow {
                     title: display_title,
                     index: i,
                     is_active: i == self.active_tab,
-                    security_count,
                     hover_progress: self.tab_hover_progress.get(i).copied().unwrap_or(0.0),
                     close_hover_progress: self.close_hover_progress.get(i).copied().unwrap_or(0.0),
                     is_renaming,
@@ -216,7 +207,7 @@ impl FerrumWindow {
             .dragging_tab
             .as_ref()
             .is_some_and(|drag| drag.is_active);
-        let show_tooltip = !dragging_active && self.security_popup.is_none();
+        let show_tooltip = !dragging_active;
 
         let tab_bar_visible = self.backend.tab_bar_height_px() > 0;
 
@@ -234,7 +225,7 @@ impl FerrumWindow {
 /// Draws the complete terminal frame content using the given renderer.
 ///
 /// This is the unified render sequence shared by both CPU and GPU paths:
-/// terminal grid, cursor, scrollbar, tab bar, drag overlay, popups, tooltip.
+/// terminal grid, cursor, scrollbar, tab bar, drag overlay, tooltip.
 ///
 /// For tabs with multiple panes, iterates the pane tree and renders each leaf
 /// into its assigned sub-rectangle, with dividers between panes and a dim
@@ -456,18 +447,18 @@ pub(in crate::gui::events) fn draw_frame_content(
         }
     }
 
-    // 6) Draw popups/menus.
-    if let Some(popup) = params.security_popup {
-        renderer.draw_security_popup(&mut target, popup);
-    }
-
-    // 7) Draw tooltip.
+    // 6) Draw tooltip.
     #[cfg(not(target_os = "macos"))]
     if tab_bar.show_tooltip
         && tab_bar.tab_bar_visible
         && let Some(ref title) = tab_bar.tab_tooltip
     {
         renderer.draw_tab_tooltip(&mut target, params.mouse_pos, title);
+    }
+
+    // 7) Draw update banner (when available).
+    if let Some(ref banner) = params.update_banner {
+        renderer.draw_update_banner(&mut target, banner);
     }
 }
 

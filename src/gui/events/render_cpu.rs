@@ -3,6 +3,7 @@
 use crate::gui::renderer::backend::RendererBackend;
 use crate::gui::*;
 
+use crate::gui::renderer::shared::banner_layout::compute_update_banner_layout;
 use super::render_shared::{FrameParams, draw_frame_content};
 
 impl FerrumWindow {
@@ -42,7 +43,11 @@ impl FerrumWindow {
             mouse_pos: self.mouse_pos,
             #[cfg(not(target_os = "macos"))]
             pinned: self.pinned,
-            security_popup: self.security_popup.as_ref(),
+            update_banner: self.pending_update_tag.as_deref().and_then(|tag| {
+                let m = renderer.tab_layout_metrics();
+                let tab_bar_h = renderer.tab_bar_height_px();
+                compute_update_banner_layout(tag, &m, bw as u32, bh as u32, tab_bar_h)
+            }),
         };
 
         draw_frame_content(

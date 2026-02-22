@@ -78,7 +78,6 @@ impl ApplicationHandler for App {
                 win.last_topbar_empty_click = None;
                 win.resize_direction = None;
                 win.hovered_tab = None;
-                win.security_popup = None;
                 if !focused {
                     #[cfg(not(target_os = "macos"))]
                     if win.dragging_tab.take().is_some() {
@@ -380,7 +379,10 @@ impl App {
                 release.tag_name, release.html_url
             );
             self.available_release = Some(release);
-            for win in self.windows.values() {
+            for win in self.windows.values_mut() {
+                win.pending_update_tag = self.available_release
+                    .as_ref()
+                    .map(|r| r.tag_name.clone());
                 win.window.request_redraw();
             }
         }

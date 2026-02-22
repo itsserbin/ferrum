@@ -199,7 +199,6 @@ pub(super) struct FerrumWindow {
     pub(super) hovered_tab: Option<usize>,
     #[cfg(not(target_os = "linux"))]
     pub(super) pending_menu_context: Option<MenuContext>,
-    pub(super) security_popup: Option<SecurityPopup>,
     #[cfg(not(target_os = "macos"))]
     pub(super) tab_hover_progress: Vec<f32>,
     #[cfg(not(target_os = "macos"))]
@@ -237,6 +236,8 @@ pub(super) struct FerrumWindow {
     pub(super) settings_tx: std::sync::mpsc::Sender<crate::config::AppConfig>,
     /// Proxy to wake the event loop from PTY reader threads.
     pub(super) event_proxy: winit::event_loop::EventLoopProxy<()>,
+    /// Tag name of the latest available update, or `None` when up to date.
+    pub(super) pending_update_tag: Option<String>,
 }
 
 /// App is now a window manager holding multiple FerrumWindows.

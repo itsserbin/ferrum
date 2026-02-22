@@ -26,7 +26,7 @@ use winit::window::{CursorIcon, ResizeDirection, Window, WindowId};
 
 use crate::core::terminal::Terminal;
 use crate::core::{MouseMode, Position, SecurityGuard, Selection};
-use crate::gui::renderer::{CpuRenderer, Renderer as _, RendererBackend, SecurityPopup};
+use crate::gui::renderer::{CpuRenderer, Renderer as _, RendererBackend};
 use crate::pty;
 use crate::update;
 
@@ -75,7 +75,6 @@ impl FerrumWindow {
             hovered_tab: None,
             #[cfg(not(target_os = "linux"))]
             pending_menu_context: None,
-            security_popup: None,
             #[cfg(not(target_os = "macos"))]
             tab_hover_progress: Vec::new(),
             #[cfg(not(target_os = "macos"))]
@@ -105,6 +104,7 @@ impl FerrumWindow {
             cursor_blink_interval_ms: config.terminal.cursor_blink_interval_ms,
             settings_tx: std::sync::mpsc::channel().0,
             event_proxy: proxy.clone(),
+            pending_update_tag: None,
         }
     }
 
