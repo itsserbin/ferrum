@@ -1,63 +1,6 @@
 # Ferrum
 
-GPU-accelerated terminal emulator written in Rust. Cross-platform: macOS, Windows, Linux.
-
-## Features
-
-- **GPU rendering** — wgpu-based renderer with automatic CPU fallback (softbuffer)
-- **Tabs** — multi-tab interface; native tab bar on macOS, custom on Windows/Linux
-- **Pane splitting** — horizontal/vertical splits, arbitrary nesting, drag-to-resize dividers
-- **Shell integration** — OSC 7 CWD tracking; bash, zsh, fish, PowerShell, cmd.exe
-- **Tab titles** — auto-populated from CWD; renameable via double-click or right-click
-- **Text selection** — character, word, and line modes via click/drag/double/triple-click
-- **Scrollback** — 1000 lines; draggable scrollbar
-- **Tab reordering** — drag-and-drop with animation
-- **Detachable windows** — drag tab out of bar to open in new window (Windows/Linux)
-- **Always-on-top** — pin window toggle
-- **Context menus** — terminal area and tab bar (copy, paste, split, rename, duplicate, close)
-- **Color scheme** — Catppuccin Mocha; xterm-256color, true color (24-bit)
-- **Update checker** — non-blocking background check, 24h cache
-
-## Keyboard Shortcuts
-
-### Tabs
-
-| Shortcut | Action |
-|----------|--------|
-| `Cmd/Ctrl+T` | New tab |
-| `Cmd/Ctrl+W` | Close pane / tab / window |
-| `Cmd/Ctrl+N` | New window |
-| `Cmd/Ctrl+Tab` | Next tab |
-| `Cmd/Ctrl+Shift+Tab` | Previous tab |
-| `Cmd/Ctrl+1`…`9` | Jump to tab 1–9 |
-| `Cmd/Ctrl+Shift+T` | Restore last closed tab |
-
-### Panes
-
-| Shortcut | Action |
-|----------|--------|
-| `Cmd/Ctrl+Shift+R` | Split right |
-| `Cmd/Ctrl+Shift+D` | Split down |
-| `Cmd/Ctrl+Shift+L` | Split left |
-| `Cmd/Ctrl+Shift+U` | Split up |
-| `Cmd/Ctrl+Shift+↑↓←→` | Navigate between panes |
-
-### Clipboard & Selection
-
-| Shortcut | Action |
-|----------|--------|
-| `Cmd/Ctrl+C` | Copy selection |
-| `Cmd/Ctrl+V` | Paste |
-| `Cmd/Ctrl+X` | Cut |
-| `Shift+←/→` | Extend selection by character |
-
-### UI
-
-| Shortcut | Action |
-|----------|--------|
-| `Cmd/Ctrl+,` | Settings |
-| `Cmd/Ctrl+Shift+P` | Toggle always-on-top |
-| `Cmd/Ctrl+↑` / `Cmd/Ctrl+↓` | Scroll to top / bottom |
+GPU-accelerated terminal emulator written in Rust. Inspired by [Ghostty](https://ghostty.org).
 
 ## Install
 
@@ -109,6 +52,55 @@ sudo dpkg -i ferrum_*_amd64.deb
 ```bash
 sudo rpm -i ferrum-*.x86_64.rpm
 ```
+
+## Features
+
+- **GPU rendering** — wgpu-based with automatic CPU fallback; no GPU, no problem
+- **Native macOS tab bar** — each tab is a real NSWindow in a native tab group, not a custom-drawn strip
+- **Pane splitting** — binary tree layout, horizontal/vertical, arbitrary nesting, drag-to-resize dividers
+- **Detachable windows** — drag a tab out of the bar to open it as a standalone window (Windows/Linux)
+- **Catppuccin Mocha** — built-in color scheme; true color (24-bit), xterm-256color
+
+## Keyboard Shortcuts
+
+### Tabs
+
+| Shortcut | Action |
+|----------|--------|
+| `Cmd/Ctrl+T` | New tab |
+| `Cmd/Ctrl+W` | Close pane / tab / window |
+| `Cmd/Ctrl+N` | New window |
+| `Cmd/Ctrl+Tab` | Next tab |
+| `Cmd/Ctrl+Shift+Tab` | Previous tab |
+| `Cmd/Ctrl+1`…`9` | Jump to tab 1–9 |
+| `Cmd/Ctrl+Shift+T` | Restore last closed tab |
+
+### Panes
+
+| Shortcut | Action |
+|----------|--------|
+| `Cmd/Ctrl+Shift+R` | Split right |
+| `Cmd/Ctrl+Shift+D` | Split down |
+| `Cmd/Ctrl+Shift+L` | Split left |
+| `Cmd/Ctrl+Shift+U` | Split up |
+| `Cmd/Ctrl+Shift+↑↓←→` | Navigate between panes |
+
+### Clipboard & Selection
+
+| Shortcut | Action |
+|----------|--------|
+| `Cmd/Ctrl+C` | Copy selection |
+| `Cmd/Ctrl+V` | Paste |
+| `Cmd/Ctrl+X` | Cut |
+| `Shift+←/→` | Extend selection by character |
+
+### UI
+
+| Shortcut | Action |
+|----------|--------|
+| `Cmd/Ctrl+,` | Settings |
+| `Cmd/Ctrl+Shift+P` | Toggle always-on-top |
+| `Cmd/Ctrl+↑` / `Cmd/Ctrl+↓` | Scroll to top / bottom |
 
 ## Build from source
 
