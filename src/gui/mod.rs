@@ -238,8 +238,10 @@ impl App {
     fn new(proxy: winit::event_loop::EventLoopProxy<()>) -> Self {
         let (tx, rx) = mpsc::channel::<PtyEvent>();
         let (update_tx, update_rx) = mpsc::channel::<update::AvailableRelease>();
-        update::spawn_update_checker(update_tx);
         let config = crate::config::load_config();
+        if config.updates.auto_check {
+            update::spawn_update_checker(update_tx);
+        }
         crate::i18n::set_locale(config.language);
         let (settings_tx, settings_rx) = std::sync::mpsc::channel();
         App {
