@@ -13,7 +13,7 @@ cask "ferrum" do
   homepage "https://github.com/itsserbin/ferrum"
 
   app "Ferrum.app"
-  binary "#{appdir}/Ferrum.app/Contents/MacOS/Ferrum"
+  binary "#{appdir}/Ferrum.app/Contents/MacOS/Ferrum", target: "ferrum"
 
   zap trash: [
     "~/Library/Application Support/ferrum",
