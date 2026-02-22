@@ -622,7 +622,8 @@ fn on_command(state: &Win32State, wparam: WPARAM) {
                 ShowWindow(state.manual_install_btn, SW_HIDE);
                 EnableWindow(state.check_now_btn, 0);
             }
-            let hwnd = SETTINGS_HWND.load(Ordering::Acquire);
+            // Cast to usize so the closure is Send (raw pointers are not Send).
+            let hwnd_usize = SETTINGS_HWND.load(Ordering::Acquire) as usize;
             let (tx, rx) = std::sync::mpsc::channel();
             crate::update::spawn_manual_check(tx);
             // Bridge thread: wait for result, store it, post message to settings window.
@@ -632,8 +633,15 @@ fn on_command(state: &Win32State, wparam: WPARAM) {
                     if let Ok(result) = rx.recv() {
                         *WIN_MANUAL_RESULT.lock().unwrap_or_else(|e| e.into_inner()) =
                             Some(result);
-                        if !hwnd.is_null() {
-                            unsafe { PostMessageW(hwnd, WM_APP_MANUAL_CHECK_RESULT, 0, 0) };
+                        if hwnd_usize != 0 {
+                            unsafe {
+                                PostMessageW(
+                                    hwnd_usize as HWND,
+                                    WM_APP_MANUAL_CHECK_RESULT,
+                                    0,
+                                    0,
+                                )
+                            };
                         }
                     }
                 })
