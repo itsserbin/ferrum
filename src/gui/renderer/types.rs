@@ -36,6 +36,7 @@ pub(in crate::gui) fn scaled_px(base: u32, ui_scale: f64) -> u32 {
 }
 
 /// A rounded rectangle in the context-menu overlay.
+#[cfg(feature = "gpu")]
 pub struct RoundedRectCmd {
     pub x: f32,
     pub y: f32,

@@ -7,6 +7,7 @@ use crate::gui::*;
 use crate::gui::renderer::shared::banner_layout::compute_update_banner_layout;
 #[cfg(feature = "gpu")]
 use crate::gui::state::UpdateInstallState;
+#[cfg(feature = "gpu")]
 use super::render_shared::{FrameParams, draw_frame_content};
 
 #[cfg(feature = "gpu")]

@@ -29,12 +29,15 @@ pub(crate) struct ThemePalette {
     // -- Tab bar --
     #[cfg(not(target_os = "macos"))]
     pub bar_bg: Color,
+    #[cfg(any(not(target_os = "macos"), feature = "gpu"))]
     pub active_tab_bg: Color,
     #[cfg(not(target_os = "macos"))]
     pub inactive_tab_hover: Color,
+    #[cfg(any(not(target_os = "macos"), feature = "gpu"))]
     pub tab_text_active: Color,
     #[cfg(not(target_os = "macos"))]
     pub tab_text_inactive: Color,
+    #[cfg(any(not(target_os = "macos"), feature = "gpu"))]
     pub tab_border: Color,
     #[cfg(not(target_os = "macos"))]
     pub close_hover_bg: Color,
@@ -98,12 +101,15 @@ impl ThemePalette {
             pin_active_color: Color::from_pixel(0xB4BEFE),
             #[cfg(not(target_os = "macos"))]
             bar_bg: Color::from_pixel(0x1E2127),
+            #[cfg(any(not(target_os = "macos"), feature = "gpu"))]
             active_tab_bg: Color::from_pixel(0x282C34),
             #[cfg(not(target_os = "macos"))]
             inactive_tab_hover: Color::from_pixel(0x2E333C),
+            #[cfg(any(not(target_os = "macos"), feature = "gpu"))]
             tab_text_active: Color::from_pixel(0xD2DBEB),
             #[cfg(not(target_os = "macos"))]
             tab_text_inactive: Color::from_pixel(0x6C7480),
+            #[cfg(any(not(target_os = "macos"), feature = "gpu"))]
             tab_border: Color::from_pixel(0x2E333C),
             #[cfg(not(target_os = "macos"))]
             close_hover_bg: Color::from_pixel(0x454B59),
@@ -155,12 +161,15 @@ impl ThemePalette {
             pin_active_color: Color::from_pixel(0x4A6FA5),
             #[cfg(not(target_os = "macos"))]
             bar_bg: Color::from_pixel(0xE5DFD9),
+            #[cfg(any(not(target_os = "macos"), feature = "gpu"))]
             active_tab_bg: Color::from_pixel(0xF5F0EB),         // = default_bg
             #[cfg(not(target_os = "macos"))]
             inactive_tab_hover: Color::from_pixel(0xECE7E2),
+            #[cfg(any(not(target_os = "macos"), feature = "gpu"))]
             tab_text_active: Color::from_pixel(0x2E3440),       // = default_fg
             #[cfg(not(target_os = "macos"))]
             tab_text_inactive: Color::from_pixel(0x8A8480),
+            #[cfg(any(not(target_os = "macos"), feature = "gpu"))]
             tab_border: Color::from_pixel(0xDDD7D1),
             #[cfg(not(target_os = "macos"))]
             close_hover_bg: Color::from_pixel(0xDDD7D1),
