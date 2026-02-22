@@ -3,7 +3,7 @@ use crate::config::{
     TerminalConfig, ThemeChoice, UpdatesConfig,
 };
 use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
-use std::sync::{mpsc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 
 use gtk4::prelude::*;
 use gtk4::{
@@ -298,71 +298,43 @@ fn build_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>, initial_tab: us
     }
 
     // Manual update check button and install button.
+    // Arc<Mutex<>> is used for cross-thread communication (glib channel API not available in glib 0.22).
+    let manual_result: Arc<Mutex<Option<crate::update::ManualCheckResult>>> =
+        Arc::new(Mutex::new(None));
+    let manual_found_tag: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+
+    // Check button: spawn check thread; result stored in manual_result, polled by the timer below.
     {
-        use std::rc::Rc;
-        use std::cell::RefCell;
-
-        // Shared: stores the tag name found by the last manual check.
-        let found_tag: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
-
-        // glib channel: check thread → GTK main context.
-        let (gtx, grx) =
-            gtk4::glib::MainContext::channel::<crate::update::ManualCheckResult>(
-                gtk4::glib::Priority::DEFAULT,
-            );
-
-        // Attach receiver: runs on GTK main thread when result arrives.
-        let status_lbl_recv = manual_status_label.clone();
-        let install_recv = manual_install_btn.clone();
-        let check_btn_recv = check_now_btn.clone();
-        let found_tag_recv = Rc::clone(&found_tag);
-        grx.attach(None, move |result| {
-            let t = crate::i18n::t();
-            match result {
-                crate::update::ManualCheckResult::UpToDate => {
-                    status_lbl_recv.set_label(t.update_up_to_date);
-                    status_lbl_recv.set_visible(true);
-                    install_recv.set_visible(false);
-                    *found_tag_recv.borrow_mut() = None;
-                }
-                crate::update::ManualCheckResult::Found(release) => {
-                    let text = t.update_available.replace("{}", &release.tag_name);
-                    status_lbl_recv.set_label(&text);
-                    status_lbl_recv.set_visible(true);
-                    install_recv.set_visible(true);
-                    *found_tag_recv.borrow_mut() = Some(release.tag_name.clone());
-                }
-            }
-            check_btn_recv.set_sensitive(true);
-            gtk4::glib::ControlFlow::Continue
-        });
-
-        // Check button handler: spawns check thread and bridges result to glib channel.
-        let status_lbl_check = manual_status_label.clone();
-        let install_check = manual_install_btn.clone();
+        let status_lbl = manual_status_label.clone();
+        let install_btn = manual_install_btn.clone();
+        let result_arc = Arc::clone(&manual_result);
         check_now_btn.connect_clicked(move |btn| {
             let t = crate::i18n::t();
             btn.set_sensitive(false);
-            status_lbl_check.set_label(t.update_checking);
-            status_lbl_check.set_visible(true);
-            install_check.set_visible(false);
+            status_lbl.set_label(t.update_checking);
+            status_lbl.set_visible(true);
+            install_btn.set_visible(false);
+            // Clear any stale result from a previous check.
+            *result_arc.lock().unwrap() = None;
             let (tx, rx) = std::sync::mpsc::channel();
             crate::update::spawn_manual_check(tx);
-            let gtx2 = gtx.clone();
+            let result_arc2 = Arc::clone(&result_arc);
             std::thread::Builder::new()
                 .name("ferrum-manual-check-bridge".to_string())
                 .spawn(move || {
                     if let Ok(result) = rx.recv() {
-                        let _ = gtx2.send(result);
+                        *result_arc2.lock().unwrap() = Some(result);
                     }
                 })
                 .ok();
         });
+    }
 
-        // Install button: launch installer for the found version.
-        let found_tag_install = Rc::clone(&found_tag);
+    // Install button: read the found tag from manual_found_tag (set by the timer on success).
+    {
+        let found_tag_install = Arc::clone(&manual_found_tag);
         manual_install_btn.connect_clicked(move |_| {
-            if let Some(tag) = found_tag_install.borrow().clone() {
+            if let Some(tag) = found_tag_install.lock().unwrap().clone() {
                 crate::update_installer::spawn_installer(&tag);
             }
         });
@@ -394,9 +366,14 @@ fn build_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>, initial_tab: us
         });
     }
 
-    // Poll CLOSE_REQUESTED and PRESENT_REQUESTED so the main thread can control us.
+    // Poll CLOSE_REQUESTED, PRESENT_REQUESTED, and manual update check results.
     {
         let w = window.clone();
+        let status_lbl_timer = manual_status_label.clone();
+        let install_btn_timer = manual_install_btn.clone();
+        let check_btn_timer = check_now_btn.clone();
+        let result_arc = Arc::clone(&manual_result);
+        let found_tag_arc = Arc::clone(&manual_found_tag);
         gtk4::glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
             if CLOSE_REQUESTED.swap(false, Ordering::Relaxed) {
                 w.close();
@@ -413,6 +390,26 @@ fn build_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>, initial_tab: us
             }
             if PRESENT_REQUESTED.swap(false, Ordering::Relaxed) {
                 w.present();
+            }
+            // Poll for manual update check result (set by background thread).
+            if let Some(result) = result_arc.lock().unwrap().take() {
+                let t = crate::i18n::t();
+                match result {
+                    crate::update::ManualCheckResult::UpToDate => {
+                        status_lbl_timer.set_label(t.update_up_to_date);
+                        status_lbl_timer.set_visible(true);
+                        install_btn_timer.set_visible(false);
+                        *found_tag_arc.lock().unwrap() = None;
+                    }
+                    crate::update::ManualCheckResult::Found(release) => {
+                        let text = t.update_available.replace("{}", &release.tag_name);
+                        status_lbl_timer.set_label(&text);
+                        status_lbl_timer.set_visible(true);
+                        install_btn_timer.set_visible(true);
+                        *found_tag_arc.lock().unwrap() = Some(release.tag_name);
+                    }
+                }
+                check_btn_timer.set_sensitive(true);
             }
             gtk4::glib::ControlFlow::Continue
         });
