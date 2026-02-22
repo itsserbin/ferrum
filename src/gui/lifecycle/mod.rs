@@ -130,9 +130,9 @@ impl ApplicationHandler for App {
             }
             WindowEvent::MouseInput { state, button, .. } => {
                 #[cfg(target_os = "macos")]
-                win.on_mouse_input(state, button);
+                win.on_mouse_input(state, button, self.available_release.as_ref());
                 #[cfg(not(target_os = "macos"))]
-                win.on_mouse_input(state, button, &mut self.next_tab_id, &self.tx, &self.config);
+                win.on_mouse_input(state, button, self.available_release.as_ref(), &mut self.next_tab_id, &self.tx, &self.config);
                 should_redraw = true;
             }
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {

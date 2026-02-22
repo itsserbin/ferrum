@@ -6,6 +6,7 @@ mod i18n;
 mod gui;
 mod pty;
 mod update;
+mod update_installer;
 
 fn main() {
     gui::run();
