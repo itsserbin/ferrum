@@ -66,7 +66,6 @@ static UK: Translations = Translations {
     security_clear_mouse_on_reset_desc: "Вимикати режими відстеження миші при скиданні термінала",
 
     // --- Security popup ---
-    security_popup_title: "Події безпеки",
     security_event_paste_newlines: "Виявлено вставку з новими рядками",
     security_event_title_query_blocked: "Заблоковано запит заголовка OSC/CSI",
     security_event_cursor_rewrite: "Виявлено перезапис курсора",
@@ -81,6 +80,13 @@ static UK: Translations = Translations {
 
     // --- Update ---
     update_available: "Доступне оновлення {}",
+    update_details: "Деталі",
+    update_install: "Встановити",
+    update_installing: "Встановлення…",
+    settings_tab_updates: "Оновлення",
+    update_current_version: "Поточна версія",
+    update_check_now: "Перевірити оновлення",
+    update_auto_check: "Автоперевірка оновлень",
 };
 
 pub fn translations() -> &'static Translations {

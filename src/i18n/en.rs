@@ -66,7 +66,6 @@ static EN: Translations = Translations {
     security_clear_mouse_on_reset_desc: "Disable mouse tracking modes when the terminal resets",
 
     // --- Security popup ---
-    security_popup_title: "Security events",
     security_event_paste_newlines: "Paste with newlines detected",
     security_event_title_query_blocked: "OSC/CSI title query blocked",
     security_event_cursor_rewrite: "Cursor rewrite detected",
@@ -81,6 +80,13 @@ static EN: Translations = Translations {
 
     // --- Update ---
     update_available: "Update {} available",
+    update_details: "Details",
+    update_install: "Install",
+    update_installing: "Installing…",
+    settings_tab_updates: "Updates",
+    update_current_version: "Current version",
+    update_check_now: "Check for Updates",
+    update_auto_check: "Auto-check for updates",
 };
 
 pub fn translations() -> &'static Translations {

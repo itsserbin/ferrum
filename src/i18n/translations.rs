@@ -68,7 +68,6 @@ pub struct Translations {
     pub security_clear_mouse_on_reset_desc: &'static str,
 
     // --- Security popup ---
-    pub security_popup_title: &'static str,
     pub security_event_paste_newlines: &'static str,
     pub security_event_title_query_blocked: &'static str,
     pub security_event_cursor_rewrite: &'static str,
@@ -84,6 +83,20 @@ pub struct Translations {
     // --- Update ---
     /// Format string — use `{}` as placeholder for the version tag.
     pub update_available: &'static str,
+    /// "Details" button label on the update banner.
+    pub update_details: &'static str,
+    /// "Install" button label on the update banner.
+    pub update_install: &'static str,
+    /// "Installing…" label shown while update is in progress.
+    pub update_installing: &'static str,
+    /// Settings tab label for Updates.
+    pub settings_tab_updates: &'static str,
+    /// "Current version" label in Updates settings tab.
+    pub update_current_version: &'static str,
+    /// "Check for Updates" button label in Updates settings tab.
+    pub update_check_now: &'static str,
+    /// "Auto-check for updates" toggle label.
+    pub update_auto_check: &'static str,
 }
 
 impl Translations {
@@ -142,7 +155,6 @@ impl Translations {
             self.security_limit_cursor_jumps_desc,
             self.security_clear_mouse_on_reset_label,
             self.security_clear_mouse_on_reset_desc,
-            self.security_popup_title,
             self.security_event_paste_newlines,
             self.security_event_title_query_blocked,
             self.security_event_cursor_rewrite,
@@ -153,6 +165,13 @@ impl Translations {
             self.macos_unpin_tooltip,
             self.macos_settings,
             self.update_available,
+            self.update_details,
+            self.update_install,
+            self.update_installing,
+            self.settings_tab_updates,
+            self.update_current_version,
+            self.update_check_now,
+            self.update_auto_check,
         ];
         fields.iter().all(|s| !s.is_empty())
     }
