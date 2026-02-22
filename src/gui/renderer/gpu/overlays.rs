@@ -4,7 +4,8 @@ use super::super::shared::overlay_layout;
 #[cfg(not(target_os = "macos"))]
 use super::super::traits::Renderer;
 #[cfg(not(target_os = "macos"))]
-use super::super::types::{DragPosition, RoundedRectCmd};
+use super::super::types::DragPosition;
+use super::super::types::RoundedRectCmd;
 #[cfg(not(target_os = "macos"))]
 use super::super::TabInfo;
 
@@ -124,7 +125,6 @@ impl super::GpuRenderer {
 }
 
 impl super::GpuRenderer {
-    #[cfg(not(target_os = "macos"))]
     pub(super) fn draw_update_banner_impl(
         &mut self,
         layout: &super::super::shared::banner_layout::UpdateBannerLayout,

@@ -186,7 +186,6 @@ impl traits::Renderer for GpuRenderer {
         self.draw_tab_tooltip_impl(target.width, target.height, mouse_pos, title);
     }
 
-    #[cfg(not(target_os = "macos"))]
     fn draw_update_banner(
         &mut self,
         _target: &mut RenderTarget<'_>,

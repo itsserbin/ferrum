@@ -25,23 +25,16 @@ pub(crate) struct ThemePalette {
     pub active_accent: Color,
     #[cfg(not(target_os = "macos"))]
     pub pin_active_color: Color,
-    pub security_accent: Color,
-
-    // -- Overlay / menu --
-    pub menu_bg: Color,
 
     // -- Tab bar --
     #[cfg(not(target_os = "macos"))]
     pub bar_bg: Color,
-    #[cfg(not(target_os = "macos"))]
     pub active_tab_bg: Color,
     #[cfg(not(target_os = "macos"))]
     pub inactive_tab_hover: Color,
-    #[cfg(not(target_os = "macos"))]
     pub tab_text_active: Color,
     #[cfg(not(target_os = "macos"))]
     pub tab_text_inactive: Color,
-    #[cfg(not(target_os = "macos"))]
     pub tab_border: Color,
     #[cfg(not(target_os = "macos"))]
     pub close_hover_bg: Color,
@@ -103,19 +96,14 @@ impl ThemePalette {
             active_accent: Color { r: 180, g: 190, b: 254 },    // #B4BEFE
             #[cfg(not(target_os = "macos"))]
             pin_active_color: Color::from_pixel(0xB4BEFE),
-            security_accent: Color { r: 249, g: 226, b: 175 },  // #F9E2AF
-            menu_bg: Color::from_pixel(0x1E2433),
             #[cfg(not(target_os = "macos"))]
             bar_bg: Color::from_pixel(0x1E2127),
-            #[cfg(not(target_os = "macos"))]
             active_tab_bg: Color::from_pixel(0x282C34),
             #[cfg(not(target_os = "macos"))]
             inactive_tab_hover: Color::from_pixel(0x2E333C),
-            #[cfg(not(target_os = "macos"))]
             tab_text_active: Color::from_pixel(0xD2DBEB),
             #[cfg(not(target_os = "macos"))]
             tab_text_inactive: Color::from_pixel(0x6C7480),
-            #[cfg(not(target_os = "macos"))]
             tab_border: Color::from_pixel(0x2E333C),
             #[cfg(not(target_os = "macos"))]
             close_hover_bg: Color::from_pixel(0x454B59),
@@ -165,19 +153,14 @@ impl ThemePalette {
             active_accent: Color::from_pixel(0x4A6FA5),          // Deep steel blue
             #[cfg(not(target_os = "macos"))]
             pin_active_color: Color::from_pixel(0x4A6FA5),
-            security_accent: Color::from_pixel(0xA6710A),        // Amber
-            menu_bg: Color::from_pixel(0xEBE6E1),
             #[cfg(not(target_os = "macos"))]
             bar_bg: Color::from_pixel(0xE5DFD9),
-            #[cfg(not(target_os = "macos"))]
             active_tab_bg: Color::from_pixel(0xF5F0EB),         // = default_bg
             #[cfg(not(target_os = "macos"))]
             inactive_tab_hover: Color::from_pixel(0xECE7E2),
-            #[cfg(not(target_os = "macos"))]
             tab_text_active: Color::from_pixel(0x2E3440),       // = default_fg
             #[cfg(not(target_os = "macos"))]
             tab_text_inactive: Color::from_pixel(0x8A8480),
-            #[cfg(not(target_os = "macos"))]
             tab_border: Color::from_pixel(0xDDD7D1),
             #[cfg(not(target_os = "macos"))]
             close_hover_bg: Color::from_pixel(0xDDD7D1),
