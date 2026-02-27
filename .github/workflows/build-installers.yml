@@ -134,13 +134,13 @@ jobs:
           zip "../../../ferrum-${{ matrix.target }}.zip" ferrum
 
       - name: Upload DMG
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: ferrum-${{ matrix.target }}.dmg
           path: ferrum-${{ matrix.target }}.dmg
 
       - name: Upload .zip
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: ferrum-${{ matrix.target }}.zip
           path: ferrum-${{ matrix.target }}.zip
@@ -177,7 +177,7 @@ jobs:
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DAppVersion=$env:VERSION installer\windows\ferrum.iss
 
       - name: Upload installer
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: Ferrum-Setup-x64.exe
           path: installer\windows\Output\Ferrum-Setup-x64.exe
@@ -234,19 +234,19 @@ jobs:
           zip ../../ferrum-x86_64-unknown-linux-gnu.zip ferrum
 
       - name: Upload .deb
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: ferrum-deb
           path: target/debian/*.deb
 
       - name: Upload .rpm
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: ferrum-rpm
           path: target/generate-rpm/*.rpm
 
       - name: Upload .zip
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: ferrum-x86_64-unknown-linux-gnu.zip
           path: ferrum-x86_64-unknown-linux-gnu.zip
