@@ -57,7 +57,7 @@ impl FerrumWindow {
             }
             Key::Named(NamedKey::ArrowUp) => {
                 if let Some(leaf) = self.active_leaf_mut() {
-                    leaf.scroll_offset = leaf.terminal.scrollback.len();
+                    leaf.scroll_offset = leaf.terminal.screen.scrollback_len();
                 }
                 Some(true)
             }

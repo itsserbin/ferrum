@@ -1,8 +1,7 @@
 use crate::core::{
-    Cell, Color, GraphemeCell, Grid, PageCoord, PageList, Row, SecurityConfig,
+    Color, GraphemeCell, PageCoord, PageList, SecurityConfig,
     SecurityEventKind, TrackedPin, UnderlineStyle,
 };
-use std::collections::VecDeque;
 use unicode_width::UnicodeWidthChar;
 use vte::{Params, Parser, Perform};
 
@@ -50,14 +49,6 @@ pub struct Terminal {
     alt_saved_cursor: PageCoord,
     alt_screen: Option<PageList>,
 
-    // ── Derived display cache (kept in sync with screen) ─────────────────────
-    /// Viewport grid derived from `screen` for renderer compatibility.
-    /// Kept in sync by `sync_grid_from_screen()` called at strategic points.
-    pub grid: Grid,
-    /// Alt-screen grid (renderer compatibility).
-    pub alt_grid: Option<Grid>,
-    /// Scrollback rows derived from `screen` scrollback.
-    pub scrollback: VecDeque<Row>,
     /// Cursor position (derived from `cursor_pin`).
     pub cursor_row: usize,
     pub cursor_col: usize,
@@ -130,9 +121,6 @@ impl Terminal {
             saved_cursor: PageCoord { abs_row: 0, col: 0 },
             alt_saved_cursor: PageCoord { abs_row: 0, col: 0 },
             alt_screen: None,
-            grid: Grid::new(rows, cols),
-            alt_grid: None,
-            scrollback: VecDeque::new(),
             cursor_row: 0,
             cursor_col: 0,
             current_fg: default_fg,
@@ -198,23 +186,27 @@ impl Terminal {
         self.pending_responses.extend_from_slice(data);
     }
 
-    /// Creates a blank `Cell` (old format) that inherits the current fg/bg.
-    /// Used by handlers and the renderer compatibility layer.
-    pub(crate) fn make_blank_cell(&self) -> Cell {
-        Cell {
-            character: ' ',
-            fg: self.current_fg,
-            bg: self.current_bg,
-            ..Cell::DEFAULT
-        }
-    }
-
     /// Creates a blank `GraphemeCell` that inherits the current fg/bg.
     pub(crate) fn make_blank_grapheme_cell(&self) -> GraphemeCell {
         let mut gc = GraphemeCell::default();
         gc.fg = self.current_fg;
         gc.bg = self.current_bg;
         gc
+    }
+
+    /// Clears the screen and scrollback, resetting cursor to (0,0).
+    ///
+    /// Unlike `full_reset()`, this preserves terminal attributes and mode flags.
+    pub fn clear_screen(&mut self) {
+        let rows = self.screen.viewport_rows();
+        let cols = self.screen.cols();
+        let max_sb = self.max_scrollback;
+        let mut new_screen = PageList::new(rows, cols, max_sb);
+        self.cursor_pin = new_screen.register_pin(PageCoord { abs_row: 0, col: 0 });
+        self.screen = new_screen;
+        self.cursor_row = 0;
+        self.cursor_col = 0;
+        self.reset_scroll_region();
     }
 
     /// Drains all pending PTY response bytes.
@@ -254,44 +246,7 @@ impl Terminal {
     /// Resets the scroll region to span the entire visible grid.
     pub fn reset_scroll_region(&mut self) {
         self.scroll_top = 0;
-        self.scroll_bottom = self.grid.rows.saturating_sub(1);
-    }
-
-    // ── Cell ↔ GraphemeCell conversion helpers ──────────────────────────────
-
-    /// Converts a `Cell` (old format) to a `GraphemeCell` (new page-based format).
-    ///
-    /// Uses `GraphemeCell::from_str` so that multi-byte encoded characters are
-    /// stored as proper grapheme clusters rather than being narrowed to a single
-    /// `char` boundary.
-    pub(crate) fn cell_to_grapheme(cell: &Cell) -> GraphemeCell {
-        let mut buf = [0u8; 4];
-        let encoded = cell.character.encode_utf8(&mut buf);
-        let mut gc = GraphemeCell::from_str(encoded);
-        gc.fg = cell.fg;
-        gc.bg = cell.bg;
-        gc.bold = cell.bold;
-        gc.dim = cell.dim;
-        gc.italic = cell.italic;
-        gc.reverse = cell.reverse;
-        gc.underline_style = cell.underline_style;
-        gc.strikethrough = cell.strikethrough;
-        gc
-    }
-
-    /// Converts a `GraphemeCell` (new format) back to a `Cell` (old format).
-    pub(crate) fn grapheme_to_cell(gc: &GraphemeCell) -> Cell {
-        Cell {
-            character: gc.grapheme().chars().next().unwrap_or(' '),
-            fg: gc.fg,
-            bg: gc.bg,
-            bold: gc.bold,
-            dim: gc.dim,
-            italic: gc.italic,
-            reverse: gc.reverse,
-            underline_style: gc.underline_style,
-            strikethrough: gc.strikethrough,
-        }
+        self.scroll_bottom = self.screen.viewport_rows().saturating_sub(1);
     }
 
     /// Drains security events detected while parsing terminal output.
@@ -401,12 +356,11 @@ impl Terminal {
         }
 
         // Check if to_row is within bounds
-        if to_row >= self.grid.rows {
+        if to_row >= self.screen.viewport_rows() {
             return;
         }
         let row_has_content =
-            // Safe: to_row < grid.rows checked above; iterating within grid.cols
-            (0..self.grid.cols).any(|col| self.grid.get_unchecked(to_row, col).character != ' ');
+            (0..self.screen.cols()).any(|col| self.screen.viewport_get(to_row, col).grapheme() != " ");
         if row_has_content {
             self.emit_security_event(SecurityEventKind::CursorRewrite);
         }
@@ -446,31 +400,10 @@ impl Terminal {
             color
         };
 
-        self.grid.recolor_cells(|cell| {
-            cell.fg = remap(cell.fg);
-            cell.bg = remap(cell.bg);
-        });
-
-        if let Some(ref mut alt) = self.alt_grid {
-            alt.recolor_cells(|cell| {
-                cell.fg = remap(cell.fg);
-                cell.bg = remap(cell.bg);
-            });
-        }
-
-        for row in &mut self.scrollback {
-            for cell in &mut row.cells {
-                cell.fg = remap(cell.fg);
-                cell.bg = remap(cell.bg);
-            }
-        }
-
-        // Also recolor the page-based screen.
-        let remap_gc = |gc: &mut GraphemeCell| {
+        self.screen.viewport_recolor(|gc: &mut GraphemeCell| {
             gc.fg = remap(gc.fg);
             gc.bg = remap(gc.bg);
-        };
-        self.screen.viewport_recolor(remap_gc);
+        });
         self.screen.scrollback_recolor(|gc| {
             gc.fg = remap(gc.fg);
             gc.bg = remap(gc.bg);
@@ -490,13 +423,11 @@ impl Terminal {
     }
 
     pub fn full_reset(&mut self) {
-        let rows = self.grid.rows;
-        let cols = self.grid.cols;
+        let rows = self.screen.viewport_rows();
+        let cols = self.screen.cols();
         let max_scrollback = self.max_scrollback;
 
-        self.alt_grid = None;
         self.alt_screen = None;
-        self.grid = Grid::new(rows, cols);
         self.cursor_row = 0;
         self.cursor_col = 0;
         self.saved_cursor = PageCoord { abs_row: 0, col: 0 };
@@ -504,7 +435,6 @@ impl Terminal {
         self.reset_scroll_region();
         self.saved_scroll_top = 0;
         self.saved_scroll_bottom = rows.saturating_sub(1);
-        self.scrollback.clear();
         self.decckm = false;
         self.cursor_visible = true;
         self.cursor_style = CursorStyle::default();
@@ -572,9 +502,8 @@ impl Perform for Terminal {
             width = 1;
         }
 
-        if self.cursor_col + width > self.grid.cols {
+        if self.cursor_col + width > self.screen.cols() {
             // Mark current row as soft-wrapped before moving to next row
-            self.grid.set_wrapped(self.cursor_row, true);
             self.screen.viewport_set_wrapped(self.cursor_row, true);
             self.cursor_col = 0;
             self.cursor_row += 1;
@@ -584,37 +513,21 @@ impl Perform for Terminal {
             }
         }
 
-        let cell = Cell {
-            character: c,
-            fg: self.current_fg,
-            bg: self.current_bg,
-            bold: self.current_bold,
-            dim: self.current_dim,
-            italic: self.current_italic,
-            reverse: self.current_reverse,
-            underline_style: self.current_underline_style,
-            strikethrough: self.current_strikethrough,
-        };
-        let gc = Self::cell_to_grapheme(&cell);
+        let mut gc = GraphemeCell::from_char(c);
+        gc.fg = self.current_fg;
+        gc.bg = self.current_bg;
+        gc.bold = self.current_bold;
+        gc.dim = self.current_dim;
+        gc.italic = self.current_italic;
+        gc.reverse = self.current_reverse;
+        gc.underline_style = self.current_underline_style;
+        gc.strikethrough = self.current_strikethrough;
         self.screen.viewport_set(self.cursor_row, self.cursor_col, gc);
-        self.grid.set(self.cursor_row, self.cursor_col, cell);
 
         // Reserve the trailing cell for wide glyphs.
-        if width == 2 && self.cursor_col + 1 < self.grid.cols {
-            let spacer_cell = Cell {
-                character: ' ',
-                fg: self.current_fg,
-                bg: self.current_bg,
-                bold: self.current_bold,
-                dim: self.current_dim,
-                italic: self.current_italic,
-                reverse: self.current_reverse,
-                underline_style: self.current_underline_style,
-                strikethrough: self.current_strikethrough,
-            };
+        if width == 2 && self.cursor_col + 1 < self.screen.cols() {
             let spacer_gc = GraphemeCell::spacer();
             self.screen.viewport_set(self.cursor_row, self.cursor_col + 1, spacer_gc);
-            self.grid.set(self.cursor_row, self.cursor_col + 1, spacer_cell);
         }
 
         // Update cursor pin position.
@@ -629,7 +542,6 @@ impl Perform for Terminal {
             10..=12 => {
                 // LF/VT/FF: move to next row, keep current column.
                 // Mark current row as NOT wrapped (hard line break).
-                self.grid.set_wrapped(self.cursor_row, false);
                 self.screen.viewport_set_wrapped(self.cursor_row, false);
                 self.cursor_row += 1;
                 if self.cursor_row > self.scroll_bottom {
@@ -653,8 +565,8 @@ impl Perform for Terminal {
             9 => {
                 const DEFAULT_TAB_WIDTH: usize = 8;
                 self.cursor_col = (self.cursor_col + DEFAULT_TAB_WIDTH) & !(DEFAULT_TAB_WIDTH - 1);
-                if self.cursor_col >= self.grid.cols {
-                    self.cursor_col = self.grid.cols - 1;
+                if self.cursor_col >= self.screen.cols() {
+                    self.cursor_col = self.screen.cols() - 1;
                 }
                 self.screen.set_pin_col(&self.cursor_pin, self.cursor_col);
             }
@@ -731,8 +643,8 @@ impl Perform for Terminal {
                 let from_row = self.cursor_row;
                 let vstart = self.screen.viewport_start_abs();
                 self.cursor_row =
-                    self.saved_cursor.abs_row.saturating_sub(vstart).min(self.grid.rows.saturating_sub(1));
-                self.cursor_col = self.saved_cursor.col.min(self.grid.cols.saturating_sub(1));
+                    self.saved_cursor.abs_row.saturating_sub(vstart).min(self.screen.viewport_rows().saturating_sub(1));
+                self.cursor_col = self.saved_cursor.col.min(self.screen.cols().saturating_sub(1));
                 self.screen.set_pin_abs_row(&self.cursor_pin, self.screen.viewport_start_abs() + self.cursor_row);
                 self.screen.set_pin_col(&self.cursor_pin, self.cursor_col);
                 self.maybe_record_cursor_rewrite(from_row, self.cursor_row);

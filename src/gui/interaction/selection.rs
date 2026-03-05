@@ -16,30 +16,33 @@ impl FerrumWindow {
 
     fn word_bounds_at(&self, row: usize, col: usize) -> Option<(Position, Position)> {
         let leaf = self.active_leaf_ref()?;
-        let grid = &leaf.terminal.grid;
-        if row >= grid.rows || col >= grid.cols {
+        let vp_rows = leaf.terminal.screen.viewport_rows();
+        let vp_cols = leaf.terminal.screen.cols();
+        if row >= vp_rows || col >= vp_cols {
             return None;
         }
 
-        // Safe: bounds checked above
-        let ch = grid.get_unchecked(row, col).character;
+        let ch = leaf.terminal.screen.viewport_get(row, col).grapheme().chars().next().unwrap_or(' ');
         if !Self::is_word_char(ch) {
             let pos = Position { row, col };
             return Some((pos, pos));
         }
 
         let mut start_col = col;
-        // Safe: start_col - 1 >= 0, and row is in bounds
-        while start_col > 0 && Self::is_word_char(grid.get_unchecked(row, start_col - 1).character)
-        {
+        while start_col > 0 {
+            let prev_ch = leaf.terminal.screen.viewport_get(row, start_col - 1).grapheme().chars().next().unwrap_or(' ');
+            if !Self::is_word_char(prev_ch) {
+                break;
+            }
             start_col -= 1;
         }
 
         let mut end_col = col;
-        // Safe: end_col + 1 < grid.cols, and row is in bounds
-        while end_col + 1 < grid.cols
-            && Self::is_word_char(grid.get_unchecked(row, end_col + 1).character)
-        {
+        while end_col + 1 < vp_cols {
+            let next_ch = leaf.terminal.screen.viewport_get(row, end_col + 1).grapheme().chars().next().unwrap_or(' ');
+            if !Self::is_word_char(next_ch) {
+                break;
+            }
             end_col += 1;
         }
 
@@ -54,15 +57,16 @@ impl FerrumWindow {
 
     fn line_bounds_at(&self, row: usize) -> Option<(Position, Position)> {
         let leaf = self.active_leaf_ref()?;
-        let grid = &leaf.terminal.grid;
-        if row >= grid.rows || grid.cols == 0 {
+        let vp_rows = leaf.terminal.screen.viewport_rows();
+        let vp_cols = leaf.terminal.screen.cols();
+        if row >= vp_rows || vp_cols == 0 {
             return None;
         }
         Some((
             Position { row, col: 0 },
             Position {
                 row,
-                col: grid.cols - 1,
+                col: vp_cols - 1,
             },
         ))
     }
@@ -71,8 +75,8 @@ impl FerrumWindow {
         match self.active_leaf_ref() {
             Some(leaf) => leaf
                 .terminal
-                .scrollback
-                .len()
+                .screen
+                .scrollback_len()
                 .saturating_sub(leaf.scroll_offset),
             None => 0,
         }
@@ -120,8 +124,8 @@ impl FerrumWindow {
     pub(in crate::gui) fn update_drag_selection(&mut self, row: usize, col: usize) {
         let (max_row, max_col, existing_selection) = match self.active_leaf_ref() {
             Some(leaf) => (
-                leaf.terminal.grid.rows.saturating_sub(1),
-                leaf.terminal.grid.cols.saturating_sub(1),
+                leaf.terminal.screen.viewport_rows().saturating_sub(1),
+                leaf.terminal.screen.cols().saturating_sub(1),
                 leaf.selection,
             ),
             None => return,

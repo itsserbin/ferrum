@@ -1,6 +1,14 @@
-use crate::core::{Color, UnderlineStyle};
+use crate::core::Color;
 use unicode_width::UnicodeWidthChar;
-use unicode_width::UnicodeWidthStr;
+
+/// Style of underline decoration on a terminal cell.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum UnderlineStyle {
+    #[default]
+    None,
+    Single,
+    Double,
+}
 
 /// Storage for a grapheme cluster — inline (≤8 UTF-8 bytes) or heap (rare ZWJ sequences).
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -78,18 +86,6 @@ impl GraphemeCell {
         }
     }
 
-    /// Creates a `GraphemeCell` from a grapheme cluster string.
-    ///
-    /// Width is computed via `UnicodeWidthStr`, capped at 2.
-    pub fn from_str(s: &str) -> Self {
-        let width = UnicodeWidthStr::width(s).min(2) as u8;
-        GraphemeCell {
-            grapheme: GraphemeStr::from_str(s),
-            width,
-            ..Self::default()
-        }
-    }
-
     /// Creates a spacer cell (width 0) used as the right half of a wide character.
     pub fn spacer() -> Self {
         GraphemeCell {
@@ -158,14 +154,6 @@ mod tests {
         assert!(cell.is_default());
         let styled = GraphemeCell { bold: true, ..GraphemeCell::default() };
         assert!(!styled.is_default());
-    }
-
-    #[test]
-    fn grapheme_cluster_stores_correctly() {
-        let family = "👨‍👩‍👧";
-        let cell = GraphemeCell::from_str(family);
-        assert_eq!(cell.grapheme(), family);
-        assert_eq!(cell.width, 2);
     }
 
     #[test]

@@ -144,8 +144,8 @@ mod tests {
         assert_eq!(term.cursor_col, saved_col);
 
         // Original grid restored: "Hello" should still be there
-        assert_eq!(term.grid.get_unchecked(0, 0).character, 'H');
-        assert_eq!(term.grid.get_unchecked(0, 4).character, 'o');
+        assert_eq!(term.screen.viewport_get(0, 0).grapheme().chars().next().unwrap_or(' '), 'H');
+        assert_eq!(term.screen.viewport_get(0, 4).grapheme().chars().next().unwrap_or(' '), 'o');
     }
 
     #[test]

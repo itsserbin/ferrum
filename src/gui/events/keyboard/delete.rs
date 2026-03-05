@@ -38,7 +38,7 @@ impl FerrumWindow {
                 return false;
             };
             let (start, end) = selection.normalized();
-            let cursor_abs_row = leaf.terminal.scrollback.len() + leaf.terminal.cursor_row;
+            let cursor_abs_row = leaf.terminal.screen.scrollback_len() + leaf.terminal.cursor_row;
             if start.abs_row != end.abs_row || start.abs_row != cursor_abs_row {
                 return false;
             }
@@ -153,7 +153,7 @@ impl FerrumWindow {
                 return false;
             }
 
-            let grid_cols = leaf.terminal.grid.cols;
+            let grid_cols = leaf.terminal.screen.cols();
             if grid_cols == 0 {
                 return false;
             }

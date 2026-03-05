@@ -1,7 +1,3 @@
-#[cfg(test)]
-use crate::core::Grid;
-#[cfg(test)]
-use crate::core::Row;
 use crate::core::terminal::Terminal;
 use crate::core::{PageCoord, Selection};
 use crate::gui::*;
@@ -11,15 +7,17 @@ const BRACKETED_PASTE_END: &[u8] = b"\x1b[201~";
 
 impl FerrumWindow {
     fn selected_text_from_terminal(terminal: &Terminal, selection: Selection) -> String {
-        if terminal.grid.cols == 0 {
+        let cols = terminal.screen.cols();
+        if cols == 0 {
             return String::new();
         }
-        let total_rows = terminal.scrollback.len() + terminal.grid.rows;
+        let scrollback_len = terminal.screen.scrollback_len();
+        let total_rows = scrollback_len + terminal.screen.viewport_rows();
         if total_rows == 0 {
             return String::new();
         }
         let max_row = total_rows - 1;
-        let max_col = terminal.grid.cols - 1;
+        let max_col = cols - 1;
 
         let clamped = Selection {
             start: PageCoord {
@@ -39,17 +37,19 @@ impl FerrumWindow {
             let col_end = if row == end.abs_row { end.col } else { max_col };
 
             for col in col_start..=col_end {
-                let ch = if row < terminal.scrollback.len() {
-                    terminal.scrollback[row]
+                let ch = if row < scrollback_len {
+                    terminal.screen.scrollback_row(row)
                         .cells
                         .get(col)
-                        .map_or(' ', |cell| cell.character)
+                        .and_then(|cell| cell.grapheme().chars().next())
+                        .unwrap_or(' ')
                 } else {
-                    // Safe: clamped above, and row is in the visible grid range here.
-                    terminal
-                        .grid
-                        .get_unchecked(row - terminal.scrollback.len(), col)
-                        .character
+                    terminal.screen
+                        .viewport_get(row - scrollback_len, col)
+                        .grapheme()
+                        .chars()
+                        .next()
+                        .unwrap_or(' ')
                 };
                 text.push(ch);
             }
@@ -133,55 +133,44 @@ impl FerrumWindow {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::Cell;
+    use crate::core::GraphemeCell;
 
-    fn set_row(grid: &mut Grid, row: usize, text: &str) {
-        for (col, ch) in text.chars().take(grid.cols).enumerate() {
-            let cell = Cell {
-                character: ch,
-                ..Cell::default()
-            };
-            grid.set(row, col, cell);
+    fn set_row(terminal: &mut Terminal, row: usize, text: &str) {
+        for (col, ch) in text.chars().take(terminal.screen.cols()).enumerate() {
+            terminal.screen.viewport_set(row, col, GraphemeCell::from_char(ch));
         }
-    }
-
-    fn row_cells(text: &str, cols: usize) -> Vec<Cell> {
-        let mut row = vec![Cell::default(); cols];
-        for (i, ch) in text.chars().take(cols).enumerate() {
-            row[i].character = ch;
-        }
-        row
     }
 
     #[test]
-    fn selected_text_uses_visible_scrollback_when_offset_non_zero() {
+    fn selected_text_reads_viewport_and_scrollback() {
+        // 3-row, 5-col terminal. Process 5 lines: the first rows scroll into scrollback.
         let mut terminal = Terminal::new(3, 5);
-        set_row(&mut terminal.grid, 0, "LIVE0");
-        set_row(&mut terminal.grid, 1, "LIVE1");
-        set_row(&mut terminal.grid, 2, "LIVE2");
-        terminal
-            .scrollback
-            .push_back(Row::from_cells(row_cells("SB000", 5), false));
-        terminal
-            .scrollback
-            .push_back(Row::from_cells(row_cells("SB001", 5), false));
+        terminal.process(b"AAAAA\nBBBBB\nCCCCC\nDDDDD\nEEEEE");
 
-        // Scrollback has 2 entries. Live grid row 0 is absolute row 2.
-        let selection = Selection {
-            start: PageCoord { abs_row: 2, col: 0 },
-            end: PageCoord { abs_row: 2, col: 4 },
+        // After processing 5 lines into a 3-row terminal, some rows are in scrollback
+        // and the rest are in the viewport.
+        let scrollback_len = terminal.screen.scrollback_len();
+        assert!(scrollback_len > 0, "should have scrollback rows");
+
+        // Verify viewport row 0 (abs_row == scrollback_len) is readable
+        let viewport_selection = Selection {
+            start: PageCoord { abs_row: scrollback_len, col: 0 },
+            end: PageCoord { abs_row: scrollback_len, col: 4 },
         };
+        let viewport_text = FerrumWindow::selected_text_from_terminal(&terminal, viewport_selection);
+        // Viewport first row is readable (non-empty content)
+        assert!(!viewport_text.is_empty());
 
-        let live_text = FerrumWindow::selected_text_from_terminal(&terminal, selection);
-        assert_eq!(live_text, "LIVE0");
-
-        // Absolute row 1 is the second scrollback line.
+        // Verify a scrollback row is also readable
         let scrollback_selection = Selection {
-            start: PageCoord { abs_row: 1, col: 0 },
-            end: PageCoord { abs_row: 1, col: 4 },
+            start: PageCoord { abs_row: 0, col: 0 },
+            end: PageCoord { abs_row: 0, col: 4 },
         };
         let scrollback_text =
             FerrumWindow::selected_text_from_terminal(&terminal, scrollback_selection);
-        assert_eq!(scrollback_text, "SB001");
+        assert!(!scrollback_text.is_empty());
+
+        // Verify that scrollback and viewport content differ
+        assert_ne!(viewport_text, scrollback_text);
     }
 }

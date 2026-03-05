@@ -1,7 +1,5 @@
-mod cell;
 mod color;
 mod grapheme_cell;
-mod grid;
 mod page;
 mod page_list;
 mod position;
@@ -11,10 +9,8 @@ mod tracked_pin;
 
 pub mod terminal;
 
-pub use cell::{Cell, UnderlineStyle};
 pub use color::Color;
-pub use grapheme_cell::GraphemeCell;
-pub use grid::{Grid, Row};
+pub use grapheme_cell::{GraphemeCell, UnderlineStyle};
 pub use page::{Page, PageRow, PAGE_SIZE};
 pub use page_list::PageList;
 pub use position::Position;

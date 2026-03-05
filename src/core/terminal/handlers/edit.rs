@@ -10,14 +10,14 @@ pub(in super::super) fn handle_inline_edit_csi(
         'P' => {
             // DCH: delete N chars and shift remainder left.
             let n = term.param(params, 1).max(1) as usize;
-            let blank = term.make_blank_cell();
-            for col in term.cursor_col..term.grid.cols {
-                if col + n < term.grid.cols {
-                    // Safe: col + n < grid.cols, and cursor_row is in bounds
-                    let cell = term.grid.get_unchecked(term.cursor_row, col + n).clone();
-                    term.grid.set(term.cursor_row, col, cell);
+            let blank = term.make_blank_grapheme_cell();
+            let cols = term.screen.cols();
+            for col in term.cursor_col..cols {
+                if col + n < cols {
+                    let cell = term.screen.viewport_get(term.cursor_row, col + n).clone();
+                    term.screen.viewport_set(term.cursor_row, col, cell);
                 } else {
-                    term.grid.set(term.cursor_row, col, blank.clone());
+                    term.screen.viewport_set(term.cursor_row, col, blank.clone());
                 }
             }
             true
@@ -25,14 +25,14 @@ pub(in super::super) fn handle_inline_edit_csi(
         '@' => {
             // ICH: insert N blank cells and shift remainder right.
             let n = term.param(params, 1).max(1) as usize;
-            let blank = term.make_blank_cell();
-            for col in (term.cursor_col..term.grid.cols).rev() {
+            let blank = term.make_blank_grapheme_cell();
+            let cols = term.screen.cols();
+            for col in (term.cursor_col..cols).rev() {
                 if col >= term.cursor_col + n {
-                    // Safe: col - n >= cursor_col >= 0, and col < grid.cols
-                    let cell = term.grid.get_unchecked(term.cursor_row, col - n).clone();
-                    term.grid.set(term.cursor_row, col, cell);
+                    let cell = term.screen.viewport_get(term.cursor_row, col - n).clone();
+                    term.screen.viewport_set(term.cursor_row, col, cell);
                 } else {
-                    term.grid.set(term.cursor_row, col, blank.clone());
+                    term.screen.viewport_set(term.cursor_row, col, blank.clone());
                 }
             }
             true
@@ -40,9 +40,10 @@ pub(in super::super) fn handle_inline_edit_csi(
         'X' => {
             // ECH: clear N cells without shifting.
             let n = term.param(params, 1).max(1) as usize;
-            let blank = term.make_blank_cell();
-            for col in term.cursor_col..(term.cursor_col + n).min(term.grid.cols) {
-                term.grid.set(term.cursor_row, col, blank.clone());
+            let blank = term.make_blank_grapheme_cell();
+            let cols = term.screen.cols();
+            for col in term.cursor_col..(term.cursor_col + n).min(cols) {
+                term.screen.viewport_set(term.cursor_row, col, blank.clone());
             }
             true
         }
@@ -52,28 +53,20 @@ pub(in super::super) fn handle_inline_edit_csi(
 
 #[cfg(test)]
 mod tests {
-    use crate::core::Cell;
+    use crate::core::GraphemeCell;
     use crate::core::terminal::Terminal;
 
     /// Helper: write a string into row 0 starting at col 0.
     fn write_row(term: &mut Terminal, text: &str) {
         for (i, ch) in text.chars().enumerate() {
-            term.grid.set(
-                0,
-                i,
-                Cell {
-                    character: ch,
-                    ..Cell::default()
-                },
-            );
+            term.screen.viewport_set(0, i, GraphemeCell::from_char(ch));
         }
     }
 
     /// Helper: read row 0 as a String (all cols).
     fn read_row(term: &Terminal) -> String {
-        (0..term.grid.cols)
-            // Safe: iterating within grid bounds
-            .map(|c| term.grid.get_unchecked(0, c).character)
+        (0..term.screen.cols())
+            .map(|c| term.screen.viewport_get(0, c).grapheme().chars().next().unwrap_or(' '))
             .collect()
     }
 
@@ -143,7 +136,7 @@ mod tests {
         let green = Color { r: 0, g: 255, b: 0 };
         term.cursor_col = 1;
         term.process(b"\x1b[48;2;0;255;0m\x1b[2X");
-        assert_eq!(term.grid.get_unchecked(0, 1).bg, green);
-        assert_eq!(term.grid.get_unchecked(0, 2).bg, green);
+        assert_eq!(term.screen.viewport_get(0, 1).bg, green);
+        assert_eq!(term.screen.viewport_get(0, 2).bg, green);
     }
 }

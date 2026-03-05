@@ -43,11 +43,14 @@ impl FerrumWindow {
             }
 
             // Horizontal delta is only reliable on the same visible row.
-            if target_row == cur_row && target_row < leaf.terminal.grid.rows {
-                let last_content = (0..leaf.terminal.grid.cols)
+            let vp_rows = leaf.terminal.screen.viewport_rows();
+            let vp_cols = leaf.terminal.screen.cols();
+            if target_row == cur_row && target_row < vp_rows {
+                let last_content = (0..vp_cols)
                     .rev()
-                    // Safe: c < grid.cols and target_row < grid.rows checked above
-                    .find(|&c| leaf.terminal.grid.get_unchecked(target_row, c).character != ' ');
+                    .find(|&c| {
+                        leaf.terminal.screen.viewport_get(target_row, c).grapheme() != " "
+                    });
                 if let Some(last_col) = last_content {
                     let safe_col = target_col.min(last_col + 1);
                     if safe_col < cur_col {
@@ -71,13 +74,14 @@ impl FerrumWindow {
             // Find the last non-space column on this row to avoid sending arrows
             // past the actual content (cmd.exe interprets RIGHT on empty input
             // as "copy from previous command").
-            if cur_row >= leaf.terminal.grid.rows {
+            let vp_rows = leaf.terminal.screen.viewport_rows();
+            let vp_cols = leaf.terminal.screen.cols();
+            if cur_row >= vp_rows {
                 return;
             }
-            let last_content = (0..leaf.terminal.grid.cols)
+            let last_content = (0..vp_cols)
                 .rev()
-                // Safe: c < grid.cols and cur_row < grid.rows checked above
-                .find(|&c| leaf.terminal.grid.get_unchecked(cur_row, c).character != ' ');
+                .find(|&c| leaf.terminal.screen.viewport_get(cur_row, c).grapheme() != " ");
 
             // Only allow movement within content bounds
             let max_col = last_content.map(|c| c + 1).unwrap_or(0);

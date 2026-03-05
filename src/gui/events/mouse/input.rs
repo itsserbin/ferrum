@@ -350,13 +350,13 @@ impl FerrumWindow {
             Some(l) => l,
             None => return false,
         };
-        let scrollback_len = leaf.terminal.scrollback.len();
+        let scrollback_len = leaf.terminal.screen.scrollback_len();
         if scrollback_len == 0 {
             return false;
         }
 
         let buf_height = size.height as usize;
-        let grid_rows = leaf.terminal.grid.rows;
+        let grid_rows = leaf.terminal.screen.viewport_rows();
         let scroll_offset = leaf.scroll_offset;
         let tab_bar_height = self.backend.tab_bar_height_px() as f64;
         let window_padding = self.backend.window_padding_px() as f64;
@@ -401,7 +401,7 @@ impl FerrumWindow {
                     (max_offset as f64 - click_ratio * max_offset as f64).round() as isize;
                 let clamped = new_offset.max(0) as usize;
                 if let Some(leaf) = self.active_leaf_mut() {
-                    leaf.scroll_offset = clamped.min(leaf.terminal.scrollback.len());
+                    leaf.scroll_offset = clamped.min(leaf.terminal.screen.scrollback_len());
                     leaf.scrollbar.last_activity = std::time::Instant::now();
                 }
             }

@@ -187,8 +187,8 @@ impl FerrumWindow {
             let Some(leaf) = tab.pane_tree.find_leaf(focused_pane) else {
                 return;
             };
-            let term_rows = leaf.terminal.grid.rows;
-            let term_cols = leaf.terminal.grid.cols;
+            let term_rows = leaf.terminal.screen.viewport_rows();
+            let term_cols = leaf.terminal.screen.cols();
             let cwd = leaf.cwd();
             let (r, c) = match direction {
                 SplitDirection::Horizontal => (term_rows, (term_cols / 2).max(1)),
@@ -334,7 +334,7 @@ impl FerrumWindow {
                     let cols = (content.width / cw).max(1) as usize;
                     let rows = (content.height / ch).max(1) as usize;
                     leaf.terminal.resize(rows, cols);
-                    leaf.scroll_offset = leaf.scroll_offset.min(leaf.terminal.scrollback.len());
+                    leaf.scroll_offset = leaf.scroll_offset.min(leaf.terminal.screen.scrollback_len());
                 }
             }
         }
@@ -345,8 +345,8 @@ impl FerrumWindow {
     pub(in crate::gui) fn send_sigwinch_to_all_panes(&mut self) {
         for tab in &mut self.tabs {
             tab.pane_tree.for_each_leaf_mut(&mut |leaf| {
-                let rows = leaf.terminal.grid.rows as u16;
-                let cols = leaf.terminal.grid.cols as u16;
+                let rows = leaf.terminal.screen.viewport_rows() as u16;
+                let cols = leaf.terminal.screen.cols() as u16;
                 if let Some(ref session) = leaf.session
                     && let Err(err) = session.resize(rows, cols)
                 {

@@ -1,7 +1,5 @@
 //! Grid operations: scrolling, display construction, and alt-screen query.
 
-use crate::core::Row;
-
 impl super::Terminal {
     /// Returns whether the terminal is in the alternate screen.
     pub fn is_alt_screen(&self) -> bool {
@@ -11,7 +9,6 @@ impl super::Terminal {
     pub(super) fn scroll_up_region(&mut self, top: usize, bottom: usize) {
         let to_scrollback = top == 0 && self.alt_screen.is_none();
 
-        // ── screen (PageList) ────────────────────────────────────────────────
         self.screen.scroll_up_region(top, bottom, to_scrollback);
         // Apply current blank cell colours to the newly cleared bottom row.
         let blank_gc = self.make_blank_grapheme_cell();
@@ -20,29 +17,9 @@ impl super::Terminal {
             self.screen.viewport_set(bottom, col, blank_gc.clone());
         }
         self.screen.viewport_set_wrapped(bottom, false);
-
-        // ── grid (display cache) ─────────────────────────────────────────────
-        if top == 0 && self.alt_grid.is_none() {
-            self.scrollback.push_back(Row::from_cells(
-                self.grid.row_slice(0).to_vec(),
-                self.grid.is_wrapped(0),
-            ));
-            if self.scrollback.len() > self.max_scrollback {
-                self.scrollback.pop_front();
-            }
-        }
-        for row in (top + 1)..=bottom {
-            self.grid.copy_row_within(row, row - 1);
-        }
-        let blank = self.make_blank_cell();
-        for col in 0..self.grid.cols {
-            self.grid.set(bottom, col, blank.clone());
-        }
-        self.grid.set_wrapped(bottom, false);
     }
 
     pub(super) fn scroll_down_region(&mut self, top: usize, bottom: usize) {
-        // ── screen (PageList) ────────────────────────────────────────────────
         self.screen.scroll_down_region(top, bottom);
         let blank_gc = self.make_blank_grapheme_cell();
         let cols = self.screen.cols();
@@ -50,16 +27,6 @@ impl super::Terminal {
             self.screen.viewport_set(top, col, blank_gc.clone());
         }
         self.screen.viewport_set_wrapped(top, false);
-
-        // ── grid (display cache) ─────────────────────────────────────────────
-        for row in (top..bottom).rev() {
-            self.grid.copy_row_within(row, row + 1);
-        }
-        let blank = self.make_blank_cell();
-        for col in 0..self.grid.cols {
-            self.grid.set(top, col, blank.clone());
-        }
-        self.grid.set_wrapped(top, false);
     }
 }
 
@@ -74,10 +41,10 @@ mod tests {
 
         term.resize(6, 10);
 
-        assert_eq!(term.grid.get(0, 0).unwrap().character, 'T');
-        assert_eq!(term.grid.get(0, 1).unwrap().character, 'e');
-        assert_eq!(term.grid.get(0, 2).unwrap().character, 's');
-        assert_eq!(term.grid.get(0, 3).unwrap().character, 't');
+        assert_eq!(term.screen.viewport_get(0, 0).grapheme(), "T");
+        assert_eq!(term.screen.viewport_get(0, 1).grapheme(), "e");
+        assert_eq!(term.screen.viewport_get(0, 2).grapheme(), "s");
+        assert_eq!(term.screen.viewport_get(0, 3).grapheme(), "t");
     }
 
     #[test]
@@ -87,8 +54,8 @@ mod tests {
 
         term.resize(6, 20);
 
-        assert_eq!(term.grid.rows, 6);
-        assert_eq!(term.grid.cols, 20);
+        assert_eq!(term.screen.viewport_rows(), 6);
+        assert_eq!(term.screen.cols(), 20);
     }
 
     #[test]
@@ -100,16 +67,16 @@ mod tests {
         term.resize(5, 10);
 
         assert!(
-            term.cursor_row < term.grid.rows,
-            "cursor_row {} should be < grid.rows {}",
+            term.cursor_row < term.screen.viewport_rows(),
+            "cursor_row {} should be < viewport_rows {}",
             term.cursor_row,
-            term.grid.rows
+            term.screen.viewport_rows()
         );
         assert!(
-            term.cursor_col < term.grid.cols,
-            "cursor_col {} should be < grid.cols {}",
+            term.cursor_col < term.screen.cols(),
+            "cursor_col {} should be < cols {}",
             term.cursor_col,
-            term.grid.cols
+            term.screen.cols()
         );
     }
 
@@ -121,10 +88,10 @@ mod tests {
         term.process(b"\x1b[?1049h");
         term.process(b"Alt content");
 
-        let scrollback_before = term.scrollback.len();
+        let scrollback_before = term.screen.scrollback_len();
 
         term.resize(4, 15);
 
-        assert_eq!(term.scrollback.len(), scrollback_before);
+        assert_eq!(term.screen.scrollback_len(), scrollback_before);
     }
 }

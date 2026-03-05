@@ -39,9 +39,9 @@ impl FerrumWindow {
         let local_y = (self.mouse_pos.1 as u32).saturating_sub(content.y);
         let col = ((local_x + self.backend.cell_width() / 2) as usize
             / self.backend.cell_width() as usize)
-            .min(leaf.terminal.grid.cols.saturating_sub(1));
+            .min(leaf.terminal.screen.cols().saturating_sub(1));
         let row = (local_y as usize / self.backend.cell_height() as usize)
-            .min(leaf.terminal.grid.rows.saturating_sub(1));
+            .min(leaf.terminal.screen.viewport_rows().saturating_sub(1));
         Some((row, col))
     }
 
@@ -115,7 +115,7 @@ impl FerrumWindow {
             let lines = raw_lines;
             if lines > 0 {
                 leaf.scroll_offset =
-                    (leaf.scroll_offset + lines as usize).min(leaf.terminal.scrollback.len());
+                    (leaf.scroll_offset + lines as usize).min(leaf.terminal.screen.scrollback_len());
             } else if lines < 0 {
                 leaf.scroll_offset = leaf.scroll_offset.saturating_sub((-lines) as usize);
             }

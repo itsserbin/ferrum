@@ -13,8 +13,8 @@ pub(in super::super) fn handle_cursor_csi(
             let col = iter.next().and_then(|p| p.first().copied()).unwrap_or(1);
 
             // Accept ConPTY's cursor position as authoritative.
-            term.cursor_row = (row as usize).saturating_sub(1).min(term.grid.rows - 1);
-            term.cursor_col = (col as usize).saturating_sub(1).min(term.grid.cols - 1);
+            term.cursor_row = (row as usize).saturating_sub(1).min(term.screen.viewport_rows() - 1);
+            term.cursor_col = (col as usize).saturating_sub(1).min(term.screen.cols() - 1);
             true
         }
         'A' => {
@@ -24,12 +24,12 @@ pub(in super::super) fn handle_cursor_csi(
         }
         'B' => {
             let n = term.param(params, 1).max(1) as usize;
-            term.cursor_row = (term.cursor_row + n).min(term.grid.rows - 1);
+            term.cursor_row = (term.cursor_row + n).min(term.screen.viewport_rows() - 1);
             true
         }
         'C' => {
             let n = term.param(params, 1).max(1) as usize;
-            term.cursor_col = (term.cursor_col + n).min(term.grid.cols - 1);
+            term.cursor_col = (term.cursor_col + n).min(term.screen.cols() - 1);
             true
         }
         'D' => {
@@ -39,12 +39,12 @@ pub(in super::super) fn handle_cursor_csi(
         }
         'G' => {
             let col = term.param(params, 1) as usize;
-            term.cursor_col = col.saturating_sub(1).min(term.grid.cols - 1);
+            term.cursor_col = col.saturating_sub(1).min(term.screen.cols() - 1);
             true
         }
         'd' => {
             let row = term.param(params, 1) as usize;
-            term.cursor_row = row.saturating_sub(1).min(term.grid.rows - 1);
+            term.cursor_row = row.saturating_sub(1).min(term.screen.viewport_rows() - 1);
             true
         }
         _ => false,

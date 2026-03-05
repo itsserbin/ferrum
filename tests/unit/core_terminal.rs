@@ -2,6 +2,10 @@ use super::Terminal;
 use crate::config::ThemeChoice;
 use crate::core::Color;
 
+fn get_char(term: &Terminal, row: usize, col: usize) -> char {
+    term.screen.viewport_get(row, col).grapheme().chars().next().unwrap_or(' ')
+}
+
 // ── Alternate screen mode ──
 
 #[test]
@@ -23,8 +27,8 @@ fn applies_sgr_and_resets_attributes() {
     let mut term = Terminal::new(2, 4);
     term.process(b"\x1b[31mA\x1b[0mB");
 
-    assert_eq!(term.grid.get(0, 0).unwrap().fg, term.ansi_palette[1]);
-    assert_eq!(term.grid.get(0, 1).unwrap().fg, Color::SENTINEL_FG);
+    assert_eq!(term.screen.viewport_get(0, 0).fg, term.ansi_palette[1]);
+    assert_eq!(term.screen.viewport_get(0, 1).fg, Color::SENTINEL_FG);
 }
 
 // ── Device status reports ──
@@ -58,11 +62,11 @@ fn print_simple_text() {
     let mut term = Terminal::new(4, 80);
     term.process(b"Hello");
 
-    assert_eq!(term.grid.get(0, 0).unwrap().character, 'H');
-    assert_eq!(term.grid.get(0, 1).unwrap().character, 'e');
-    assert_eq!(term.grid.get(0, 2).unwrap().character, 'l');
-    assert_eq!(term.grid.get(0, 3).unwrap().character, 'l');
-    assert_eq!(term.grid.get(0, 4).unwrap().character, 'o');
+    assert_eq!(get_char(&term, 0, 0), 'H');
+    assert_eq!(get_char(&term, 0, 1), 'e');
+    assert_eq!(get_char(&term, 0, 2), 'l');
+    assert_eq!(get_char(&term, 0, 3), 'l');
+    assert_eq!(get_char(&term, 0, 4), 'o');
     assert_eq!(term.cursor_col, 5);
 }
 
@@ -74,12 +78,12 @@ fn print_wraps_at_edge() {
     term.process(text.as_bytes());
 
     // Row 0 should be full (80 chars)
-    assert_eq!(term.grid.get(0, 0).unwrap().character, 'A');
-    assert_eq!(term.grid.get(0, 79).unwrap().character, 'B'); // index 79: 79%26=1 -> 'B'
+    assert_eq!(get_char(&term, 0, 0), 'A');
+    assert_eq!(get_char(&term, 0, 79), 'B'); // index 79: 79%26=1 -> 'B'
 
     // Row 1 should have 2 chars
-    assert_eq!(term.grid.get(1, 0).unwrap().character, 'C'); // index 80: 80%26=2 -> 'C'
-    assert_eq!(term.grid.get(1, 1).unwrap().character, 'D'); // index 81: 81%26=3 -> 'D'
+    assert_eq!(get_char(&term, 1, 0), 'C'); // index 80: 80%26=2 -> 'C'
+    assert_eq!(get_char(&term, 1, 1), 'D'); // index 81: 81%26=3 -> 'D'
     assert_eq!(term.cursor_row, 1);
     assert_eq!(term.cursor_col, 2);
 }
@@ -90,8 +94,8 @@ fn print_wide_char() {
     // CJK character is 2 columns wide
     term.process("漢".as_bytes());
 
-    assert_eq!(term.grid.get(0, 0).unwrap().character, '漢');
-    assert_eq!(term.grid.get(0, 1).unwrap().character, ' '); // placeholder
+    assert_eq!(get_char(&term, 0, 0), '漢');
+    assert_eq!(get_char(&term, 0, 1), ' '); // placeholder
     assert_eq!(term.cursor_col, 2);
 }
 
@@ -100,8 +104,8 @@ fn print_combining_mark_is_not_dropped() {
     let mut term = Terminal::new(4, 80);
     term.process("e\u{0301}".as_bytes()); // e + combining acute accent
 
-    assert_eq!(term.grid.get(0, 0).unwrap().character, 'e');
-    assert_eq!(term.grid.get(0, 1).unwrap().character, '\u{0301}');
+    assert_eq!(get_char(&term, 0, 0), 'e');
+    assert_eq!(get_char(&term, 0, 1), '\u{0301}');
     assert_eq!(term.cursor_col, 2);
 }
 
@@ -112,9 +116,9 @@ fn execute_lf() {
     let mut term = Terminal::new(4, 80);
     term.process(b"A\nB");
 
-    assert_eq!(term.grid.get(0, 0).unwrap().character, 'A');
+    assert_eq!(get_char(&term, 0, 0), 'A');
     // LF moves down one row; col stays after A (col 1).
-    assert_eq!(term.grid.get(1, 1).unwrap().character, 'B');
+    assert_eq!(get_char(&term, 1, 1), 'B');
 }
 
 #[test]
@@ -122,9 +126,9 @@ fn execute_vt_and_ff_behave_like_newline() {
     let mut term = Terminal::new(6, 80);
     term.process(b"A\x0bB\x0cC");
 
-    assert_eq!(term.grid.get(0, 0).unwrap().character, 'A');
-    assert_eq!(term.grid.get(1, 1).unwrap().character, 'B');
-    assert_eq!(term.grid.get(2, 2).unwrap().character, 'C');
+    assert_eq!(get_char(&term, 0, 0), 'A');
+    assert_eq!(get_char(&term, 1, 1), 'B');
+    assert_eq!(get_char(&term, 2, 2), 'C');
 }
 
 #[test]
@@ -133,9 +137,9 @@ fn execute_cr() {
     term.process(b"ABC\rX");
 
     // CR resets col to 0, X overwrites A
-    assert_eq!(term.grid.get(0, 0).unwrap().character, 'X');
-    assert_eq!(term.grid.get(0, 1).unwrap().character, 'B');
-    assert_eq!(term.grid.get(0, 2).unwrap().character, 'C');
+    assert_eq!(get_char(&term, 0, 0), 'X');
+    assert_eq!(get_char(&term, 0, 1), 'B');
+    assert_eq!(get_char(&term, 0, 2), 'C');
 }
 
 #[test]
@@ -144,8 +148,8 @@ fn execute_backspace() {
     term.process(b"AB\x08X");
 
     // Backspace moves cursor back one; X overwrites B
-    assert_eq!(term.grid.get(0, 0).unwrap().character, 'A');
-    assert_eq!(term.grid.get(0, 1).unwrap().character, 'X');
+    assert_eq!(get_char(&term, 0, 0), 'A');
+    assert_eq!(get_char(&term, 0, 1), 'X');
 }
 
 #[test]
@@ -154,7 +158,7 @@ fn execute_tab() {
     term.process(b"\tX");
 
     // Tab stops every 8 columns: col 0 -> col 8
-    assert_eq!(term.grid.get(0, 8).unwrap().character, 'X');
+    assert_eq!(get_char(&term, 0, 8), 'X');
     assert_eq!(term.cursor_col, 9);
 }
 
@@ -199,11 +203,11 @@ fn esc_reverse_index_at_top() {
     term.process(b"\x1bM");
 
     // Row 0 should now be blank (scroll_down inserts blank at top)
-    assert_eq!(term.grid.get(0, 0).unwrap().character, ' ');
+    assert_eq!(get_char(&term, 0, 0), ' ');
     // Old row 0 ('A') should have moved to row 1
-    assert_eq!(term.grid.get(1, 0).unwrap().character, 'A');
+    assert_eq!(get_char(&term, 1, 0), 'A');
     // Old row 1 ('B') should have moved to row 2
-    assert_eq!(term.grid.get(2, 0).unwrap().character, 'B');
+    assert_eq!(get_char(&term, 2, 0), 'B');
 }
 
 #[test]
@@ -211,7 +215,7 @@ fn esc_ris_full_reset() {
     let mut term = Terminal::new(4, 80);
     // Set some attributes and move cursor
     term.process(b"\x1b[1;31mHello");
-    assert!(term.grid.get(0, 0).unwrap().bold);
+    assert!(term.screen.viewport_get(0, 0).bold);
     assert_eq!(term.cursor_col, 5);
 
     // ESC c = RIS (full reset)
@@ -219,8 +223,8 @@ fn esc_ris_full_reset() {
 
     assert_eq!(term.cursor_row, 0);
     assert_eq!(term.cursor_col, 0);
-    assert_eq!(term.grid.get(0, 0).unwrap().character, ' '); // grid cleared
-    assert!(term.scrollback.is_empty());
+    assert_eq!(get_char(&term, 0, 0), ' '); // grid cleared
+    assert!(term.screen.scrollback_len() == 0);
     assert!(term.cursor_visible);
     assert!(!term.decckm);
 }
@@ -241,20 +245,20 @@ fn lf_at_bottom_scrolls() {
     }
     // Cursor should be at row 3 (bottom)
     assert_eq!(term.cursor_row, 3);
-    assert_eq!(term.grid.get(0, 0).unwrap().character, 'A');
+    assert_eq!(get_char(&term, 0, 0), 'A');
 
     // LF at bottom triggers scroll
     term.process(b"\n");
 
     // Row A should go to scrollback
-    assert_eq!(term.scrollback.len(), 1);
-    assert_eq!(term.scrollback[0].cells[0].character, 'A');
+    assert_eq!(term.screen.scrollback_len(), 1);
+    assert_eq!(term.screen.scrollback_row(0).cells[0].grapheme().chars().next().unwrap_or(' '), 'A');
 
     // Content shifts up: B->row0, C->row1, D->row2, blank->row3
-    assert_eq!(term.grid.get(0, 0).unwrap().character, 'B');
-    assert_eq!(term.grid.get(1, 0).unwrap().character, 'C');
-    assert_eq!(term.grid.get(2, 0).unwrap().character, 'D');
-    assert_eq!(term.grid.get(3, 0).unwrap().character, ' ');
+    assert_eq!(get_char(&term, 0, 0), 'B');
+    assert_eq!(get_char(&term, 1, 0), 'C');
+    assert_eq!(get_char(&term, 2, 0), 'D');
+    assert_eq!(get_char(&term, 3, 0), ' ');
 }
 
 #[test]
@@ -272,9 +276,9 @@ fn scrollback_preserved() {
 
     // We scrolled 17 times (20 lines - 4 visible + 1 for the last \n)
     // Scrollback should have grown
-    assert!(!term.scrollback.is_empty());
+    assert!(term.screen.scrollback_len() > 0);
     // Scrollback should not exceed max (1000)
-    assert!(term.scrollback.len() <= 1000);
+    assert!(term.screen.scrollback_len() <= 1000);
 }
 
 // ── OSC 7: working directory reporting ──
@@ -350,13 +354,13 @@ fn recolor_remaps_default_fg_bg() {
     let ansi = ThemeChoice::FerrumDark.resolve().ansi;
 
     let mut term = Terminal::new(4, 4);
-    assert_eq!(term.grid.get(0, 0).unwrap().fg, old_fg);
-    assert_eq!(term.grid.get(0, 0).unwrap().bg, old_bg);
+    assert_eq!(term.screen.viewport_get(0, 0).fg, old_fg);
+    assert_eq!(term.screen.viewport_get(0, 0).bg, old_bg);
 
     term.recolor(old_fg, old_bg, &ansi, new_fg, new_bg, &ansi);
 
-    assert_eq!(term.grid.get(0, 0).unwrap().fg, new_fg);
-    assert_eq!(term.grid.get(0, 0).unwrap().bg, new_bg);
+    assert_eq!(term.screen.viewport_get(0, 0).fg, new_fg);
+    assert_eq!(term.screen.viewport_get(0, 0).bg, new_bg);
     assert_eq!(term.default_fg, new_fg);
     assert_eq!(term.default_bg, new_bg);
 }
@@ -373,12 +377,12 @@ fn recolor_leaves_custom_sgr_colors_untouched() {
     term.process(b"\x1b[38;2;255;128;0mHello");
 
     let custom_fg = Color { r: 255, g: 128, b: 0 };
-    assert_eq!(term.grid.get(0, 0).unwrap().fg, custom_fg);
+    assert_eq!(term.screen.viewport_get(0, 0).fg, custom_fg);
 
     term.recolor(old_fg, old_bg, &ansi, new_fg, new_bg, &ansi);
 
-    assert_eq!(term.grid.get(0, 0).unwrap().fg, custom_fg);
-    assert_eq!(term.grid.get(0, 0).unwrap().bg, new_bg);
+    assert_eq!(term.screen.viewport_get(0, 0).fg, custom_fg);
+    assert_eq!(term.screen.viewport_get(0, 0).bg, new_bg);
 }
 
 #[test]
@@ -395,9 +399,9 @@ fn recolor_remaps_ansi_palette_colors() {
     let mut term = Terminal::new(4, 10);
     term.process(b"\x1b[31mRed");
 
-    assert_eq!(term.grid.get(0, 0).unwrap().fg, old_ansi[1]);
+    assert_eq!(term.screen.viewport_get(0, 0).fg, old_ansi[1]);
 
     term.recolor(old_fg, old_bg, &old_ansi, old_fg, old_bg, &new_ansi);
 
-    assert_eq!(term.grid.get(0, 0).unwrap().fg, new_ansi[1]);
+    assert_eq!(term.screen.viewport_get(0, 0).fg, new_ansi[1]);
 }

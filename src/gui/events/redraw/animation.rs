@@ -105,7 +105,7 @@ impl FerrumWindow {
 
     fn scrollbar_animation_schedule(&self, now: Instant) -> Option<(Instant, bool)> {
         let leaf = self.active_leaf_ref()?;
-        if leaf.terminal.scrollback.is_empty() || leaf.scrollbar.hover || leaf.scrollbar.dragging {
+        if leaf.terminal.screen.scrollback_len() == 0 || leaf.scrollbar.hover || leaf.scrollbar.dragging {
             return None;
         }
 

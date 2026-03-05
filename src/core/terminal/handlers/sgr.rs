@@ -78,7 +78,7 @@ pub(in super::super) fn handle_sgr(term: &mut Terminal, params: &Params) {
 #[cfg(test)]
 mod tests {
     use crate::core::terminal::Terminal;
-    use crate::core::{Cell, Color, UnderlineStyle};
+    use crate::core::{Color, UnderlineStyle};
 
     fn write_colored(seq: &[u8]) -> Terminal {
         let mut term = Terminal::new(4, 20);
@@ -87,19 +87,14 @@ mod tests {
         term
     }
 
-    fn cell_at(term: &Terminal, row: usize, col: usize) -> &Cell {
-        // Safe: tests use known valid coordinates
-        term.grid.get_unchecked(row, col)
-    }
-
     #[test]
     fn sgr_reset() {
         let mut term = Terminal::new(4, 20);
         term.process(b"\x1b[1;31mA\x1b[0mB");
-        let a = cell_at(&term, 0, 0);
+        let a = term.screen.viewport_get(0, 0);
         assert!(a.bold);
         assert_eq!(a.fg, term.ansi_palette[1]);
-        let b = cell_at(&term, 0, 1);
+        let b = term.screen.viewport_get(0, 1);
         assert!(!b.bold);
         assert_eq!(b.fg, Color::SENTINEL_FG);
     }
@@ -107,37 +102,37 @@ mod tests {
     #[test]
     fn sgr_bold() {
         let term = write_colored(b"\x1b[1m");
-        assert!(cell_at(&term, 0, 0).bold);
+        assert!(term.screen.viewport_get(0, 0).bold);
     }
 
     #[test]
     fn sgr_underline() {
         let term = write_colored(b"\x1b[4m");
-        assert_eq!(cell_at(&term, 0, 0).underline_style, UnderlineStyle::Single);
+        assert_eq!(term.screen.viewport_get(0, 0).underline_style, UnderlineStyle::Single);
     }
 
     #[test]
     fn sgr_reverse() {
         let term = write_colored(b"\x1b[7m");
-        assert!(cell_at(&term, 0, 0).reverse);
+        assert!(term.screen.viewport_get(0, 0).reverse);
     }
 
     #[test]
     fn sgr_bold_off() {
         let term = write_colored(b"\x1b[1m\x1b[22m");
-        assert!(!cell_at(&term, 0, 0).bold);
+        assert!(!term.screen.viewport_get(0, 0).bold);
     }
 
     #[test]
     fn sgr_underline_off() {
         let term = write_colored(b"\x1b[4m\x1b[24m");
-        assert_eq!(cell_at(&term, 0, 0).underline_style, UnderlineStyle::None);
+        assert_eq!(term.screen.viewport_get(0, 0).underline_style, UnderlineStyle::None);
     }
 
     #[test]
     fn sgr_reverse_off() {
         let term = write_colored(b"\x1b[7m\x1b[27m");
-        assert!(!cell_at(&term, 0, 0).reverse);
+        assert!(!term.screen.viewport_get(0, 0).reverse);
     }
 
     #[test]
@@ -146,7 +141,7 @@ mod tests {
             let seq = format!("\x1b[{}m", 30 + i);
             let term = write_colored(seq.as_bytes());
             assert_eq!(
-                cell_at(&term, 0, 0).fg,
+                term.screen.viewport_get(0, 0).fg,
                 term.ansi_palette[i as usize],
                 "SGR {} should set fg to ANSI[{}]",
                 30 + i,
@@ -161,7 +156,7 @@ mod tests {
             let seq = format!("\x1b[{}m", 40 + i);
             let term = write_colored(seq.as_bytes());
             assert_eq!(
-                cell_at(&term, 0, 0).bg,
+                term.screen.viewport_get(0, 0).bg,
                 term.ansi_palette[i as usize],
                 "SGR {} should set bg to ANSI[{}]",
                 40 + i,
@@ -176,7 +171,7 @@ mod tests {
             let seq = format!("\x1b[{}m", 90 + i);
             let term = write_colored(seq.as_bytes());
             assert_eq!(
-                cell_at(&term, 0, 0).fg,
+                term.screen.viewport_get(0, 0).fg,
                 term.ansi_palette[(8 + i) as usize],
                 "SGR {} should set fg to ANSI[{}]",
                 90 + i,
@@ -191,7 +186,7 @@ mod tests {
             let seq = format!("\x1b[{}m", 100 + i);
             let term = write_colored(seq.as_bytes());
             assert_eq!(
-                cell_at(&term, 0, 0).bg,
+                term.screen.viewport_get(0, 0).bg,
                 term.ansi_palette[(8 + i) as usize],
                 "SGR {} should set bg to ANSI[{}]",
                 100 + i,
@@ -203,25 +198,21 @@ mod tests {
     #[test]
     fn sgr_256_fg() {
         let term = write_colored(b"\x1b[38;5;196m");
-        assert_eq!(cell_at(&term, 0, 0).fg, Color::from_256(196));
+        assert_eq!(term.screen.viewport_get(0, 0).fg, Color::from_256(196));
     }
 
     #[test]
     fn sgr_256_bg() {
         let term = write_colored(b"\x1b[48;5;82m");
-        assert_eq!(cell_at(&term, 0, 0).bg, Color::from_256(82));
+        assert_eq!(term.screen.viewport_get(0, 0).bg, Color::from_256(82));
     }
 
     #[test]
     fn sgr_rgb_fg() {
         let term = write_colored(b"\x1b[38;2;255;128;0m");
         assert_eq!(
-            cell_at(&term, 0, 0).fg,
-            Color {
-                r: 255,
-                g: 128,
-                b: 0
-            }
+            term.screen.viewport_get(0, 0).fg,
+            Color { r: 255, g: 128, b: 0 }
         );
     }
 
@@ -229,31 +220,27 @@ mod tests {
     fn sgr_rgb_bg() {
         let term = write_colored(b"\x1b[48;2;10;20;30m");
         assert_eq!(
-            cell_at(&term, 0, 0).bg,
-            Color {
-                r: 10,
-                g: 20,
-                b: 30
-            }
+            term.screen.viewport_get(0, 0).bg,
+            Color { r: 10, g: 20, b: 30 }
         );
     }
 
     #[test]
     fn sgr_default_fg() {
         let term = write_colored(b"\x1b[31m\x1b[39m");
-        assert_eq!(cell_at(&term, 0, 0).fg, Color::SENTINEL_FG);
+        assert_eq!(term.screen.viewport_get(0, 0).fg, Color::SENTINEL_FG);
     }
 
     #[test]
     fn sgr_default_bg() {
         let term = write_colored(b"\x1b[41m\x1b[49m");
-        assert_eq!(cell_at(&term, 0, 0).bg, Color::SENTINEL_BG);
+        assert_eq!(term.screen.viewport_get(0, 0).bg, Color::SENTINEL_BG);
     }
 
     #[test]
     fn sgr_combined() {
         let term = write_colored(b"\x1b[1;4;31m");
-        let cell = cell_at(&term, 0, 0);
+        let cell = term.screen.viewport_get(0, 0);
         assert!(cell.bold);
         assert_eq!(cell.underline_style, UnderlineStyle::Single);
         assert_eq!(cell.fg, term.ansi_palette[1]);
@@ -263,7 +250,7 @@ mod tests {
     fn sgr_no_params_resets() {
         let mut term = Terminal::new(4, 20);
         term.process(b"\x1b[1;31mA\x1b[mB");
-        let b = cell_at(&term, 0, 1);
+        let b = term.screen.viewport_get(0, 1);
         assert!(!b.bold);
         assert_eq!(b.fg, Color::SENTINEL_FG);
     }
@@ -271,7 +258,7 @@ mod tests {
     #[test]
     fn sgr_dim() {
         let term = write_colored(b"\x1b[2m");
-        assert!(cell_at(&term, 0, 0).dim);
+        assert!(term.screen.viewport_get(0, 0).dim);
     }
 
     #[test]
@@ -279,10 +266,10 @@ mod tests {
         // SGR 22 resets both bold and dim
         let mut term = Terminal::new(4, 20);
         term.process(b"\x1b[1;2mA\x1b[22mB");
-        let a = cell_at(&term, 0, 0);
+        let a = term.screen.viewport_get(0, 0);
         assert!(a.bold);
         assert!(a.dim);
-        let b = cell_at(&term, 0, 1);
+        let b = term.screen.viewport_get(0, 1);
         assert!(!b.bold);
         assert!(!b.dim);
     }
@@ -290,42 +277,42 @@ mod tests {
     #[test]
     fn sgr_italic() {
         let term = write_colored(b"\x1b[3m");
-        assert!(cell_at(&term, 0, 0).italic);
+        assert!(term.screen.viewport_get(0, 0).italic);
     }
 
     #[test]
     fn sgr_italic_off() {
         let term = write_colored(b"\x1b[3m\x1b[23m");
-        assert!(!cell_at(&term, 0, 0).italic);
+        assert!(!term.screen.viewport_get(0, 0).italic);
     }
 
     #[test]
     fn sgr_strikethrough() {
         let term = write_colored(b"\x1b[9m");
-        assert!(cell_at(&term, 0, 0).strikethrough);
+        assert!(term.screen.viewport_get(0, 0).strikethrough);
     }
 
     #[test]
     fn sgr_strikethrough_off() {
         let term = write_colored(b"\x1b[9m\x1b[29m");
-        assert!(!cell_at(&term, 0, 0).strikethrough);
+        assert!(!term.screen.viewport_get(0, 0).strikethrough);
     }
 
     #[test]
     fn sgr_double_underline() {
         let term = write_colored(b"\x1b[21m");
-        assert_eq!(cell_at(&term, 0, 0).underline_style, UnderlineStyle::Double);
+        assert_eq!(term.screen.viewport_get(0, 0).underline_style, UnderlineStyle::Double);
     }
 
     #[test]
     fn sgr_reset_clears_all_new_attrs() {
         let mut term = Terminal::new(4, 20);
         term.process(b"\x1b[2;3;9mA\x1b[0mB");
-        let a = cell_at(&term, 0, 0);
+        let a = term.screen.viewport_get(0, 0);
         assert!(a.dim);
         assert!(a.italic);
         assert!(a.strikethrough);
-        let b = cell_at(&term, 0, 1);
+        let b = term.screen.viewport_get(0, 1);
         assert!(!b.dim);
         assert!(!b.italic);
         assert!(!b.strikethrough);

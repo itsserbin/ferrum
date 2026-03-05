@@ -9,7 +9,7 @@ pub(in super::super) fn handle_scroll_csi(
     match action {
         'r' => {
             // DECSTBM — Set Top and Bottom Margins
-            let rows = term.grid.rows;
+            let rows = term.screen.viewport_rows();
             let mut iter = params.iter();
             let top = iter.next().and_then(|p| p.first().copied()).unwrap_or(1);
             let bottom = iter
@@ -76,7 +76,7 @@ pub(in super::super) fn handle_scroll_csi(
 
 #[cfg(test)]
 mod tests {
-    use crate::core::Cell;
+    use crate::core::GraphemeCell;
     use crate::core::terminal::Terminal;
 
     /// Helper: fill each row with a distinct character ('A' for row 0, 'B' for row 1, etc.)
@@ -85,14 +85,7 @@ mod tests {
         for r in 0..rows {
             let ch = (b'A' + r as u8) as char;
             for c in 0..cols {
-                term.grid.set(
-                    r,
-                    c,
-                    Cell {
-                        character: ch,
-                        ..Cell::default()
-                    },
-                );
+                term.screen.viewport_set(r, c, GraphemeCell::from_char(ch));
             }
         }
         term
@@ -101,8 +94,7 @@ mod tests {
     /// Helper: get the character in every column of a row as a single char
     /// (assumes all cols in a row have the same char for our tests).
     fn row_char(term: &Terminal, row: usize) -> char {
-        // Safe: tests use known valid coordinates
-        term.grid.get_unchecked(row, 0).character
+        term.screen.viewport_get(row, 0).grapheme().chars().next().unwrap_or(' ')
     }
 
     #[test]
@@ -123,14 +115,7 @@ mod tests {
         for r in 0..10 {
             let ch = (b'A' + r as u8) as char;
             for c in 0..10 {
-                term.grid.set(
-                    r,
-                    c,
-                    Cell {
-                        character: ch,
-                        ..Cell::default()
-                    },
-                );
+                term.screen.viewport_set(r, c, GraphemeCell::from_char(ch));
             }
         }
 
@@ -163,14 +148,7 @@ mod tests {
         for r in 0..6 {
             let ch = (b'A' + r as u8) as char;
             for c in 0..5 {
-                term.grid.set(
-                    r,
-                    c,
-                    Cell {
-                        character: ch,
-                        ..Cell::default()
-                    },
-                );
+                term.screen.viewport_set(r, c, GraphemeCell::from_char(ch));
             }
         }
         term.process(b"\x1b[1S");
@@ -194,8 +172,8 @@ mod tests {
         assert_eq!(row_char(&term, 3), ' ');
 
         // Row A should be in scrollback
-        assert_eq!(term.scrollback.len(), 1);
-        assert_eq!(term.scrollback[0].cells[0].character, 'A');
+        assert_eq!(term.screen.scrollback_len(), 1);
+        assert_eq!(term.screen.scrollback_row(0).cells[0].grapheme().chars().next().unwrap_or(' '), 'A');
     }
 
     #[test]
@@ -249,14 +227,7 @@ mod tests {
         for r in 0..4 {
             let ch = (b'A' + r as u8) as char;
             for c in 0..5 {
-                term.grid.set(
-                    r,
-                    c,
-                    Cell {
-                        character: ch,
-                        ..Cell::default()
-                    },
-                );
+                term.screen.viewport_set(r, c, GraphemeCell::from_char(ch));
             }
         }
 

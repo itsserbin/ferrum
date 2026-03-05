@@ -83,7 +83,7 @@ impl FerrumWindow {
                 return false;
             }
 
-            let grid_cols = leaf.terminal.grid.cols;
+            let grid_cols = leaf.terminal.screen.cols();
             if grid_cols == 0 {
                 return false;
             }
@@ -98,7 +98,7 @@ impl FerrumWindow {
                 }
             };
 
-            let abs_row = leaf.terminal.scrollback.len() + leaf.terminal.cursor_row;
+            let abs_row = leaf.terminal.screen.scrollback_len() + leaf.terminal.cursor_row;
             let anchor_col = self
                 .keyboard_selection_anchor
                 .filter(|anchor| anchor.abs_row == abs_row)
