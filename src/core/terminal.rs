@@ -215,6 +215,9 @@ impl Terminal {
     }
 
     /// No-op: scrollback_popped tracking removed — selection uses screen coords.
+    ///
+    /// TODO: Remove this stub and the unreachable `adjust_for_scrollback_pop` branch
+    /// in `src/gui/events/pty.rs` once the `PageList` eviction model is settled.
     pub fn drain_scrollback_popped(&mut self) -> usize {
         0
     }
