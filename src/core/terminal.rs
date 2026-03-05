@@ -227,20 +227,22 @@ impl Terminal {
         0
     }
 
-    /// Registers a tracked selection-start pin at the given viewport row/col.
-    pub fn set_selection_start(&mut self, vrow: usize, col: usize) {
-        let abs = self.screen.scrollback_len() + vrow;
-        let coord = PageCoord { abs_row: abs, col };
-        let pin = self.screen.register_pin(coord);
+    /// Registers a tracked selection-start pin at the given absolute row/col.
+    pub fn set_selection_start(&mut self, abs_row: usize, col: usize) {
+        let pin = self.make_selection_pin(abs_row, col);
         self.selection_start_pin = Some(pin);
     }
 
-    /// Registers a tracked selection-end pin at the given viewport row/col.
-    pub fn set_selection_end(&mut self, vrow: usize, col: usize) {
-        let abs = self.screen.scrollback_len() + vrow;
-        let coord = PageCoord { abs_row: abs, col };
-        let pin = self.screen.register_pin(coord);
+    /// Registers a tracked selection-end pin at the given absolute row/col.
+    pub fn set_selection_end(&mut self, abs_row: usize, col: usize) {
+        let pin = self.make_selection_pin(abs_row, col);
         self.selection_end_pin = Some(pin);
+    }
+
+    /// Creates a tracked pin at the given absolute row/col.
+    fn make_selection_pin(&mut self, abs_row: usize, col: usize) -> TrackedPin {
+        let coord = PageCoord { abs_row, col };
+        self.screen.register_pin(coord)
     }
 
     /// Clears both selection tracking pins.

@@ -144,10 +144,8 @@ impl PaneLeaf {
 
     /// Sets the current selection and registers tracking pins on the terminal.
     pub(super) fn set_selection(&mut self, sel: Selection) {
-        self.terminal
-            .set_selection_start(sel.start.abs_row.saturating_sub(self.terminal.screen.scrollback_len()), sel.start.col);
-        self.terminal
-            .set_selection_end(sel.end.abs_row.saturating_sub(self.terminal.screen.scrollback_len()), sel.end.col);
+        self.terminal.set_selection_start(sel.start.abs_row, sel.start.col);
+        self.terminal.set_selection_end(sel.end.abs_row, sel.end.col);
         self.selection = Some(sel);
     }
 

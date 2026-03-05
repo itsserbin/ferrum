@@ -134,6 +134,13 @@ impl FerrumWindow {
         if let Some(leaf) = self.active_leaf_mut() {
             leaf.selection =
                 Self::selection_from_cursor_bounds(abs_row, anchor_col, target_col, grid_cols);
+            // Keep pins in sync with the updated keyboard selection.
+            if let Some(sel) = leaf.selection {
+                leaf.terminal.set_selection_start(sel.start.abs_row, sel.start.col);
+                leaf.terminal.set_selection_end(sel.end.abs_row, sel.end.col);
+            } else {
+                leaf.terminal.clear_selection_pins();
+            }
         }
 
         true
