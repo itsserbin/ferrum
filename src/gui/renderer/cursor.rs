@@ -3,6 +3,10 @@ use super::RenderTarget;
 use crate::core::PageList;
 use crate::gui::pane::PaneRect;
 
+fn cursor_char(screen: &PageList, row: usize, col: usize) -> char {
+    screen.viewport_get(row, col).grapheme().chars().next().unwrap_or(' ')
+}
+
 impl CpuRenderer {
     pub fn draw_cursor(
         &mut self,
@@ -24,13 +28,12 @@ impl CpuRenderer {
             CursorStyle::BlinkingBlock | CursorStyle::SteadyBlock => {
                 // Filled block with inverted foreground/background.
                 self.draw_bg(target, x, y, self.palette.default_fg);
-                let grapheme = if row < screen.viewport_rows() && col < screen.cols() {
-                    screen.viewport_get(row, col).grapheme().to_owned()
+                let ch = if row < screen.viewport_rows() && col < screen.cols() {
+                    cursor_char(screen, row, col)
                 } else {
-                    " ".to_owned()
+                    ' '
                 };
-                if let Some(ch) = grapheme.chars().next()
-                    && ch != ' ' {
+                if ch != ' ' {
                     self.draw_char(target, x, y, ch, self.palette.default_bg);
                 }
             }
@@ -92,13 +95,12 @@ impl CpuRenderer {
         match style {
             CursorStyle::BlinkingBlock | CursorStyle::SteadyBlock => {
                 self.draw_bg(target, x, y, self.palette.default_fg);
-                let grapheme = if row < screen.viewport_rows() && col < screen.cols() {
-                    screen.viewport_get(row, col).grapheme().to_owned()
+                let ch = if row < screen.viewport_rows() && col < screen.cols() {
+                    cursor_char(screen, row, col)
                 } else {
-                    " ".to_owned()
+                    ' '
                 };
-                if let Some(ch) = grapheme.chars().next()
-                    && ch != ' ' {
+                if ch != ' ' {
                     self.draw_char(target, x, y, ch, self.palette.default_bg);
                 }
             }

@@ -81,8 +81,9 @@ impl super::GpuRenderer {
         // Used for selection hit-testing which works in absolute coordinates.
         let viewport_start = screen.scrollback_len().saturating_sub(scroll_offset);
         let mut cells = Vec::with_capacity(rows * cols);
-        let mut prev_codepoint = 32u32; // default: space
+        let mut prev_codepoint;
         for row in 0..rows {
+            prev_codepoint = 32u32; // reset per row — wide char must not leak to the next row
             let abs_row = viewport_start + row;
             for col in 0..cols {
                 let cell = super::super::display_cell(screen, scroll_offset, row, col);
