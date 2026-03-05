@@ -86,16 +86,27 @@ impl super::Terminal {
     fn reflow_resize(&mut self, new_rows: usize, new_cols: usize) {
         let (logical_lines, cursor_line_idx) = self.collect_logical_lines();
 
-        // Compute cursor (row, col) in the rewrapped output.
-        // `min_len` is the cursor's absolute offset within its logical line,
-        // so after rewrapping: row = start + offset/new_cols, col = offset%new_cols.
-        let cursor_in_rewrapped = cursor_line_idx.map(|idx| {
-            let start = super::reflow::rows_before_line(&logical_lines, idx, new_cols);
-            let offset = logical_lines[idx].min_len;
-            (start + offset / new_cols, offset % new_cols)
-        });
+        // rewrap_lines tracks the start row of cursor_line_idx in one pass,
+        // avoiding a separate traversal via the old rows_before_line helper.
+        let (rewrapped, cursor_line_start) =
+            super::reflow::rewrap_lines(&logical_lines, new_cols, cursor_line_idx);
 
-        let rewrapped = super::reflow::rewrap_lines(&logical_lines, new_cols);
+        // Place the cursor at the START of the prompt's logical line (col 0).
+        //
+        // When SIGWINCH fires, the shell (zsh, bash/readline) does:
+        //   1. CR → already at col 0, no-op
+        //   2. Erase from current position to end of screen
+        //   3. Redraw the full prompt + any typed input
+        //
+        // If we placed the cursor at the ACTUAL offset within the wrapped line
+        // (e.g. row start+1, col 15 for a 35-char prompt at 20 cols), the shell
+        // would erase only from the MIDDLE of the reflowed prompt onward, leaving
+        // the first wrapped rows visible — causing the prompt to appear doubled.
+        //
+        // By placing the cursor at (start, 0), the shell erases the entire
+        // reflowed cursor line and redraws it cleanly.
+        let cursor_in_rewrapped = cursor_line_start.map(|start| (start, 0usize));
+
         self.fill_grid_from_rewrapped(&rewrapped, new_rows, new_cols, cursor_in_rewrapped);
     }
 

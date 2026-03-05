@@ -19,18 +19,25 @@ pub(super) struct LogicalLine {
 /// This is a pure function with no side effects: it takes collected logical
 /// lines and a target width, and produces a flat list of physical rows with
 /// correct wrap flags.
-pub(super) fn rewrap_lines(lines: &[LogicalLine], new_cols: usize) -> Vec<Row> {
+///
+/// If `cursor_line_idx` is provided, also returns the index of the first
+/// rewrapped row that corresponds to that logical line — used by the caller
+/// to restore the cursor position after reflow without an extra traversal.
+pub(super) fn rewrap_lines(
+    lines: &[LogicalLine],
+    new_cols: usize,
+    cursor_line_idx: Option<usize>,
+) -> (Vec<Row>, Option<usize>) {
     let mut rewrapped: Vec<Row> = Vec::new();
-    for logical_line in lines {
+    let mut cursor_rewrapped_row: Option<usize> = None;
+    for (line_idx, logical_line) in lines.iter().enumerate() {
         // Trim only untouched default cells; keep styled spaces and explicit
         // spaces before cursor in the active line.
-        let len = logical_line
-            .cells
-            .iter()
-            .rposition(|c| c != &Cell::default())
-            .map(|i| i + 1)
-            .unwrap_or(0);
-        let len = len.max(logical_line.min_len.min(logical_line.cells.len()));
+        let len = line_content_len(logical_line);
+
+        if cursor_line_idx == Some(line_idx) {
+            cursor_rewrapped_row = Some(rewrapped.len());
+        }
 
         if len == 0 {
             rewrapped.push(Row::new(new_cols));
@@ -48,17 +55,7 @@ pub(super) fn rewrap_lines(lines: &[LogicalLine], new_cols: usize) -> Vec<Row> {
             pos = end;
         }
     }
-    rewrapped
-}
-
-/// Count how many rewrapped rows logical lines `[0..line_idx]` produce at `new_cols`.
-pub(super) fn rows_before_line(lines: &[LogicalLine], line_idx: usize, new_cols: usize) -> usize {
-    lines[..line_idx].iter().map(|line| line_row_count(line, new_cols)).sum()
-}
-
-fn line_row_count(line: &LogicalLine, new_cols: usize) -> usize {
-    let len = line_content_len(line);
-    if len == 0 { 1 } else { len.div_ceil(new_cols) }
+    (rewrapped, cursor_rewrapped_row)
 }
 
 fn line_content_len(line: &LogicalLine) -> usize {
@@ -152,7 +149,7 @@ mod tests {
             cells: vec![],
             min_len: 0,
         }];
-        let result = rewrap_lines(&lines, 10);
+        let (result, _) = rewrap_lines(&lines, 10, None);
         assert_eq!(result.len(), 1);
         assert!(!result[0].wrapped);
         assert_eq!(result[0].cells.len(), 10);
@@ -171,7 +168,7 @@ mod tests {
             })
             .collect();
         let lines = vec![LogicalLine { cells, min_len: 0 }];
-        let result = rewrap_lines(&lines, 10);
+        let (result, _) = rewrap_lines(&lines, 10, None);
         assert_eq!(result.len(), 1);
         assert!(!result[0].wrapped);
         assert_eq!(result[0].cells[0].character, 'H');
@@ -188,7 +185,7 @@ mod tests {
             })
             .collect();
         let lines = vec![LogicalLine { cells, min_len: 0 }];
-        let result = rewrap_lines(&lines, 4);
+        let (result, _) = rewrap_lines(&lines, 4, None);
         assert_eq!(result.len(), 3);
         assert!(result[0].wrapped);
         assert!(result[1].wrapped);
@@ -210,7 +207,7 @@ mod tests {
             })
             .collect();
         let lines = vec![LogicalLine { cells, min_len: 6 }];
-        let result = rewrap_lines(&lines, 10);
+        let (result, _) = rewrap_lines(&lines, 10, None);
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].cells[0].character, 'a');
         assert_eq!(result[0].cells[1].character, 'b');
@@ -231,7 +228,7 @@ mod tests {
             .collect();
         cells.resize(10, Cell::default());
         let lines = vec![LogicalLine { cells, min_len: 0 }];
-        let result = rewrap_lines(&lines, 5);
+        let (result, _) = rewrap_lines(&lines, 5, None);
         assert_eq!(result.len(), 1);
         assert!(!result[0].wrapped);
         assert_eq!(result[0].cells[0].character, 'a');
@@ -265,7 +262,7 @@ mod tests {
                 min_len: 0,
             },
         ];
-        let result = rewrap_lines(&lines, 3);
+        let (result, _) = rewrap_lines(&lines, 3, None);
         assert_eq!(result.len(), 3);
         assert!(result[0].wrapped);
         assert!(!result[1].wrapped);

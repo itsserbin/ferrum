@@ -351,6 +351,9 @@ impl ApplicationHandler for App {
                 if now >= deadline {
                     win.sigwinch_deadline = None;
                     win.send_sigwinch_to_all_panes();
+                    // Show cursor only after the shell has received SIGWINCH and
+                    // will redraw the prompt to the correct position on next frame.
+                    win.window.set_cursor_visible(true);
                     win.window.request_redraw();
                 } else {
                     // Wake up in time to send SIGWINCH.

@@ -343,17 +343,15 @@ impl FerrumWindow {
     /// Call this once after resize has settled (see `sigwinch_deadline`).
     pub(in crate::gui) fn send_sigwinch_to_all_panes(&mut self) {
         for tab in &mut self.tabs {
-            for pane_id in tab.pane_tree.leaf_ids() {
-                if let Some(leaf) = tab.pane_tree.find_leaf(pane_id) {
-                    let rows = leaf.terminal.grid.rows as u16;
-                    let cols = leaf.terminal.grid.cols as u16;
-                    if let Some(ref session) = leaf.session
-                        && let Err(err) = session.resize(rows, cols)
-                    {
-                        eprintln!("Failed to send SIGWINCH for pane {pane_id}: {err}");
-                    }
+            tab.pane_tree.for_each_leaf_mut(&mut |leaf| {
+                let rows = leaf.terminal.grid.rows as u16;
+                let cols = leaf.terminal.grid.cols as u16;
+                if let Some(ref session) = leaf.session
+                    && let Err(err) = session.resize(rows, cols)
+                {
+                    eprintln!("Failed to send SIGWINCH for pane {}: {err}", leaf.id);
                 }
-            }
+            });
         }
     }
 }

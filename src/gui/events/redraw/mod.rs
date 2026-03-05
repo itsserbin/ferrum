@@ -20,9 +20,9 @@ impl FerrumWindow {
     pub(in crate::gui) fn apply_pending_resize(&mut self) {
         if self.pending_grid_resize.take().is_some() {
             // Resize terminal grids so rendering is correct.
-            // SIGWINCH is deferred until the resize settles (see sigwinch_deadline).
+            // Cursor stays hidden until SIGWINCH is sent (see sigwinch_deadline),
+            // at which point the shell redraws to the correct position.
             self.resize_all_panes();
-            self.window.set_cursor_visible(true);
         }
     }
 

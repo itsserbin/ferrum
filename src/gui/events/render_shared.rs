@@ -88,6 +88,10 @@ pub(in crate::gui::events) struct FrameParams<'a> {
     pub tab: Option<&'a crate::gui::state::TabState>,
     pub cursor_blink_start: std::time::Instant,
     pub cursor_blink_interval_ms: u64,
+    /// When `true`, the terminal text cursor is not drawn.
+    /// Set during resize so the cursor does not visually jump to an intermediate
+    /// position while the shell hasn't yet redrawn the prompt via SIGWINCH.
+    pub suppress_cursor: bool,
     #[cfg(not(target_os = "macos"))]
     pub hovered_tab: Option<usize>,
     #[cfg(not(target_os = "macos"))]
@@ -296,7 +300,8 @@ pub(in crate::gui::events) fn draw_frame_content(
                     }
 
                     // Cursor.
-                    if leaf.scroll_offset == 0
+                    if !params.suppress_cursor
+                        && leaf.scroll_offset == 0
                         && leaf.terminal.cursor_visible
                         && is_focused
                         && should_show_cursor(params.cursor_blink_start, leaf.terminal.cursor_style, params.cursor_blink_interval_ms)
@@ -378,7 +383,8 @@ pub(in crate::gui::events) fn draw_frame_content(
                 }
 
                 // Cursor.
-                if leaf.scroll_offset == 0
+                if !params.suppress_cursor
+                    && leaf.scroll_offset == 0
                     && leaf.terminal.cursor_visible
                     && should_show_cursor(params.cursor_blink_start, leaf.terminal.cursor_style, params.cursor_blink_interval_ms)
                 {

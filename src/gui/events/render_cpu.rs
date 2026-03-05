@@ -38,6 +38,7 @@ impl FerrumWindow {
             tab: self.tabs.get(self.active_tab),
             cursor_blink_start: self.cursor_blink_start,
             cursor_blink_interval_ms: self.cursor_blink_interval_ms,
+            suppress_cursor: self.sigwinch_deadline.is_some(),
             #[cfg(not(target_os = "macos"))]
             hovered_tab: self.hovered_tab,
             #[cfg(not(target_os = "macos"))]
