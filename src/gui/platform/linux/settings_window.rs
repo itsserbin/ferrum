@@ -478,9 +478,9 @@ fn build_terminal_tab(config: &AppConfig, t: &crate::i18n::Translations) -> (gtk
         &vbox,
         t.terminal_max_scrollback_label,
         config.terminal.max_scrollback as f64,
-        0.0,
-        50000.0,
-        100.0,
+        TerminalConfig::SCROLLBACK_MIN as f64,
+        TerminalConfig::SCROLLBACK_MAX as f64,
+        TerminalConfig::SCROLLBACK_STEP as f64,
         0,
     );
     let cursor_blink = labeled_spin(

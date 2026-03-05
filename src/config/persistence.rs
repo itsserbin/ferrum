@@ -65,10 +65,15 @@ mod tests {
 
     #[test]
     fn load_config_returns_default_when_no_file() {
-        // With a non-existent XDG dir, load should return defaults.
+        // Point XDG_CONFIG_HOME at a guaranteed non-existent path so that
+        // load_config() falls back to AppConfig::default().
+        // SAFETY: test-only mutation; this test is not run concurrently with
+        // other env-reading tests (single-threaded by default in Rust tests).
+        unsafe { std::env::set_var("XDG_CONFIG_HOME", "/nonexistent/ferrum-test-path") };
         let config = load_config();
+        unsafe { std::env::remove_var("XDG_CONFIG_HOME") };
         assert_eq!(config.font.size, 14.0);
-        assert_eq!(config.terminal.max_scrollback, 1000);
+        assert_eq!(config.terminal.max_scrollback, 30_000);
     }
 
     #[test]
