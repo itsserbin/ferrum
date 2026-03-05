@@ -270,6 +270,8 @@ impl FerrumWindow {
         tab.focused_pane = pane_id;
 
         self.resize_all_panes();
+        // A pane split is a discrete event, not a drag: dimensions are already
+        // final, so SIGWINCH can be sent immediately without debouncing.
         self.send_sigwinch_to_all_panes();
     }
 

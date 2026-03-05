@@ -60,17 +60,7 @@ impl super::Terminal {
                 ));
             }
 
-            // Build the new grid from old rows [push_count .. push_count+rows].
-            let mut new_grid = Grid::new(rows, cols);
-            for new_r in 0..rows {
-                let old_r = push_count + new_r;
-                if old_r < self.grid.rows {
-                    let copy_cols = cols.min(self.grid.cols);
-                    new_grid.copy_row_from_slice(new_r, &self.grid.row_slice(old_r)[..copy_cols]);
-                    new_grid.set_wrapped(new_r, self.grid.is_wrapped(old_r));
-                }
-            }
-            self.grid = new_grid;
+            self.grid = self.grid.resized_from_offset(rows, cols, push_count);
             self.cursor_row = self.cursor_row.saturating_sub(push_count);
         } else {
             // Height increase or same: keep top rows, add blank rows at bottom.

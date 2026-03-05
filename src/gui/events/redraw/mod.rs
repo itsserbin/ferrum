@@ -39,6 +39,10 @@ impl FerrumWindow {
             return;
         }
         self.pending_grid_resize = true;
+        // A DPI change alters cell pixel dimensions, so the grid row/col count
+        // can change. Defer SIGWINCH the same way a window resize does.
+        self.sigwinch_deadline =
+            Some(std::time::Instant::now() + std::time::Duration::from_millis(SIGWINCH_DEBOUNCE_MS));
     }
 
     pub(crate) fn on_resized(&mut self, size: winit::dpi::PhysicalSize<u32>) {

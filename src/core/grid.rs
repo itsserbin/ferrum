@@ -86,10 +86,21 @@ impl Grid {
 
     /// Simple resize without reflow (used for alt screen).
     pub fn resized(&self, rows: usize, cols: usize) -> Grid {
+        self.resized_from_offset(rows, cols, 0)
+    }
+
+    /// Like `resized`, but starts copying from `src_offset` in the source grid.
+    ///
+    /// Row `new_r` of the result is filled from row `src_offset + new_r` of
+    /// `self`. Used by `simple_resize` to skip rows already pushed to scrollback.
+    pub fn resized_from_offset(&self, rows: usize, cols: usize, src_offset: usize) -> Grid {
         let mut new_grid = Grid::new(rows, cols);
-        for row in 0..rows.min(self.rows) {
-            new_grid.copy_row_from_slice(row, &self.row_slice(row)[..cols.min(self.cols)]);
-            new_grid.set_wrapped(row, self.is_wrapped(row));
+        for new_r in 0..rows {
+            let old_r = src_offset + new_r;
+            if old_r < self.rows {
+                new_grid.copy_row_from_slice(new_r, &self.row_slice(old_r)[..cols.min(self.cols)]);
+                new_grid.set_wrapped(new_r, self.is_wrapped(old_r));
+            }
         }
         new_grid
     }
