@@ -19,15 +19,8 @@ impl FerrumWindow {
 
     pub(in crate::gui) fn apply_pending_resize(&mut self) {
         if self.pending_grid_resize.take().is_some() {
-            // Recalculate grid size from current window dimensions to avoid race condition
-            // with native tab bar toggle on macOS (which can change window.inner_size()
-            // between on_resized() and this apply call).
-            let size = self.window.inner_size();
-            let (rows, cols) = self.calc_grid_size(size.width, size.height);
-            self.resize_all_tabs(rows, cols);
-            // Recalculate pane layout for the active tab so each pane gets its
-            // correct dimensions based on the split tree (resize_all_tabs uses a
-            // uniform size which is only accurate for single-pane tabs).
+            // Recalculate pane layout for all tabs so each pane gets its correct
+            // dimensions based on the split tree.
             self.resize_all_panes();
             // Show mouse cursor after resize completes
             self.window.set_cursor_visible(true);
@@ -48,6 +41,10 @@ impl FerrumWindow {
     }
 
     pub(crate) fn on_resized(&mut self, size: winit::dpi::PhysicalSize<u32>) {
+        // Reconfigure the GPU surface immediately so the OS compositor does not
+        // stretch the previous frame to fit the new window dimensions while the
+        // next rendered frame is in flight.
+        self.backend.notify_resize(size.width, size.height);
         let (rows, cols) = self.calc_grid_size(size.width, size.height);
         // Coalesce rapid OS resize events and apply only the latest grid size on redraw.
         self.pending_grid_resize = Some((rows, cols));

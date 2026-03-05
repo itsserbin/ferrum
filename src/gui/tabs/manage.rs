@@ -39,9 +39,7 @@ impl FerrumWindow {
             let next_height = self.backend.tab_bar_height_px();
 
             if prev_height != next_height && !self.tabs.is_empty() {
-                let size = self.window.inner_size();
-                let (rows, cols) = self.calc_grid_size(size.width, size.height);
-                self.resize_all_tabs(rows, cols);
+                self.resize_all_panes();
             }
         }
     }
@@ -109,34 +107,6 @@ impl FerrumWindow {
         }
     }
 
-    /// Resizes all tab terminals and their PTY sessions.
-    pub(in crate::gui) fn resize_all_tabs(&mut self, rows: usize, cols: usize) {
-        for tab in &mut self.tabs {
-            // Iterate over all leaves in the pane tree.
-            let leaf_ids = tab.pane_tree.leaf_ids();
-            for leaf_id in leaf_ids {
-                if let Some(leaf) = tab.pane_tree.find_leaf_mut(leaf_id) {
-                    if leaf.terminal.grid.rows == rows && leaf.terminal.grid.cols == cols {
-                        continue;
-                    }
-
-                    leaf.terminal.resize(rows, cols);
-
-                    // Clamp scroll_offset to valid range after resize (scrollback may have changed)
-                    leaf.scroll_offset = leaf.scroll_offset.min(leaf.terminal.scrollback.len());
-
-                    if let Some(ref session) = leaf.session
-                        && let Err(err) = session.resize(rows as u16, cols as u16)
-                    {
-                        eprintln!(
-                            "Failed to resize PTY for tab {}, pane {}: {err}",
-                            tab.id, leaf_id
-                        );
-                    }
-                }
-            }
-        }
-    }
 
     /// Starts inline rename for the selected tab.
     pub(in crate::gui) fn start_rename(&mut self, tab_index: usize) {
@@ -338,36 +308,35 @@ impl FerrumWindow {
         }
     }
 
-    /// Recalculates pane dimensions for the active tab based on current window size,
-    /// resizing each pane's terminal and PTY session accordingly.
+    /// Recalculates pane dimensions for all tabs based on current window size,
+    /// resizing each pane's terminal and PTY session to its correct split dimensions.
     pub(in crate::gui) fn resize_all_panes(&mut self) {
         let cw = self.backend.cell_width();
         let ch = self.backend.cell_height();
         let terminal_rect = self.terminal_content_rect();
-
         let divider_px = DIVIDER_WIDTH;
         let scaled_pane_pad = self.backend.pane_inner_padding_px();
-        let Some(tab) = self.active_tab_mut() else {
-            return;
-        };
-        let pane_pad = if tab.has_multiple_panes() {
-            scaled_pane_pad
-        } else {
-            0
-        };
-        let layout = tab.pane_tree.layout(terminal_rect, divider_px);
 
-        for (pane_id, rect) in layout {
-            if let Some(leaf) = tab.pane_tree.find_leaf_mut(pane_id) {
-                let content = rect.inset(pane_pad);
-                let cols = (content.width / cw).max(1) as usize;
-                let rows = (content.height / ch).max(1) as usize;
-                leaf.terminal.resize(rows, cols);
-                leaf.scroll_offset = leaf.scroll_offset.min(leaf.terminal.scrollback.len());
-                if let Some(ref session) = leaf.session
-                    && let Err(err) = session.resize(rows as u16, cols as u16)
-                {
-                    eprintln!("Failed to resize PTY for pane {}: {err}", pane_id);
+        for tab in &mut self.tabs {
+            let pane_pad = if tab.has_multiple_panes() {
+                scaled_pane_pad
+            } else {
+                0
+            };
+            let layout = tab.pane_tree.layout(terminal_rect, divider_px);
+
+            for (pane_id, rect) in layout {
+                if let Some(leaf) = tab.pane_tree.find_leaf_mut(pane_id) {
+                    let content = rect.inset(pane_pad);
+                    let cols = (content.width / cw).max(1) as usize;
+                    let rows = (content.height / ch).max(1) as usize;
+                    leaf.terminal.resize(rows, cols);
+                    leaf.scroll_offset = leaf.scroll_offset.min(leaf.terminal.scrollback.len());
+                    if let Some(ref session) = leaf.session
+                        && let Err(err) = session.resize(rows as u16, cols as u16)
+                    {
+                        eprintln!("Failed to resize PTY for pane {}: {err}", pane_id);
+                    }
                 }
             }
         }
