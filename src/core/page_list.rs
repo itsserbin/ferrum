@@ -123,36 +123,9 @@ impl PageList {
             .free_list
             .pop()
             .unwrap_or_else(|| *Page::new(self.cols));
+        // Verify the recycled or new page was allocated for the current column width.
+        debug_assert_eq!(page.cols, self.cols, "page column mismatch on alloc");
         self.pages.push(page);
-    }
-
-    // ── Scroll ───────────────────────────────────────────────────────────────
-
-    /// Push the top `count` viewport rows into scrollback, appending blank rows at the bottom.
-    pub fn scroll_up(&mut self, count: usize) {
-        let count = count.min(self.viewport_rows);
-        let would_be = self.scrollback_count + count;
-        if would_be > self.max_scrollback {
-            let evict = would_be - self.max_scrollback;
-            self.evict_scrollback(evict);
-        }
-        self.scrollback_count += count;
-        let cols = self.cols;
-        for _ in 0..count {
-            self.append_row(PageRow::new(cols));
-        }
-    }
-
-    fn evict_scrollback(&mut self, count: usize) {
-        let count = count.min(self.scrollback_count);
-        let first_kept_page = count / PAGE_SIZE;
-        let evicted_pages: Vec<Page> = self.pages.drain(0..first_kept_page).collect();
-        for p in evicted_pages {
-            self.free_list.push(p);
-        }
-        self.scrollback_count -= first_kept_page * PAGE_SIZE;
-        let remaining_evict = count - first_kept_page * PAGE_SIZE;
-        self.scrollback_count = self.scrollback_count.saturating_sub(remaining_evict);
     }
 
     // ── Simple resize ────────────────────────────────────────────────────────
@@ -421,35 +394,6 @@ mod tests {
         let cell = GraphemeCell::from_char('X');
         list.viewport_set(0, 0, cell);
         assert_eq!(list.viewport_get(0, 0).grapheme(), "X");
-    }
-
-    #[test]
-    fn scroll_up_grows_scrollback() {
-        let mut list = PageList::new(3, 5, 100);
-        list.scroll_up(1);
-        assert_eq!(list.scrollback_len(), 1);
-        assert_eq!(list.viewport_rows(), 3);
-        assert_eq!(list.total_rows(), 4);
-    }
-
-    #[test]
-    fn scroll_up_preserves_content_in_scrollback() {
-        let mut list = PageList::new(3, 5, 100);
-        list.viewport_set(0, 0, GraphemeCell::from_char('A'));
-        list.scroll_up(1);
-        // Row that was viewport row 0 is now scrollback row 0.
-        assert_eq!(list.scrollback_row(0).cells[0].grapheme(), "A");
-        // New viewport row 0 is blank.
-        assert!(list.viewport_get(0, 0).is_default());
-    }
-
-    #[test]
-    fn scrollback_respects_max_rows() {
-        let mut list = PageList::new(2, 5, 3);
-        for _ in 0..6 {
-            list.scroll_up(1);
-        }
-        assert!(list.scrollback_len() <= 3);
     }
 
     #[test]
