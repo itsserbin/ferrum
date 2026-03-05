@@ -191,7 +191,7 @@ pub(super) enum MenuContext {
 pub(super) struct FerrumWindow {
     pub(super) window: Arc<Window>,
     pub(super) window_title: String,
-    pub(super) pending_grid_resize: Option<(usize, usize)>,
+    pub(super) pending_grid_resize: bool,
     /// When set, SIGWINCH is sent to all panes once this instant is reached.
     /// Reset on every resize event so SIGWINCH fires only after the drag settles.
     pub(super) sigwinch_deadline: Option<std::time::Instant>,

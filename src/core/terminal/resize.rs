@@ -123,19 +123,22 @@ impl super::Terminal {
         cursor_in_rewrapped: Option<(usize, usize)>,
     ) {
         let total_rows = rewrapped.len();
-        let scrollback_count = total_rows.saturating_sub(new_rows);
+        // Rows beyond new_rows go to scrollback; the rest fill the grid.
+        // Clamp to max_scrollback so we never exceed the limit, and skip
+        // rows that would be evicted immediately — avoids a per-iteration
+        // pop_front (scrollback was just cleared).
+        let grid_offset = total_rows.saturating_sub(new_rows);
+        let scrollback_count = grid_offset.min(self.max_scrollback);
+        let skip_count = grid_offset.saturating_sub(scrollback_count);
 
         self.scrollback.clear();
         self.grid = Grid::new(new_rows, new_cols);
 
-        for row in rewrapped.iter().take(scrollback_count) {
+        for row in rewrapped.iter().skip(skip_count).take(scrollback_count) {
             self.scrollback.push_back(row.clone());
-            if self.scrollback.len() > self.max_scrollback {
-                self.scrollback.pop_front();
-            }
         }
 
-        for (i, row) in rewrapped.iter().skip(scrollback_count).enumerate() {
+        for (i, row) in rewrapped.iter().skip(grid_offset).enumerate() {
             for (col, cell) in row.cells.iter().enumerate() {
                 self.grid.set(i, col, cell.clone());
             }
@@ -151,7 +154,7 @@ impl super::Terminal {
         // stray partial-line indicator (`%`).
         if let Some((row_in_rewrapped, col)) = cursor_in_rewrapped {
             self.cursor_row = row_in_rewrapped
-                .saturating_sub(scrollback_count)
+                .saturating_sub(grid_offset)
                 .min(new_rows.saturating_sub(1));
             self.cursor_col = col.min(new_cols.saturating_sub(1));
         } else {

@@ -3,6 +3,10 @@ mod animation;
 #[cfg(feature = "gpu")]
 use crate::gui::renderer::backend::RendererBackend;
 use crate::gui::*;
+
+/// Debounce delay before sending SIGWINCH after the last resize event.
+/// Allows the user to finish dragging before the shell redraws its prompt.
+const SIGWINCH_DEBOUNCE_MS: u64 = 80;
 #[cfg(target_os = "macos")]
 use std::time::Instant;
 
@@ -18,7 +22,8 @@ impl FerrumWindow {
     }
 
     pub(in crate::gui) fn apply_pending_resize(&mut self) {
-        if self.pending_grid_resize.take().is_some() {
+        if self.pending_grid_resize {
+            self.pending_grid_resize = false;
             // Resize terminal grids so rendering is correct.
             // Cursor stays hidden until SIGWINCH is sent (see sigwinch_deadline),
             // at which point the shell redraws to the correct position.
@@ -33,23 +38,19 @@ impl FerrumWindow {
         if (self.backend.ui_scale() - prev_scale).abs() < SCALE_EPSILON {
             return;
         }
-
-        let size = self.window.inner_size();
-        let (rows, cols) = self.calc_grid_size(size.width, size.height);
-        self.pending_grid_resize = Some((rows, cols));
+        self.pending_grid_resize = true;
     }
 
     pub(crate) fn on_resized(&mut self, size: winit::dpi::PhysicalSize<u32>) {
         // Reconfigure the GPU surface immediately so the OS compositor does not
         // stretch the previous frame to fit the new window dimensions.
         self.backend.notify_resize(size.width, size.height);
-        let (rows, cols) = self.calc_grid_size(size.width, size.height);
-        self.pending_grid_resize = Some((rows, cols));
+        self.pending_grid_resize = true;
         self.window.set_cursor_visible(false);
         // Defer SIGWINCH: reset deadline on every resize event so SIGWINCH fires
         // only once, ~80 ms after the user stops dragging.
         self.sigwinch_deadline =
-            Some(std::time::Instant::now() + std::time::Duration::from_millis(80));
+            Some(std::time::Instant::now() + std::time::Duration::from_millis(SIGWINCH_DEBOUNCE_MS));
         self.window.request_redraw();
     }
 
