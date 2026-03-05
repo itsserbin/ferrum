@@ -59,6 +59,7 @@ impl FerrumWindow {
             window,
             window_title: "Ferrum".to_string(),
             pending_grid_resize: None,
+            sigwinch_deadline: None,
             backend,
             tabs: Vec::new(),
             active_tab: 0,

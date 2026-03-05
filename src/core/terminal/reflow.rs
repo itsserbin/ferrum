@@ -51,39 +51,62 @@ pub(super) fn rewrap_lines(lines: &[LogicalLine], new_cols: usize) -> Vec<Row> {
     rewrapped
 }
 
-impl super::Terminal {
-    /// Collect scrollback and meaningful grid rows into logical lines.
-    ///
-    /// Merges consecutive soft-wrapped physical rows into single logical lines.
-    /// Tracks `min_len` to preserve trailing spaces before the cursor position.
-    pub(super) fn collect_logical_lines(&self) -> Vec<LogicalLine> {
-        let content_rows = self.compute_content_rows();
+/// Count how many rewrapped rows logical lines `[0..line_idx]` produce at `new_cols`.
+pub(super) fn rows_before_line(lines: &[LogicalLine], line_idx: usize, new_cols: usize) -> usize {
+    lines[..line_idx].iter().map(|line| line_row_count(line, new_cols)).sum()
+}
 
+fn line_row_count(line: &LogicalLine, new_cols: usize) -> usize {
+    let len = line_content_len(line);
+    if len == 0 { 1 } else { len.div_ceil(new_cols) }
+}
+
+fn line_content_len(line: &LogicalLine) -> usize {
+    let len = line
+        .cells
+        .iter()
+        .rposition(|c| c != &Cell::default())
+        .map(|i| i + 1)
+        .unwrap_or(0);
+    len.max(line.min_len.min(line.cells.len()))
+}
+
+impl super::Terminal {
+    /// Collect scrollback and visible grid into logical lines.
+    ///
+    /// Also returns the index of the logical line that contains the cursor,
+    /// used to correctly position the cursor after reflow.
+    pub(super) fn collect_logical_lines(&self) -> (Vec<LogicalLine>, Option<usize>) {
+        let content_rows = self.compute_content_rows();
         let mut lines: Vec<LogicalLine> = Vec::new();
         let mut current_cells: Vec<Cell> = Vec::new();
         let mut current_min_len = 0usize;
+        let mut cursor_in_current = false;
+        let mut cursor_line_idx: Option<usize> = None;
 
-        // First from scrollback
         for row in self.scrollback.iter() {
             current_cells.extend(row.cells.iter().cloned());
             if !row.wrapped {
                 lines.push(LogicalLine {
                     cells: std::mem::take(&mut current_cells),
-                    min_len: current_min_len,
+                    min_len: 0,
                 });
-                current_min_len = 0;
             }
         }
 
-        // Then from grid up to the computed content boundary.
         for r in 0..content_rows {
             let line_start = current_cells.len();
             current_cells.extend(self.grid.row_cells(r));
             if r == self.cursor_row {
-                let clamped_cursor_col = self.cursor_col.min(self.grid.cols);
-                current_min_len = current_min_len.max(line_start + clamped_cursor_col);
+                cursor_in_current = true;
+                let clamped = self.cursor_col.min(self.grid.cols);
+                current_min_len = current_min_len.max(line_start + clamped);
             }
             if !self.grid.is_wrapped(r) {
+                if cursor_in_current {
+                    cursor_line_idx = Some(lines.len());
+                    cursor_in_current = false;
+                }
                 lines.push(LogicalLine {
                     cells: std::mem::take(&mut current_cells),
                     min_len: current_min_len,
@@ -92,27 +115,26 @@ impl super::Terminal {
             }
         }
 
-        // Handle remaining content (if last row was wrapped)
         if !current_cells.is_empty() {
+            if cursor_in_current {
+                cursor_line_idx = Some(lines.len());
+            }
             lines.push(LogicalLine {
                 cells: current_cells,
                 min_len: current_min_len,
             });
         }
 
-        lines
+        (lines, cursor_line_idx)
     }
 
-    /// Compute the number of grid rows that contain meaningful content.
-    ///
-    /// Includes all rows up to the cursor position, plus any rows below the
-    /// cursor that contain non-default content (e.g., after cursor-addressing).
     pub(super) fn compute_content_rows(&self) -> usize {
         let cursor_rows = self.cursor_row.saturating_add(1).min(self.grid.rows);
         let default_cell = Cell::default();
         let last_content_row = (0..self.grid.rows).rev().find(|&row| {
             self.grid.is_wrapped(row)
-                || (0..self.grid.cols).any(|col| self.grid.get_unchecked(row, col) != &default_cell)
+                || (0..self.grid.cols)
+                    .any(|col| self.grid.get_unchecked(row, col) != &default_cell)
         });
         last_content_row
             .map(|row| (row + 1).max(cursor_rows))

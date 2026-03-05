@@ -274,6 +274,7 @@ impl FerrumWindow {
         tab.focused_pane = pane_id;
 
         self.resize_all_panes();
+        self.send_sigwinch_to_all_panes();
     }
 
     /// Closes the focused pane in the active tab.
@@ -308,8 +309,9 @@ impl FerrumWindow {
         }
     }
 
-    /// Recalculates pane dimensions for all tabs based on current window size,
-    /// resizing each pane's terminal and PTY session to its correct split dimensions.
+    /// Recalculates pane dimensions for all tabs and resizes the terminal grids.
+    /// Does NOT send SIGWINCH — call `send_sigwinch_to_all_panes` separately
+    /// after the resize has settled (debounced).
     pub(in crate::gui) fn resize_all_panes(&mut self) {
         let cw = self.backend.cell_width();
         let ch = self.backend.cell_height();
@@ -332,10 +334,23 @@ impl FerrumWindow {
                     let rows = (content.height / ch).max(1) as usize;
                     leaf.terminal.resize(rows, cols);
                     leaf.scroll_offset = leaf.scroll_offset.min(leaf.terminal.scrollback.len());
+                }
+            }
+        }
+    }
+
+    /// Sends SIGWINCH to all panes with their current grid dimensions.
+    /// Call this once after resize has settled (see `sigwinch_deadline`).
+    pub(in crate::gui) fn send_sigwinch_to_all_panes(&mut self) {
+        for tab in &mut self.tabs {
+            for pane_id in tab.pane_tree.leaf_ids() {
+                if let Some(leaf) = tab.pane_tree.find_leaf(pane_id) {
+                    let rows = leaf.terminal.grid.rows as u16;
+                    let cols = leaf.terminal.grid.cols as u16;
                     if let Some(ref session) = leaf.session
-                        && let Err(err) = session.resize(rows as u16, cols as u16)
+                        && let Err(err) = session.resize(rows, cols)
                     {
-                        eprintln!("Failed to resize PTY for pane {}: {err}", pane_id);
+                        eprintln!("Failed to send SIGWINCH for pane {pane_id}: {err}");
                     }
                 }
             }

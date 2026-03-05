@@ -86,6 +86,16 @@ impl RendererBackend {
         self.as_renderer_mut().set_scale(scale_factor);
     }
 
+    /// Reconfigures the GPU surface to the new window dimensions so the OS
+    /// compositor does not stretch the previous frame during resize.
+    /// No-op for the CPU backend (softbuffer reconfigures itself in the render path).
+    pub fn notify_resize(&mut self, _width: u32, _height: u32) {
+        #[cfg(feature = "gpu")]
+        if let Self::Gpu(gpu) = self {
+            gpu.resize(_width, _height);
+        }
+    }
+
     #[cfg(not(target_os = "macos"))]
     pub fn set_tab_bar_visible(&mut self, visible: bool) {
         self.as_renderer_mut().set_tab_bar_visible(visible);

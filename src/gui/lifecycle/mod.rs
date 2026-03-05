@@ -345,6 +345,20 @@ impl ApplicationHandler for App {
             }
         }
 
+        // Send deferred SIGWINCH once the resize has settled (~80 ms after last event).
+        for win in self.windows.values_mut() {
+            if let Some(deadline) = win.sigwinch_deadline {
+                if now >= deadline {
+                    win.sigwinch_deadline = None;
+                    win.send_sigwinch_to_all_panes();
+                    win.window.request_redraw();
+                } else {
+                    // Wake up in time to send SIGWINCH.
+                    next_wakeup = Some(next_wakeup.map_or(deadline, |c| c.min(deadline)));
+                }
+            }
+        }
+
         let update = self.available_release.as_ref();
         for win in self.windows.values_mut() {
             win.sync_window_title(update);
