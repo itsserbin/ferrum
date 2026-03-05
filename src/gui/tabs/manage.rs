@@ -291,6 +291,9 @@ impl FerrumWindow {
             tab.focused_pane = next_focus;
         }
         self.resize_all_panes();
+        // Closing a pane is a discrete event: the surviving pane expands to fill
+        // the freed space immediately, so SIGWINCH can be sent without debouncing.
+        self.send_sigwinch_to_all_panes();
     }
 
     /// Navigates focus to the nearest pane in the given direction from the currently
