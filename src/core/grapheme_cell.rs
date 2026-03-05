@@ -1,5 +1,5 @@
 use crate::core::Color;
-use unicode_width::UnicodeWidthChar;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 /// Style of underline decoration on a terminal cell.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -86,6 +86,16 @@ impl GraphemeCell {
         }
     }
 
+    /// Creates a `GraphemeCell` from a grapheme cluster string (e.g. a ZWJ emoji sequence).
+    pub fn from_str(s: &str) -> Self {
+        let width = UnicodeWidthStr::width(s).min(2) as u8;
+        GraphemeCell {
+            grapheme: GraphemeStr::from_str(s),
+            width,
+            ..Self::default()
+        }
+    }
+
     /// Creates a spacer cell (width 0) used as the right half of a wide character.
     pub fn spacer() -> Self {
         GraphemeCell {
@@ -159,6 +169,14 @@ mod tests {
     #[test]
     fn from_char_emoji_is_wide() {
         let cell = GraphemeCell::from_char('🚀');
+        assert_eq!(cell.width, 2);
+    }
+
+    #[test]
+    fn grapheme_cluster_stores_correctly() {
+        let family = "👨‍👩‍👧";
+        let cell = GraphemeCell::from_str(family);
+        assert_eq!(cell.grapheme(), family);
         assert_eq!(cell.width, 2);
     }
 }

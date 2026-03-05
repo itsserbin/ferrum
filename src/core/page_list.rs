@@ -426,8 +426,8 @@ fn rewrap_lines(
                 }
                 if cell.width == 2 {
                     if placed_cols + 2 > new_cols {
-                        // Wide char doesn't fit — replace with '?'.
-                        cells.push(GraphemeCell::from_char('?'));
+                        // Wide char doesn't fit — replace with '?' grapheme.
+                        cells.push(GraphemeCell::from_str("?"));
                         placed_cols += 1;
                     } else {
                         cells.push(cell.clone());
