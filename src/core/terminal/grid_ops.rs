@@ -5,7 +5,7 @@ use crate::core::{Cell, Grid, Row};
 impl super::Terminal {
     /// Returns whether the terminal is in the alternate screen.
     pub fn is_alt_screen(&self) -> bool {
-        self.alt_grid.is_some()
+        self.alt_screen.is_some()
     }
 
     /// Builds a display grid by combining scrollback with the visible grid.
@@ -32,7 +32,19 @@ impl super::Terminal {
     }
 
     pub(super) fn scroll_up_region(&mut self, top: usize, bottom: usize) {
-        // Persist the top row to scrollback only for the main screen.
+        let to_scrollback = top == 0 && self.alt_screen.is_none();
+
+        // ── screen (PageList) ────────────────────────────────────────────────
+        self.screen.scroll_up_region(top, bottom, to_scrollback);
+        // Apply current blank cell colours to the newly cleared bottom row.
+        let blank_gc = self.make_blank_grapheme_cell();
+        let cols = self.screen.cols();
+        for col in 0..cols {
+            self.screen.viewport_set(bottom, col, blank_gc.clone());
+        }
+        self.screen.viewport_set_wrapped(bottom, false);
+
+        // ── grid (display cache) ─────────────────────────────────────────────
         if top == 0 && self.alt_grid.is_none() {
             self.scrollback.push_back(Row::from_cells(
                 self.grid.row_slice(0).to_vec(),
@@ -40,10 +52,8 @@ impl super::Terminal {
             ));
             if self.scrollback.len() > self.max_scrollback {
                 self.scrollback.pop_front();
-                self.scrollback_popped += 1;
             }
         }
-
         for row in (top + 1)..=bottom {
             self.grid.copy_row_within(row, row - 1);
         }
@@ -55,6 +65,16 @@ impl super::Terminal {
     }
 
     pub(super) fn scroll_down_region(&mut self, top: usize, bottom: usize) {
+        // ── screen (PageList) ────────────────────────────────────────────────
+        self.screen.scroll_down_region(top, bottom);
+        let blank_gc = self.make_blank_grapheme_cell();
+        let cols = self.screen.cols();
+        for col in 0..cols {
+            self.screen.viewport_set(top, col, blank_gc.clone());
+        }
+        self.screen.viewport_set_wrapped(top, false);
+
+        // ── grid (display cache) ─────────────────────────────────────────────
         for row in (top..bottom).rev() {
             self.grid.copy_row_within(row, row + 1);
         }

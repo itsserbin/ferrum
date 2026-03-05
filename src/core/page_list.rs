@@ -44,11 +44,6 @@ impl PageList {
         self.scrollback_count + self.viewport_rows
     }
 
-    /// Create a blank row with the current column count.
-    pub fn make_row(&self) -> PageRow {
-        PageRow::new(self.cols)
-    }
-
     /// Convert absolute row index to (page_idx, row_within_page).
     fn abs_to_page(&self, abs_row: usize) -> (usize, usize) {
         (abs_row / PAGE_SIZE, abs_row % PAGE_SIZE)
@@ -85,12 +80,6 @@ impl PageList {
         self.pages[pi].get_mut(ri)
     }
 
-    pub fn viewport_set_row(&mut self, row: usize, src: PageRow) {
-        let abs = self.viewport_start_abs() + row;
-        let (pi, ri) = self.abs_to_page(abs);
-        *self.pages[pi].get_mut(ri) = src;
-    }
-
     pub fn viewport_is_wrapped(&self, row: usize) -> bool {
         self.viewport_row(row).wrapped
     }
@@ -104,6 +93,105 @@ impl PageList {
     pub fn scrollback_row(&self, idx: usize) -> &PageRow {
         let (pi, ri) = self.abs_to_page(idx);
         self.pages[pi].get(ri)
+    }
+
+    /// Copy a viewport row to another viewport row.
+    pub fn viewport_copy_row(&mut self, src_row: usize, dst_row: usize) {
+        debug_assert_ne!(src_row, dst_row);
+        let src = self.viewport_row(src_row).clone();
+        *self.viewport_row_mut(dst_row) = src;
+    }
+
+    /// Scroll up within a viewport region [top..=bottom].
+    ///
+    /// When `top == 0` and `to_scrollback` is `true`, the evicted top row is
+    /// appended to the scrollback buffer (oldest entries are dropped when the
+    /// buffer is full).  In all other cases the evicted row is discarded.
+    pub fn scroll_up_region(&mut self, top: usize, bottom: usize, to_scrollback: bool) {
+        let evicted = if top == 0 && to_scrollback {
+            Some(self.viewport_row(top).clone())
+        } else {
+            None
+        };
+        for row in (top + 1)..=bottom {
+            self.viewport_copy_row(row, row - 1);
+        }
+        // Clear the bottom row.
+        let row_mut = self.viewport_row_mut(bottom);
+        for cell in &mut row_mut.cells {
+            *cell = GraphemeCell::default();
+        }
+        row_mut.wrapped = false;
+        if let Some(evicted_row) = evicted {
+            self.push_to_scrollback(evicted_row);
+        }
+    }
+
+    /// Scroll down within a viewport region [top..=bottom].
+    pub fn scroll_down_region(&mut self, top: usize, bottom: usize) {
+        for row in (top..bottom).rev() {
+            self.viewport_copy_row(row, row + 1);
+        }
+        let row_mut = self.viewport_row_mut(top);
+        for cell in &mut row_mut.cells {
+            *cell = GraphemeCell::default();
+        }
+        row_mut.wrapped = false;
+    }
+
+    /// Append a row to the scrollback buffer, evicting the oldest row if full.
+    pub fn push_to_scrollback(&mut self, row: PageRow) {
+        if self.scrollback_count >= self.max_scrollback {
+            // Buffer is full: evict the oldest scrollback row (abs index 0)
+            // by shifting all scrollback rows left by one slot and placing
+            // the new row at the last scrollback slot.
+            debug_assert!(self.scrollback_count > 0, "max_scrollback must be > 0");
+            for i in 1..self.scrollback_count {
+                let src = self.abs_row(i).clone();
+                *self.abs_row_mut(i - 1) = src;
+            }
+            *self.abs_row_mut(self.scrollback_count - 1) = row;
+        } else {
+            // Buffer has space: insert the new row at the scrollback/viewport
+            // boundary (abs index = scrollback_count) so it becomes the newest
+            // scrollback row.  This requires shifting all viewport rows up by 1.
+            //
+            // Step 1: append a spare row at the physical end to make room.
+            //         The new spare is at abs index (scrollback_count + viewport_rows).
+            let spare_abs = self.scrollback_count + self.viewport_rows;
+            self.append_row(PageRow::new(self.cols));
+            // Step 2: rotate viewport rows one position forward (higher abs),
+            //         working from the end toward the boundary.
+            for i in (self.scrollback_count..spare_abs).rev() {
+                let src = self.abs_row(i).clone();
+                *self.abs_row_mut(i + 1) = src;
+            }
+            // Step 3: write the new scrollback row at the boundary slot.
+            *self.abs_row_mut(self.scrollback_count) = row;
+            // Step 4: increment scrollback_count; viewport_rows stays unchanged.
+            self.scrollback_count += 1;
+        }
+    }
+
+    /// Apply a function to every cell in the current viewport.
+    pub fn viewport_recolor<F: FnMut(&mut GraphemeCell)>(&mut self, mut f: F) {
+        for vrow in 0..self.viewport_rows {
+            let abs = self.viewport_start_abs() + vrow;
+            let (pi, ri) = self.abs_to_page(abs);
+            for cell in &mut self.pages[pi].get_mut(ri).cells {
+                f(cell);
+            }
+        }
+    }
+
+    /// Apply a function to every cell in the scrollback buffer.
+    pub fn scrollback_recolor<F: FnMut(&mut GraphemeCell)>(&mut self, mut f: F) {
+        for sb_idx in 0..self.scrollback_count {
+            let (pi, ri) = self.abs_to_page(sb_idx);
+            for cell in &mut self.pages[pi].get_mut(ri).cells {
+                f(cell);
+            }
+        }
     }
 
     // ── Internal: append a row to the end ───────────────────────────────────

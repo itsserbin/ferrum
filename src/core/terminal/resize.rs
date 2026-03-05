@@ -1,4 +1,4 @@
-//! Terminal resize logic: simple resize and reflow resize strategies.
+//! Terminal resize logic: uses `PageList` reflow directly (no bridge methods).
 
 use crate::core::{Grid, Row};
 
@@ -8,17 +8,22 @@ impl super::Terminal {
             return;
         }
 
-        // Alt grid: simple resize (no reflow)
+        // Alt screen: simple resize (no reflow).
+        if let Some(ref mut alt) = self.alt_screen {
+            alt.simple_resize(rows, cols);
+        }
         if let Some(ref mut alt) = self.alt_grid {
             *alt = alt.resized(rows, cols);
         }
 
-        // Reflow when cols change (main screen only).
-        // For row-only changes use simple resize so we can anchor correctly.
         let old_cols = self.grid.cols;
-        if old_cols != cols && self.alt_grid.is_none() {
-            self.reflow_resize(rows, cols);
+        if old_cols != cols && self.alt_screen.is_none() {
+            // Reflow resize: run grapheme-aware reflow on the PageList directly,
+            // then rebuild the display cache (grid + scrollback) from the result.
+            self.screen.reflow(rows, cols, &self.cursor_pin);
+            self.rebuild_display_cache_after_resize(rows, cols);
         } else {
+            // Height-only resize or alt-screen present: use simple resize logic.
             self.simple_resize(rows, cols);
         }
 
@@ -27,6 +32,45 @@ impl super::Terminal {
         self.scroll_bottom = rows - 1;
 
         self.resize_at = Some(std::time::Instant::now());
+    }
+
+    /// Rebuild `self.grid`, `self.scrollback`, `self.cursor_row`, `self.cursor_col`
+    /// from `self.screen` after a reflow resize.  Called only when cols changed.
+    fn rebuild_display_cache_after_resize(&mut self, new_rows: usize, new_cols: usize) {
+        let sb_len = self.screen.scrollback_len();
+
+        // Rebuild scrollback from screen.
+        self.scrollback.clear();
+        for i in 0..sb_len {
+            let pr = self.screen.scrollback_row(i);
+            let cells: Vec<crate::core::Cell> =
+                pr.cells.iter().map(super::Terminal::grapheme_to_cell).collect();
+            self.scrollback.push_back(Row::from_cells(cells, pr.wrapped));
+        }
+
+        // Rebuild grid from screen viewport.
+        self.grid = Grid::new(new_rows, new_cols);
+        let vrows = self.screen.viewport_rows();
+        let vcols = self.screen.cols();
+        for r in 0..vrows.min(new_rows) {
+            let wrapped = self.screen.viewport_is_wrapped(r);
+            for c in 0..vcols.min(new_cols) {
+                let gc = self.screen.viewport_get(r, c);
+                self.grid.set(r, c, super::Terminal::grapheme_to_cell(gc));
+            }
+            self.grid.set_wrapped(r, wrapped);
+        }
+
+        // Update cursor from pin.
+        let coord = self.screen.pin_coord(&self.cursor_pin);
+        let vstart = self.screen.viewport_start_abs();
+        self.cursor_row =
+            coord.abs_row.saturating_sub(vstart).min(new_rows.saturating_sub(1));
+        self.cursor_col = coord.col.min(new_cols.saturating_sub(1));
+        // Sync the display cache's cursor_row/cursor_col back to the pin.
+        let new_abs = vstart + self.cursor_row;
+        self.screen.set_pin_abs_row(&self.cursor_pin, new_abs);
+        self.screen.set_pin_col(&self.cursor_pin, self.cursor_col);
     }
 
     /// Resize when only the height changes (no col change, no reflow).
@@ -45,7 +89,8 @@ impl super::Terminal {
                 0
             };
 
-            let overflow = (self.scrollback.len() + push_count).saturating_sub(self.max_scrollback);
+            let overflow =
+                (self.scrollback.len() + push_count).saturating_sub(self.max_scrollback);
             // Evict old scrollback rows that will be pushed out by the new rows.
             let old_evictions = overflow.saturating_sub(push_count);
             for _ in 0..old_evictions {
@@ -69,82 +114,24 @@ impl super::Terminal {
         }
 
         self.cursor_col = self.cursor_col.min(cols.saturating_sub(1));
-    }
 
-    /// Reflow resize: rewrap all content (scrollback + visible grid) to the new
-    /// column width, then restore the cursor to the beginning of the prompt's
-    /// logical line.
-    ///
-    /// Placing the cursor at the START of the prompt's logical line ensures
-    /// that readline's SIGWINCH handler redraws the prompt starting from the
-    /// same row where reflow placed it — preventing double-prompt artifacts.
-    fn reflow_resize(&mut self, new_rows: usize, new_cols: usize) {
-        let (logical_lines, cursor_line_idx) = self.collect_logical_lines();
-
-        // rewrap_lines tracks the start row of cursor_line_idx in one pass,
-        // avoiding a separate traversal via the old rows_before_line helper.
-        let (rewrapped, cursor_line_start) =
-            super::reflow::rewrap_lines(&logical_lines, new_cols, cursor_line_idx);
-
-        // Place the cursor at the START of the prompt's logical line (col 0).
-        //
-        // When SIGWINCH fires, the shell (zsh, bash/readline) does:
-        //   1. CR → already at col 0, no-op
-        //   2. Erase from current position to end of screen
-        //   3. Redraw the full prompt + any typed input
-        //
-        // If we placed the cursor at the ACTUAL offset within the wrapped line
-        // (e.g. row start+1, col 15 for a 35-char prompt at 20 cols), the shell
-        // would erase only from the MIDDLE of the reflowed prompt onward, leaving
-        // the first wrapped rows visible — causing the prompt to appear doubled.
-        //
-        // By placing the cursor at (start, 0), the shell erases the entire
-        // reflowed cursor line and redraws it cleanly.
-        self.fill_grid_from_rewrapped(&rewrapped, new_rows, new_cols, cursor_line_start);
-    }
-
-    fn fill_grid_from_rewrapped(
-        &mut self,
-        rewrapped: &[Row],
-        new_rows: usize,
-        new_cols: usize,
-        cursor_row_in_rewrapped: Option<usize>,
-    ) {
-        let total_rows = rewrapped.len();
-        // Rows beyond new_rows go to scrollback; the rest fill the grid.
-        // Clamp to max_scrollback so we never exceed the limit, and skip
-        // rows that would be evicted immediately — avoids a per-iteration
-        // pop_front (scrollback was just cleared).
-        let grid_offset = total_rows.saturating_sub(new_rows);
-        let scrollback_count = grid_offset.min(self.max_scrollback);
-        let skip_count = grid_offset.saturating_sub(scrollback_count);
-
-        self.scrollback.clear();
-        self.grid = Grid::new(new_rows, new_cols);
-
-        for row in rewrapped.iter().skip(skip_count).take(scrollback_count) {
-            self.scrollback.push_back(row.clone());
+        // Keep screen in sync with simple resize.
+        self.screen.simple_resize(rows, cols);
+        // Rebuild the viewport from the grid so screen and grid agree.
+        for r in 0..rows {
+            for c in 0..cols {
+                if r < self.grid.rows && c < self.grid.cols {
+                    let gc = super::Terminal::cell_to_grapheme(self.grid.get_unchecked(r, c));
+                    self.screen.viewport_set(r, c, gc);
+                }
+            }
+            if r < self.grid.rows {
+                self.screen.viewport_set_wrapped(r, self.grid.is_wrapped(r));
+            }
         }
-
-        for (i, row) in rewrapped.iter().skip(grid_offset).enumerate() {
-            self.grid.copy_row_from_slice(i, &row.cells);
-            self.grid.set_wrapped(i, row.wrapped);
-        }
-
-        // Place cursor at the start of its reflowed row (col 0).
-        //
-        // readline's SIGWINCH handler sends CR first (moves to col 0), then
-        // redraws the full prompt from the current row — placing the cursor
-        // at col 0 ensures the shell erases the entire reflowed line and
-        // redraws cleanly without a stray partial-line indicator (`%`).
-        if let Some(row_in_rewrapped) = cursor_row_in_rewrapped {
-            self.cursor_row = row_in_rewrapped
-                .saturating_sub(grid_offset)
-                .min(new_rows.saturating_sub(1));
-            self.cursor_col = 0;
-        } else {
-            self.cursor_row = new_rows.saturating_sub(1);
-            self.cursor_col = 0;
-        }
+        // Update cursor pin.
+        let abs = self.screen.viewport_start_abs() + self.cursor_row;
+        self.screen.set_pin_abs_row(&self.cursor_pin, abs);
+        self.screen.set_pin_col(&self.cursor_pin, self.cursor_col);
     }
 }

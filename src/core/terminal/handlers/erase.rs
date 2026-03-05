@@ -40,10 +40,25 @@ pub(in super::super) fn handle_erase_csi(
                     }
                 }
                 3 => {
-                    let cleared = term.scrollback.len();
                     term.scrollback.clear();
-                    // Keep selection anchoring in sync with absolute-row space.
-                    term.scrollback_popped = term.scrollback_popped.saturating_add(cleared);
+                    // Also clear the page-based scrollback.
+                    // Rebuild screen with empty scrollback to stay in sync.
+                    let rows = term.screen.viewport_rows();
+                    let cols = term.screen.cols();
+                    let max_sb = term.max_scrollback;
+                    let mut new_screen = crate::core::PageList::new(rows, cols, max_sb);
+                    for r in 0..rows {
+                        for c in 0..cols {
+                            let gc = term.screen.viewport_get(r, c).clone();
+                            new_screen.viewport_set(r, c, gc);
+                        }
+                        new_screen.viewport_set_wrapped(r, term.screen.viewport_is_wrapped(r));
+                    }
+                    let abs = new_screen.viewport_start_abs() + term.cursor_row;
+                    let new_cursor_pin =
+                        new_screen.register_pin(crate::core::PageCoord { abs_row: abs, col: term.cursor_col });
+                    term.cursor_pin = new_cursor_pin;
+                    term.screen = new_screen;
                 }
                 _ => {}
             }

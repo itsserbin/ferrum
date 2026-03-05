@@ -1,5 +1,5 @@
 use crate::core::{
-    Cell, Color, GraphemeCell, Grid, PageCoord, PageList, PageRow, Row, SecurityConfig,
+    Cell, Color, GraphemeCell, Grid, PageCoord, PageList, Row, SecurityConfig,
     SecurityEventKind, TrackedPin, UnderlineStyle,
 };
 use std::collections::VecDeque;
@@ -43,12 +43,26 @@ pub enum MouseMode {
 }
 
 pub struct Terminal {
+    // ── Primary state (PageList + TrackedPin) ────────────────────────────────
+    pub screen: PageList,
+    cursor_pin: TrackedPin,
+    saved_cursor: PageCoord,
+    alt_saved_cursor: PageCoord,
+    alt_screen: Option<PageList>,
+
+    // ── Derived display cache (kept in sync with screen) ─────────────────────
+    /// Viewport grid derived from `screen` for renderer compatibility.
+    /// Kept in sync by `sync_grid_from_screen()` called at strategic points.
     pub grid: Grid,
-    alt_grid: Option<Grid>,
+    /// Alt-screen grid (renderer compatibility).
+    pub alt_grid: Option<Grid>,
+    /// Scrollback rows derived from `screen` scrollback.
+    pub scrollback: VecDeque<Row>,
+    /// Cursor position (derived from `cursor_pin`).
     pub cursor_row: usize,
     pub cursor_col: usize,
-    saved_cursor: (usize, usize),     // ESC 7 / ESC 8 (DECSC/DECRC)
-    alt_saved_cursor: (usize, usize), // Saved separately for alt-screen enter/leave.
+
+    // ── Colour and attribute state ───────────────────────────────────────────
     current_fg: Color,
     current_bg: Color,
     pub default_fg: Color,
@@ -60,12 +74,17 @@ pub struct Terminal {
     current_reverse: bool,
     current_underline_style: UnderlineStyle,
     current_strikethrough: bool,
+
+    // ── Scroll region ────────────────────────────────────────────────────────
     scroll_top: usize,
     scroll_bottom: usize,
     saved_scroll_top: usize,
     saved_scroll_bottom: usize,
-    pub scrollback: VecDeque<Row>,
+
+    // ── Limits ───────────────────────────────────────────────────────────────
     pub max_scrollback: usize,
+
+    // ── Mode flags ───────────────────────────────────────────────────────────
     pub decckm: bool,               // Application Cursor Key Mode (ESC[?1h/l)
     pub cursor_visible: bool,       // DECTCEM (mode 25)
     pub pending_responses: Vec<u8>, // Bytes queued for PTY replies.
@@ -77,16 +96,12 @@ pub struct Terminal {
     pending_security_events: Vec<SecurityEventKind>,
     pub cursor_style: CursorStyle,
     pub resize_at: Option<std::time::Instant>,
-    scrollback_popped: usize,
+
+    // ── Misc ─────────────────────────────────────────────────────────────────
     parser: Parser,
     pub cwd: Option<String>,
     /// Window/icon title set by OSC 0/1/2.
     pub title: Option<String>,
-    /// Page-based buffer used exclusively for grapheme-aware reflow on resize.
-    /// All other terminal operations use `grid` + `scrollback` as canonical state.
-    screen: PageList,
-    /// Tracked cursor pin into `screen`, kept in sync during reflow.
-    cursor_pin: TrackedPin,
 }
 
 impl Terminal {
@@ -106,12 +121,16 @@ impl Terminal {
         let mut screen = PageList::new(rows, cols, max_scrollback);
         let cursor_pin = screen.register_pin(PageCoord { abs_row: 0, col: 0 });
         Self {
+            screen,
+            cursor_pin,
+            saved_cursor: PageCoord { abs_row: 0, col: 0 },
+            alt_saved_cursor: PageCoord { abs_row: 0, col: 0 },
+            alt_screen: None,
             grid: Grid::new(rows, cols),
             alt_grid: None,
+            scrollback: VecDeque::new(),
             cursor_row: 0,
             cursor_col: 0,
-            saved_cursor: (0, 0),
-            alt_saved_cursor: (0, 0),
             current_fg: default_fg,
             current_bg: default_bg,
             default_fg,
@@ -127,7 +146,6 @@ impl Terminal {
             scroll_bottom: rows - 1,
             saved_scroll_top: 0,
             saved_scroll_bottom: rows - 1,
-            scrollback: VecDeque::new(),
             max_scrollback,
             decckm: false,
             cursor_visible: true,
@@ -140,12 +158,9 @@ impl Terminal {
             pending_security_events: Vec::new(),
             cursor_style: CursorStyle::default(),
             resize_at: None,
-            scrollback_popped: 0,
             parser: Parser::new(),
             cwd: None,
             title: None,
-            screen,
-            cursor_pin,
         }
     }
 
@@ -177,8 +192,8 @@ impl Terminal {
         self.pending_responses.extend_from_slice(data);
     }
 
-    /// Creates a blank cell that inherits the current foreground and background colors.
-    /// Per xterm spec, erase operations fill with the current SGR background.
+    /// Creates a blank `Cell` (old format) that inherits the current fg/bg.
+    /// Used by handlers and the renderer compatibility layer.
     pub(crate) fn make_blank_cell(&self) -> Cell {
         Cell {
             character: ' ',
@@ -188,14 +203,22 @@ impl Terminal {
         }
     }
 
+    /// Creates a blank `GraphemeCell` that inherits the current fg/bg.
+    pub(crate) fn make_blank_grapheme_cell(&self) -> GraphemeCell {
+        let mut gc = GraphemeCell::default();
+        gc.fg = self.current_fg;
+        gc.bg = self.current_bg;
+        gc
+    }
+
     /// Drains all pending PTY response bytes.
     pub fn drain_responses(&mut self) -> Vec<u8> {
         std::mem::take(&mut self.pending_responses)
     }
 
-    /// Returns and resets the accumulated scrollback-popped counter.
+    /// No-op: scrollback_popped tracking removed — selection uses screen coords.
     pub fn drain_scrollback_popped(&mut self) -> usize {
-        std::mem::take(&mut self.scrollback_popped)
+        0
     }
 
     /// Resets the scroll region to span the entire visible grid.
@@ -207,8 +230,14 @@ impl Terminal {
     // ── Cell ↔ GraphemeCell conversion helpers ──────────────────────────────
 
     /// Converts a `Cell` (old format) to a `GraphemeCell` (new page-based format).
-    fn cell_to_grapheme(cell: &Cell) -> GraphemeCell {
-        let mut gc = GraphemeCell::from_char(cell.character);
+    ///
+    /// Uses `GraphemeCell::from_str` so that multi-byte encoded characters are
+    /// stored as proper grapheme clusters rather than being narrowed to a single
+    /// `char` boundary.
+    pub(crate) fn cell_to_grapheme(cell: &Cell) -> GraphemeCell {
+        let mut buf = [0u8; 4];
+        let encoded = cell.character.encode_utf8(&mut buf);
+        let mut gc = GraphemeCell::from_str(encoded);
         gc.fg = cell.fg;
         gc.bg = cell.bg;
         gc.bold = cell.bold;
@@ -221,7 +250,7 @@ impl Terminal {
     }
 
     /// Converts a `GraphemeCell` (new format) back to a `Cell` (old format).
-    fn grapheme_to_cell(gc: &GraphemeCell) -> Cell {
+    pub(crate) fn grapheme_to_cell(gc: &GraphemeCell) -> Cell {
         Cell {
             character: gc.grapheme().chars().next().unwrap_or(' '),
             fg: gc.fg,
@@ -234,114 +263,6 @@ impl Terminal {
             strikethrough: gc.strikethrough,
         }
     }
-
-    /// Populates `self.screen` from `self.grid` + `self.scrollback` + cursor.
-    /// Call this before reflow so the PageList has up-to-date content.
-    ///
-    /// Layout in the PageList: scrollback rows first, then viewport rows.
-    /// `scrollback_count` is updated to reflect the number of scrollback rows.
-    pub(super) fn populate_screen_from_grid(&mut self) {
-        let rows = self.grid.rows;
-        let cols = self.grid.cols;
-        let max_scrollback = self.max_scrollback;
-
-        // Start with an empty PageList (viewport_rows=0 means no rows pre-allocated).
-        // Scrollback rows are appended first so they occupy the lowest abs indices.
-        self.screen = PageList::new(0, cols, max_scrollback);
-
-        // Append scrollback rows first (abs indices 0..sb_len).
-        // Append a blank row then mutate it via abs_row_mut to write cell content
-        // without an extra allocation.
-        let blank_row = self.screen.make_row();
-        for sb_row in &self.scrollback {
-            let abs_idx = self.screen.total_rows();
-            self.screen.append_row(blank_row.clone());
-            self.screen.scrollback_count += 1;
-            let pr = self.screen.abs_row_mut(abs_idx);
-            for (c, cell) in sb_row.cells.iter().enumerate() {
-                if c < pr.cells.len() {
-                    pr.cells[c] = Self::cell_to_grapheme(cell);
-                }
-            }
-            pr.wrapped = sb_row.wrapped;
-        }
-
-        // Grow the viewport section to `rows` rows using simple_resize, which
-        // appends blank rows at abs indices sb_len..(sb_len+rows).
-        self.screen.simple_resize(rows, cols);
-
-        // Write grid content into the new viewport rows.
-        for r in 0..rows {
-            for c in 0..cols {
-                let gc = Self::cell_to_grapheme(self.grid.get_unchecked(r, c));
-                self.screen.viewport_set(r, c, gc);
-            }
-            self.screen.viewport_set_wrapped(r, self.grid.is_wrapped(r));
-        }
-
-        // Update cursor pin to the current absolute position using the PageList
-        // wrapper methods, which exercise set_pin_abs_row and set_pin_col.
-        let abs_row = self.screen.viewport_start_abs() + self.cursor_row;
-        self.screen.set_pin_abs_row(&self.cursor_pin, abs_row);
-        self.screen.set_pin_col(&self.cursor_pin, self.cursor_col);
-    }
-
-    /// Populates `self.grid` + `self.scrollback` from `self.screen` after reflow.
-    /// Also updates `cursor_row` / `cursor_col` from `cursor_pin`.
-    pub(super) fn populate_grid_from_screen(&mut self, new_rows: usize, new_cols: usize) {
-        let sb_len = self.screen.scrollback_len();
-
-        // Rebuild scrollback from screen.
-        self.scrollback.clear();
-        for i in 0..sb_len {
-            let pr = self.screen.scrollback_row(i);
-            let cells: Vec<Cell> = pr.cells.iter().map(Self::grapheme_to_cell).collect();
-            self.scrollback.push_back(Row::from_cells(cells, pr.wrapped));
-        }
-
-        // Rebuild grid from screen viewport using the viewport access API.
-        self.grid = Grid::new(new_rows, new_cols);
-        let vrows = self.screen.viewport_rows();
-        let vcols = self.screen.cols();
-        for r in 0..vrows.min(new_rows) {
-            let wrapped = self.screen.viewport_is_wrapped(r);
-            // Read cells via viewport_get, converting GraphemeCell → Cell.
-            let cells: Vec<Cell> = (0..vcols.min(new_cols))
-                .map(|c| Self::grapheme_to_cell(self.screen.viewport_get(r, c)))
-                .collect();
-            self.grid.copy_row_from_slice(r, &cells);
-            self.grid.set_wrapped(r, wrapped);
-
-            // Write the row back into the screen via viewport_set_row so the screen
-            // stays consistent with the grid after sync. Use GraphemeCell::from_str to
-            // preserve multi-char grapheme clusters that survived reflow.
-            let gc_cells: Vec<GraphemeCell> = (0..vcols.min(new_cols))
-                .map(|c| {
-                    let src = self.screen.viewport_get(r, c);
-                    let mut gc = GraphemeCell::from_str(src.grapheme());
-                    gc.fg = src.fg;
-                    gc.bg = src.bg;
-                    gc.bold = src.bold;
-                    gc.dim = src.dim;
-                    gc.italic = src.italic;
-                    gc.reverse = src.reverse;
-                    gc.underline_style = src.underline_style;
-                    gc.strikethrough = src.strikethrough;
-                    gc
-                })
-                .collect();
-            let pr = PageRow::from_cells(gc_cells, wrapped);
-            self.screen.viewport_set_row(r, pr);
-        }
-
-        // Update cursor from pin via the PageList pin_coord accessor.
-        let coord = self.screen.pin_coord(&self.cursor_pin);
-        let vstart = self.screen.viewport_start_abs();
-        self.cursor_row =
-            coord.abs_row.saturating_sub(vstart).min(new_rows.saturating_sub(1));
-        self.cursor_col = coord.col.min(new_cols.saturating_sub(1));
-    }
-
 
     /// Drains security events detected while parsing terminal output.
     pub fn drain_security_events(&mut self) -> Vec<SecurityEventKind> {
@@ -514,6 +435,23 @@ impl Terminal {
             }
         }
 
+        // Also recolor the page-based screen.
+        let remap_gc = |gc: &mut GraphemeCell| {
+            gc.fg = remap(gc.fg);
+            gc.bg = remap(gc.bg);
+        };
+        self.screen.viewport_recolor(remap_gc);
+        self.screen.scrollback_recolor(|gc| {
+            gc.fg = remap(gc.fg);
+            gc.bg = remap(gc.bg);
+        });
+        if let Some(ref mut alt) = self.alt_screen {
+            alt.viewport_recolor(|gc| {
+                gc.fg = remap(gc.fg);
+                gc.bg = remap(gc.bg);
+            });
+        }
+
         self.current_fg = remap(self.current_fg);
         self.current_bg = remap(self.current_bg);
         self.default_fg = new_fg;
@@ -527,11 +465,12 @@ impl Terminal {
         let max_scrollback = self.max_scrollback;
 
         self.alt_grid = None;
+        self.alt_screen = None;
         self.grid = Grid::new(rows, cols);
         self.cursor_row = 0;
         self.cursor_col = 0;
-        self.saved_cursor = (0, 0);
-        self.alt_saved_cursor = (0, 0);
+        self.saved_cursor = PageCoord { abs_row: 0, col: 0 };
+        self.alt_saved_cursor = PageCoord { abs_row: 0, col: 0 };
         self.reset_scroll_region();
         self.saved_scroll_top = 0;
         self.saved_scroll_bottom = rows.saturating_sub(1);
@@ -547,7 +486,6 @@ impl Terminal {
         self.cwd = None;
         self.reset_attributes();
         self.parser = Parser::new();
-        // Reset the page-based buffer that backs reflow operations.
         let mut screen = PageList::new(rows, cols, max_scrollback);
         self.cursor_pin = screen.register_pin(PageCoord { abs_row: 0, col: 0 });
         self.screen = screen;
@@ -607,6 +545,7 @@ impl Perform for Terminal {
         if self.cursor_col + width > self.grid.cols {
             // Mark current row as soft-wrapped before moving to next row
             self.grid.set_wrapped(self.cursor_row, true);
+            self.screen.viewport_set_wrapped(self.cursor_row, true);
             self.cursor_col = 0;
             self.cursor_row += 1;
             if self.cursor_row > self.scroll_bottom {
@@ -615,11 +554,25 @@ impl Perform for Terminal {
             }
         }
 
-        self.grid.set(
-            self.cursor_row,
-            self.cursor_col,
-            Cell {
-                character: c,
+        let cell = Cell {
+            character: c,
+            fg: self.current_fg,
+            bg: self.current_bg,
+            bold: self.current_bold,
+            dim: self.current_dim,
+            italic: self.current_italic,
+            reverse: self.current_reverse,
+            underline_style: self.current_underline_style,
+            strikethrough: self.current_strikethrough,
+        };
+        let gc = Self::cell_to_grapheme(&cell);
+        self.screen.viewport_set(self.cursor_row, self.cursor_col, gc);
+        self.grid.set(self.cursor_row, self.cursor_col, cell);
+
+        // Reserve the trailing cell for wide glyphs.
+        if width == 2 && self.cursor_col + 1 < self.grid.cols {
+            let spacer_cell = Cell {
+                character: ' ',
                 fg: self.current_fg,
                 bg: self.current_bg,
                 bold: self.current_bold,
@@ -628,28 +581,16 @@ impl Perform for Terminal {
                 reverse: self.current_reverse,
                 underline_style: self.current_underline_style,
                 strikethrough: self.current_strikethrough,
-            },
-        );
-
-        // Reserve the trailing cell for wide glyphs.
-        if width == 2 && self.cursor_col + 1 < self.grid.cols {
-            self.grid.set(
-                self.cursor_row,
-                self.cursor_col + 1,
-                Cell {
-                    character: ' ',
-                    fg: self.current_fg,
-                    bg: self.current_bg,
-                    bold: self.current_bold,
-                    dim: self.current_dim,
-                    italic: self.current_italic,
-                    reverse: self.current_reverse,
-                    underline_style: self.current_underline_style,
-                    strikethrough: self.current_strikethrough,
-                },
-            );
+            };
+            let spacer_gc = GraphemeCell::spacer();
+            self.screen.viewport_set(self.cursor_row, self.cursor_col + 1, spacer_gc);
+            self.grid.set(self.cursor_row, self.cursor_col + 1, spacer_cell);
         }
 
+        // Update cursor pin position.
+        let abs = self.screen.viewport_start_abs() + self.cursor_row;
+        self.screen.set_pin_abs_row(&self.cursor_pin, abs);
+        self.screen.set_pin_col(&self.cursor_pin, self.cursor_col + width);
         self.cursor_col += width;
     }
 
@@ -659,18 +600,24 @@ impl Perform for Terminal {
                 // LF/VT/FF: move to next row, keep current column.
                 // Mark current row as NOT wrapped (hard line break).
                 self.grid.set_wrapped(self.cursor_row, false);
+                self.screen.viewport_set_wrapped(self.cursor_row, false);
                 self.cursor_row += 1;
                 if self.cursor_row > self.scroll_bottom {
                     self.scroll_up_region(self.scroll_top, self.scroll_bottom);
                     self.cursor_row = self.scroll_bottom;
                 }
+                // Update cursor pin.
+                let abs = self.screen.viewport_start_abs() + self.cursor_row;
+                self.screen.set_pin_abs_row(&self.cursor_pin, abs);
             }
             13 => {
                 self.cursor_col = 0;
+                self.screen.set_pin_col(&self.cursor_pin, 0);
             }
             8 => {
                 if self.cursor_col > 0 {
                     self.cursor_col -= 1;
+                    self.screen.set_pin_col(&self.cursor_pin, self.cursor_col);
                 }
             }
             9 => {
@@ -679,6 +626,7 @@ impl Perform for Terminal {
                 if self.cursor_col >= self.grid.cols {
                     self.cursor_col = self.grid.cols - 1;
                 }
+                self.screen.set_pin_col(&self.cursor_pin, self.cursor_col);
             }
             _ => {}
         }
@@ -745,11 +693,18 @@ impl Perform for Terminal {
 
     fn esc_dispatch(&mut self, _intermediates: &[u8], _ignore: bool, byte: u8) {
         match byte {
-            b'7' => self.saved_cursor = (self.cursor_row, self.cursor_col),
+            b'7' => {
+                let abs = self.screen.viewport_start_abs() + self.cursor_row;
+                self.saved_cursor = PageCoord { abs_row: abs, col: self.cursor_col };
+            }
             b'8' => {
                 let from_row = self.cursor_row;
-                self.cursor_row = self.saved_cursor.0;
-                self.cursor_col = self.saved_cursor.1;
+                let vstart = self.screen.viewport_start_abs();
+                self.cursor_row =
+                    self.saved_cursor.abs_row.saturating_sub(vstart).min(self.grid.rows.saturating_sub(1));
+                self.cursor_col = self.saved_cursor.col.min(self.grid.cols.saturating_sub(1));
+                self.screen.set_pin_abs_row(&self.cursor_pin, self.screen.viewport_start_abs() + self.cursor_row);
+                self.screen.set_pin_col(&self.cursor_pin, self.cursor_col);
                 self.maybe_record_cursor_rewrite(from_row, self.cursor_row);
             }
             b'M' => {
@@ -759,6 +714,8 @@ impl Perform for Terminal {
                     self.scroll_down_region(self.scroll_top, self.scroll_bottom);
                 } else {
                     self.cursor_row = self.cursor_row.saturating_sub(1);
+                    let abs = self.screen.viewport_start_abs() + self.cursor_row;
+                    self.screen.set_pin_abs_row(&self.cursor_pin, abs);
                 }
                 self.maybe_record_cursor_rewrite(from_row, self.cursor_row);
             }
