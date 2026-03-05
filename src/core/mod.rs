@@ -1,5 +1,6 @@
 mod cell;
 mod color;
+mod grapheme_cell;
 mod grid;
 mod position;
 mod security;
@@ -9,6 +10,7 @@ pub mod terminal;
 
 pub use cell::{Cell, UnderlineStyle};
 pub use color::Color;
+pub use grapheme_cell::GraphemeCell;
 pub use grid::{Grid, Row};
 pub use position::Position;
 pub use security::{SecurityConfig, SecurityEventKind, SecurityGuard};
