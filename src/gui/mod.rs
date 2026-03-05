@@ -318,6 +318,14 @@ impl App {
         #[cfg(target_os = "macos")]
         platform::macos::configure_native_tabs(&window);
 
+        // Pin the native tab bar to the terminal theme background color so it
+        // doesn't blend with the desktop wallpaper.
+        #[cfg(target_os = "macos")]
+        {
+            let bg = self.config.theme.resolve().default_bg;
+            platform::macos::set_window_background_color(&window, bg.r, bg.g, bg.b);
+        }
+
         // Set up macOS titlebar pin button.
         #[cfg(target_os = "macos")]
         platform::macos::setup_toolbar(&window);
