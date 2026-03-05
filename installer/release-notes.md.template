@@ -1,3 +1,7 @@
+${EXISTING}
+
+---
+
 ## Installation
 
 ### macOS
@@ -28,7 +32,3 @@ Open the DMG and drag Ferrum to Applications. Ferrum is ad-hoc signed but not no
 |------|--------|
 | [${DEB}](${BASE}/${DEB}) | Debian / Ubuntu |
 | [${RPM}](${BASE}/${RPM}) | Fedora / RHEL |
-
----
-
-${EXISTING}
