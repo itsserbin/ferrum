@@ -19,18 +19,25 @@ pub(super) struct LogicalLine {
 /// This is a pure function with no side effects: it takes collected logical
 /// lines and a target width, and produces a flat list of physical rows with
 /// correct wrap flags.
-pub(super) fn rewrap_lines(lines: &[LogicalLine], new_cols: usize) -> Vec<Row> {
+///
+/// If `cursor_line_idx` is provided, also returns the index of the first
+/// rewrapped row that corresponds to that logical line — used by the caller
+/// to restore the cursor position after reflow without an extra traversal.
+pub(super) fn rewrap_lines(
+    lines: &[LogicalLine],
+    new_cols: usize,
+    cursor_line_idx: Option<usize>,
+) -> (Vec<Row>, Option<usize>) {
     let mut rewrapped: Vec<Row> = Vec::new();
-    for logical_line in lines {
+    let mut cursor_rewrapped_row: Option<usize> = None;
+    for (line_idx, logical_line) in lines.iter().enumerate() {
         // Trim only untouched default cells; keep styled spaces and explicit
         // spaces before cursor in the active line.
-        let len = logical_line
-            .cells
-            .iter()
-            .rposition(|c| c != &Cell::default())
-            .map(|i| i + 1)
-            .unwrap_or(0);
-        let len = len.max(logical_line.min_len.min(logical_line.cells.len()));
+        let len = line_content_len(logical_line);
+
+        if cursor_line_idx == Some(line_idx) {
+            cursor_rewrapped_row = Some(rewrapped.len());
+        }
 
         if len == 0 {
             rewrapped.push(Row::new(new_cols));
@@ -41,49 +48,65 @@ pub(super) fn rewrap_lines(lines: &[LogicalLine], new_cols: usize) -> Vec<Row> {
         let mut pos = 0;
         while pos < content.len() {
             let end = (pos + new_cols).min(content.len());
-            let mut cells: Vec<Cell> = content[pos..end].to_vec();
+            let mut cells = Vec::with_capacity(new_cols);
+            cells.extend_from_slice(&content[pos..end]);
             cells.resize(new_cols, Cell::default());
             let wrapped = end < content.len();
             rewrapped.push(Row::from_cells(cells, wrapped));
             pos = end;
         }
     }
-    rewrapped
+    (rewrapped, cursor_rewrapped_row)
+}
+
+fn line_content_len(line: &LogicalLine) -> usize {
+    let len = line
+        .cells
+        .iter()
+        .rposition(|c| c != &Cell::default())
+        .map(|i| i + 1)
+        .unwrap_or(0);
+    len.max(line.min_len.min(line.cells.len()))
 }
 
 impl super::Terminal {
-    /// Collect scrollback and meaningful grid rows into logical lines.
+    /// Collect scrollback and visible grid into logical lines.
     ///
-    /// Merges consecutive soft-wrapped physical rows into single logical lines.
-    /// Tracks `min_len` to preserve trailing spaces before the cursor position.
-    pub(super) fn collect_logical_lines(&self) -> Vec<LogicalLine> {
+    /// Also returns the index of the logical line that contains the cursor,
+    /// used to correctly position the cursor after reflow.
+    pub(super) fn collect_logical_lines(&self) -> (Vec<LogicalLine>, Option<usize>) {
         let content_rows = self.compute_content_rows();
-
         let mut lines: Vec<LogicalLine> = Vec::new();
         let mut current_cells: Vec<Cell> = Vec::new();
-        let mut current_min_len = 0usize;
+        let mut cursor_line_idx: Option<usize> = None;
 
-        // First from scrollback
         for row in self.scrollback.iter() {
-            current_cells.extend(row.cells.iter().cloned());
+            current_cells.extend_from_slice(&row.cells);
             if !row.wrapped {
                 lines.push(LogicalLine {
                     cells: std::mem::take(&mut current_cells),
-                    min_len: current_min_len,
+                    min_len: 0,
                 });
-                current_min_len = 0;
             }
         }
 
-        // Then from grid up to the computed content boundary.
+        // cursor_in_current only applies to grid rows; the cursor is never in scrollback.
+        let mut cursor_in_current = false;
+        let mut current_min_len = 0usize;
+
         for r in 0..content_rows {
             let line_start = current_cells.len();
-            current_cells.extend(self.grid.row_cells(r));
+            current_cells.extend_from_slice(self.grid.row_slice(r));
             if r == self.cursor_row {
-                let clamped_cursor_col = self.cursor_col.min(self.grid.cols);
-                current_min_len = current_min_len.max(line_start + clamped_cursor_col);
+                cursor_in_current = true;
+                let clamped = self.cursor_col.min(self.grid.cols);
+                current_min_len = current_min_len.max(line_start + clamped);
             }
             if !self.grid.is_wrapped(r) {
+                if cursor_in_current {
+                    cursor_line_idx = Some(lines.len());
+                    cursor_in_current = false;
+                }
                 lines.push(LogicalLine {
                     cells: std::mem::take(&mut current_cells),
                     min_len: current_min_len,
@@ -92,27 +115,26 @@ impl super::Terminal {
             }
         }
 
-        // Handle remaining content (if last row was wrapped)
         if !current_cells.is_empty() {
+            if cursor_in_current {
+                cursor_line_idx = Some(lines.len());
+            }
             lines.push(LogicalLine {
                 cells: current_cells,
                 min_len: current_min_len,
             });
         }
 
-        lines
+        (lines, cursor_line_idx)
     }
 
-    /// Compute the number of grid rows that contain meaningful content.
-    ///
-    /// Includes all rows up to the cursor position, plus any rows below the
-    /// cursor that contain non-default content (e.g., after cursor-addressing).
     pub(super) fn compute_content_rows(&self) -> usize {
         let cursor_rows = self.cursor_row.saturating_add(1).min(self.grid.rows);
         let default_cell = Cell::default();
         let last_content_row = (0..self.grid.rows).rev().find(|&row| {
             self.grid.is_wrapped(row)
-                || (0..self.grid.cols).any(|col| self.grid.get_unchecked(row, col) != &default_cell)
+                || (0..self.grid.cols)
+                    .any(|col| self.grid.get_unchecked(row, col) != &default_cell)
         });
         last_content_row
             .map(|row| (row + 1).max(cursor_rows))
@@ -130,7 +152,7 @@ mod tests {
             cells: vec![],
             min_len: 0,
         }];
-        let result = rewrap_lines(&lines, 10);
+        let (result, _) = rewrap_lines(&lines, 10, None);
         assert_eq!(result.len(), 1);
         assert!(!result[0].wrapped);
         assert_eq!(result[0].cells.len(), 10);
@@ -149,7 +171,7 @@ mod tests {
             })
             .collect();
         let lines = vec![LogicalLine { cells, min_len: 0 }];
-        let result = rewrap_lines(&lines, 10);
+        let (result, _) = rewrap_lines(&lines, 10, None);
         assert_eq!(result.len(), 1);
         assert!(!result[0].wrapped);
         assert_eq!(result[0].cells[0].character, 'H');
@@ -166,7 +188,7 @@ mod tests {
             })
             .collect();
         let lines = vec![LogicalLine { cells, min_len: 0 }];
-        let result = rewrap_lines(&lines, 4);
+        let (result, _) = rewrap_lines(&lines, 4, None);
         assert_eq!(result.len(), 3);
         assert!(result[0].wrapped);
         assert!(result[1].wrapped);
@@ -188,7 +210,7 @@ mod tests {
             })
             .collect();
         let lines = vec![LogicalLine { cells, min_len: 6 }];
-        let result = rewrap_lines(&lines, 10);
+        let (result, _) = rewrap_lines(&lines, 10, None);
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].cells[0].character, 'a');
         assert_eq!(result[0].cells[1].character, 'b');
@@ -209,7 +231,7 @@ mod tests {
             .collect();
         cells.resize(10, Cell::default());
         let lines = vec![LogicalLine { cells, min_len: 0 }];
-        let result = rewrap_lines(&lines, 5);
+        let (result, _) = rewrap_lines(&lines, 5, None);
         assert_eq!(result.len(), 1);
         assert!(!result[0].wrapped);
         assert_eq!(result[0].cells[0].character, 'a');
@@ -243,7 +265,7 @@ mod tests {
                 min_len: 0,
             },
         ];
-        let result = rewrap_lines(&lines, 3);
+        let (result, _) = rewrap_lines(&lines, 3, None);
         assert_eq!(result.len(), 3);
         assert!(result[0].wrapped);
         assert!(!result[1].wrapped);

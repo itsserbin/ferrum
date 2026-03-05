@@ -4,7 +4,7 @@
 //! verbatim in `render_cpu.rs` and `render_gpu.rs`.
 
 use crate::core::terminal::CursorStyle;
-use crate::gui::pane::{DIVIDER_WIDTH, PaneNode, PaneRect, SplitDirection, split_rect};
+use crate::gui::pane::{DIVIDER_WIDTH, PaneLeaf, PaneNode, PaneRect, SplitDirection, split_rect};
 use crate::gui::renderer::traits::Renderer;
 use crate::gui::renderer::{RenderTarget, ScrollbarState};
 use crate::gui::renderer::shared::banner_layout::UpdateBannerLayout;
@@ -88,6 +88,10 @@ pub(in crate::gui::events) struct FrameParams<'a> {
     pub tab: Option<&'a crate::gui::state::TabState>,
     pub cursor_blink_start: std::time::Instant,
     pub cursor_blink_interval_ms: u64,
+    /// When `true`, the terminal text cursor is not drawn.
+    /// Set during resize so the cursor does not visually jump to an intermediate
+    /// position while the shell hasn't yet redrawn the prompt via SIGWINCH.
+    pub suppress_cursor: bool,
     #[cfg(not(target_os = "macos"))]
     pub hovered_tab: Option<usize>,
     #[cfg(not(target_os = "macos"))]
@@ -296,11 +300,7 @@ pub(in crate::gui::events) fn draw_frame_content(
                     }
 
                     // Cursor.
-                    if leaf.scroll_offset == 0
-                        && leaf.terminal.cursor_visible
-                        && is_focused
-                        && should_show_cursor(params.cursor_blink_start, leaf.terminal.cursor_style, params.cursor_blink_interval_ms)
-                    {
+                    if cursor_should_draw(params, leaf, is_focused) {
                         renderer.draw_cursor_in_rect(
                             &mut target,
                             leaf.terminal.cursor_row,
@@ -312,27 +312,8 @@ pub(in crate::gui::events) fn draw_frame_content(
                     }
 
                     // Scrollbar within the full pane rect (not inset).
-                    let scrollback_len = leaf.terminal.scrollback.len();
-                    if scrollback_len > 0 {
-                        let hover = leaf.scrollbar.hover || leaf.scrollbar.dragging;
-                        let opacity = scrollbar_opacity(
-                            leaf.scrollbar.hover,
-                            leaf.scrollbar.dragging,
-                            leaf.scrollbar.last_activity,
-                        );
-                        if opacity > 0.0 {
-                            renderer.render_scrollbar_in_rect(
-                                &mut target,
-                                &ScrollbarState {
-                                    scroll_offset: leaf.scroll_offset,
-                                    scrollback_len,
-                                    grid_rows: leaf.terminal.grid.rows,
-                                    opacity,
-                                    hover,
-                                },
-                                rect,
-                            );
-                        }
+                    if let Some(sb) = leaf_scrollbar_state(leaf) {
+                        renderer.render_scrollbar_in_rect(&mut target, &sb, rect);
                     }
                 }
             }
@@ -378,10 +359,7 @@ pub(in crate::gui::events) fn draw_frame_content(
                 }
 
                 // Cursor.
-                if leaf.scroll_offset == 0
-                    && leaf.terminal.cursor_visible
-                    && should_show_cursor(params.cursor_blink_start, leaf.terminal.cursor_style, params.cursor_blink_interval_ms)
-                {
+                if cursor_should_draw(params, leaf, true) {
                     renderer.draw_cursor(
                         &mut target,
                         leaf.terminal.cursor_row,
@@ -392,26 +370,8 @@ pub(in crate::gui::events) fn draw_frame_content(
                 }
 
                 // Scrollbar.
-                let scrollback_len = leaf.terminal.scrollback.len();
-                if scrollback_len > 0 {
-                    let hover = leaf.scrollbar.hover || leaf.scrollbar.dragging;
-                    let opacity = scrollbar_opacity(
-                        leaf.scrollbar.hover,
-                        leaf.scrollbar.dragging,
-                        leaf.scrollbar.last_activity,
-                    );
-                    if opacity > 0.0 {
-                        renderer.render_scrollbar(
-                            &mut target,
-                            &ScrollbarState {
-                                scroll_offset: leaf.scroll_offset,
-                                scrollback_len,
-                                grid_rows: leaf.terminal.grid.rows,
-                                opacity,
-                                hover,
-                            },
-                        );
-                    }
+                if let Some(sb) = leaf_scrollbar_state(leaf) {
+                    renderer.render_scrollbar(&mut target, &sb);
                 }
             }
         }
@@ -579,5 +539,44 @@ pub(in crate::gui::events) fn should_show_cursor(
         ms < interval || (ms / interval).is_multiple_of(2)
     } else {
         true
+    }
+}
+
+/// Returns whether the cursor should be drawn for `leaf` this frame.
+fn cursor_should_draw(params: &FrameParams<'_>, leaf: &PaneLeaf, is_focused: bool) -> bool {
+    !params.suppress_cursor
+        && leaf.scroll_offset == 0
+        && leaf.terminal.cursor_visible
+        && is_focused
+        && should_show_cursor(
+            params.cursor_blink_start,
+            leaf.terminal.cursor_style,
+            params.cursor_blink_interval_ms,
+        )
+}
+
+/// Builds the scrollbar render state for `leaf`, or returns `None` when the
+/// scrollbar should not be drawn (no scrollback, or fully faded out).
+fn leaf_scrollbar_state(leaf: &PaneLeaf) -> Option<ScrollbarState> {
+    let scrollback_len = leaf.terminal.scrollback.len();
+    if scrollback_len == 0 {
+        return None;
+    }
+    let hover = leaf.scrollbar.hover || leaf.scrollbar.dragging;
+    let opacity = scrollbar_opacity(
+        leaf.scrollbar.hover,
+        leaf.scrollbar.dragging,
+        leaf.scrollbar.last_activity,
+    );
+    if opacity > 0.0 {
+        Some(ScrollbarState {
+            scroll_offset: leaf.scroll_offset,
+            scrollback_len,
+            grid_rows: leaf.terminal.grid.rows,
+            opacity,
+            hover,
+        })
+    } else {
+        None
     }
 }

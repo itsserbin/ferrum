@@ -4,6 +4,11 @@ use crate::gui::*;
 mod pty_events;
 mod window_requests;
 
+/// Sets `slot` to the earlier of its current value and `at`.
+fn schedule_wakeup(slot: &mut Option<std::time::Instant>, at: std::time::Instant) {
+    *slot = Some(slot.map_or(at, |current| current.min(at)));
+}
+
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         // Only create the initial window once.
@@ -345,6 +350,23 @@ impl ApplicationHandler for App {
             }
         }
 
+        // Send deferred SIGWINCH once the resize has settled (~80 ms after last event).
+        for win in self.windows.values_mut() {
+            if let Some(deadline) = win.sigwinch_deadline {
+                if now >= deadline {
+                    win.sigwinch_deadline = None;
+                    win.send_sigwinch_to_all_panes();
+                    // Show cursor only after the shell has received SIGWINCH and
+                    // will redraw the prompt to the correct position on next frame.
+                    win.window.set_cursor_visible(true);
+                    win.window.request_redraw();
+                } else {
+                    // Wake up in time to send SIGWINCH.
+                    schedule_wakeup(&mut next_wakeup, deadline);
+                }
+            }
+        }
+
         let update = self.available_release.as_ref();
         for win in self.windows.values_mut() {
             win.sync_window_title(update);
@@ -352,11 +374,11 @@ impl ApplicationHandler for App {
                 if redraw_now {
                     win.window.request_redraw();
                 }
-                next_wakeup = Some(next_wakeup.map_or(deadline, |current| current.min(deadline)));
+                schedule_wakeup(&mut next_wakeup, deadline);
             }
             // Ensure we wake up for next CWD poll
             let next_cwd = win.last_cwd_poll + std::time::Duration::from_secs(1);
-            next_wakeup = Some(next_wakeup.map_or(next_cwd, |current| current.min(next_cwd)));
+            schedule_wakeup(&mut next_wakeup, next_cwd);
         }
 
         match next_wakeup {

@@ -2,8 +2,6 @@
 
 use crate::core::{Grid, Row};
 
-use super::reflow::rewrap_lines;
-
 impl super::Terminal {
     pub fn resize(&mut self, rows: usize, cols: usize) {
         if self.grid.rows == rows && self.grid.cols == cols {
@@ -15,9 +13,8 @@ impl super::Terminal {
             *alt = alt.resized(rows, cols);
         }
 
-        // Main grid resize:
-        // - Reflow on width changes in the main grid to preserve wrapped content
-        // - Fallback to simple resize for alt grid or row-only changes
+        // Reflow when cols change (main screen only).
+        // For row-only changes use simple resize so we can anchor correctly.
         let old_cols = self.grid.cols;
         if old_cols != cols && self.alt_grid.is_none() {
             self.reflow_resize(rows, cols);
@@ -32,70 +29,122 @@ impl super::Terminal {
         self.resize_at = Some(std::time::Instant::now());
     }
 
-    /// Simple resize - just resize the grid, let shell handle content via SIGWINCH.
+    /// Resize when only the height changes (no col change, no reflow).
+    ///
+    /// When the terminal shrinks, rows are discarded from the top only as
+    /// needed to keep the cursor visible — if there is empty space below the
+    /// cursor those rows are simply dropped and the cursor stays in place.
+    /// When the terminal grows, blank rows are added at the bottom.
     fn simple_resize(&mut self, rows: usize, cols: usize) {
-        self.grid = self.grid.resized(rows, cols);
-        self.cursor_row = self.cursor_row.min(rows.saturating_sub(1));
+        if rows < self.grid.rows {
+            // Only push top rows to scrollback when the cursor would fall
+            // outside the new grid — i.e. when there is no empty space below.
+            let push_count = if self.cursor_row >= rows {
+                self.cursor_row + 1 - rows
+            } else {
+                0
+            };
+
+            let overflow = (self.scrollback.len() + push_count).saturating_sub(self.max_scrollback);
+            // Evict old scrollback rows that will be pushed out by the new rows.
+            let old_evictions = overflow.saturating_sub(push_count);
+            for _ in 0..old_evictions {
+                self.scrollback.pop_front();
+            }
+            // Skip grid rows that would be pushed only to be immediately evicted.
+            let skip = overflow.min(push_count);
+            for r in skip..push_count {
+                self.scrollback.push_back(Row::from_cells(
+                    self.grid.row_slice(r).to_vec(),
+                    self.grid.is_wrapped(r),
+                ));
+            }
+
+            self.grid = self.grid.resized_from_offset(rows, cols, push_count);
+            self.cursor_row = self.cursor_row.saturating_sub(push_count);
+        } else {
+            // Height increase or same: keep top rows, add blank rows at bottom.
+            self.grid = self.grid.resized(rows, cols);
+            self.cursor_row = self.cursor_row.min(rows.saturating_sub(1));
+        }
+
         self.cursor_col = self.cursor_col.min(cols.saturating_sub(1));
     }
 
-    /// Reflow resize: reflow content to new width, preserving cursor position.
+    /// Reflow resize: rewrap all content (scrollback + visible grid) to the new
+    /// column width, then restore the cursor to the beginning of the prompt's
+    /// logical line.
     ///
-    /// Strategy:
-    /// 1. Collect scrollback + meaningful grid rows into logical lines
-    /// 2. Rewrap logical lines to new column width
-    /// 3. Fill grid from top, excess goes to scrollback
-    /// 4. Cursor stays at same logical position
+    /// Placing the cursor at the START of the prompt's logical line ensures
+    /// that readline's SIGWINCH handler redraws the prompt starting from the
+    /// same row where reflow placed it — preventing double-prompt artifacts.
     fn reflow_resize(&mut self, new_rows: usize, new_cols: usize) {
-        let logical_lines = self.collect_logical_lines();
-        let rewrapped = rewrap_lines(&logical_lines, new_cols);
-        self.fill_grid_from_rewrapped(&rewrapped, new_rows, new_cols);
+        let (logical_lines, cursor_line_idx) = self.collect_logical_lines();
+
+        // rewrap_lines tracks the start row of cursor_line_idx in one pass,
+        // avoiding a separate traversal via the old rows_before_line helper.
+        let (rewrapped, cursor_line_start) =
+            super::reflow::rewrap_lines(&logical_lines, new_cols, cursor_line_idx);
+
+        // Place the cursor at the START of the prompt's logical line (col 0).
+        //
+        // When SIGWINCH fires, the shell (zsh, bash/readline) does:
+        //   1. CR → already at col 0, no-op
+        //   2. Erase from current position to end of screen
+        //   3. Redraw the full prompt + any typed input
+        //
+        // If we placed the cursor at the ACTUAL offset within the wrapped line
+        // (e.g. row start+1, col 15 for a 35-char prompt at 20 cols), the shell
+        // would erase only from the MIDDLE of the reflowed prompt onward, leaving
+        // the first wrapped rows visible — causing the prompt to appear doubled.
+        //
+        // By placing the cursor at (start, 0), the shell erases the entire
+        // reflowed cursor line and redraws it cleanly.
+        self.fill_grid_from_rewrapped(&rewrapped, new_rows, new_cols, cursor_line_start);
     }
 
-    /// Fill the grid and scrollback from rewrapped rows, and restore cursor.
-    ///
-    /// If all rewrapped content fits in the grid, it is placed at the top with
-    /// the cursor at the last content row. Otherwise, excess rows go to
-    /// scrollback and the cursor is placed at the bottom.
-    fn fill_grid_from_rewrapped(&mut self, rewrapped: &[Row], new_rows: usize, new_cols: usize) {
+    fn fill_grid_from_rewrapped(
+        &mut self,
+        rewrapped: &[Row],
+        new_rows: usize,
+        new_cols: usize,
+        cursor_row_in_rewrapped: Option<usize>,
+    ) {
         let total_rows = rewrapped.len();
+        // Rows beyond new_rows go to scrollback; the rest fill the grid.
+        // Clamp to max_scrollback so we never exceed the limit, and skip
+        // rows that would be evicted immediately — avoids a per-iteration
+        // pop_front (scrollback was just cleared).
+        let grid_offset = total_rows.saturating_sub(new_rows);
+        let scrollback_count = grid_offset.min(self.max_scrollback);
+        let skip_count = grid_offset.saturating_sub(scrollback_count);
 
         self.scrollback.clear();
         self.grid = Grid::new(new_rows, new_cols);
 
-        if total_rows <= new_rows {
-            // All content fits in grid - fill from top
-            for (i, row) in rewrapped.iter().enumerate() {
-                for (col, cell) in row.cells.iter().enumerate() {
-                    if col < new_cols {
-                        self.grid.set(i, col, cell.clone());
-                    }
-                }
-                self.grid.set_wrapped(i, row.wrapped);
-            }
-            self.cursor_row = total_rows.saturating_sub(1);
-        } else {
-            // Content overflows - excess goes to scrollback
-            let scrollback_count = total_rows - new_rows;
-
-            for row in rewrapped.iter().take(scrollback_count) {
-                self.scrollback.push_back(row.clone());
-                if self.scrollback.len() > self.max_scrollback {
-                    self.scrollback.pop_front();
-                }
-            }
-
-            for (i, row) in rewrapped.iter().skip(scrollback_count).enumerate() {
-                for (col, cell) in row.cells.iter().enumerate() {
-                    if col < new_cols {
-                        self.grid.set(i, col, cell.clone());
-                    }
-                }
-                self.grid.set_wrapped(i, row.wrapped);
-            }
-            self.cursor_row = new_rows.saturating_sub(1);
+        for row in rewrapped.iter().skip(skip_count).take(scrollback_count) {
+            self.scrollback.push_back(row.clone());
         }
 
-        self.cursor_col = self.cursor_col.min(new_cols.saturating_sub(1));
+        for (i, row) in rewrapped.iter().skip(grid_offset).enumerate() {
+            self.grid.copy_row_from_slice(i, &row.cells);
+            self.grid.set_wrapped(i, row.wrapped);
+        }
+
+        // Place cursor at the start of its reflowed row (col 0).
+        //
+        // readline's SIGWINCH handler sends CR first (moves to col 0), then
+        // redraws the full prompt from the current row — placing the cursor
+        // at col 0 ensures the shell erases the entire reflowed line and
+        // redraws cleanly without a stray partial-line indicator (`%`).
+        if let Some(row_in_rewrapped) = cursor_row_in_rewrapped {
+            self.cursor_row = row_in_rewrapped
+                .saturating_sub(grid_offset)
+                .min(new_rows.saturating_sub(1));
+            self.cursor_col = 0;
+        } else {
+            self.cursor_row = new_rows.saturating_sub(1);
+            self.cursor_col = 0;
+        }
     }
 }

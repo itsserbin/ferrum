@@ -86,23 +86,56 @@ impl Grid {
 
     /// Simple resize without reflow (used for alt screen).
     pub fn resized(&self, rows: usize, cols: usize) -> Grid {
+        self.resized_from_offset(rows, cols, 0)
+    }
+
+    /// Like `resized`, but starts copying from `src_offset` in the source grid.
+    ///
+    /// Row `new_r` of the result is filled from row `src_offset + new_r` of
+    /// `self`. Used by `simple_resize` to skip rows already pushed to scrollback.
+    pub fn resized_from_offset(&self, rows: usize, cols: usize, src_offset: usize) -> Grid {
         let mut new_grid = Grid::new(rows, cols);
-        for row in 0..rows.min(self.rows) {
-            for col in 0..cols.min(self.cols) {
-                // Safe: iterating within both grids' bounds
-                new_grid.set(row, col, self.get_unchecked(row, col).clone());
+        for new_r in 0..rows {
+            let old_r = src_offset + new_r;
+            if old_r < self.rows {
+                new_grid.copy_row_from_slice(new_r, &self.row_slice(old_r)[..cols.min(self.cols)]);
+                new_grid.set_wrapped(new_r, self.is_wrapped(old_r));
             }
-            new_grid.set_wrapped(row, self.is_wrapped(row));
         }
         new_grid
     }
 
-    /// Extract a row as a Vec<Cell>, for saving to scrollback.
-    pub fn row_cells(&self, row: usize) -> Vec<Cell> {
-        self.rows_data
-            .get(row)
-            .map(|r| r.cells.clone())
-            .unwrap_or_default()
+    /// Returns the cells of a row as a slice (no allocation).
+    ///
+    /// Use `row_slice(r).to_vec()` when you need an owned copy for scrollback.
+    pub fn row_slice(&self, row: usize) -> &[Cell] {
+        &self.rows_data[row].cells
+    }
+
+    /// Bulk-copies `src` cells into `dst_row`, up to `min(src.len(), self.cols)` cells.
+    ///
+    /// Replaces the cell-by-cell `set()` loop when the caller already knows
+    /// the destination row is valid — avoids per-cell bounds checks.
+    pub fn copy_row_from_slice(&mut self, dst_row: usize, src: &[Cell]) {
+        let n = src.len().min(self.cols);
+        self.rows_data[dst_row].cells[..n].clone_from_slice(&src[..n]);
+    }
+
+    /// Copies all cells and the wrapped flag from `src_row` into `dst_row`.
+    ///
+    /// Used by scroll/resize loops to move rows without per-cell bounds checks.
+    /// Both indices must be valid and distinct.
+    pub fn copy_row_within(&mut self, src_row: usize, dst_row: usize) {
+        debug_assert_ne!(src_row, dst_row);
+        if src_row < dst_row {
+            let (left, right) = self.rows_data.split_at_mut(dst_row);
+            right[0].cells.clone_from_slice(&left[src_row].cells);
+            right[0].wrapped = left[src_row].wrapped;
+        } else {
+            let (left, right) = self.rows_data.split_at_mut(src_row);
+            left[dst_row].cells.clone_from_slice(&right[0].cells);
+            left[dst_row].wrapped = right[0].wrapped;
+        }
     }
 
     /// Applies a function to every cell in the grid.

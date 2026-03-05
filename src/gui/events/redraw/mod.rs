@@ -3,6 +3,10 @@ mod animation;
 #[cfg(feature = "gpu")]
 use crate::gui::renderer::backend::RendererBackend;
 use crate::gui::*;
+
+/// Debounce delay before sending SIGWINCH after the last resize event.
+/// Allows the user to finish dragging before the shell redraws its prompt.
+const SIGWINCH_DEBOUNCE_MS: u64 = 80;
 #[cfg(target_os = "macos")]
 use std::time::Instant;
 
@@ -18,19 +22,12 @@ impl FerrumWindow {
     }
 
     pub(in crate::gui) fn apply_pending_resize(&mut self) {
-        if self.pending_grid_resize.take().is_some() {
-            // Recalculate grid size from current window dimensions to avoid race condition
-            // with native tab bar toggle on macOS (which can change window.inner_size()
-            // between on_resized() and this apply call).
-            let size = self.window.inner_size();
-            let (rows, cols) = self.calc_grid_size(size.width, size.height);
-            self.resize_all_tabs(rows, cols);
-            // Recalculate pane layout for the active tab so each pane gets its
-            // correct dimensions based on the split tree (resize_all_tabs uses a
-            // uniform size which is only accurate for single-pane tabs).
+        if self.pending_grid_resize {
+            self.pending_grid_resize = false;
+            // Resize terminal grids so rendering is correct.
+            // Cursor stays hidden until SIGWINCH is sent (see sigwinch_deadline),
+            // at which point the shell redraws to the correct position.
             self.resize_all_panes();
-            // Show mouse cursor after resize completes
-            self.window.set_cursor_visible(true);
         }
     }
 
@@ -41,18 +38,23 @@ impl FerrumWindow {
         if (self.backend.ui_scale() - prev_scale).abs() < SCALE_EPSILON {
             return;
         }
-
-        let size = self.window.inner_size();
-        let (rows, cols) = self.calc_grid_size(size.width, size.height);
-        self.pending_grid_resize = Some((rows, cols));
+        self.pending_grid_resize = true;
+        // A DPI change alters cell pixel dimensions, so the grid row/col count
+        // can change. Defer SIGWINCH the same way a window resize does.
+        self.sigwinch_deadline =
+            Some(std::time::Instant::now() + std::time::Duration::from_millis(SIGWINCH_DEBOUNCE_MS));
     }
 
     pub(crate) fn on_resized(&mut self, size: winit::dpi::PhysicalSize<u32>) {
-        let (rows, cols) = self.calc_grid_size(size.width, size.height);
-        // Coalesce rapid OS resize events and apply only the latest grid size on redraw.
-        self.pending_grid_resize = Some((rows, cols));
-        // Hide mouse cursor during resize to avoid visual glitches
+        // Reconfigure the GPU surface immediately so the OS compositor does not
+        // stretch the previous frame to fit the new window dimensions.
+        self.backend.notify_resize(size.width, size.height);
+        self.pending_grid_resize = true;
         self.window.set_cursor_visible(false);
+        // Defer SIGWINCH: reset deadline on every resize event so SIGWINCH fires
+        // only once, ~80 ms after the user stops dragging.
+        self.sigwinch_deadline =
+            Some(std::time::Instant::now() + std::time::Duration::from_millis(SIGWINCH_DEBOUNCE_MS));
         self.window.request_redraw();
     }
 
@@ -72,7 +74,10 @@ impl FerrumWindow {
         self.refresh_tab_bar_visibility();
         self.apply_pending_resize();
         self.advance_ui_animations();
+        self.render_frame();
+    }
 
+    fn render_frame(&mut self) {
         let size = self.window.inner_size();
 
         let (Some(w), Some(h)) = (NonZeroU32::new(size.width), NonZeroU32::new(size.height)) else {
