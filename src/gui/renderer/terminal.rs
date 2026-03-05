@@ -1,36 +1,60 @@
 use super::*;
 use super::RenderTarget;
-use crate::core::{Color, UnderlineStyle};
+use crate::core::{Color, GraphemeCell, PageList, UnderlineStyle};
 use crate::gui::pane::PaneRect;
 
 impl CpuRenderer {
     /// Maps sentinel default colors to the current theme palette.
     ///
-    /// Cells created by `Cell::default()` carry compile-time sentinel values.
+    /// Cells created by `GraphemeCell::default()` carry compile-time sentinel values.
     /// We remap them so empty cells render with the theme's actual defaults.
     fn remap_defaults(&self, fg: Color, bg: Color) -> (Color, Color) {
         let fg = if fg == Color::SENTINEL_FG { self.palette.default_fg } else { fg };
         let bg = if bg == Color::SENTINEL_BG { self.palette.default_bg } else { bg };
         (fg, bg)
     }
+
+    /// Returns the cell to render for a given (row, col) in the display,
+    /// taking `scroll_offset` into account. When scrolled, rows above the
+    /// viewport come from the scrollback buffer.
+    fn display_cell(screen: &PageList, scroll_offset: usize, row: usize, col: usize) -> GraphemeCell {
+        if row < scroll_offset {
+            let sb_idx = screen.scrollback_len().saturating_sub(scroll_offset) + row;
+            if sb_idx < screen.scrollback_len() {
+                let sb_row = screen.scrollback_row(sb_idx);
+                if col < sb_row.cells.len() {
+                    return sb_row.cells[col].clone();
+                }
+            }
+            GraphemeCell::default()
+        } else {
+            screen.viewport_get(row - scroll_offset, col).clone()
+        }
+    }
+
     /// Renders terminal cells with top/left offsets for tab bar and padding.
     pub fn render(
         &mut self,
         target: &mut RenderTarget<'_>,
-        grid: &Grid,
+        screen: &PageList,
         selection: Option<&Selection>,
-        viewport_start: usize,
+        scroll_offset: usize,
     ) {
         let buf_width = target.width;
         let buf_height = target.height;
         let y_offset = self.tab_bar_height_px() + self.window_padding_px();
         let x_offset = self.window_padding_px();
+        let rows = screen.viewport_rows();
+        let cols = screen.cols();
+        let viewport_start = screen.scrollback_len().saturating_sub(scroll_offset);
 
-        for row in 0..grid.rows {
+        for row in 0..rows {
             let abs_row = viewport_start + row;
-            for col in 0..grid.cols {
-                // Safe: iterating within grid bounds
-                let cell = grid.get_unchecked(row, col);
+            for col in 0..cols {
+                let cell = Self::display_cell(screen, scroll_offset, row, col);
+                // Spacer cells (right half of wide char) — skip rendering the glyph,
+                // but still draw the background.
+                let is_spacer = cell.width == 0;
                 let x = col as u32 * self.metrics.cell_width + x_offset;
                 let y = row as u32 * self.metrics.cell_height + y_offset;
 
@@ -66,12 +90,14 @@ impl CpuRenderer {
 
                 self.draw_bg(target, x, y, bg);
 
-                if cell.character != ' ' {
-                    self.draw_char(target, x, y, cell.character, fg);
+                if !is_spacer
+                    && let Some(ch) = cell.grapheme().chars().next()
+                    && ch != ' ' {
+                    self.draw_char(target, x, y, ch, fg);
                 }
 
                 // Underline
-                if cell.underline_style != UnderlineStyle::None {
+                if !is_spacer && cell.underline_style != UnderlineStyle::None {
                     let underline_y = y + self.metrics.cell_height - 2;
                     if (underline_y as usize) < buf_height {
                         let pixel = fg.to_pixel();
@@ -88,7 +114,7 @@ impl CpuRenderer {
                 }
 
                 // Strikethrough
-                if cell.strikethrough {
+                if !is_spacer && cell.strikethrough {
                     let strike_y = y + self.metrics.cell_height / 2;
                     if (strike_y as usize) < buf_height {
                         let pixel = fg.to_pixel();
@@ -113,9 +139,9 @@ impl CpuRenderer {
     pub fn render_in_rect(
         &mut self,
         target: &mut RenderTarget<'_>,
-        grid: &Grid,
+        screen: &PageList,
         selection: Option<&Selection>,
-        viewport_start: usize,
+        scroll_offset: usize,
         rect: PaneRect,
         fg_dim: f32,
     ) {
@@ -123,10 +149,15 @@ impl CpuRenderer {
         let buf_height = target.height;
         let rect_right = (rect.x + rect.width) as usize;
         let rect_bottom = (rect.y + rect.height) as usize;
-        for row in 0..grid.rows {
+        let rows = screen.viewport_rows();
+        let cols = screen.cols();
+        let viewport_start = screen.scrollback_len().saturating_sub(scroll_offset);
+
+        for row in 0..rows {
             let abs_row = viewport_start + row;
-            for col in 0..grid.cols {
-                let cell = grid.get_unchecked(row, col);
+            for col in 0..cols {
+                let cell = Self::display_cell(screen, scroll_offset, row, col);
+                let is_spacer = cell.width == 0;
                 let x = col as u32 * self.metrics.cell_width + rect.x;
                 let y = row as u32 * self.metrics.cell_height + rect.y;
 
@@ -172,11 +203,13 @@ impl CpuRenderer {
 
                 self.draw_bg(target, x, y, bg);
 
-                if cell.character != ' ' {
-                    self.draw_char(target, x, y, cell.character, fg);
+                if !is_spacer
+                    && let Some(ch) = cell.grapheme().chars().next()
+                    && ch != ' ' {
+                    self.draw_char(target, x, y, ch, fg);
                 }
 
-                if cell.underline_style != UnderlineStyle::None {
+                if !is_spacer && cell.underline_style != UnderlineStyle::None {
                     let underline_y = y + self.metrics.cell_height - 2;
                     if (underline_y as usize) < buf_height && (underline_y as usize) < rect_bottom {
                         let pixel = fg.to_pixel();
@@ -193,7 +226,7 @@ impl CpuRenderer {
                 }
 
                 // Strikethrough
-                if cell.strikethrough {
+                if !is_spacer && cell.strikethrough {
                     let strike_y = y + self.metrics.cell_height / 2;
                     if (strike_y as usize) < buf_height && (strike_y as usize) < rect_bottom {
                         let pixel = fg.to_pixel();

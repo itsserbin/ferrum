@@ -41,15 +41,6 @@ impl Grid {
         }
     }
 
-    /// Returns a reference to the cell at (row, col), or None if out of bounds.
-    pub fn get(&self, row: usize, col: usize) -> Option<&Cell> {
-        if row < self.rows && col < self.cols {
-            Some(&self.rows_data[row].cells[col])
-        } else {
-            None
-        }
-    }
-
     /// Returns a reference to the cell at (row, col) without bounds checking.
     ///
     /// This is safe to call in performance-critical loops where bounds are already verified
@@ -209,6 +200,19 @@ impl Grid {
             } else {
                 self.rows_data[row].cells[col] = Cell::default();
             }
+        }
+    }
+}
+
+#[cfg(test)]
+impl Grid {
+    /// Returns a reference to the cell at (row, col), or None if out of bounds.
+    /// Available only in test builds.
+    pub fn get(&self, row: usize, col: usize) -> Option<&Cell> {
+        if row < self.rows && col < self.cols {
+            Some(&self.rows_data[row].cells[col])
+        } else {
+            None
         }
     }
 }

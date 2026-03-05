@@ -272,32 +272,15 @@ pub(in crate::gui::events) fn draw_frame_content(
 
                     let content = rect.inset(pane_pad);
 
-                    // Render terminal grid into pane content area.
-                    let viewport_start = leaf
-                        .terminal
-                        .scrollback
-                        .len()
-                        .saturating_sub(leaf.scroll_offset);
-                    if leaf.scroll_offset == 0 {
-                        renderer.render_in_rect(
-                            &mut target,
-                            &leaf.terminal.grid,
-                            leaf.selection.as_ref(),
-                            viewport_start,
-                            content,
-                            fg_dim,
-                        );
-                    } else {
-                        let display = leaf.terminal.build_display(leaf.scroll_offset);
-                        renderer.render_in_rect(
-                            &mut target,
-                            &display,
-                            leaf.selection.as_ref(),
-                            viewport_start,
-                            content,
-                            fg_dim,
-                        );
-                    }
+                    // Render terminal content into pane area.
+                    renderer.render_in_rect(
+                        &mut target,
+                        &leaf.terminal.screen,
+                        leaf.selection.as_ref(),
+                        leaf.scroll_offset,
+                        content,
+                        fg_dim,
+                    );
 
                     // Cursor.
                     if cursor_should_draw(params, leaf, is_focused) {
@@ -305,7 +288,7 @@ pub(in crate::gui::events) fn draw_frame_content(
                             &mut target,
                             leaf.terminal.cursor_row,
                             leaf.terminal.cursor_col,
-                            &leaf.terminal.grid,
+                            &leaf.terminal.screen,
                             leaf.terminal.cursor_style,
                             content,
                         );
@@ -336,27 +319,12 @@ pub(in crate::gui::events) fn draw_frame_content(
         } else {
             // Single-pane: use the original render path (faster, no rect clipping).
             if let Some(leaf) = tab.focused_leaf() {
-                let viewport_start = leaf
-                    .terminal
-                    .scrollback
-                    .len()
-                    .saturating_sub(leaf.scroll_offset);
-                if leaf.scroll_offset == 0 {
-                    renderer.render(
-                        &mut target,
-                        &leaf.terminal.grid,
-                        leaf.selection.as_ref(),
-                        viewport_start,
-                    );
-                } else {
-                    let display = leaf.terminal.build_display(leaf.scroll_offset);
-                    renderer.render(
-                        &mut target,
-                        &display,
-                        leaf.selection.as_ref(),
-                        viewport_start,
-                    );
-                }
+                renderer.render(
+                    &mut target,
+                    &leaf.terminal.screen,
+                    leaf.selection.as_ref(),
+                    leaf.scroll_offset,
+                );
 
                 // Cursor.
                 if cursor_should_draw(params, leaf, true) {
@@ -364,7 +332,7 @@ pub(in crate::gui::events) fn draw_frame_content(
                         &mut target,
                         leaf.terminal.cursor_row,
                         leaf.terminal.cursor_col,
-                        &leaf.terminal.grid,
+                        &leaf.terminal.screen,
                         leaf.terminal.cursor_style,
                     );
                 }
@@ -558,7 +526,7 @@ fn cursor_should_draw(params: &FrameParams<'_>, leaf: &PaneLeaf, is_focused: boo
 /// Builds the scrollbar render state for `leaf`, or returns `None` when the
 /// scrollbar should not be drawn (no scrollback, or fully faded out).
 fn leaf_scrollbar_state(leaf: &PaneLeaf) -> Option<ScrollbarState> {
-    let scrollback_len = leaf.terminal.scrollback.len();
+    let scrollback_len = leaf.terminal.screen.scrollback_len();
     if scrollback_len == 0 {
         return None;
     }
@@ -572,7 +540,7 @@ fn leaf_scrollbar_state(leaf: &PaneLeaf) -> Option<ScrollbarState> {
         Some(ScrollbarState {
             scroll_offset: leaf.scroll_offset,
             scrollback_len,
-            grid_rows: leaf.terminal.grid.rows,
+            grid_rows: leaf.terminal.screen.viewport_rows(),
             opacity,
             hover,
         })

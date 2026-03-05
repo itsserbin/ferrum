@@ -1,34 +1,11 @@
 //! Grid operations: scrolling, display construction, and alt-screen query.
 
-use crate::core::{Cell, Grid, Row};
+use crate::core::Row;
 
 impl super::Terminal {
     /// Returns whether the terminal is in the alternate screen.
     pub fn is_alt_screen(&self) -> bool {
         self.alt_screen.is_some()
-    }
-
-    /// Builds a display grid by combining scrollback with the visible grid.
-    /// Called only when `scroll_offset > 0`, so the copy cost is acceptable.
-    pub fn build_display(&self, scroll_offset: usize) -> Grid {
-        let scroll_offset = scroll_offset.min(self.scrollback.len());
-        let mut display = Grid::new(self.grid.rows, self.grid.cols);
-        for row in 0..self.grid.rows {
-            for col in 0..self.grid.cols {
-                let cell = if row < scroll_offset {
-                    let sb_idx = self.scrollback.len().saturating_sub(scroll_offset) + row;
-                    if col < self.scrollback[sb_idx].cells.len() {
-                        self.scrollback[sb_idx].cells[col].clone()
-                    } else {
-                        Cell::default()
-                    }
-                } else {
-                    self.grid.get_unchecked(row - scroll_offset, col).clone()
-                };
-                display.set(row, col, cell);
-            }
-        }
-        display
     }
 
     pub(super) fn scroll_up_region(&mut self, top: usize, bottom: usize) {

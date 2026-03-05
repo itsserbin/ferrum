@@ -101,6 +101,14 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let cell_x = local_x - col * uniforms.cell_width;
     let cell_y = local_y - row * uniforms.cell_height;
 
+    // For spacer cells (right half of wide chars), shift the glyph sample
+    // left by one cell width so both halves render from the same glyph.
+    let is_wide_right = (cell.attrs & 256u) != 0u;
+    var adjusted_cell_x = cell_x;
+    if is_wide_right {
+        adjusted_cell_x = cell_x + uniforms.cell_width;
+    }
+
     // Resolve foreground / background, honoring reverse video.
     var fg = cell.fg;
     var bg = cell.bg;
@@ -124,7 +132,8 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
         if glyph.w > 0.0 {
             // Pixel position relative to glyph bounding box.
-            let gx = f32(cell_x) - glyph.offset_x;
+            // For wide-right spacer cells, adjusted_cell_x shifts sample to the right half.
+            let gx = f32(adjusted_cell_x) - glyph.offset_x;
             let gy = f32(cell_y) - glyph.offset_y;
 
             if gx >= 0.0 && gx < glyph.w && gy >= 0.0 && gy < glyph.h {

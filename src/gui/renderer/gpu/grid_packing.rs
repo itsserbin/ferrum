@@ -1,6 +1,6 @@
 //! Packs terminal grid cells into GPU buffer format.
 
-use crate::core::{Color, Grid, Selection, UnderlineStyle};
+use crate::core::{Color, GraphemeCell, PageList, Selection, UnderlineStyle};
 use crate::gui::pane::PaneRect;
 
 use super::GridBatch;
@@ -13,6 +13,9 @@ const ATTR_UNDERLINE: u32 = 1 << 2;
 const ATTR_REVERSE: u32 = 1 << 3;
 const ATTR_DIM: u32 = 1 << 4;
 const ATTR_STRIKETHROUGH: u32 = 1 << 5;
+/// Set on spacer cells (right half of a wide char) so the shader can
+/// offset the glyph sample by one cell width.
+const ATTR_WIDE_RIGHT: u32 = 1 << 8;
 
 impl super::GpuRenderer {
     pub(super) fn terminal_texture_extent(&self) -> (u32, u32) {
@@ -65,22 +68,52 @@ impl super::GpuRenderer {
         });
     }
 
+    /// Returns the cell to render for a given (row, col) in the display,
+    /// taking `scroll_offset` into account. When scrolled, rows above the
+    /// viewport come from the scrollback buffer.
+    fn display_cell(screen: &PageList, scroll_offset: usize, row: usize, col: usize) -> GraphemeCell {
+        if row < scroll_offset {
+            let sb_idx = screen.scrollback_len().saturating_sub(scroll_offset) + row;
+            if sb_idx < screen.scrollback_len() {
+                let sb_row = screen.scrollback_row(sb_idx);
+                if col < sb_row.cells.len() {
+                    return sb_row.cells[col].clone();
+                }
+            }
+            GraphemeCell::default()
+        } else {
+            screen.viewport_get(row - scroll_offset, col).clone()
+        }
+    }
+
     fn pack_grid_cells(
         &mut self,
-        grid: &Grid,
+        screen: &PageList,
         selection: Option<&Selection>,
-        viewport_start: usize,
+        scroll_offset: usize,
         fg_dim: f32,
     ) -> Vec<PackedCell> {
-        let rows = grid.rows;
-        let cols = grid.cols;
+        let rows = screen.viewport_rows();
+        let cols = screen.cols();
+        // viewport_start: absolute row index of the first displayed row.
+        // Used for selection hit-testing which works in absolute coordinates.
+        let viewport_start = screen.scrollback_len().saturating_sub(scroll_offset);
         let mut cells = Vec::with_capacity(rows * cols);
+        let mut prev_codepoint = 32u32; // default: space
         for row in 0..rows {
             let abs_row = viewport_start + row;
             for col in 0..cols {
-                let cell = grid.get_unchecked(row, col);
+                let cell = Self::display_cell(screen, scroll_offset, row, col);
                 let selected = selection.is_some_and(|s| s.contains(abs_row, col));
-                let codepoint = cell.character as u32;
+
+                let (codepoint, attrs_wide) = if cell.width == 0 {
+                    // Spacer cell: use the previous cell's codepoint and mark as wide-right.
+                    (prev_codepoint, ATTR_WIDE_RIGHT)
+                } else {
+                    let cp = cell.grapheme().chars().next().map(|c| c as u32).unwrap_or(32);
+                    prev_codepoint = cp;
+                    (cp, 0u32)
+                };
 
                 // Ensure non-ASCII terminal glyphs exist in the atlas.
                 if codepoint >= 128 {
@@ -93,7 +126,7 @@ impl super::GpuRenderer {
                     );
                 }
 
-                let mut attrs = 0u32;
+                let mut attrs = attrs_wide;
                 if cell.bold { attrs |= ATTR_BOLD; }
                 if cell.italic { attrs |= ATTR_ITALIC; }
                 if cell.underline_style != UnderlineStyle::None { attrs |= ATTR_UNDERLINE; }
@@ -134,9 +167,9 @@ impl super::GpuRenderer {
     /// Queues one grid compute batch for this frame.
     pub(super) fn queue_grid_batch(
         &mut self,
-        grid: &Grid,
+        screen: &PageList,
         selection: Option<&Selection>,
-        viewport_start: usize,
+        scroll_offset: usize,
         region: PaneRect,
         fg_dim: f32,
     ) {
@@ -146,22 +179,25 @@ impl super::GpuRenderer {
             return;
         }
 
-        let dispatch_width = (grid.cols as u32)
+        let rows = screen.viewport_rows();
+        let cols = screen.cols();
+
+        let dispatch_width = (cols as u32)
             .saturating_mul(self.metrics.cell_width)
             .min(region.width);
-        let dispatch_height = (grid.rows as u32)
+        let dispatch_height = (rows as u32)
             .saturating_mul(self.metrics.cell_height)
             .min(region.height);
         if dispatch_width == 0 || dispatch_height == 0 {
             return;
         }
 
-        let cells = self.pack_grid_cells(grid, selection, viewport_start, fg_dim);
+        let cells = self.pack_grid_cells(screen, selection, scroll_offset, fg_dim);
         self.grid_batches.push(GridBatch {
             cells,
             uniforms: GridUniforms {
-                cols: grid.cols as u32,
-                rows: grid.rows as u32,
+                cols: cols as u32,
+                rows: rows as u32,
                 cell_width: self.metrics.cell_width,
                 cell_height: self.metrics.cell_height,
                 origin_x: region.x,

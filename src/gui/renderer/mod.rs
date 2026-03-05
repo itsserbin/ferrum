@@ -12,7 +12,7 @@ mod terminal;
 pub mod traits;
 pub mod types;
 
-use crate::core::{CursorStyle, Grid, Selection};
+use crate::core::{CursorStyle, Selection};
 
 pub use backend::RendererBackend;
 pub use cpu::CpuRenderer;
