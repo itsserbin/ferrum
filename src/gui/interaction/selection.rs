@@ -1,4 +1,4 @@
-use crate::core::SelectionPoint;
+use crate::core::PageCoord;
 use crate::gui::*;
 use std::cmp::Ordering;
 
@@ -82,9 +82,9 @@ impl FerrumWindow {
         self.viewport_start() + screen_row
     }
 
-    fn pos_to_abs(&self, pos: Position) -> SelectionPoint {
-        SelectionPoint {
-            row: self.screen_to_abs(pos.row),
+    fn pos_to_abs(&self, pos: Position) -> PageCoord {
+        PageCoord {
+            abs_row: self.screen_to_abs(pos.row),
             col: pos.col,
         }
     }
@@ -96,7 +96,7 @@ impl FerrumWindow {
         let abs_start = self.pos_to_abs(start);
         let abs_end = self.pos_to_abs(end);
         if let Some(leaf) = self.active_leaf_mut() {
-            leaf.selection = Some(Selection {
+            leaf.set_selection(Selection {
                 start: abs_start,
                 end: abs_end,
             });
@@ -110,7 +110,7 @@ impl FerrumWindow {
         let abs_start = self.pos_to_abs(start);
         let abs_end = self.pos_to_abs(end);
         if let Some(leaf) = self.active_leaf_mut() {
-            leaf.selection = Some(Selection {
+            leaf.set_selection(Selection {
                 start: abs_start,
                 end: abs_end,
             });
@@ -132,13 +132,13 @@ impl FerrumWindow {
         // Anchor is already in absolute coords
         let mut anchor = self
             .selection_anchor
-            .unwrap_or(SelectionPoint { row: vp + row, col });
-        // Clamp anchor col (row is absolute, no clamping to screen max_row)
+            .unwrap_or(PageCoord { abs_row: vp + row, col });
+        // Clamp anchor col (abs_row is absolute, no clamping to screen max_row)
         anchor.col = anchor.col.min(max_col);
 
         let abs_row = vp + row.min(max_row);
-        let current = SelectionPoint {
-            row: abs_row,
+        let current = PageCoord {
+            abs_row,
             col: col.min(max_col),
         };
         let mode = self.selection_drag_mode;
@@ -149,7 +149,7 @@ impl FerrumWindow {
         }
 
         // Convert anchor back to screen-relative for word_bounds_at/line_bounds_at
-        let anchor_screen_row = anchor.row.saturating_sub(vp).min(max_row);
+        let anchor_screen_row = anchor.abs_row.saturating_sub(vp).min(max_row);
         let current_screen_row = row.min(max_row);
 
         let selection = match mode {
@@ -186,25 +186,25 @@ impl FerrumWindow {
                 }
             }
             SelectionDragMode::Line => {
-                if current.row < anchor.row {
+                if current.abs_row < anchor.abs_row {
                     Selection {
-                        start: SelectionPoint {
-                            row: current.row,
+                        start: PageCoord {
+                            abs_row: current.abs_row,
                             col: 0,
                         },
-                        end: SelectionPoint {
-                            row: anchor.row,
+                        end: PageCoord {
+                            abs_row: anchor.abs_row,
                             col: max_col,
                         },
                     }
                 } else {
                     Selection {
-                        start: SelectionPoint {
-                            row: anchor.row,
+                        start: PageCoord {
+                            abs_row: anchor.abs_row,
                             col: 0,
                         },
-                        end: SelectionPoint {
-                            row: current.row,
+                        end: PageCoord {
+                            abs_row: current.abs_row,
                             col: max_col,
                         },
                     }
@@ -213,7 +213,7 @@ impl FerrumWindow {
         };
 
         if let Some(leaf) = self.active_leaf_mut() {
-            leaf.selection = Some(selection);
+            leaf.set_selection(selection);
         }
     }
 }

@@ -19,7 +19,7 @@ pub use page::{Page, PageRow, PAGE_SIZE};
 pub use page_list::PageList;
 pub use position::Position;
 pub use security::{SecurityConfig, SecurityEventKind, SecurityGuard};
-pub use selection::{Selection, SelectionPoint};
+pub use selection::Selection;
 pub use terminal::{CursorStyle, MouseMode};
 pub use tracked_pin::{PageCoord, TrackedPin};
 

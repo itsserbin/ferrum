@@ -1,4 +1,4 @@
-use crate::core::SelectionPoint;
+use crate::core::PageCoord;
 use crate::gui::*;
 
 impl FerrumWindow {
@@ -57,8 +57,8 @@ impl FerrumWindow {
             return;
         }
 
-        let abs_pos = SelectionPoint {
-            row: self.screen_to_abs(row),
+        let abs_pos = PageCoord {
+            abs_row: self.screen_to_abs(row),
             col,
         };
 
@@ -80,7 +80,7 @@ impl FerrumWindow {
                     self.selection_anchor = Some(anchor);
                     self.selection_drag_mode = SelectionDragMode::Character;
                     if let Some(leaf) = self.tabs[idx].focused_leaf_mut() {
-                        leaf.selection = Some(Selection {
+                        leaf.set_selection(Selection {
                             start: anchor,
                             end: abs_pos,
                         });
@@ -94,7 +94,7 @@ impl FerrumWindow {
                         // Single-click arms char-wise drag; selection starts on movement.
                         self.selection_drag_mode = SelectionDragMode::Character;
                         if let Some(leaf) = self.tabs[idx].focused_leaf_mut() {
-                            leaf.selection = None;
+                            leaf.clear_selection();
                         }
                     }
                     2 => {
@@ -114,6 +114,7 @@ impl FerrumWindow {
                     && self.tabs[idx]
                         .focused_leaf()
                         .is_none_or(|l| l.selection.is_none());
+
                 self.is_selecting = false;
                 self.selection_anchor = None;
                 if should_move_cursor {

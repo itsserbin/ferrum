@@ -3,7 +3,7 @@ use crate::core::Grid;
 #[cfg(test)]
 use crate::core::Row;
 use crate::core::terminal::Terminal;
-use crate::core::{Selection, SelectionPoint};
+use crate::core::{PageCoord, Selection};
 use crate::gui::*;
 
 const BRACKETED_PASTE_START: &[u8] = b"\x1b[200~";
@@ -22,21 +22,21 @@ impl FerrumWindow {
         let max_col = terminal.grid.cols - 1;
 
         let clamped = Selection {
-            start: SelectionPoint {
-                row: selection.start.row.min(max_row),
+            start: PageCoord {
+                abs_row: selection.start.abs_row.min(max_row),
                 col: selection.start.col.min(max_col),
             },
-            end: SelectionPoint {
-                row: selection.end.row.min(max_row),
+            end: PageCoord {
+                abs_row: selection.end.abs_row.min(max_row),
                 col: selection.end.col.min(max_col),
             },
         };
         let (start, end) = clamped.normalized();
 
         let mut text = String::new();
-        for row in start.row..=end.row {
-            let col_start = if row == start.row { start.col } else { 0 };
-            let col_end = if row == end.row { end.col } else { max_col };
+        for row in start.abs_row..=end.abs_row {
+            let col_start = if row == start.abs_row { start.col } else { 0 };
+            let col_end = if row == end.abs_row { end.col } else { max_col };
 
             for col in col_start..=col_end {
                 let ch = if row < terminal.scrollback.len() {
@@ -53,7 +53,7 @@ impl FerrumWindow {
                 };
                 text.push(ch);
             }
-            if row < end.row {
+            if row < end.abs_row {
                 text.push('\n');
             }
         }
@@ -168,8 +168,8 @@ mod tests {
 
         // Scrollback has 2 entries. Live grid row 0 is absolute row 2.
         let selection = Selection {
-            start: SelectionPoint { row: 2, col: 0 },
-            end: SelectionPoint { row: 2, col: 4 },
+            start: PageCoord { abs_row: 2, col: 0 },
+            end: PageCoord { abs_row: 2, col: 4 },
         };
 
         let live_text = FerrumWindow::selected_text_from_terminal(&terminal, selection);
@@ -177,8 +177,8 @@ mod tests {
 
         // Absolute row 1 is the second scrollback line.
         let scrollback_selection = Selection {
-            start: SelectionPoint { row: 1, col: 0 },
-            end: SelectionPoint { row: 1, col: 4 },
+            start: PageCoord { abs_row: 1, col: 0 },
+            end: PageCoord { abs_row: 1, col: 4 },
         };
         let scrollback_text =
             FerrumWindow::selected_text_from_terminal(&terminal, scrollback_selection);

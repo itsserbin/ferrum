@@ -39,7 +39,7 @@ impl FerrumWindow {
             };
             let (start, end) = selection.normalized();
             let cursor_abs_row = leaf.terminal.scrollback.len() + leaf.terminal.cursor_row;
-            if start.row != end.row || start.row != cursor_abs_row {
+            if start.abs_row != end.abs_row || start.abs_row != cursor_abs_row {
                 return false;
             }
 
@@ -76,7 +76,7 @@ impl FerrumWindow {
         self.copy_selection();
         if !self.delete_terminal_selection(false) {
             if let Some(leaf) = self.active_leaf_mut() {
-                leaf.selection = None;
+                leaf.clear_selection();
             }
             self.keyboard_selection_anchor = None;
         }

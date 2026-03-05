@@ -97,6 +97,10 @@ pub struct Terminal {
     pub cursor_style: CursorStyle,
     pub resize_at: Option<std::time::Instant>,
 
+    // ── Selection pins ───────────────────────────────────────────────────────
+    pub selection_start_pin: Option<TrackedPin>,
+    pub selection_end_pin: Option<TrackedPin>,
+
     // ── Misc ─────────────────────────────────────────────────────────────────
     parser: Parser,
     pub cwd: Option<String>,
@@ -158,6 +162,8 @@ impl Terminal {
             pending_security_events: Vec::new(),
             cursor_style: CursorStyle::default(),
             resize_at: None,
+            selection_start_pin: None,
+            selection_end_pin: None,
             parser: Parser::new(),
             cwd: None,
             title: None,
@@ -219,6 +225,28 @@ impl Terminal {
     /// No-op: scrollback_popped tracking removed — selection uses screen coords.
     pub fn drain_scrollback_popped(&mut self) -> usize {
         0
+    }
+
+    /// Registers a tracked selection-start pin at the given viewport row/col.
+    pub fn set_selection_start(&mut self, vrow: usize, col: usize) {
+        let abs = self.screen.scrollback_len() + vrow;
+        let coord = PageCoord { abs_row: abs, col };
+        let pin = self.screen.register_pin(coord);
+        self.selection_start_pin = Some(pin);
+    }
+
+    /// Registers a tracked selection-end pin at the given viewport row/col.
+    pub fn set_selection_end(&mut self, vrow: usize, col: usize) {
+        let abs = self.screen.scrollback_len() + vrow;
+        let coord = PageCoord { abs_row: abs, col };
+        let pin = self.screen.register_pin(coord);
+        self.selection_end_pin = Some(pin);
+    }
+
+    /// Clears both selection tracking pins.
+    pub fn clear_selection_pins(&mut self) {
+        self.selection_start_pin = None;
+        self.selection_end_pin = None;
     }
 
     /// Resets the scroll region to span the entire visible grid.
