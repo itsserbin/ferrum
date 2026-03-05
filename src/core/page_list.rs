@@ -1,3 +1,4 @@
+use crate::core::tracked_pin::{PageCoord, TrackedPin};
 use crate::core::{GraphemeCell, Page, PageRow, PAGE_SIZE};
 
 pub struct PageList {
@@ -7,6 +8,7 @@ pub struct PageList {
     viewport_rows: usize,
     cols: usize,
     max_scrollback: usize,
+    pins: Vec<TrackedPin>,
 }
 
 impl PageList {
@@ -18,6 +20,7 @@ impl PageList {
             viewport_rows,
             cols,
             max_scrollback,
+            pins: Vec::new(),
         };
         for _ in 0..viewport_rows {
             list.append_row(PageRow::new(cols));
@@ -182,6 +185,31 @@ impl PageList {
     pub fn abs_row_mut(&mut self, abs: usize) -> &mut PageRow {
         let (pi, ri) = self.abs_to_page(abs);
         self.pages[pi].get_mut(ri)
+    }
+
+    // ── Pin management ───────────────────────────────────────────────────────
+
+    /// Register a new tracked pin at the given coordinate.
+    /// Returns a handle — cloning shares the same underlying coordinate.
+    pub fn register_pin(&mut self, coord: PageCoord) -> TrackedPin {
+        let pin = TrackedPin::new(coord);
+        self.pins.push(pin.clone());
+        pin
+    }
+
+    /// Read the current coordinate of a pin.
+    pub fn pin_coord(&self, pin: &TrackedPin) -> PageCoord {
+        pin.coord()
+    }
+
+    /// Set the column of a pin.
+    pub fn set_pin_col(&self, pin: &TrackedPin, col: usize) {
+        pin.set_col(col);
+    }
+
+    /// Set the absolute row of a pin (used during reflow to update cursor).
+    pub fn set_pin_abs_row(&self, pin: &TrackedPin, abs_row: usize) {
+        pin.set_abs_row(abs_row);
     }
 }
 
