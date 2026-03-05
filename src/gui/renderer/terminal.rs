@@ -1,6 +1,6 @@
 use super::*;
 use super::RenderTarget;
-use crate::core::{Color, GraphemeCell, PageList, UnderlineStyle};
+use crate::core::{Color, PageList, UnderlineStyle};
 use crate::gui::pane::PaneRect;
 
 impl CpuRenderer {
@@ -12,24 +12,6 @@ impl CpuRenderer {
         let fg = if fg == Color::SENTINEL_FG { self.palette.default_fg } else { fg };
         let bg = if bg == Color::SENTINEL_BG { self.palette.default_bg } else { bg };
         (fg, bg)
-    }
-
-    /// Returns the cell to render for a given (row, col) in the display,
-    /// taking `scroll_offset` into account. When scrolled, rows above the
-    /// viewport come from the scrollback buffer.
-    fn display_cell(screen: &PageList, scroll_offset: usize, row: usize, col: usize) -> GraphemeCell {
-        if row < scroll_offset {
-            let sb_idx = screen.scrollback_len().saturating_sub(scroll_offset) + row;
-            if sb_idx < screen.scrollback_len() {
-                let sb_row = screen.scrollback_row(sb_idx);
-                if col < sb_row.cells.len() {
-                    return sb_row.cells[col].clone();
-                }
-            }
-            GraphemeCell::default()
-        } else {
-            screen.viewport_get(row - scroll_offset, col).clone()
-        }
     }
 
     /// Renders terminal cells with top/left offsets for tab bar and padding.
@@ -51,7 +33,7 @@ impl CpuRenderer {
         for row in 0..rows {
             let abs_row = viewport_start + row;
             for col in 0..cols {
-                let cell = Self::display_cell(screen, scroll_offset, row, col);
+                let cell = super::display_cell(screen, scroll_offset, row, col);
                 // Spacer cells (right half of wide char) — skip rendering the glyph,
                 // but still draw the background.
                 let is_spacer = cell.width == 0;
@@ -156,7 +138,7 @@ impl CpuRenderer {
         for row in 0..rows {
             let abs_row = viewport_start + row;
             for col in 0..cols {
-                let cell = Self::display_cell(screen, scroll_offset, row, col);
+                let cell = super::display_cell(screen, scroll_offset, row, col);
                 let is_spacer = cell.width == 0;
                 let x = col as u32 * self.metrics.cell_width + rect.x;
                 let y = row as u32 * self.metrics.cell_height + rect.y;

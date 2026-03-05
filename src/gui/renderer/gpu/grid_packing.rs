@@ -1,6 +1,6 @@
 //! Packs terminal grid cells into GPU buffer format.
 
-use crate::core::{Color, GraphemeCell, PageList, Selection, UnderlineStyle};
+use crate::core::{Color, PageList, Selection, UnderlineStyle};
 use crate::gui::pane::PaneRect;
 
 use super::GridBatch;
@@ -68,24 +68,6 @@ impl super::GpuRenderer {
         });
     }
 
-    /// Returns the cell to render for a given (row, col) in the display,
-    /// taking `scroll_offset` into account. When scrolled, rows above the
-    /// viewport come from the scrollback buffer.
-    fn display_cell(screen: &PageList, scroll_offset: usize, row: usize, col: usize) -> GraphemeCell {
-        if row < scroll_offset {
-            let sb_idx = screen.scrollback_len().saturating_sub(scroll_offset) + row;
-            if sb_idx < screen.scrollback_len() {
-                let sb_row = screen.scrollback_row(sb_idx);
-                if col < sb_row.cells.len() {
-                    return sb_row.cells[col].clone();
-                }
-            }
-            GraphemeCell::default()
-        } else {
-            screen.viewport_get(row - scroll_offset, col).clone()
-        }
-    }
-
     fn pack_grid_cells(
         &mut self,
         screen: &PageList,
@@ -103,7 +85,7 @@ impl super::GpuRenderer {
         for row in 0..rows {
             let abs_row = viewport_start + row;
             for col in 0..cols {
-                let cell = Self::display_cell(screen, scroll_offset, row, col);
+                let cell = super::super::display_cell(screen, scroll_offset, row, col);
                 let selected = selection.is_some_and(|s| s.contains(abs_row, col));
 
                 let (codepoint, attrs_wide) = if cell.width == 0 {
