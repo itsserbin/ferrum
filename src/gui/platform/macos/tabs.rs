@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use objc2::msg_send;
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
-use objc2_app_kit::{NSWindow, NSWindowTabbingMode};
+use objc2_app_kit::{NSAppearance, NSAppearanceNameAqua, NSAppearanceNameDarkAqua, NSColor, NSWindow, NSWindowTabbingMode};
 use objc2_foundation::ns_string;
 use winit::window::Window;
 
@@ -189,4 +189,43 @@ pub fn sync_native_tab_bar_visibility(window: &Window) {
 /// Returns and resets the native "+" click counter.
 pub fn take_new_tab_requests() -> usize {
     NEW_TAB_REQUESTED.swap(0, Ordering::SeqCst)
+}
+
+/// Sets the native macOS window background color to a fixed sRGB value.
+///
+/// The native tab bar adopts this color, preventing it from blending with the
+/// desktop wallpaper and keeping it consistent with the terminal theme.
+/// The window appearance (dark/light) is derived from the color luminance so
+/// that the tab bar title text remains legible against the background.
+pub fn set_window_background_color(window: &Window, r: u8, g: u8, b: u8) {
+    let Some(ns_window) = get_ns_window(window) else {
+        return;
+    };
+
+    let color = NSColor::colorWithSRGBRed_green_blue_alpha(
+        r as f64 / 255.0,
+        g as f64 / 255.0,
+        b as f64 / 255.0,
+        1.0,
+    );
+
+    // Derive dark vs. light from perceptual luminance (ITU-R BT.601 coefficients).
+    // Luminance < 128 → dark theme → white title text; ≥ 128 → light → black text.
+    let luminance = 0.299 * r as f32 + 0.587 * g as f32 + 0.114 * b as f32;
+    let appearance_name = if luminance < 128.0 {
+        unsafe { NSAppearanceNameDarkAqua }
+    } else {
+        unsafe { NSAppearanceNameAqua }
+    };
+    let appearance = NSAppearance::appearanceNamed(appearance_name);
+
+    // titlebarAppearsTransparent removes the vibrancy material from the titlebar/
+    // tab bar area so the window backgroundColor shows through uniformly.
+    ns_window.setTitlebarAppearsTransparent(true);
+    ns_window.setBackgroundColor(Some(&color));
+    // SAFETY: setAppearance: is a standard NSWindow property setter present on
+    // all supported macOS versions. The NSAppearance pointer is valid.
+    unsafe {
+        let _: () = msg_send![&*ns_window, setAppearance: appearance.as_deref()];
+    }
 }
