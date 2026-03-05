@@ -1,7 +1,7 @@
 use crate::core::GraphemeCell;
 
 /// A single row of terminal cells.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct PageRow {
     pub cells: Vec<GraphemeCell>,
     pub wrapped: bool,
