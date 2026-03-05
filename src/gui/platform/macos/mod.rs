@@ -16,7 +16,8 @@ pub use pin::{
 // Settings window functions are accessed via `settings_window::` submodule path directly.
 pub use tabs::{
     add_as_tab, configure_native_tabs, install_new_tab_handler, select_next_tab,
-    select_previous_tab, select_tab, sync_native_tab_bar_visibility, take_new_tab_requests,
+    select_previous_tab, select_tab, set_window_background_color, sync_native_tab_bar_visibility,
+    take_new_tab_requests,
 };
 
 /// Extracts the NSWindow from a winit Window via raw-window-handle.
