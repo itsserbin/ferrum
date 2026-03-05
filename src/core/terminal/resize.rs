@@ -45,13 +45,18 @@ impl super::Terminal {
                 0
             };
 
-            for r in 0..push_count {
+            let overflow = (self.scrollback.len() + push_count).saturating_sub(self.max_scrollback);
+            // Evict old scrollback rows that will be pushed out by the new rows.
+            let old_evictions = overflow.saturating_sub(push_count);
+            for _ in 0..old_evictions {
+                self.scrollback.pop_front();
+            }
+            // Skip grid rows that would be pushed only to be immediately evicted.
+            let skip = overflow.min(push_count);
+            for r in skip..push_count {
                 let cells = self.grid.row_cells(r);
                 let wrapped = self.grid.is_wrapped(r);
                 self.scrollback.push_back(Row::from_cells(cells, wrapped));
-                if self.scrollback.len() > self.max_scrollback {
-                    self.scrollback.pop_front();
-                }
             }
 
             // Build the new grid from old rows [push_count .. push_count+rows].
@@ -132,9 +137,7 @@ impl super::Terminal {
 
         for (i, row) in rewrapped.iter().skip(scrollback_count).enumerate() {
             for (col, cell) in row.cells.iter().enumerate() {
-                if col < new_cols {
-                    self.grid.set(i, col, cell.clone());
-                }
+                self.grid.set(i, col, cell.clone());
             }
             self.grid.set_wrapped(i, row.wrapped);
         }

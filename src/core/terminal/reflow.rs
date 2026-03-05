@@ -48,7 +48,8 @@ pub(super) fn rewrap_lines(
         let mut pos = 0;
         while pos < content.len() {
             let end = (pos + new_cols).min(content.len());
-            let mut cells: Vec<Cell> = content[pos..end].to_vec();
+            let mut cells = Vec::with_capacity(new_cols);
+            cells.extend_from_slice(&content[pos..end]);
             cells.resize(new_cols, Cell::default());
             let wrapped = end < content.len();
             rewrapped.push(Row::from_cells(cells, wrapped));
@@ -77,8 +78,6 @@ impl super::Terminal {
         let content_rows = self.compute_content_rows();
         let mut lines: Vec<LogicalLine> = Vec::new();
         let mut current_cells: Vec<Cell> = Vec::new();
-        let mut current_min_len = 0usize;
-        let mut cursor_in_current = false;
         let mut cursor_line_idx: Option<usize> = None;
 
         for row in self.scrollback.iter() {
@@ -90,6 +89,10 @@ impl super::Terminal {
                 });
             }
         }
+
+        // cursor_in_current only applies to grid rows; the cursor is never in scrollback.
+        let mut cursor_in_current = false;
+        let mut current_min_len = 0usize;
 
         for r in 0..content_rows {
             let line_start = current_cells.len();

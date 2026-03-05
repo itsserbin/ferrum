@@ -182,24 +182,20 @@ impl FerrumWindow {
         tab.next_pane_id += 1;
         let tab_id = tab.id;
 
-        // Calculate rows/cols for the new pane (roughly half the focused pane's terminal).
-        let (rows, cols) = {
+        // Calculate rows/cols for the new pane and inherit CWD in one leaf lookup.
+        let (rows, cols, cwd) = {
             let Some(leaf) = tab.pane_tree.find_leaf(focused_pane) else {
                 return;
             };
             let term_rows = leaf.terminal.grid.rows;
             let term_cols = leaf.terminal.grid.cols;
-            match direction {
+            let cwd = leaf.cwd();
+            let (r, c) = match direction {
                 SplitDirection::Horizontal => (term_rows, (term_cols / 2).max(1)),
                 SplitDirection::Vertical => ((term_rows / 2).max(1), term_cols),
-            }
+            };
+            (r, c, cwd)
         };
-
-        // Inherit CWD from the focused pane (if available via OSC 7).
-        let cwd = tab
-            .pane_tree
-            .find_leaf(focused_pane)
-            .and_then(|leaf| leaf.cwd());
 
         // Spawn a new PTY session.
         let shell = pty::default_shell();
