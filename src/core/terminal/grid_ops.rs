@@ -34,9 +34,10 @@ impl super::Terminal {
     pub(super) fn scroll_up_region(&mut self, top: usize, bottom: usize) {
         // Persist the top row to scrollback only for the main screen.
         if top == 0 && self.alt_grid.is_none() {
-            let cells = self.grid.row_cells(0);
-            let wrapped = self.grid.is_wrapped(0);
-            self.scrollback.push_back(Row::from_cells(cells, wrapped));
+            self.scrollback.push_back(Row::from_cells(
+                self.grid.row_slice(0).to_vec(),
+                self.grid.is_wrapped(0),
+            ));
             if self.scrollback.len() > self.max_scrollback {
                 self.scrollback.pop_front();
                 self.scrollback_popped += 1;
@@ -44,12 +45,7 @@ impl super::Terminal {
         }
 
         for row in (top + 1)..=bottom {
-            for col in 0..self.grid.cols {
-                let cell = self.grid.get_unchecked(row, col).clone();
-                self.grid.set(row - 1, col, cell);
-            }
-            let wrapped = self.grid.is_wrapped(row);
-            self.grid.set_wrapped(row - 1, wrapped);
+            self.grid.copy_row_within(row, row - 1);
         }
         let blank = self.make_blank_cell();
         for col in 0..self.grid.cols {
@@ -60,12 +56,7 @@ impl super::Terminal {
 
     pub(super) fn scroll_down_region(&mut self, top: usize, bottom: usize) {
         for row in (top..bottom).rev() {
-            for col in 0..self.grid.cols {
-                let cell = self.grid.get_unchecked(row, col).clone();
-                self.grid.set(row + 1, col, cell);
-            }
-            let wrapped = self.grid.is_wrapped(row);
-            self.grid.set_wrapped(row + 1, wrapped);
+            self.grid.copy_row_within(row, row + 1);
         }
         let blank = self.make_blank_cell();
         for col in 0..self.grid.cols {

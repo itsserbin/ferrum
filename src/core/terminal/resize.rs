@@ -54,9 +54,10 @@ impl super::Terminal {
             // Skip grid rows that would be pushed only to be immediately evicted.
             let skip = overflow.min(push_count);
             for r in skip..push_count {
-                let cells = self.grid.row_cells(r);
-                let wrapped = self.grid.is_wrapped(r);
-                self.scrollback.push_back(Row::from_cells(cells, wrapped));
+                self.scrollback.push_back(Row::from_cells(
+                    self.grid.row_slice(r).to_vec(),
+                    self.grid.is_wrapped(r),
+                ));
             }
 
             // Build the new grid from old rows [push_count .. push_count+rows].
@@ -64,9 +65,8 @@ impl super::Terminal {
             for new_r in 0..rows {
                 let old_r = push_count + new_r;
                 if old_r < self.grid.rows {
-                    for c in 0..cols.min(self.grid.cols) {
-                        new_grid.set(new_r, c, self.grid.get_unchecked(old_r, c).clone());
-                    }
+                    let copy_cols = cols.min(self.grid.cols);
+                    new_grid.copy_row_from_slice(new_r, &self.grid.row_slice(old_r)[..copy_cols]);
                     new_grid.set_wrapped(new_r, self.grid.is_wrapped(old_r));
                 }
             }
@@ -110,9 +110,7 @@ impl super::Terminal {
         //
         // By placing the cursor at (start, 0), the shell erases the entire
         // reflowed cursor line and redraws it cleanly.
-        let cursor_in_rewrapped = cursor_line_start.map(|start| (start, 0usize));
-
-        self.fill_grid_from_rewrapped(&rewrapped, new_rows, new_cols, cursor_in_rewrapped);
+        self.fill_grid_from_rewrapped(&rewrapped, new_rows, new_cols, cursor_line_start);
     }
 
     fn fill_grid_from_rewrapped(
@@ -120,7 +118,7 @@ impl super::Terminal {
         rewrapped: &[Row],
         new_rows: usize,
         new_cols: usize,
-        cursor_in_rewrapped: Option<(usize, usize)>,
+        cursor_row_in_rewrapped: Option<usize>,
     ) {
         let total_rows = rewrapped.len();
         // Rows beyond new_rows go to scrollback; the rest fill the grid.
@@ -139,24 +137,21 @@ impl super::Terminal {
         }
 
         for (i, row) in rewrapped.iter().skip(grid_offset).enumerate() {
-            for (col, cell) in row.cells.iter().enumerate() {
-                self.grid.set(i, col, cell.clone());
-            }
+            self.grid.copy_row_from_slice(i, &row.cells);
             self.grid.set_wrapped(i, row.wrapped);
         }
 
-        // Place cursor at its correct reflowed position.
+        // Place cursor at the start of its reflowed row (col 0).
         //
         // readline's SIGWINCH handler sends CR first (moves to col 0), then
-        // redraws the full prompt from the current row — so the exact col value
-        // does not affect readline redraw correctness, but it must match the
-        // shell's expectation of where the cursor is so zsh/bash don't emit a
-        // stray partial-line indicator (`%`).
-        if let Some((row_in_rewrapped, col)) = cursor_in_rewrapped {
+        // redraws the full prompt from the current row — placing the cursor
+        // at col 0 ensures the shell erases the entire reflowed line and
+        // redraws cleanly without a stray partial-line indicator (`%`).
+        if let Some(row_in_rewrapped) = cursor_row_in_rewrapped {
             self.cursor_row = row_in_rewrapped
                 .saturating_sub(grid_offset)
                 .min(new_rows.saturating_sub(1));
-            self.cursor_col = col.min(new_cols.saturating_sub(1));
+            self.cursor_col = 0;
         } else {
             self.cursor_row = new_rows.saturating_sub(1);
             self.cursor_col = 0;

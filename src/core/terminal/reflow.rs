@@ -81,7 +81,7 @@ impl super::Terminal {
         let mut cursor_line_idx: Option<usize> = None;
 
         for row in self.scrollback.iter() {
-            current_cells.extend(row.cells.iter().cloned());
+            current_cells.extend_from_slice(&row.cells);
             if !row.wrapped {
                 lines.push(LogicalLine {
                     cells: std::mem::take(&mut current_cells),
@@ -96,7 +96,7 @@ impl super::Terminal {
 
         for r in 0..content_rows {
             let line_start = current_cells.len();
-            current_cells.extend(self.grid.row_cells(r));
+            current_cells.extend_from_slice(self.grid.row_slice(r));
             if r == self.cursor_row {
                 cursor_in_current = true;
                 let clamped = self.cursor_col.min(self.grid.cols);

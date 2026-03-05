@@ -88,21 +88,43 @@ impl Grid {
     pub fn resized(&self, rows: usize, cols: usize) -> Grid {
         let mut new_grid = Grid::new(rows, cols);
         for row in 0..rows.min(self.rows) {
-            for col in 0..cols.min(self.cols) {
-                // Safe: iterating within both grids' bounds
-                new_grid.set(row, col, self.get_unchecked(row, col).clone());
-            }
+            new_grid.copy_row_from_slice(row, &self.row_slice(row)[..cols.min(self.cols)]);
             new_grid.set_wrapped(row, self.is_wrapped(row));
         }
         new_grid
     }
 
-    /// Extract a row as a Vec<Cell>, for saving to scrollback.
-    pub fn row_cells(&self, row: usize) -> Vec<Cell> {
-        self.rows_data
-            .get(row)
-            .map(|r| r.cells.clone())
-            .unwrap_or_default()
+    /// Returns the cells of a row as a slice (no allocation).
+    ///
+    /// Use `row_slice(r).to_vec()` when you need an owned copy for scrollback.
+    pub fn row_slice(&self, row: usize) -> &[Cell] {
+        &self.rows_data[row].cells
+    }
+
+    /// Bulk-copies `src` cells into `dst_row`, up to `min(src.len(), self.cols)` cells.
+    ///
+    /// Replaces the cell-by-cell `set()` loop when the caller already knows
+    /// the destination row is valid — avoids per-cell bounds checks.
+    pub fn copy_row_from_slice(&mut self, dst_row: usize, src: &[Cell]) {
+        let n = src.len().min(self.cols);
+        self.rows_data[dst_row].cells[..n].clone_from_slice(&src[..n]);
+    }
+
+    /// Copies all cells and the wrapped flag from `src_row` into `dst_row`.
+    ///
+    /// Used by scroll/resize loops to move rows without per-cell bounds checks.
+    /// Both indices must be valid and distinct.
+    pub fn copy_row_within(&mut self, src_row: usize, dst_row: usize) {
+        debug_assert_ne!(src_row, dst_row);
+        if src_row < dst_row {
+            let (left, right) = self.rows_data.split_at_mut(dst_row);
+            right[0].cells.clone_from_slice(&left[src_row].cells);
+            right[0].wrapped = left[src_row].wrapped;
+        } else {
+            let (left, right) = self.rows_data.split_at_mut(src_row);
+            left[dst_row].cells.clone_from_slice(&right[0].cells);
+            left[dst_row].wrapped = right[0].wrapped;
+        }
     }
 
     /// Applies a function to every cell in the grid.
