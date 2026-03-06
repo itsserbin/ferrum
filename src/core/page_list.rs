@@ -590,6 +590,8 @@ mod tests {
 
     #[test]
     fn reflow_wraps_long_line_to_narrower_width() {
+        // 10-char logical line (rows 0+1 form one wrapped logical line),
+        // reflow from 10 cols to 5 cols.
         let mut list = PageList::new(3, 10, 100);
         fill_viewport_row(&mut list, 0, "ABCDE");
         fill_viewport_row(&mut list, 1, "FGHIJ");
