@@ -290,9 +290,9 @@ impl PageList {
     /// readline/zsh sends CR then redraws from the cursor row, so placing the
     /// cursor at col=0 ensures the shell erases the full reflowed line cleanly.
     pub fn reflow(&mut self, new_rows: usize, new_cols: usize, cursor_pin: &TrackedPin) {
-        let (logical_lines, cursor_line_idx) = self.collect_logical_lines(cursor_pin);
+        let (logical_lines, cursor_info) = self.collect_logical_lines(cursor_pin);
         let (rewrapped, cursor_row_in_rewrapped) =
-            rewrap_lines(&logical_lines, new_cols, cursor_line_idx);
+            rewrap_lines(&logical_lines, new_cols, cursor_info);
         let skip = self.rebuild_from_rows(rewrapped, new_rows, new_cols);
         if let Some(vrow) = cursor_row_in_rewrapped {
             // `vrow` is the index of the cursor row in the `rewrapped` Vec.
@@ -303,13 +303,21 @@ impl PageList {
         }
     }
 
-    fn collect_logical_lines(&self, cursor_pin: &TrackedPin) -> (Vec<LogicalLine>, Option<usize>) {
+    /// Returns `(logical_lines, cursor_info)` where `cursor_info` is
+    /// `Some((line_idx, col_in_line))`: the index of the cursor's logical line
+    /// and the cursor's column offset within that line (= cells accumulated
+    /// before the cursor's physical row + cursor_col within that row).
+    fn collect_logical_lines(
+        &self,
+        cursor_pin: &TrackedPin,
+    ) -> (Vec<LogicalLine>, Option<(usize, usize)>) {
         let cursor_abs = cursor_pin.coord().abs_row;
         let cursor_col = cursor_pin.coord().col;
         let mut lines: Vec<LogicalLine> = Vec::new();
         let mut current: Vec<GraphemeCell> = Vec::new();
-        let mut cursor_line_idx: Option<usize> = None;
+        let mut cursor_info: Option<(usize, usize)> = None;
         let mut cursor_in_current = false;
+        let mut cursor_col_in_line = 0usize;
         let mut current_min_len = 0usize;
 
         for abs_row in 0..self.total_rows() {
@@ -331,12 +339,16 @@ impl PageList {
             }
             if abs_row == cursor_abs {
                 cursor_in_current = true;
-                current_min_len = current_min_len.max(line_start + cursor_col);
+                // Record the cursor's column offset within this logical line so
+                // `rewrap_lines` can compute the correct physical row after rewrapping.
+                cursor_col_in_line = line_start + cursor_col;
+                current_min_len = current_min_len.max(cursor_col_in_line);
             }
             if !row.wrapped {
                 if cursor_in_current {
-                    cursor_line_idx = Some(lines.len());
+                    cursor_info = Some((lines.len(), cursor_col_in_line));
                     cursor_in_current = false;
+                    cursor_col_in_line = 0;
                 }
                 lines.push(LogicalLine {
                     cells: std::mem::take(&mut current),
@@ -347,11 +359,11 @@ impl PageList {
         }
         if !current.is_empty() {
             if cursor_in_current {
-                cursor_line_idx = Some(lines.len());
+                cursor_info = Some((lines.len(), cursor_col_in_line));
             }
             lines.push(LogicalLine { cells: current, min_len: current_min_len });
         }
-        (lines, cursor_line_idx)
+        (lines, cursor_info)
     }
 
     /// Rebuilds the buffer from `rows` for the given new dimensions.
@@ -401,23 +413,33 @@ struct LogicalLine {
 fn rewrap_lines(
     lines: &[LogicalLine],
     new_cols: usize,
-    cursor_line_idx: Option<usize>,
+    cursor_info: Option<(usize, usize)>, // (cursor_line_idx, cursor_col_in_line)
 ) -> (Vec<PageRow>, Option<usize>) {
     let mut rewrapped: Vec<PageRow> = Vec::new();
     let mut cursor_rewrapped_row: Option<usize> = None;
 
     for (line_idx, line) in lines.iter().enumerate() {
         let len = line_content_len(line);
-        if cursor_line_idx == Some(line_idx) {
-            cursor_rewrapped_row = Some(rewrapped.len());
-        }
+        let is_cursor_line =
+            cursor_info.map_or(false, |(cli, _)| cli == line_idx);
+        let cursor_col_in_line =
+            cursor_info.and_then(|(cli, col)| if cli == line_idx { Some(col) } else { None });
+
         if len == 0 {
+            if is_cursor_line {
+                cursor_rewrapped_row = Some(rewrapped.len());
+            }
             rewrapped.push(PageRow::new(new_cols));
             continue;
         }
 
         let content = &line.cells[..len];
         let mut pos = 0;
+        // Tracks the number of columns covered by all physical rows placed so
+        // far for *this* logical line. Used to detect which physical row
+        // contains the cursor's column-in-line position.
+        let mut cols_before_row = 0usize;
+
         while pos < content.len() {
             let mut col_count = 0usize;
             let mut end = pos;
@@ -435,6 +457,20 @@ fn rewrap_lines(
                 col_count += w;
                 end += 1;
             }
+            let wrapped = end < content.len();
+
+            // Determine whether the cursor falls in this physical row.
+            // The row spans columns [cols_before_row, cols_before_row + col_count).
+            // On the last row (wrapped=false) the cursor lands here if it hasn't
+            // been placed yet (handles cursors past the end of visible content).
+            if is_cursor_line && cursor_rewrapped_row.is_none() {
+                let in_range = cursor_col_in_line
+                    .map_or(false, |c| c < cols_before_row + col_count);
+                if in_range || !wrapped {
+                    cursor_rewrapped_row = Some(rewrapped.len());
+                }
+            }
+
             // Build the physical row for this slice.
             let mut cells: Vec<GraphemeCell> = Vec::with_capacity(new_cols);
             let mut placed_cols = 0usize;
@@ -458,8 +494,9 @@ fn rewrap_lines(
                 }
             }
             cells.resize(new_cols, GraphemeCell::default());
-            let wrapped = end < content.len();
             rewrapped.push(PageRow::from_cells(cells, wrapped));
+
+            cols_before_row += col_count;
             // Advance pos, skipping any trailing spacers.
             pos = end;
             while pos < content.len() && content[pos].width == 0 {

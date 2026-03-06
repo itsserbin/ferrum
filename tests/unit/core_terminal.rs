@@ -405,3 +405,122 @@ fn recolor_remaps_ansi_palette_colors() {
 
     assert_eq!(term.screen.viewport_get(0, 0).fg, new_ansi[1]);
 }
+
+// ── Reflow cursor tracking ──
+
+#[test]
+fn reflow_cursor_row_points_to_correct_physical_row_after_narrow_resize() {
+    // Terminal 3×8. Write "XXXXXXXX\r\nABCDEFG".
+    //   Row 0: X×8  (output, non-cursor)
+    //   Row 1: ABCDEFG (cursor at col 7, non-wrapped)
+    // Resize to 3×4.  Rewrap:
+    //   Rows 0,1 (from X×8):     [X×4 wrapped] [X×4]     → scrollback (2 rows)
+    //   Rows 2,3 (from ABCDEFG): [ABCD wrapped] [EFG.]    → viewport rows 0,1
+    // Cursor (col 7 in logical line) falls in the EFG row (cols 4-6) — viewport row 1.
+    // With the bug: cursor placed on row 0 (ABCD), not row 1 (EFG).
+    let mut term = Terminal::new(3, 8);
+    term.process(b"XXXXXXXX\r\nABCDEFG");
+    assert_eq!(term.cursor_row, 1);
+    assert_eq!(term.cursor_col, 7);
+
+    term.resize(3, 4);
+
+    assert_eq!(term.cursor_row, 1, "cursor should be on EFG row (viewport row 1), not on ABCD row (viewport row 0)");
+    assert_eq!(term.cursor_col, 0, "cursor_col is reset to 0 for SIGWINCH compatibility");
+}
+
+#[test]
+fn reflow_cursor_row_correct_when_logical_line_wraps_three_times() {
+    // Terminal 5×12. Write "XXXXXXXXXXXX\r\nABCDEFGHIJK".
+    //   Row 0: X×12 (output)
+    //   Row 1: ABCDEFGHIJK — cursor at col 11, non-wrapped
+    // Resize to 5×4.  Rewrap:
+    //   From X×12: [X×4 w] [X×4 w] [X×4]   → scrollback rows 0-2
+    //   From ABCDEFGHIJK (11 chars):
+    //     [ABCD w] → scrollback row 3
+    //     [EFGH w] → viewport row 0
+    //     [IJK.]   → viewport row 1  ← cursor (col 11 in logical = 8+3 col range)
+    // Cursor must be at viewport row 1, not row 0.
+    let mut term = Terminal::new(5, 12);
+    term.process(b"XXXXXXXXXXXX\r\nABCDEFGHIJK");
+    assert_eq!(term.cursor_row, 1);
+    assert_eq!(term.cursor_col, 11);
+
+    term.resize(5, 4);
+
+    assert_eq!(term.cursor_row, 1, "cursor should be on IJK row (viewport row 1), not on EFGH row (viewport row 0)");
+}
+
+// ── Reflow content preservation ──
+
+#[test]
+fn reflow_single_narrow_wide_restores_all_rows() {
+    // 5 rows × 10 cols; each row has a distinct char (A–E) in col 0.
+    let mut term = Terminal::new(5, 10);
+    term.process(b"AAAAAAAA\r\nBBBBBBBB\r\nCCCCCCCC\r\nDDDDDDDD\r\nEEEEEEEE");
+
+    // Narrow resize → rows wrap (8-char content → 2 physical rows each at 4 cols).
+    term.resize(5, 4);
+    // Wide resize → rows should unwrap back.
+    term.resize(5, 10);
+
+    assert_eq!(get_char(&term, 0, 0), 'A', "row A missing after single reflow cycle");
+    assert_eq!(get_char(&term, 1, 0), 'B', "row B missing after single reflow cycle");
+    assert_eq!(get_char(&term, 2, 0), 'C', "row C missing after single reflow cycle");
+    assert_eq!(get_char(&term, 3, 0), 'D', "row D missing after single reflow cycle");
+    assert_eq!(get_char(&term, 4, 0), 'E', "row E missing after single reflow cycle");
+}
+
+#[test]
+fn reflow_intensive_preserves_content_rows() {
+    // Same setup: 5 rows × 10 cols with A–E in each row.
+    let mut term = Terminal::new(5, 10);
+    term.process(b"AAAAAAAA\r\nBBBBBBBB\r\nCCCCCCCC\r\nDDDDDDDD\r\nEEEEEEEE");
+
+    // Five narrow→wide cycles to simulate "intensive reflow".
+    for _ in 0..5 {
+        term.resize(5, 4);
+        term.resize(5, 10);
+    }
+
+    assert_eq!(get_char(&term, 0, 0), 'A', "row A lost after intensive reflow");
+    assert_eq!(get_char(&term, 1, 0), 'B', "row B lost after intensive reflow");
+    assert_eq!(get_char(&term, 2, 0), 'C', "row C lost after intensive reflow");
+    assert_eq!(get_char(&term, 3, 0), 'D', "row D lost after intensive reflow");
+    assert_eq!(get_char(&term, 4, 0), 'E', "row E lost after intensive reflow");
+}
+
+#[test]
+fn reflow_intensive_varying_sizes_preserves_content() {
+    // Larger terminal, more content rows, irregular resize pattern.
+    let mut term = Terminal::new(10, 20);
+    term.process(b"AAAAAAAAAAAAAAAA\r\n");
+    term.process(b"BBBBBBBBBBBBBBBB\r\n");
+    term.process(b"CCCCCCCCCCCCCCCC\r\n");
+    term.process(b"DDDDDDDDDDDDDDDD\r\n");
+    term.process(b"EEEEEEEEEEEEEEEE\r\n");
+    term.process(b"FFFFFFFFFFFFFFFF\r\n");
+    term.process(b"GGGGGGGGGGGGGGGG\r\n");
+    term.process(b"HHHHHHHHHHHHHHHH\r\n");
+    term.process(b"IIIIIIIIIIIIIIII\r\n");
+    term.process(b"JJJJJJJJJJJJJJJJ");
+
+    // Irregular resize sequence.
+    term.resize(10, 5);
+    term.resize(10, 30);
+    term.resize(10, 8);
+    term.resize(10, 20);
+    term.resize(10, 3);
+    term.resize(10, 20);
+
+    assert_eq!(get_char(&term, 0, 0), 'A', "row A lost after varying reflow");
+    assert_eq!(get_char(&term, 1, 0), 'B', "row B lost after varying reflow");
+    assert_eq!(get_char(&term, 2, 0), 'C', "row C lost after varying reflow");
+    assert_eq!(get_char(&term, 3, 0), 'D', "row D lost after varying reflow");
+    assert_eq!(get_char(&term, 4, 0), 'E', "row E lost after varying reflow");
+    assert_eq!(get_char(&term, 5, 0), 'F', "row F lost after varying reflow");
+    assert_eq!(get_char(&term, 6, 0), 'G', "row G lost after varying reflow");
+    assert_eq!(get_char(&term, 7, 0), 'H', "row H lost after varying reflow");
+    assert_eq!(get_char(&term, 8, 0), 'I', "row I lost after varying reflow");
+    assert_eq!(get_char(&term, 9, 0), 'J', "row J lost after varying reflow");
+}
