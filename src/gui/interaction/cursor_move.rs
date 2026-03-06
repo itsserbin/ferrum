@@ -27,6 +27,8 @@ impl FerrumWindow {
         let cur_row = leaf.terminal.cursor_row();
         let cur_col = leaf.terminal.cursor_col();
         let alt_screen = leaf.terminal.is_alt_screen();
+        let vp_rows = leaf.terminal.screen.viewport_rows();
+        let vp_cols = leaf.terminal.screen.cols();
 
         let mut bytes = Vec::new();
 
@@ -43,25 +45,13 @@ impl FerrumWindow {
             }
 
             // Horizontal delta is only reliable on the same visible row.
-            let vp_rows = leaf.terminal.screen.viewport_rows();
-            let vp_cols = leaf.terminal.screen.cols();
             if target_row == cur_row && target_row < vp_rows {
                 let last_content = (0..vp_cols)
                     .rev()
-                    .find(|&c| {
-                        leaf.terminal.screen.viewport_get(target_row, c).grapheme() != " "
-                    });
+                    .find(|&c| leaf.terminal.screen.viewport_get(target_row, c).first_char() != ' ');
                 if let Some(last_col) = last_content {
                     let safe_col = target_col.min(last_col + 1);
-                    if safe_col < cur_col {
-                        for _ in 0..(cur_col - safe_col) {
-                            bytes.extend_from_slice(b"\x1b[D");
-                        }
-                    } else if safe_col > cur_col {
-                        for _ in 0..(safe_col - cur_col) {
-                            bytes.extend_from_slice(b"\x1b[C");
-                        }
-                    }
+                    bytes.extend(Self::build_horizontal_cursor_move_bytes(cur_col, safe_col));
                 }
             }
             // Skip horizontal move across rows: grid coords may not map to app text coords.
@@ -70,32 +60,21 @@ impl FerrumWindow {
             if target_row != cur_row {
                 return;
             }
+            if cur_row >= vp_rows {
+                return;
+            }
 
             // Find the last non-space column on this row to avoid sending arrows
             // past the actual content (cmd.exe interprets RIGHT on empty input
             // as "copy from previous command").
-            let vp_rows = leaf.terminal.screen.viewport_rows();
-            let vp_cols = leaf.terminal.screen.cols();
-            if cur_row >= vp_rows {
-                return;
-            }
             let last_content = (0..vp_cols)
                 .rev()
-                .find(|&c| leaf.terminal.screen.viewport_get(cur_row, c).grapheme() != " ");
+                .find(|&c| leaf.terminal.screen.viewport_get(cur_row, c).first_char() != ' ');
 
-            // Only allow movement within content bounds
+            // Only allow movement within content bounds.
             let max_col = last_content.map(|c| c + 1).unwrap_or(0);
             let safe_target = target_col.min(max_col);
-
-            if safe_target < cur_col {
-                for _ in 0..(cur_col - safe_target) {
-                    bytes.extend_from_slice(b"\x1b[D");
-                }
-            } else if safe_target > cur_col {
-                for _ in 0..(safe_target - cur_col) {
-                    bytes.extend_from_slice(b"\x1b[C");
-                }
-            }
+            bytes.extend(Self::build_horizontal_cursor_move_bytes(cur_col, safe_target));
         }
 
         if !bytes.is_empty() {

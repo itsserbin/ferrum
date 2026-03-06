@@ -104,6 +104,11 @@ impl GraphemeCell {
         }
     }
 
+    /// Returns the first char of this cell's grapheme cluster, or `' '` if empty.
+    pub fn first_char(&self) -> char {
+        self.grapheme().chars().next().unwrap_or(' ')
+    }
+
     /// Returns `true` if this cell is identical to `GraphemeCell::default()`.
     pub fn is_default(&self) -> bool {
         *self == Self::default()

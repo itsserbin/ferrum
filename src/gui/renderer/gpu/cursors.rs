@@ -22,14 +22,13 @@ impl super::GpuRenderer {
         match style {
             CursorStyle::BlinkingBlock | CursorStyle::SteadyBlock => {
                 self.push_rect(x, y, cw, ch, cursor_color, 1.0);
-                // Fetch the cell at (row, col) from the viewport.
-                let grapheme = if row < screen.viewport_rows() && col < screen.cols() {
-                    screen.viewport_get(row, col).grapheme().to_owned()
+                let ch = if row < screen.viewport_rows() && col < screen.cols() {
+                    screen.viewport_get(row, col).first_char()
                 } else {
-                    " ".to_owned()
+                    ' '
                 };
-                if grapheme != " " {
-                    let cp = grapheme.chars().next().map(|c| c as u32).unwrap_or(32);
+                if ch != ' ' {
+                    let cp = ch as u32;
                     let info = self.atlas.get_or_insert(
                         cp,
                         &self.font,

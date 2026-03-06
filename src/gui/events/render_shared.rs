@@ -503,6 +503,9 @@ pub(in crate::gui::events) fn should_show_cursor(
 ) -> bool {
     if style.is_blinking() {
         let interval = interval_ms as u128;
+        if interval == 0 {
+            return true;
+        }
         let ms = blink_start.elapsed().as_millis();
         ms < interval || (ms / interval).is_multiple_of(2)
     } else {

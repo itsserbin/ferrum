@@ -11,15 +11,7 @@ impl FerrumWindow {
     ) -> Vec<u8> {
         let mut bytes = Vec::new();
 
-        if target_col < cursor_col {
-            for _ in 0..(cursor_col - target_col) {
-                bytes.extend_from_slice(b"\x1b[D");
-            }
-        } else if target_col > cursor_col {
-            for _ in 0..(target_col - cursor_col) {
-                bytes.extend_from_slice(b"\x1b[C");
-            }
-        }
+        bytes.extend(Self::build_horizontal_cursor_move_bytes(cursor_col, target_col));
 
         let delete_seq: &[u8] = if use_backspace { b"\x7f" } else { b"\x1b[3~" };
         for _ in 0..cells_to_delete {

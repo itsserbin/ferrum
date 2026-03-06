@@ -1,4 +1,5 @@
-use std::sync::{Arc, Mutex};
+use std::cell::Cell;
+use std::rc::Rc;
 
 /// A coordinate in the `PageList` address space.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -11,38 +12,35 @@ pub struct PageCoord {
 ///
 /// Cloning a `TrackedPin` shares the same underlying coordinate — when
 /// `PageList` updates the pin, all clones see the change.
+///
+/// `Terminal` is single-threaded; `Rc<Cell<>>` avoids the locking overhead of
+/// `Arc<Mutex<>>` on every cursor movement.
 #[derive(Clone, Debug)]
 pub struct TrackedPin {
-    inner: Arc<Mutex<PageCoord>>,
+    inner: Rc<Cell<PageCoord>>,
 }
 
 impl TrackedPin {
     pub(crate) fn new(coord: PageCoord) -> Self {
         Self {
-            inner: Arc::new(Mutex::new(coord)),
+            inner: Rc::new(Cell::new(coord)),
         }
     }
 
     pub fn coord(&self) -> PageCoord {
-        *self.inner.lock().expect("TrackedPin lock not poisoned")
+        self.inner.get()
     }
 
     pub fn set_coord(&self, coord: PageCoord) {
-        *self.inner.lock().expect("TrackedPin lock not poisoned") = coord;
+        self.inner.set(coord);
     }
 
     pub fn set_col(&self, col: usize) {
-        self.inner
-            .lock()
-            .expect("TrackedPin lock not poisoned")
-            .col = col;
+        self.inner.set(PageCoord { col, ..self.inner.get() });
     }
 
     pub fn set_abs_row(&self, abs_row: usize) {
-        self.inner
-            .lock()
-            .expect("TrackedPin lock not poisoned")
-            .abs_row = abs_row;
+        self.inner.set(PageCoord { abs_row, ..self.inner.get() });
     }
 }
 
@@ -68,7 +66,7 @@ mod tests {
         let mut list = PageList::new(24, 80, 1000);
         let pin = list.register_pin(PageCoord { abs_row: 0, col: 5 });
         let pin_clone = pin.clone();
-        list.set_pin_col(&pin, 0);
+        pin.set_col(0);
         // The clone sees the same update.
         assert_eq!(pin_clone.coord().col, 0);
     }
@@ -80,7 +78,7 @@ mod tests {
             abs_row: 10,
             col: 5,
         });
-        list.set_pin_col(&pin, 0);
+        pin.set_col(0);
         assert_eq!(pin.coord().col, 0);
     }
 
@@ -95,7 +93,7 @@ mod tests {
             abs_row: 2,
             col: 20,
         });
-        list.set_pin_col(&pin_a, 0);
+        pin_a.set_col(0);
         // pin_b is unaffected.
         assert_eq!(pin_b.coord().col, 20);
     }

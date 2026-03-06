@@ -353,12 +353,12 @@ impl Terminal {
     /// Sets the cursor row and keeps `cursor_pin` in sync.
     pub fn set_cursor_row(&mut self, row: usize) {
         let abs = self.screen.viewport_start_abs() + row;
-        self.screen.set_pin_abs_row(&self.cursor_pin, abs);
+        self.cursor_pin.set_abs_row(abs);
     }
 
     /// Sets the cursor column and keeps `cursor_pin` in sync.
     pub fn set_cursor_col(&mut self, col: usize) {
-        self.screen.set_pin_col(&self.cursor_pin, col);
+        self.cursor_pin.set_col(col);
     }
 
     /// Sets both cursor row and column, keeping `cursor_pin` in sync.
@@ -385,7 +385,7 @@ impl Terminal {
             return;
         }
         let row_has_content =
-            (0..self.screen.cols()).any(|col| self.screen.viewport_get(to_row, col).grapheme() != " ");
+            (0..self.screen.cols()).any(|col| self.screen.viewport_get(to_row, col).first_char() != ' ');
         if row_has_content {
             self.emit_security_event(SecurityEventKind::CursorRewrite);
         }
@@ -650,7 +650,7 @@ impl Perform for Terminal {
         if self.handle_erase_csi(action, params) {
             return;
         }
-        let _ = self.handle_device_csi(action, params, intermediates);
+        self.handle_device_csi(action, params, intermediates);
     }
 
     fn esc_dispatch(&mut self, _intermediates: &[u8], _ignore: bool, byte: u8) {

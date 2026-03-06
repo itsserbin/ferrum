@@ -545,7 +545,7 @@ fn on_value_changed(state: &Win32State) {
     update_all_displays(state);
     SUPPRESS.store(false, Ordering::Relaxed);
     let config = build_config(state);
-    let _ = state.tx.send(config);
+    state.tx.send(config).ok();
 }
 
 fn on_manual_check_result(state: &Win32State) {
@@ -592,25 +592,25 @@ fn on_command(state: &Win32State, wparam: WPARAM) {
             reset_controls(state);
             SUPPRESS.store(false, Ordering::Relaxed);
             let config = build_config(state);
-            let _ = state.tx.send(config);
+            state.tx.send(config).ok();
         }
         (id::SECURITY_MODE_COMBO, CBN_SELCHANGE) => {
             SUPPRESS.store(true, Ordering::Relaxed);
             apply_security_preset(state);
             SUPPRESS.store(false, Ordering::Relaxed);
             let config = build_config(state);
-            let _ = state.tx.send(config);
+            state.tx.send(config).ok();
         }
         (id::PASTE_CHECK | id::BLOCK_TITLE_CHECK | id::LIMIT_CURSOR_CHECK | id::CLEAR_MOUSE_CHECK, BN_CLICKED) => {
             SUPPRESS.store(true, Ordering::Relaxed);
             infer_security_mode(state);
             SUPPRESS.store(false, Ordering::Relaxed);
             let config = build_config(state);
-            let _ = state.tx.send(config);
+            state.tx.send(config).ok();
         }
         (id::AUTO_CHECK_CHECK, BN_CLICKED) => {
             let config = build_config(state);
-            let _ = state.tx.send(config);
+            state.tx.send(config).ok();
         }
         (id::CHECK_NOW_BTN, BN_CLICKED) => {
             // Disable the button and show "Checking…" while check runs.
@@ -656,7 +656,7 @@ fn on_command(state: &Win32State, wparam: WPARAM) {
         }
         (id::FONT_FAMILY_COMBO | id::THEME_COMBO | id::LANGUAGE_COMBO, CBN_SELCHANGE) => {
             let config = build_config(state);
-            let _ = state.tx.send(config);
+            state.tx.send(config).ok();
         }
         _ => {}
     }

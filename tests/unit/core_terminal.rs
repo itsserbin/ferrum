@@ -3,7 +3,7 @@ use crate::config::ThemeChoice;
 use crate::core::Color;
 
 fn get_char(term: &Terminal, row: usize, col: usize) -> char {
-    term.screen.viewport_get(row, col).grapheme().chars().next().unwrap_or(' ')
+    term.screen.viewport_get(row, col).first_char()
 }
 
 // ── Alternate screen mode ──
@@ -252,7 +252,7 @@ fn lf_at_bottom_scrolls() {
 
     // Row A should go to scrollback
     assert_eq!(term.screen.scrollback_len(), 1);
-    assert_eq!(term.screen.scrollback_row(0).cells[0].grapheme().chars().next().unwrap_or(' '), 'A');
+    assert_eq!(term.screen.scrollback_row(0).cells[0].first_char(), 'A');
 
     // Content shifts up: B->row0, C->row1, D->row2, blank->row3
     assert_eq!(get_char(&term, 0, 0), 'B');
@@ -430,7 +430,9 @@ fn reflow_cursor_row_points_to_correct_physical_row_after_narrow_resize() {
     // cursor on EFG (vrow 2).  Content above stays visible instead of being
     // pushed into scrollback.
     assert_eq!(term.cursor_row(), 2, "cursor should be on EFG row (viewport row 2), not on ABCD row (viewport row 1)");
-    assert_eq!(term.cursor_col(), 0, "cursor_col is reset to 0 for SIGWINCH compatibility");
+    // cursor at col 7 in logical "ABCDEFG"; after reflow to 4 cols the cursor
+    // falls in the "EFG." row at col 3 (7 - 4 cols consumed by "ABCD" row).
+    assert_eq!(term.cursor_col(), 3, "cursor col should reflect actual position in reflowed row");
 }
 
 #[test]

@@ -44,13 +44,13 @@ pub(super) fn build_terminal_context_menu(
     let clear_sel = MenuItem::new(t.menu_clear_selection, has_selection, None);
     action_map.push((clear_sel.id().clone(), MenuAction::ClearSelection));
 
-    let _ = menu.append_items(&[
+    menu.append_items(&[
         &copy_item,
         &paste_item,
         &select_all,
         &clear_sel,
         &PredefinedMenuItem::separator(),
-    ]);
+    ]).ok();
 
     let split_right = MenuItem::new(t.menu_split_right, true, None);
     action_map.push((split_right.id().clone(), MenuAction::SplitRight));
@@ -61,18 +61,18 @@ pub(super) fn build_terminal_context_menu(
     let split_up = MenuItem::new(t.menu_split_up, true, None);
     action_map.push((split_up.id().clone(), MenuAction::SplitUp));
 
-    let _ = menu.append_items(&[
+    menu.append_items(&[
         &split_right,
         &split_down,
         &split_left,
         &split_up,
         &PredefinedMenuItem::separator(),
-    ]);
+    ]).ok();
 
     if has_multiple_panes {
         let close_pane = MenuItem::new(t.menu_close_pane, true, None);
         action_map.push((close_pane.id().clone(), MenuAction::ClosePane));
-        let _ = menu.append_items(&[&close_pane, &PredefinedMenuItem::separator()]);
+        menu.append_items(&[&close_pane, &PredefinedMenuItem::separator()]).ok();
     }
 
     let clear_term = MenuItem::new(t.menu_clear_terminal, true, None);
@@ -80,7 +80,7 @@ pub(super) fn build_terminal_context_menu(
     let reset_term = MenuItem::new(t.menu_reset_terminal, true, None);
     action_map.push((reset_term.id().clone(), MenuAction::ResetTerminal));
 
-    let _ = menu.append_items(&[&clear_term, &reset_term]);
+    menu.append_items(&[&clear_term, &reset_term]).ok();
 
     (menu, action_map)
 }
@@ -99,13 +99,13 @@ pub(super) fn build_tab_context_menu() -> (Menu, Vec<(MenuId, MenuAction)>) {
     let close = MenuItem::new(t.menu_close, true, None);
     action_map.push((close.id().clone(), MenuAction::CloseTab));
 
-    let _ = menu.append_items(&[
+    menu.append_items(&[
         &rename,
         &PredefinedMenuItem::separator(),
         &duplicate,
         &PredefinedMenuItem::separator(),
         &close,
-    ]);
+    ]).ok();
 
     (menu, action_map)
 }

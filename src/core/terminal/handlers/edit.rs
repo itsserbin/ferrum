@@ -72,7 +72,7 @@ mod tests {
     /// Helper: read row 0 as a String (all cols).
     fn read_row(term: &Terminal) -> String {
         (0..term.screen.cols())
-            .map(|c| term.screen.viewport_get(0, c).grapheme().chars().next().unwrap_or(' '))
+            .map(|c| term.screen.viewport_get(0, c).first_char())
             .collect()
     }
 

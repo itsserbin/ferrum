@@ -454,6 +454,6 @@ impl Drop for Session {
         // Blocking wait() was removed to prevent UI thread hangs.
         // Errors are silenced: the process is usually already dead
         // (killed by shutdown() on the background thread).
-        let _ = self.child.kill();
+        self.child.kill().ok();
     }
 }

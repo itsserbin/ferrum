@@ -17,28 +17,22 @@ pub(in super::super) fn handle_erase_csi(
                         term.screen.viewport_set(cr, col, blank.clone());
                     }
                     for row in (cr + 1)..term.screen.viewport_rows() {
-                        for col in 0..term.screen.cols() {
-                            term.screen.viewport_set(row, col, blank.clone());
-                        }
+                        term.screen.viewport_row_mut(row).clear_with(blank.clone());
                     }
                 }
                 1 => {
                     let blank = term.make_blank_grapheme_cell();
                     for row in 0..cr {
-                        for col in 0..term.screen.cols() {
-                            term.screen.viewport_set(row, col, blank.clone());
-                        }
+                        term.screen.viewport_row_mut(row).clear_with(blank.clone());
                     }
-                    for col in 0..=cc.min(term.screen.cols() - 1) {
+                    for col in 0..=cc.min(term.screen.cols().saturating_sub(1)) {
                         term.screen.viewport_set(cr, col, blank.clone());
                     }
                 }
                 2 => {
                     let blank = term.make_blank_grapheme_cell();
                     for row in 0..term.screen.viewport_rows() {
-                        for col in 0..term.screen.cols() {
-                            term.screen.viewport_set(row, col, blank.clone());
-                        }
+                        term.screen.viewport_row_mut(row).clear_with(blank.clone());
                     }
                 }
                 3 => {
@@ -77,15 +71,13 @@ pub(in super::super) fn handle_erase_csi(
                 }
                 1 => {
                     let blank = term.make_blank_grapheme_cell();
-                    for col in 0..=cc.min(term.screen.cols() - 1) {
+                    for col in 0..=cc.min(term.screen.cols().saturating_sub(1)) {
                         term.screen.viewport_set(cr, col, blank.clone());
                     }
                 }
                 2 => {
                     let blank = term.make_blank_grapheme_cell();
-                    for col in 0..term.screen.cols() {
-                        term.screen.viewport_set(cr, col, blank.clone());
-                    }
+                    term.screen.viewport_row_mut(cr).clear_with(blank);
                 }
                 _ => {}
             }
@@ -112,7 +104,7 @@ mod tests {
     }
 
     fn get_char(term: &Terminal, row: usize, col: usize) -> char {
-        term.screen.viewport_get(row, col).grapheme().chars().next().unwrap_or(' ')
+        term.screen.viewport_get(row, col).first_char()
     }
 
     #[test]

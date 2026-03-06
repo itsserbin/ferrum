@@ -93,7 +93,7 @@ impl super::GpuRenderer {
                     // Spacer cell: use the previous cell's codepoint and mark as wide-right.
                     (prev_codepoint, ATTR_WIDE_RIGHT)
                 } else {
-                    let cp = cell.grapheme().chars().next().map(|c| c as u32).unwrap_or(32);
+                    let cp = cell.first_char() as u32;
                     prev_codepoint = cp;
                     (cp, 0u32)
                 };

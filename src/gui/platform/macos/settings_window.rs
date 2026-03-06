@@ -379,7 +379,7 @@ pub fn send_current_config() {
     };
     sync_security_controls(state);
     let config = build_config_from_controls(state);
-    let _ = state.sender.send(config);
+    state.sender.send(config).ok();
 }
 
 /// Parses editable text field values and updates the corresponding steppers.

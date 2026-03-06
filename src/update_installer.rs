@@ -7,13 +7,14 @@ use std::fs;
 /// On success, relaunches the app. Failures are logged and non-fatal.
 pub(crate) fn spawn_installer(tag_name: &str) {
     let tag = tag_name.to_owned();
-    let _ = std::thread::Builder::new()
+    std::thread::Builder::new()
         .name("ferrum-installer".into())
         .spawn(move || {
             if let Err(e) = run_install(&tag) {
                 eprintln!("[update] install failed: {e}");
             }
-        });
+        })
+        .ok();
 }
 
 fn run_install(tag: &str) -> anyhow::Result<()> {
@@ -134,7 +135,7 @@ fn replace_current_binary(new_bin: &[u8]) -> anyhow::Result<()> {
 
 fn relaunch() -> ! {
     let exe = env::current_exe().unwrap_or_else(|_| std::path::PathBuf::from("ferrum"));
-    let _ = std::process::Command::new(exe).spawn();
+    std::process::Command::new(exe).spawn().ok();
     std::process::exit(0);
 }
 

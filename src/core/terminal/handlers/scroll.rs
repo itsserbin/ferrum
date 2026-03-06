@@ -95,7 +95,7 @@ mod tests {
     /// Helper: get the character in every column of a row as a single char
     /// (assumes all cols in a row have the same char for our tests).
     fn row_char(term: &Terminal, row: usize) -> char {
-        term.screen.viewport_get(row, 0).grapheme().chars().next().unwrap_or(' ')
+        term.screen.viewport_get(row, 0).first_char()
     }
 
     #[test]
@@ -173,7 +173,7 @@ mod tests {
 
         // Row A should be in scrollback
         assert_eq!(term.screen.scrollback_len(), 1);
-        assert_eq!(term.screen.scrollback_row(0).cells[0].grapheme().chars().next().unwrap_or(' '), 'A');
+        assert_eq!(term.screen.scrollback_row(0).cells[0].first_char(), 'A');
     }
 
     #[test]

@@ -356,7 +356,7 @@ impl App {
             win.active_tab = 0;
             win.refresh_tab_bar_visibility();
             // Mouse button is still held — initiate OS drag so the window follows cursor.
-            let _ = win.window.drag_window();
+            win.window.drag_window().ok();
             win.window.request_redraw();
         }
     }

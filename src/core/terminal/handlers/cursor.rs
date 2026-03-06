@@ -15,7 +15,7 @@ pub(in super::super) fn handle_cursor_csi(
             // Accept ConPTY's cursor position as authoritative.
             term.set_cursor(
                 (row as usize).saturating_sub(1).min(term.screen.viewport_rows() - 1),
-                (col as usize).saturating_sub(1).min(term.screen.cols() - 1),
+                (col as usize).saturating_sub(1).min(term.screen.cols().saturating_sub(1)),
             );
             true
         }
@@ -31,7 +31,7 @@ pub(in super::super) fn handle_cursor_csi(
         }
         'C' => {
             let n = term.param(params, 1).max(1) as usize;
-            term.set_cursor_col((term.cursor_col() + n).min(term.screen.cols() - 1));
+            term.set_cursor_col((term.cursor_col() + n).min(term.screen.cols().saturating_sub(1)));
             true
         }
         'D' => {
@@ -41,7 +41,7 @@ pub(in super::super) fn handle_cursor_csi(
         }
         'G' => {
             let col = term.param(params, 1) as usize;
-            term.set_cursor_col(col.saturating_sub(1).min(term.screen.cols() - 1));
+            term.set_cursor_col(col.saturating_sub(1).min(term.screen.cols().saturating_sub(1)));
             true
         }
         'd' => {

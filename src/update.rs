@@ -50,12 +50,13 @@ pub(crate) enum ManualCheckResult {
 ///
 /// Sends exactly one `ManualCheckResult` to `tx` and exits.
 pub(crate) fn spawn_manual_check(tx: mpsc::Sender<ManualCheckResult>) {
-    let _ = std::thread::Builder::new()
+    std::thread::Builder::new()
         .name("ferrum-manual-check".to_string())
         .spawn(move || {
             let result = run_manual_check();
-            let _ = tx.send(result);
-        });
+            tx.send(result).ok();
+        })
+        .ok();
 }
 
 fn run_manual_check() -> ManualCheckResult {
@@ -81,13 +82,14 @@ fn run_manual_check() -> ManualCheckResult {
 ///
 /// If a newer version is found, it sends one `AvailableRelease` to `tx`.
 pub(crate) fn spawn_update_checker(tx: mpsc::Sender<AvailableRelease>) {
-    let _ = std::thread::Builder::new()
+    std::thread::Builder::new()
         .name("release-update-checker".to_string())
         .spawn(move || {
             if let Some(release) = check_for_update() {
-                let _ = tx.send(release);
+                tx.send(release).ok();
             }
-        });
+        })
+        .ok();
 }
 
 /// Checks for a newer release using cache-first strategy.
@@ -166,7 +168,7 @@ fn write_cache(cache: &UpdateCache) {
     let Ok(json) = serde_json::to_vec(cache) else {
         return;
     };
-    let _ = fs::write(path, json);
+    fs::write(path, json).ok();
 }
 
 fn cache_path() -> Option<PathBuf> {

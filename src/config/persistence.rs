@@ -56,7 +56,7 @@ pub(crate) fn save_config(config: &AppConfig) {
     let Ok(serialized) = ron::ser::to_string_pretty(config, pretty) else {
         return;
     };
-    let _ = fs::write(path, serialized);
+    fs::write(path, serialized).ok();
 }
 
 #[cfg(test)]

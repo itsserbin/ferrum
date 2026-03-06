@@ -74,10 +74,10 @@ pub fn open_settings_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>) {
         std::thread::spawn(move || {
             if let Err(e) = gtk4::init() {
                 eprintln!("[ferrum] Failed to initialize GTK4: {e}");
-                let _ = ready_tx.send(false);
+                ready_tx.send(false).ok();
                 return;
             }
-            let _ = ready_tx.send(true);
+            ready_tx.send(true).ok();
             gtk4::glib::MainLoop::new(None, false).run();
         });
         if ready_rx.recv() == Ok(true) {
@@ -203,7 +203,7 @@ fn build_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>, initial_tab: us
                 return;
             }
             let config = build_config(&controls);
-            let _ = tx.send(config);
+            tx.send(config).ok();
         }
     };
 

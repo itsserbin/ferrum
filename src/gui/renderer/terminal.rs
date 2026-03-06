@@ -72,10 +72,11 @@ impl CpuRenderer {
 
                 self.draw_bg(target, x, y, bg);
 
-                if !is_spacer
-                    && let Some(ch) = cell.grapheme().chars().next()
-                    && ch != ' ' {
-                    self.draw_char(target, x, y, ch, fg);
+                if !is_spacer {
+                    let ch = cell.first_char();
+                    if ch != ' ' {
+                        self.draw_char(target, x, y, ch, fg);
+                    }
                 }
 
                 // Underline
@@ -185,10 +186,11 @@ impl CpuRenderer {
 
                 self.draw_bg(target, x, y, bg);
 
-                if !is_spacer
-                    && let Some(ch) = cell.grapheme().chars().next()
-                    && ch != ' ' {
-                    self.draw_char(target, x, y, ch, fg);
+                if !is_spacer {
+                    let ch = cell.first_char();
+                    if ch != ' ' {
+                        self.draw_char(target, x, y, ch, fg);
+                    }
                 }
 
                 if !is_spacer && cell.underline_style != UnderlineStyle::None {

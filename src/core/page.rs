@@ -33,6 +33,21 @@ impl PageRow {
         let written_cols = cells.len();
         Self { cells, wrapped, written_cols }
     }
+
+    /// Resets all cells to default, clears the wrapped flag, and zeros `written_cols`.
+    pub fn clear(&mut self) {
+        self.clear_with(GraphemeCell::default());
+    }
+
+    /// Fills every cell with `blank`, clears the wrapped flag, and zeros `written_cols`.
+    ///
+    /// Unlike [`clear`], this preserves the blank's SGR attributes (e.g. background
+    /// color set by `\x1b[48;…m` before an erase sequence).
+    pub fn clear_with(&mut self, blank: GraphemeCell) {
+        self.cells.fill(blank);
+        self.wrapped = false;
+        self.written_cols = 0;
+    }
 }
 
 /// Maximum number of rows a single `Page` can hold.
@@ -74,12 +89,12 @@ impl Page {
     }
 
     /// Returns a reference to the row at `idx`.
-    pub fn get(&self, idx: usize) -> &PageRow {
+    pub fn row(&self, idx: usize) -> &PageRow {
         &self.rows[idx]
     }
 
     /// Returns a mutable reference to the row at `idx`.
-    pub fn get_mut(&mut self, idx: usize) -> &mut PageRow {
+    pub fn row_mut(&mut self, idx: usize) -> &mut PageRow {
         &mut self.rows[idx]
     }
 }
@@ -103,7 +118,7 @@ mod tests {
         row.cells[0] = GraphemeCell::from_char('A');
         page.push(row);
         assert_eq!(page.len, 1);
-        assert_eq!(page.get(0).cells[0].grapheme(), "A");
+        assert_eq!(page.row(0).cells[0].grapheme(), "A");
     }
 
     #[test]
@@ -112,7 +127,7 @@ mod tests {
         let mut row = PageRow::new(5);
         row.wrapped = true;
         page.push(row);
-        assert!(page.get(0).wrapped);
+        assert!(page.row(0).wrapped);
     }
 
     #[test]
@@ -147,7 +162,7 @@ mod tests {
     fn page_get_mut_allows_mutation() {
         let mut page = Page::new(3);
         page.push(PageRow::new(3));
-        page.get_mut(0).cells[1] = GraphemeCell::from_char('Z');
-        assert_eq!(page.get(0).cells[1].grapheme(), "Z");
+        page.row_mut(0).cells[1] = GraphemeCell::from_char('Z');
+        assert_eq!(page.row(0).cells[1].grapheme(), "Z");
     }
 }

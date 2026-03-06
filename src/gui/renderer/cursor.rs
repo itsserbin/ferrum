@@ -3,10 +3,6 @@ use super::RenderTarget;
 use crate::core::PageList;
 use crate::gui::pane::PaneRect;
 
-fn cursor_char(screen: &PageList, row: usize, col: usize) -> char {
-    screen.viewport_get(row, col).grapheme().chars().next().unwrap_or(' ')
-}
-
 impl CpuRenderer {
     pub fn draw_cursor(
         &mut self,
@@ -29,7 +25,7 @@ impl CpuRenderer {
                 // Filled block with inverted foreground/background.
                 self.draw_bg(target, x, y, self.palette.default_fg);
                 let ch = if row < screen.viewport_rows() && col < screen.cols() {
-                    cursor_char(screen, row, col)
+                    screen.viewport_get(row, col).first_char()
                 } else {
                     ' '
                 };
@@ -96,7 +92,7 @@ impl CpuRenderer {
             CursorStyle::BlinkingBlock | CursorStyle::SteadyBlock => {
                 self.draw_bg(target, x, y, self.palette.default_fg);
                 let ch = if row < screen.viewport_rows() && col < screen.cols() {
-                    cursor_char(screen, row, col)
+                    screen.viewport_get(row, col).first_char()
                 } else {
                     ' '
                 };

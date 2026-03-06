@@ -171,6 +171,7 @@ impl FerrumWindow {
         // End divider drag on mouse release.
         if state == ElementState::Released && self.divider_drag.take().is_some() {
             self.resize_all_panes();
+            self.send_sigwinch_to_all_panes();
             self.window.request_redraw();
             return;
         }
@@ -269,6 +270,7 @@ impl FerrumWindow {
         // End divider drag on mouse release.
         if state == ElementState::Released && self.divider_drag.take().is_some() {
             self.resize_all_panes();
+            self.send_sigwinch_to_all_panes();
             self.window.request_redraw();
             return;
         }

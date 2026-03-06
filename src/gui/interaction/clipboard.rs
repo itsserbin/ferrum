@@ -41,15 +41,9 @@ impl FerrumWindow {
                     terminal.screen.scrollback_row(row)
                         .cells
                         .get(col)
-                        .and_then(|cell| cell.grapheme().chars().next())
-                        .unwrap_or(' ')
+                        .map_or(' ', |cell| cell.first_char())
                 } else {
-                    terminal.screen
-                        .viewport_get(row - scrollback_len, col)
-                        .grapheme()
-                        .chars()
-                        .next()
-                        .unwrap_or(' ')
+                    terminal.screen.viewport_get(row - scrollback_len, col).first_char()
                 };
                 text.push(ch);
             }
@@ -111,7 +105,7 @@ impl FerrumWindow {
             .active_leaf_ref()
             .is_some_and(|leaf| leaf.selection.is_some())
         {
-            let _ = self.delete_terminal_selection(false);
+            self.delete_terminal_selection(false);
         }
 
         let bytes = {

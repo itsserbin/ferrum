@@ -22,7 +22,7 @@ impl FerrumWindow {
             return None;
         }
 
-        let ch = leaf.terminal.screen.viewport_get(row, col).grapheme().chars().next().unwrap_or(' ');
+        let ch = leaf.terminal.screen.viewport_get(row, col).first_char();
         if !Self::is_word_char(ch) {
             let pos = Position { row, col };
             return Some((pos, pos));
@@ -30,7 +30,7 @@ impl FerrumWindow {
 
         let mut start_col = col;
         while start_col > 0 {
-            let prev_ch = leaf.terminal.screen.viewport_get(row, start_col - 1).grapheme().chars().next().unwrap_or(' ');
+            let prev_ch = leaf.terminal.screen.viewport_get(row, start_col - 1).first_char();
             if !Self::is_word_char(prev_ch) {
                 break;
             }
@@ -39,7 +39,7 @@ impl FerrumWindow {
 
         let mut end_col = col;
         while end_col + 1 < vp_cols {
-            let next_ch = leaf.terminal.screen.viewport_get(row, end_col + 1).grapheme().chars().next().unwrap_or(' ');
+            let next_ch = leaf.terminal.screen.viewport_get(row, end_col + 1).first_char();
             if !Self::is_word_char(next_ch) {
                 break;
             }

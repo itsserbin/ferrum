@@ -18,14 +18,14 @@ pub(in crate::gui) fn spawn_pty_reader(
             loop {
                 match reader.read(&mut buf) {
                     Ok(0) => {
-                        let _ = tx.send(PtyEvent::Exited { tab_id, pane_id });
-                        let _ = proxy.send_event(());
+                        tx.send(PtyEvent::Exited { tab_id, pane_id }).ok();
+                        proxy.send_event(()).ok();
                         break;
                     }
                     Err(err) => {
                         eprintln!("PTY read error for tab {tab_id} pane {pane_id}: {err}");
-                        let _ = tx.send(PtyEvent::Exited { tab_id, pane_id });
-                        let _ = proxy.send_event(());
+                        tx.send(PtyEvent::Exited { tab_id, pane_id }).ok();
+                        proxy.send_event(()).ok();
                         break;
                     }
                     Ok(n) => {
@@ -40,7 +40,9 @@ pub(in crate::gui) fn spawn_pty_reader(
                             eprintln!("PTY reader {}-{}: channel disconnected", tab_id, pane_id);
                             break;
                         }
-                        let _ = proxy.send_event(());
+                        if proxy.send_event(()).is_err() {
+                            break;
+                        }
                     }
                 }
             }
