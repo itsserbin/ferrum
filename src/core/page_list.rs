@@ -703,4 +703,66 @@ mod tests {
         assert_eq!(list.viewport_rows(), 3);
         assert!(list.viewport_get(2, 0).is_default()); // cursor row is last row, blank
     }
+
+    #[test]
+    fn reflow_narrow_active_line_is_cleared() {
+        // 5-col terminal, 4 rows. Row 2 has "ABCDE" (content above cursor).
+        // Cursor on row 3 (blank). After reflow to 2 cols:
+        // "ABCDE" must be reflowed into rows above the cursor.
+        // The last row (cursor row) must be blank.
+        let mut list = PageList::new(4, 5, 100);
+        fill_viewport_row(&mut list, 2, "ABCDE");
+        let cursor_abs = list.viewport_start_abs() + 3; // blank row after content
+        let pin = list.pin_at(PageCoord { abs_row: cursor_abs, col: 0 });
+        list.reflow(4, 2, &pin);
+        // Cursor row (last row) must be blank.
+        assert!(list.viewport_get(3, 0).is_default(), "cursor row must be blank after reflow");
+        // Content above cursor must have been reflowed.
+        assert_eq!(list.viewport_get(1, 0).grapheme(), "A", "reflowed content row 1 col 0");
+        assert_eq!(list.viewport_get(2, 0).grapheme(), "C", "reflowed content row 2 col 0");
+    }
+
+    #[test]
+    fn reflow_narrow_cursor_always_at_last_viewport_row() {
+        // 4-row, 10-col terminal. Content at rows 0-1 (wrapped), cursor at row 3 (blank).
+        let mut list = PageList::new(4, 10, 100);
+        fill_viewport_row(&mut list, 0, "hello");
+        fill_viewport_row(&mut list, 1, "world");
+        list.viewport_set_wrapped(0, true);
+        let cursor_abs = list.viewport_start_abs() + 3;
+        let pin = list.pin_at(PageCoord { abs_row: cursor_abs, col: 3 });
+        list.reflow(4, 3, &pin);
+        let expected_last_row_abs = list.viewport_start_abs() + list.viewport_rows() - 1;
+        assert_eq!(
+            pin.coord().abs_row,
+            expected_last_row_abs,
+            "cursor must be at last viewport row after reflow"
+        );
+    }
+
+    #[test]
+    fn reflow_narrow_does_not_duplicate_prompt() {
+        // Simulates narrow resize: "PROMPT" is on the last row (cursor here).
+        // After reflow to 2 cols the prompt must NOT appear in the viewport —
+        // the shell redraws it after SIGWINCH, so any duplicate causes visual
+        // corruption.
+        let mut list = PageList::new(4, 6, 100);
+        fill_viewport_row(&mut list, 3, "PROMPT");
+        let cursor_abs = list.viewport_start_abs() + 3;
+        let pin = list.pin_at(PageCoord { abs_row: cursor_abs, col: 6 });
+        list.reflow(4, 2, &pin);
+        // Every viewport row must be blank — no prompt content duplicated.
+        for vrow in 0..list.viewport_rows() {
+            assert!(
+                list.viewport_get(vrow, 0).is_default(),
+                "row {vrow} col 0 must be blank — no duplicate prompt content"
+            );
+        }
+        // Cursor at last viewport row.
+        assert_eq!(
+            pin.coord().abs_row,
+            list.viewport_start_abs() + 3,
+            "cursor must be at last viewport row"
+        );
+    }
 }
