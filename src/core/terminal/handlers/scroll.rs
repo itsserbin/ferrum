@@ -28,8 +28,7 @@ pub(in super::super) fn handle_scroll_csi(
             term.scroll_top = top_1_based - 1;
             term.scroll_bottom = bottom_1_based - 1;
             // VT spec: DECSTBM resets cursor to home position (0,0).
-            term.cursor_row = 0;
-            term.cursor_col = 0;
+            term.set_cursor(0, 0);
             true
         }
         'S' => {
@@ -50,23 +49,25 @@ pub(in super::super) fn handle_scroll_csi(
         }
         'L' => {
             // Insert Lines
-            if term.cursor_row < term.scroll_top || term.cursor_row > term.scroll_bottom {
+            let cr = term.cursor_row();
+            if cr < term.scroll_top || cr > term.scroll_bottom {
                 return true;
             }
             let n = term.param(params, 1).max(1) as usize;
             for _ in 0..n {
-                term.scroll_down_region(term.cursor_row, term.scroll_bottom);
+                term.scroll_down_region(cr, term.scroll_bottom);
             }
             true
         }
         'M' => {
             // Delete Lines
-            if term.cursor_row < term.scroll_top || term.cursor_row > term.scroll_bottom {
+            let cr = term.cursor_row();
+            if cr < term.scroll_top || cr > term.scroll_bottom {
                 return true;
             }
             let n = term.param(params, 1).max(1) as usize;
             for _ in 0..n {
-                term.scroll_up_region(term.cursor_row, term.scroll_bottom);
+                term.scroll_up_region(cr, term.scroll_bottom);
             }
             true
         }
@@ -102,13 +103,12 @@ mod tests {
         // \x1b[2;5r on a 10-row grid sets scroll region rows 1..4 (0-based).
         // VT spec: DECSTBM resets cursor to home (0,0).
         let mut term = Terminal::new(10, 10);
-        term.cursor_row = 3;
-        term.cursor_col = 5;
+        term.set_cursor(3, 5);
         term.process(b"\x1b[2;5r");
 
         // Cursor reset to home
-        assert_eq!(term.cursor_row, 0);
-        assert_eq!(term.cursor_col, 0);
+        assert_eq!(term.cursor_row(), 0);
+        assert_eq!(term.cursor_col(), 0);
 
         // Verify margins are set correctly by filling rows and scrolling.
         // Fill rows 0..9 with distinct chars.
@@ -193,7 +193,7 @@ mod tests {
         // Rows ['A','B','C','D'], cursor at row 1, insert 1 line
         // => ['A',' ','B','C'], row D lost
         let mut term = filled_term(4, 5);
-        term.cursor_row = 1;
+        term.set_cursor_row(1);
         term.process(b"\x1b[1L");
 
         assert_eq!(row_char(&term, 0), 'A');
@@ -207,7 +207,7 @@ mod tests {
         // Rows ['A','B','C','D'], cursor at row 1, delete 1 line
         // => ['A','C','D',' ']
         let mut term = filled_term(4, 5);
-        term.cursor_row = 1;
+        term.set_cursor_row(1);
         term.process(b"\x1b[1M");
 
         assert_eq!(row_char(&term, 0), 'A');
@@ -246,20 +246,19 @@ mod tests {
     #[test]
     fn decstbm_invalid_region_is_ignored() {
         let mut term = Terminal::new(6, 5);
-        term.cursor_row = 5;
-        term.cursor_col = 3;
+        term.set_cursor(5, 3);
 
         term.process(b"\x1b[5;2r");
 
-        assert_eq!(term.cursor_row, 5);
-        assert_eq!(term.cursor_col, 3);
+        assert_eq!(term.cursor_row(), 5);
+        assert_eq!(term.cursor_col(), 3);
     }
 
     #[test]
     fn il_outside_scroll_region_is_noop() {
         let mut term = filled_term(5, 4);
         term.process(b"\x1b[2;4r"); // region: rows 1..3 (0-based)
-        term.cursor_row = 0; // outside region
+        term.set_cursor_row(0); // outside region
 
         let before: Vec<char> = (0..5).map(|row| row_char(&term, row)).collect();
         term.process(b"\x1b[1L");
@@ -272,7 +271,7 @@ mod tests {
     fn dl_outside_scroll_region_is_noop() {
         let mut term = filled_term(5, 4);
         term.process(b"\x1b[2;4r"); // region: rows 1..3 (0-based)
-        term.cursor_row = 4; // outside region
+        term.set_cursor_row(4); // outside region
 
         let before: Vec<char> = (0..5).map(|row| row_char(&term, row)).collect();
         term.process(b"\x1b[1M");

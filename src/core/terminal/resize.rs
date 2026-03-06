@@ -13,16 +13,8 @@ impl super::Terminal {
 
         let old_cols = self.screen.cols();
         if old_cols != cols && self.alt_screen.is_none() {
-            // Sync cursor_pin to the current cursor position before reflow.
-            // The pin is not updated during ordinary scrolling or cursor
-            // movement — only at resize boundaries — so it may be stale.
-            // Without this sync, reflow finds the cursor at the wrong row and
-            // the shell redraws its prompt at the wrong position after SIGWINCH.
-            let cur_abs = self.screen.viewport_start_abs() + self.cursor_row;
-            self.screen.set_pin_abs_row(&self.cursor_pin, cur_abs);
-            self.screen.set_pin_col(&self.cursor_pin, self.cursor_col);
-
-            // Reflow resize: run grapheme-aware reflow on the PageList directly.
+            // cursor_pin is always current (every cursor movement updates it),
+            // so reflow can use it directly without a prior sync.
             self.screen.reflow(rows, cols, &self.cursor_pin);
             self.update_cursor_after_resize(rows, cols);
         } else {
@@ -37,16 +29,11 @@ impl super::Terminal {
         self.resize_at = Some(std::time::Instant::now());
     }
 
-    /// Update `cursor_row` and `cursor_col` from the cursor pin after a reflow resize.
+    /// Clamp the cursor to the new bounds after a reflow resize.
     fn update_cursor_after_resize(&mut self, new_rows: usize, new_cols: usize) {
-        let coord = self.screen.pin_coord(&self.cursor_pin);
-        let vstart = self.screen.viewport_start_abs();
-        self.cursor_row =
-            coord.abs_row.saturating_sub(vstart).min(new_rows.saturating_sub(1));
-        self.cursor_col = coord.col.min(new_cols.saturating_sub(1));
-        let new_abs = vstart + self.cursor_row;
-        self.screen.set_pin_abs_row(&self.cursor_pin, new_abs);
-        self.screen.set_pin_col(&self.cursor_pin, self.cursor_col);
+        let clamped_row = self.cursor_row().min(new_rows.saturating_sub(1));
+        let clamped_col = self.cursor_col().min(new_cols.saturating_sub(1));
+        self.set_cursor(clamped_row, clamped_col);
     }
 
     /// Resize when only the height changes (no col change, no reflow).
@@ -59,21 +46,22 @@ impl super::Terminal {
     /// bottom.
     fn simple_resize(&mut self, rows: usize, cols: usize) {
         let old_rows = self.screen.viewport_rows();
-        if self.alt_screen.is_none() && rows < old_rows && self.cursor_row >= rows {
+        if self.alt_screen.is_none() && rows < old_rows && self.cursor_row() >= rows {
             // Push enough rows from the top to scrollback so the cursor fits.
-            let excess = self.cursor_row + 1 - rows;
+            let excess = self.cursor_row() + 1 - rows;
             for _ in 0..excess {
                 self.screen.scroll_up_region(0, old_rows - 1, true);
             }
-            self.cursor_row -= excess;
+            // When scrollback has space, each scroll decreases cursor_row() by 1
+            // automatically (viewport_start_abs increases). When scrollback is full,
+            // cursor_row() does not decrease — clamp explicitly.
+            if self.cursor_row() >= rows {
+                self.set_cursor_row(rows.saturating_sub(1));
+            }
         }
         self.screen.simple_resize(rows, cols);
-        // Update cursor position to stay within bounds.
-        self.cursor_row = self.cursor_row.min(rows.saturating_sub(1));
-        self.cursor_col = self.cursor_col.min(cols.saturating_sub(1));
-        // Update cursor pin.
-        let abs = self.screen.viewport_start_abs() + self.cursor_row;
-        self.screen.set_pin_abs_row(&self.cursor_pin, abs);
-        self.screen.set_pin_col(&self.cursor_pin, self.cursor_col);
+        let new_row = self.cursor_row().min(rows.saturating_sub(1));
+        let new_col = self.cursor_col().min(cols.saturating_sub(1));
+        self.set_cursor(new_row, new_col);
     }
 }

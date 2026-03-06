@@ -8,13 +8,15 @@ pub(in super::super) fn handle_erase_csi(
 ) -> bool {
     match action {
         'J' => {
+            let cr = term.cursor_row();
+            let cc = term.cursor_col();
             match term.param(params, 0) {
                 0 => {
                     let blank = term.make_blank_grapheme_cell();
-                    for col in term.cursor_col..term.screen.cols() {
-                        term.screen.viewport_set(term.cursor_row, col, blank.clone());
+                    for col in cc..term.screen.cols() {
+                        term.screen.viewport_set(cr, col, blank.clone());
                     }
-                    for row in (term.cursor_row + 1)..term.screen.viewport_rows() {
+                    for row in (cr + 1)..term.screen.viewport_rows() {
                         for col in 0..term.screen.cols() {
                             term.screen.viewport_set(row, col, blank.clone());
                         }
@@ -22,13 +24,13 @@ pub(in super::super) fn handle_erase_csi(
                 }
                 1 => {
                     let blank = term.make_blank_grapheme_cell();
-                    for row in 0..term.cursor_row {
+                    for row in 0..cr {
                         for col in 0..term.screen.cols() {
                             term.screen.viewport_set(row, col, blank.clone());
                         }
                     }
-                    for col in 0..=term.cursor_col.min(term.screen.cols() - 1) {
-                        term.screen.viewport_set(term.cursor_row, col, blank.clone());
+                    for col in 0..=cc.min(term.screen.cols() - 1) {
+                        term.screen.viewport_set(cr, col, blank.clone());
                     }
                 }
                 2 => {
@@ -53,9 +55,9 @@ pub(in super::super) fn handle_erase_csi(
                         }
                         new_screen.viewport_set_wrapped(r, term.screen.viewport_is_wrapped(r));
                     }
-                    let abs = new_screen.viewport_start_abs() + term.cursor_row;
+                    let abs = new_screen.viewport_start_abs() + cr;
                     let new_cursor_pin =
-                        new_screen.register_pin(crate::core::PageCoord { abs_row: abs, col: term.cursor_col });
+                        new_screen.register_pin(crate::core::PageCoord { abs_row: abs, col: cc });
                     term.cursor_pin = new_cursor_pin;
                     term.screen = new_screen;
                 }
@@ -64,23 +66,25 @@ pub(in super::super) fn handle_erase_csi(
             true
         }
         'K' => {
+            let cr = term.cursor_row();
+            let cc = term.cursor_col();
             match term.param(params, 0) {
                 0 => {
                     let blank = term.make_blank_grapheme_cell();
-                    for col in term.cursor_col..term.screen.cols() {
-                        term.screen.viewport_set(term.cursor_row, col, blank.clone());
+                    for col in cc..term.screen.cols() {
+                        term.screen.viewport_set(cr, col, blank.clone());
                     }
                 }
                 1 => {
                     let blank = term.make_blank_grapheme_cell();
-                    for col in 0..=term.cursor_col.min(term.screen.cols() - 1) {
-                        term.screen.viewport_set(term.cursor_row, col, blank.clone());
+                    for col in 0..=cc.min(term.screen.cols() - 1) {
+                        term.screen.viewport_set(cr, col, blank.clone());
                     }
                 }
                 2 => {
                     let blank = term.make_blank_grapheme_cell();
                     for col in 0..term.screen.cols() {
-                        term.screen.viewport_set(term.cursor_row, col, blank.clone());
+                        term.screen.viewport_set(cr, col, blank.clone());
                     }
                 }
                 _ => {}
@@ -114,8 +118,7 @@ mod tests {
     #[test]
     fn ed_erase_below() {
         let mut term = filled_term(4, 10);
-        term.cursor_row = 1;
-        term.cursor_col = 3;
+        term.set_cursor(1, 3);
         term.process(b"\x1b[0J");
         // Before cursor on row 1: preserved
         for c in 0..3 {
@@ -161,8 +164,7 @@ mod tests {
     #[test]
     fn ed_erase_above() {
         let mut term = filled_term(4, 10);
-        term.cursor_row = 1;
-        term.cursor_col = 3;
+        term.set_cursor(1, 3);
         term.process(b"\x1b[1J");
         // Row 0: fully erased
         for c in 0..10 {
@@ -245,8 +247,7 @@ mod tests {
     #[test]
     fn ed_default_is_erase_below() {
         let mut term = filled_term(4, 10);
-        term.cursor_row = 1;
-        term.cursor_col = 3;
+        term.set_cursor(1, 3);
         term.process(b"\x1b[J");
         // Same as 0J: from cursor to end erased
         for c in 3..10 {
@@ -290,8 +291,7 @@ mod tests {
     #[test]
     fn el_erase_right() {
         let mut term = filled_term(4, 10);
-        term.cursor_row = 0;
-        term.cursor_col = 3;
+        term.set_cursor(0, 3);
         term.process(b"\x1b[0K");
         // Cols 0..2 preserved
         for c in 0..3 {
@@ -316,8 +316,7 @@ mod tests {
     #[test]
     fn el_erase_left() {
         let mut term = filled_term(4, 10);
-        term.cursor_row = 0;
-        term.cursor_col = 3;
+        term.set_cursor(0, 3);
         term.process(b"\x1b[1K");
         // Cols 0..3 erased (inclusive)
         for c in 0..=3 {
@@ -342,8 +341,7 @@ mod tests {
     #[test]
     fn el_erase_whole_line() {
         let mut term = filled_term(4, 10);
-        term.cursor_row = 0;
-        term.cursor_col = 5;
+        term.set_cursor(0, 5);
         term.process(b"\x1b[2K");
         for c in 0..10 {
             assert_eq!(
@@ -358,8 +356,7 @@ mod tests {
     #[test]
     fn el_default_is_erase_right() {
         let mut term = filled_term(4, 10);
-        term.cursor_row = 0;
-        term.cursor_col = 3;
+        term.set_cursor(0, 3);
         term.process(b"\x1b[K");
         // Same as 0K
         for c in 0..3 {
@@ -397,7 +394,7 @@ mod tests {
         let mut term = Terminal::new(4, 10);
         let blue = Color { r: 0, g: 0, b: 255 };
         term.process(b"AAAA");
-        term.cursor_col = 0;
+        term.set_cursor_col(0);
         term.process(b"\x1b[48;2;0;0;255m\x1b[2K");
         assert_eq!(term.screen.viewport_get(0, 0).bg, blue);
         assert_eq!(term.screen.viewport_get(0, 9).bg, blue);

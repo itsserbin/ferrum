@@ -49,10 +49,6 @@ pub struct Terminal {
     alt_saved_cursor: PageCoord,
     alt_screen: Option<PageList>,
 
-    /// Cursor position (derived from `cursor_pin`).
-    pub cursor_row: usize,
-    pub cursor_col: usize,
-
     // ── Colour and attribute state ───────────────────────────────────────────
     current_fg: Color,
     current_bg: Color,
@@ -121,8 +117,6 @@ impl Terminal {
             saved_cursor: PageCoord { abs_row: 0, col: 0 },
             alt_saved_cursor: PageCoord { abs_row: 0, col: 0 },
             alt_screen: None,
-            cursor_row: 0,
-            cursor_col: 0,
             current_fg: default_fg,
             current_bg: default_bg,
             default_fg,
@@ -204,8 +198,6 @@ impl Terminal {
         let mut new_screen = PageList::new(rows, cols, max_sb);
         self.cursor_pin = new_screen.register_pin(PageCoord { abs_row: 0, col: 0 });
         self.screen = new_screen;
-        self.cursor_row = 0;
-        self.cursor_col = 0;
         self.reset_scroll_region();
     }
 
@@ -345,6 +337,36 @@ impl Terminal {
     /// are not flagged as security events (shells legitimately redraw prompts).
     pub(crate) const RESIZE_CURSOR_JUMP_GRACE_SECS: u64 = 2;
 
+    /// Returns the viewport-relative cursor row (derived from `cursor_pin`).
+    pub fn cursor_row(&self) -> usize {
+        self.cursor_pin
+            .coord()
+            .abs_row
+            .saturating_sub(self.screen.viewport_start_abs())
+    }
+
+    /// Returns the cursor column (derived from `cursor_pin`).
+    pub fn cursor_col(&self) -> usize {
+        self.cursor_pin.coord().col
+    }
+
+    /// Sets the cursor row and keeps `cursor_pin` in sync.
+    pub fn set_cursor_row(&mut self, row: usize) {
+        let abs = self.screen.viewport_start_abs() + row;
+        self.screen.set_pin_abs_row(&self.cursor_pin, abs);
+    }
+
+    /// Sets the cursor column and keeps `cursor_pin` in sync.
+    pub fn set_cursor_col(&mut self, col: usize) {
+        self.screen.set_pin_col(&self.cursor_pin, col);
+    }
+
+    /// Sets both cursor row and column, keeping `cursor_pin` in sync.
+    pub fn set_cursor(&mut self, row: usize, col: usize) {
+        self.set_cursor_row(row);
+        self.set_cursor_col(col);
+    }
+
     fn maybe_record_cursor_rewrite(&mut self, from_row: usize, to_row: usize) {
         if !self.security_config.limit_cursor_jumps || self.is_alt_screen() || to_row >= from_row {
             return;
@@ -431,8 +453,6 @@ impl Terminal {
         let max_scrollback = self.max_scrollback;
 
         self.alt_screen = None;
-        self.cursor_row = 0;
-        self.cursor_col = 0;
         self.saved_cursor = PageCoord { abs_row: 0, col: 0 };
         self.alt_saved_cursor = PageCoord { abs_row: 0, col: 0 };
         self.reset_scroll_region();
@@ -472,10 +492,10 @@ impl Terminal {
     }
 
     fn handle_cursor_csi(&mut self, action: char, params: &Params) -> bool {
-        let from_row = self.cursor_row;
+        let from_row = self.cursor_row();
         let handled = handlers::cursor::handle_cursor_csi(self, action, params);
         if handled {
-            self.maybe_record_cursor_rewrite(from_row, self.cursor_row);
+            self.maybe_record_cursor_rewrite(from_row, self.cursor_row());
         }
         handled
     }
@@ -505,17 +525,22 @@ impl Perform for Terminal {
             width = 1;
         }
 
-        if self.cursor_col + width > self.screen.cols() {
-            // Mark current row as soft-wrapped before moving to next row
-            self.screen.viewport_set_wrapped(self.cursor_row, true);
-            self.cursor_col = 0;
-            self.cursor_row += 1;
-            if self.cursor_row > self.scroll_bottom {
+        if self.cursor_col() + width > self.screen.cols() {
+            // Mark current row as soft-wrapped before moving to next row.
+            let cr = self.cursor_row();
+            self.screen.viewport_set_wrapped(cr, true);
+            self.set_cursor_col(0);
+            let next_row = self.cursor_row() + 1;
+            if next_row > self.scroll_bottom {
                 self.scroll_up_region(self.scroll_top, self.scroll_bottom);
-                self.cursor_row = self.scroll_bottom;
+                self.set_cursor_row(self.scroll_bottom);
+            } else {
+                self.set_cursor_row(next_row);
             }
         }
 
+        let cr = self.cursor_row();
+        let cc = self.cursor_col();
         let mut gc = GraphemeCell::from_char(c);
         gc.fg = self.current_fg;
         gc.bg = self.current_bg;
@@ -525,19 +550,15 @@ impl Perform for Terminal {
         gc.reverse = self.current_reverse;
         gc.underline_style = self.current_underline_style;
         gc.strikethrough = self.current_strikethrough;
-        self.screen.viewport_set(self.cursor_row, self.cursor_col, gc);
+        self.screen.viewport_set(cr, cc, gc);
 
         // Reserve the trailing cell for wide glyphs.
-        if width == 2 && self.cursor_col + 1 < self.screen.cols() {
+        if width == 2 && cc + 1 < self.screen.cols() {
             let spacer_gc = GraphemeCell::spacer();
-            self.screen.viewport_set(self.cursor_row, self.cursor_col + 1, spacer_gc);
+            self.screen.viewport_set(cr, cc + 1, spacer_gc);
         }
 
-        // Update cursor pin position.
-        let abs = self.screen.viewport_start_abs() + self.cursor_row;
-        self.screen.set_pin_abs_row(&self.cursor_pin, abs);
-        self.screen.set_pin_col(&self.cursor_pin, self.cursor_col + width);
-        self.cursor_col += width;
+        self.set_cursor_col(cc + width);
     }
 
     fn execute(&mut self, byte: u8) {
@@ -545,33 +566,29 @@ impl Perform for Terminal {
             10..=12 => {
                 // LF/VT/FF: move to next row, keep current column.
                 // Mark current row as NOT wrapped (hard line break).
-                self.screen.viewport_set_wrapped(self.cursor_row, false);
-                self.cursor_row += 1;
-                if self.cursor_row > self.scroll_bottom {
+                let cr = self.cursor_row();
+                self.screen.viewport_set_wrapped(cr, false);
+                let next_row = cr + 1;
+                if next_row > self.scroll_bottom {
                     self.scroll_up_region(self.scroll_top, self.scroll_bottom);
-                    self.cursor_row = self.scroll_bottom;
+                    self.set_cursor_row(self.scroll_bottom);
+                } else {
+                    self.set_cursor_row(next_row);
                 }
-                // Update cursor pin.
-                let abs = self.screen.viewport_start_abs() + self.cursor_row;
-                self.screen.set_pin_abs_row(&self.cursor_pin, abs);
             }
             13 => {
-                self.cursor_col = 0;
-                self.screen.set_pin_col(&self.cursor_pin, 0);
+                self.set_cursor_col(0);
             }
             8 => {
-                if self.cursor_col > 0 {
-                    self.cursor_col -= 1;
-                    self.screen.set_pin_col(&self.cursor_pin, self.cursor_col);
+                if self.cursor_col() > 0 {
+                    self.set_cursor_col(self.cursor_col() - 1);
                 }
             }
             9 => {
                 const DEFAULT_TAB_WIDTH: usize = 8;
-                self.cursor_col = (self.cursor_col + DEFAULT_TAB_WIDTH) & !(DEFAULT_TAB_WIDTH - 1);
-                if self.cursor_col >= self.screen.cols() {
-                    self.cursor_col = self.screen.cols() - 1;
-                }
-                self.screen.set_pin_col(&self.cursor_pin, self.cursor_col);
+                let new_col =
+                    (self.cursor_col() + DEFAULT_TAB_WIDTH) & !(DEFAULT_TAB_WIDTH - 1);
+                self.set_cursor_col(new_col.min(self.screen.cols() - 1));
             }
             _ => {}
         }
@@ -639,30 +656,29 @@ impl Perform for Terminal {
     fn esc_dispatch(&mut self, _intermediates: &[u8], _ignore: bool, byte: u8) {
         match byte {
             b'7' => {
-                let abs = self.screen.viewport_start_abs() + self.cursor_row;
-                self.saved_cursor = PageCoord { abs_row: abs, col: self.cursor_col };
+                self.saved_cursor = PageCoord {
+                    abs_row: self.cursor_pin.coord().abs_row,
+                    col: self.cursor_col(),
+                };
             }
             b'8' => {
-                let from_row = self.cursor_row;
+                let from_row = self.cursor_row();
                 let vstart = self.screen.viewport_start_abs();
-                self.cursor_row =
-                    self.saved_cursor.abs_row.saturating_sub(vstart).min(self.screen.viewport_rows().saturating_sub(1));
-                self.cursor_col = self.saved_cursor.col.min(self.screen.cols().saturating_sub(1));
-                self.screen.set_pin_abs_row(&self.cursor_pin, self.screen.viewport_start_abs() + self.cursor_row);
-                self.screen.set_pin_col(&self.cursor_pin, self.cursor_col);
-                self.maybe_record_cursor_rewrite(from_row, self.cursor_row);
+                let row = self.saved_cursor.abs_row.saturating_sub(vstart)
+                    .min(self.screen.viewport_rows().saturating_sub(1));
+                let col = self.saved_cursor.col.min(self.screen.cols().saturating_sub(1));
+                self.set_cursor(row, col);
+                self.maybe_record_cursor_rewrite(from_row, self.cursor_row());
             }
             b'M' => {
-                let from_row = self.cursor_row;
+                let from_row = self.cursor_row();
                 // Reverse Index: cursor up, scroll down if at top of region
-                if self.cursor_row == self.scroll_top {
+                if self.cursor_row() == self.scroll_top {
                     self.scroll_down_region(self.scroll_top, self.scroll_bottom);
                 } else {
-                    self.cursor_row = self.cursor_row.saturating_sub(1);
-                    let abs = self.screen.viewport_start_abs() + self.cursor_row;
-                    self.screen.set_pin_abs_row(&self.cursor_pin, abs);
+                    self.set_cursor_row(self.cursor_row().saturating_sub(1));
                 }
-                self.maybe_record_cursor_rewrite(from_row, self.cursor_row);
+                self.maybe_record_cursor_rewrite(from_row, self.cursor_row());
             }
             b'c' => self.full_reset(), // RIS - full terminal reset
             _ => {}

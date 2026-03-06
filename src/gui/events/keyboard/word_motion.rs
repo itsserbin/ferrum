@@ -112,7 +112,7 @@ impl FerrumWindow {
             return 0;
         }
 
-        let row = leaf.terminal.cursor_row.min(rows.saturating_sub(1));
+        let row = leaf.terminal.cursor_row().min(rows.saturating_sub(1));
         let mut line = Vec::with_capacity(cols);
         for col in 0..cols {
             let ch = leaf.terminal.screen.viewport_get(row, col)

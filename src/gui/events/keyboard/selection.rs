@@ -88,7 +88,7 @@ impl FerrumWindow {
                 return false;
             }
 
-            let cursor_col = leaf.terminal.cursor_col.min(grid_cols);
+            let cursor_col = leaf.terminal.cursor_col().min(grid_cols);
             let target_col = if word_motion {
                 Self::word_motion_target_col_from_leaf(leaf, cursor_col, motion)
             } else {
@@ -98,7 +98,7 @@ impl FerrumWindow {
                 }
             };
 
-            let abs_row = leaf.terminal.screen.scrollback_len() + leaf.terminal.cursor_row;
+            let abs_row = leaf.terminal.screen.scrollback_len() + leaf.terminal.cursor_row();
             let anchor_col = self
                 .keyboard_selection_anchor
                 .filter(|anchor| anchor.abs_row == abs_row)

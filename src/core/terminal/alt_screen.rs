@@ -17,8 +17,10 @@ impl super::Terminal {
             let alt_screen = PageList::new(rows, cols, 0); // alt screen has no scrollback
             let abs_start = alt_screen.viewport_start_abs();
             // Save cursor coord before swapping.
-            let cur_abs = self.screen.viewport_start_abs() + self.cursor_row;
-            self.alt_saved_cursor = PageCoord { abs_row: cur_abs, col: self.cursor_col };
+            self.alt_saved_cursor = PageCoord {
+                abs_row: self.cursor_pin.coord().abs_row,
+                col: self.cursor_col(),
+            };
             let main_screen = std::mem::replace(&mut self.screen, alt_screen);
             self.alt_screen = Some(main_screen);
             // Register a new cursor pin on the alt screen at (0, 0).
@@ -27,8 +29,7 @@ impl super::Terminal {
 
             self.saved_scroll_top = self.scroll_top;
             self.saved_scroll_bottom = self.scroll_bottom;
-            self.cursor_row = 0;
-            self.cursor_col = 0;
+            // cursor_row() == 0, cursor_col() == 0 automatically (pin at abs_start, col 0).
             self.cursor_style = CursorStyle::BlinkingBlock;
             self.scroll_top = 0;
             self.scroll_bottom = rows - 1;
@@ -44,13 +45,11 @@ impl super::Terminal {
             let vstart = self.screen.viewport_start_abs();
             let rows = self.screen.viewport_rows();
             let cols = self.screen.cols();
-            self.cursor_row =
-                saved.abs_row.saturating_sub(vstart).min(rows.saturating_sub(1));
-            self.cursor_col = saved.col.min(cols.saturating_sub(1));
-            let restored_abs = vstart + self.cursor_row;
+            let row = saved.abs_row.saturating_sub(vstart).min(rows.saturating_sub(1));
+            let col = saved.col.min(cols.saturating_sub(1));
             self.cursor_pin = self.screen.register_pin(PageCoord {
-                abs_row: restored_abs,
-                col: self.cursor_col,
+                abs_row: vstart + row,
+                col,
             });
 
             self.scroll_top = self.saved_scroll_top;

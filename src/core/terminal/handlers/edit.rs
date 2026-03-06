@@ -12,12 +12,14 @@ pub(in super::super) fn handle_inline_edit_csi(
             let n = term.param(params, 1).max(1) as usize;
             let blank = term.make_blank_grapheme_cell();
             let cols = term.screen.cols();
-            for col in term.cursor_col..cols {
+            let cr = term.cursor_row();
+            let cc = term.cursor_col();
+            for col in cc..cols {
                 if col + n < cols {
-                    let cell = term.screen.viewport_get(term.cursor_row, col + n).clone();
-                    term.screen.viewport_set(term.cursor_row, col, cell);
+                    let cell = term.screen.viewport_get(cr, col + n).clone();
+                    term.screen.viewport_set(cr, col, cell);
                 } else {
-                    term.screen.viewport_set(term.cursor_row, col, blank.clone());
+                    term.screen.viewport_set(cr, col, blank.clone());
                 }
             }
             true
@@ -27,12 +29,14 @@ pub(in super::super) fn handle_inline_edit_csi(
             let n = term.param(params, 1).max(1) as usize;
             let blank = term.make_blank_grapheme_cell();
             let cols = term.screen.cols();
-            for col in (term.cursor_col..cols).rev() {
-                if col >= term.cursor_col + n {
-                    let cell = term.screen.viewport_get(term.cursor_row, col - n).clone();
-                    term.screen.viewport_set(term.cursor_row, col, cell);
+            let cr = term.cursor_row();
+            let cc = term.cursor_col();
+            for col in (cc..cols).rev() {
+                if col >= cc + n {
+                    let cell = term.screen.viewport_get(cr, col - n).clone();
+                    term.screen.viewport_set(cr, col, cell);
                 } else {
-                    term.screen.viewport_set(term.cursor_row, col, blank.clone());
+                    term.screen.viewport_set(cr, col, blank.clone());
                 }
             }
             true
@@ -42,8 +46,10 @@ pub(in super::super) fn handle_inline_edit_csi(
             let n = term.param(params, 1).max(1) as usize;
             let blank = term.make_blank_grapheme_cell();
             let cols = term.screen.cols();
-            for col in term.cursor_col..(term.cursor_col + n).min(cols) {
-                term.screen.viewport_set(term.cursor_row, col, blank.clone());
+            let cr = term.cursor_row();
+            let cc = term.cursor_col();
+            for col in cc..(cc + n).min(cols) {
+                term.screen.viewport_set(cr, col, blank.clone());
             }
             true
         }
@@ -75,7 +81,7 @@ mod tests {
         // Row "ABCDE", cursor at col 1, delete 2 chars => "ADE  "
         let mut term = Terminal::new(4, 5);
         write_row(&mut term, "ABCDE");
-        term.cursor_col = 1;
+        term.set_cursor_col(1);
         term.process(b"\x1b[2P");
 
         assert_eq!(read_row(&term), "ADE  ");
@@ -87,7 +93,7 @@ mod tests {
         // D and E are pushed off the right edge.
         let mut term = Terminal::new(4, 5);
         write_row(&mut term, "ABCDE");
-        term.cursor_col = 1;
+        term.set_cursor_col(1);
         term.process(b"\x1b[2@");
 
         assert_eq!(read_row(&term), "A  BC");
@@ -98,7 +104,7 @@ mod tests {
         // Row "ABCDE", cursor at col 1, erase 2 chars => "A  DE" (no shift)
         let mut term = Terminal::new(4, 5);
         write_row(&mut term, "ABCDE");
-        term.cursor_col = 1;
+        term.set_cursor_col(1);
         term.process(b"\x1b[2X");
 
         assert_eq!(read_row(&term), "A  DE");
@@ -110,7 +116,7 @@ mod tests {
         // Row "ABCDE", cursor at col 1 => "ACDE "
         let mut term = Terminal::new(4, 5);
         write_row(&mut term, "ABCDE");
-        term.cursor_col = 1;
+        term.set_cursor_col(1);
         term.process(b"\x1b[P");
 
         assert_eq!(read_row(&term), "ACDE ");
@@ -122,7 +128,7 @@ mod tests {
         // Row "ABCDE", cursor at col 4 (last), insert 1 => "ABCD "
         let mut term = Terminal::new(4, 5);
         write_row(&mut term, "ABCDE");
-        term.cursor_col = 4;
+        term.set_cursor_col(4);
         term.process(b"\x1b[1@");
 
         assert_eq!(read_row(&term), "ABCD ");
@@ -134,7 +140,7 @@ mod tests {
         let mut term = Terminal::new(4, 5);
         write_row(&mut term, "ABCDE");
         let green = Color { r: 0, g: 255, b: 0 };
-        term.cursor_col = 1;
+        term.set_cursor_col(1);
         term.process(b"\x1b[48;2;0;255;0m\x1b[2X");
         assert_eq!(term.screen.viewport_get(0, 1).bg, green);
         assert_eq!(term.screen.viewport_get(0, 2).bg, green);

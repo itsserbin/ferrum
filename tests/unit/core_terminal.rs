@@ -36,8 +36,8 @@ fn applies_sgr_and_resets_attributes() {
 #[test]
 fn reports_cursor_position_response() {
     let mut term = Terminal::new(3, 5);
-    term.cursor_row = 1;
-    term.cursor_col = 3;
+    term.set_cursor_row(1);
+    term.set_cursor_col(3);
 
     term.process(b"\x1b[6n");
 
@@ -47,8 +47,8 @@ fn reports_cursor_position_response() {
 #[test]
 fn reports_cursor_position_response_for_private_query() {
     let mut term = Terminal::new(3, 5);
-    term.cursor_row = 2;
-    term.cursor_col = 4;
+    term.set_cursor_row(2);
+    term.set_cursor_col(4);
 
     term.process(b"\x1b[?6n");
 
@@ -67,7 +67,7 @@ fn print_simple_text() {
     assert_eq!(get_char(&term, 0, 2), 'l');
     assert_eq!(get_char(&term, 0, 3), 'l');
     assert_eq!(get_char(&term, 0, 4), 'o');
-    assert_eq!(term.cursor_col, 5);
+    assert_eq!(term.cursor_col(), 5);
 }
 
 #[test]
@@ -84,8 +84,8 @@ fn print_wraps_at_edge() {
     // Row 1 should have 2 chars
     assert_eq!(get_char(&term, 1, 0), 'C'); // index 80: 80%26=2 -> 'C'
     assert_eq!(get_char(&term, 1, 1), 'D'); // index 81: 81%26=3 -> 'D'
-    assert_eq!(term.cursor_row, 1);
-    assert_eq!(term.cursor_col, 2);
+    assert_eq!(term.cursor_row(), 1);
+    assert_eq!(term.cursor_col(), 2);
 }
 
 #[test]
@@ -96,7 +96,7 @@ fn print_wide_char() {
 
     assert_eq!(get_char(&term, 0, 0), '漢');
     assert_eq!(get_char(&term, 0, 1), ' '); // placeholder
-    assert_eq!(term.cursor_col, 2);
+    assert_eq!(term.cursor_col(), 2);
 }
 
 #[test]
@@ -106,7 +106,7 @@ fn print_combining_mark_is_not_dropped() {
 
     assert_eq!(get_char(&term, 0, 0), 'e');
     assert_eq!(get_char(&term, 0, 1), '\u{0301}');
-    assert_eq!(term.cursor_col, 2);
+    assert_eq!(term.cursor_col(), 2);
 }
 
 // ── Perform trait: execute ──
@@ -159,7 +159,7 @@ fn execute_tab() {
 
     // Tab stops every 8 columns: col 0 -> col 8
     assert_eq!(get_char(&term, 0, 8), 'X');
-    assert_eq!(term.cursor_col, 9);
+    assert_eq!(term.cursor_col(), 9);
 }
 
 // ── Perform trait: esc_dispatch ──
@@ -169,21 +169,21 @@ fn esc_save_restore_cursor() {
     let mut term = Terminal::new(10, 80);
     // Move cursor to (3, 5) using CUP
     term.process(b"\x1b[4;6H"); // 1-based: row 4, col 6 -> 0-based: (3, 5)
-    assert_eq!(term.cursor_row, 3);
-    assert_eq!(term.cursor_col, 5);
+    assert_eq!(term.cursor_row(), 3);
+    assert_eq!(term.cursor_col(), 5);
 
     // ESC 7 = save cursor
     term.process(b"\x1b7");
 
     // Move somewhere else
     term.process(b"\x1b[1;1H"); // move to (0, 0)
-    assert_eq!(term.cursor_row, 0);
-    assert_eq!(term.cursor_col, 0);
+    assert_eq!(term.cursor_row(), 0);
+    assert_eq!(term.cursor_col(), 0);
 
     // ESC 8 = restore cursor
     term.process(b"\x1b8");
-    assert_eq!(term.cursor_row, 3);
-    assert_eq!(term.cursor_col, 5);
+    assert_eq!(term.cursor_row(), 3);
+    assert_eq!(term.cursor_col(), 5);
 }
 
 #[test]
@@ -192,12 +192,12 @@ fn esc_reverse_index_at_top() {
     // Fill rows with identifiable content
     term.process(b"AAAAAAAAAA"); // row 0
     term.process(b"\n");
-    term.cursor_col = 0;
+    term.set_cursor_col(0);
     term.process(b"BBBBBBBBBB"); // row 1
 
     // Move cursor to row 0
     term.process(b"\x1b[1;1H"); // CUP to (0, 0)
-    assert_eq!(term.cursor_row, 0);
+    assert_eq!(term.cursor_row(), 0);
 
     // ESC M = Reverse Index at top => scroll_down_region
     term.process(b"\x1bM");
@@ -216,13 +216,13 @@ fn esc_ris_full_reset() {
     // Set some attributes and move cursor
     term.process(b"\x1b[1;31mHello");
     assert!(term.screen.viewport_get(0, 0).bold);
-    assert_eq!(term.cursor_col, 5);
+    assert_eq!(term.cursor_col(), 5);
 
     // ESC c = RIS (full reset)
     term.process(b"\x1bc");
 
-    assert_eq!(term.cursor_row, 0);
-    assert_eq!(term.cursor_col, 0);
+    assert_eq!(term.cursor_row(), 0);
+    assert_eq!(term.cursor_col(), 0);
     assert_eq!(get_char(&term, 0, 0), ' '); // grid cleared
     assert!(term.screen.scrollback_len() == 0);
     assert!(term.cursor_visible);
@@ -240,11 +240,11 @@ fn lf_at_bottom_scrolls() {
         term.process(&line);
         if *row_char != b'D' {
             term.process(b"\n");
-            term.cursor_col = 0;
+            term.set_cursor_col(0);
         }
     }
     // Cursor should be at row 3 (bottom)
-    assert_eq!(term.cursor_row, 3);
+    assert_eq!(term.cursor_row(), 3);
     assert_eq!(get_char(&term, 0, 0), 'A');
 
     // LF at bottom triggers scroll
@@ -271,7 +271,7 @@ fn scrollback_preserved() {
         let line: Vec<u8> = vec![ch; 10];
         term.process(&line);
         term.process(b"\n");
-        term.cursor_col = 0;
+        term.set_cursor_col(0);
     }
 
     // We scrolled 17 times (20 lines - 4 visible + 1 for the last \n)
@@ -420,8 +420,8 @@ fn reflow_cursor_row_points_to_correct_physical_row_after_narrow_resize() {
     // With the bug: cursor placed on row 0 (ABCD), not row 1 (EFG).
     let mut term = Terminal::new(3, 8);
     term.process(b"XXXXXXXX\r\nABCDEFG");
-    assert_eq!(term.cursor_row, 1);
-    assert_eq!(term.cursor_col, 7);
+    assert_eq!(term.cursor_row(), 1);
+    assert_eq!(term.cursor_col(), 7);
 
     term.resize(3, 4);
 
@@ -429,8 +429,8 @@ fn reflow_cursor_row_points_to_correct_physical_row_after_narrow_resize() {
     // lands at the last row (new_rows - 1 = 2).  Viewport = [XXXX, ABCD, EFG],
     // cursor on EFG (vrow 2).  Content above stays visible instead of being
     // pushed into scrollback.
-    assert_eq!(term.cursor_row, 2, "cursor should be on EFG row (viewport row 2), not on ABCD row (viewport row 1)");
-    assert_eq!(term.cursor_col, 0, "cursor_col is reset to 0 for SIGWINCH compatibility");
+    assert_eq!(term.cursor_row(), 2, "cursor should be on EFG row (viewport row 2), not on ABCD row (viewport row 1)");
+    assert_eq!(term.cursor_col(), 0, "cursor_col is reset to 0 for SIGWINCH compatibility");
 }
 
 #[test]
@@ -447,15 +447,15 @@ fn reflow_cursor_row_correct_when_logical_line_wraps_three_times() {
     // Cursor must be at viewport row 1, not row 0.
     let mut term = Terminal::new(5, 12);
     term.process(b"XXXXXXXXXXXX\r\nABCDEFGHIJK");
-    assert_eq!(term.cursor_row, 1);
-    assert_eq!(term.cursor_col, 11);
+    assert_eq!(term.cursor_row(), 1);
+    assert_eq!(term.cursor_col(), 11);
 
     term.resize(5, 4);
 
     // With cursor-bottom anchoring the viewport is [XXXX, XXXX, ABCD, EFGH, IJK],
     // cursor on IJK at viewport row 4 (new_rows - 1).  More content visible than
     // with the old end-of-buffer anchor that pushed XXXX rows into scrollback.
-    assert_eq!(term.cursor_row, 4, "cursor should be on IJK row (viewport row 4), not on EFGH row (viewport row 3)");
+    assert_eq!(term.cursor_row(), 4, "cursor should be on IJK row (viewport row 4), not on EFGH row (viewport row 3)");
 }
 
 #[test]
@@ -475,8 +475,8 @@ fn reflow_cursor_stays_at_prompt_not_in_content_area() {
         term.process(b"XXXXXXXX\r\n");
     }
     term.process(b"$ ");
-    assert_eq!(term.cursor_row, 8);
-    assert_eq!(term.cursor_col, 2);
+    assert_eq!(term.cursor_row(), 8);
+    assert_eq!(term.cursor_col(), 2);
 
     term.resize(10, 4);
 
@@ -487,7 +487,7 @@ fn reflow_cursor_stays_at_prompt_not_in_content_area() {
     // With cursor-bottom anchoring cursor lands at new_rows - 1 = 9 (last row).
     // The trailing blank row is dropped; cursor is still BELOW all content rows.
     assert_eq!(
-        term.cursor_row, 9,
+        term.cursor_row(), 9,
         "cursor should be at the last viewport row (9), not in the content area"
     );
 }

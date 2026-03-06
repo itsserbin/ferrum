@@ -267,11 +267,6 @@ impl PageList {
         pin
     }
 
-    /// Read the current coordinate of a pin.
-    pub fn pin_coord(&self, pin: &TrackedPin) -> PageCoord {
-        pin.coord()
-    }
-
     /// Set the column of a pin.
     pub fn set_pin_col(&self, pin: &TrackedPin, col: usize) {
         pin.set_col(col);
@@ -634,7 +629,7 @@ mod tests {
         let cursor_abs = list.viewport_start_abs();
         let pin = list.register_pin(PageCoord { abs_row: cursor_abs, col: 5 });
         list.reflow(3, 5, &pin);
-        assert_eq!(list.pin_coord(&pin).col, 0);
+        assert_eq!(pin.coord().col, 0);
     }
 
     #[test]

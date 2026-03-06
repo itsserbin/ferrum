@@ -61,21 +61,20 @@ mod tests {
     #[test]
     fn resize_clamps_cursor() {
         let mut term = Terminal::new(10, 20);
-        term.cursor_row = 8;
-        term.cursor_col = 15;
+        term.set_cursor(8, 15);
 
         term.resize(5, 10);
 
         assert!(
-            term.cursor_row < term.screen.viewport_rows(),
+            term.cursor_row() < term.screen.viewport_rows(),
             "cursor_row {} should be < viewport_rows {}",
-            term.cursor_row,
+            term.cursor_row(),
             term.screen.viewport_rows()
         );
         assert!(
-            term.cursor_col < term.screen.cols(),
+            term.cursor_col() < term.screen.cols(),
             "cursor_col {} should be < cols {}",
-            term.cursor_col,
+            term.cursor_col(),
             term.screen.cols()
         );
     }

@@ -24,8 +24,8 @@ impl FerrumWindow {
             return;
         }
 
-        let cur_row = leaf.terminal.cursor_row;
-        let cur_col = leaf.terminal.cursor_col;
+        let cur_row = leaf.terminal.cursor_row();
+        let cur_col = leaf.terminal.cursor_col();
         let alt_screen = leaf.terminal.is_alt_screen();
 
         let mut bytes = Vec::new();

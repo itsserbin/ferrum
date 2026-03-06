@@ -38,12 +38,12 @@ impl FerrumWindow {
                 return false;
             };
             let (start, end) = selection.normalized();
-            let cursor_abs_row = leaf.terminal.screen.scrollback_len() + leaf.terminal.cursor_row;
+            let cursor_abs_row = leaf.terminal.screen.scrollback_len() + leaf.terminal.cursor_row();
             if start.abs_row != end.abs_row || start.abs_row != cursor_abs_row {
                 return false;
             }
 
-            (leaf.terminal.cursor_col, start.col, end.col)
+            (leaf.terminal.cursor_col(), start.col, end.col)
         };
 
         let target_col = if use_backspace {
@@ -158,7 +158,7 @@ impl FerrumWindow {
                 return false;
             }
 
-            let cursor_col = leaf.terminal.cursor_col.min(grid_cols);
+            let cursor_col = leaf.terminal.cursor_col().min(grid_cols);
             let target_col = if use_backspace {
                 Self::word_motion_target_col_from_leaf(leaf, cursor_col, HorizontalMotion::Left)
             } else {

@@ -286,8 +286,8 @@ pub(in crate::gui::events) fn draw_frame_content(
                     if cursor_should_draw(params, leaf, is_focused) {
                         renderer.draw_cursor_in_rect(
                             &mut target,
-                            leaf.terminal.cursor_row,
-                            leaf.terminal.cursor_col,
+                            leaf.terminal.cursor_row(),
+                            leaf.terminal.cursor_col(),
                             &leaf.terminal.screen,
                             leaf.terminal.cursor_style,
                             content,
@@ -330,8 +330,8 @@ pub(in crate::gui::events) fn draw_frame_content(
                 if cursor_should_draw(params, leaf, true) {
                     renderer.draw_cursor(
                         &mut target,
-                        leaf.terminal.cursor_row,
-                        leaf.terminal.cursor_col,
+                        leaf.terminal.cursor_row(),
+                        leaf.terminal.cursor_col(),
                         &leaf.terminal.screen,
                         leaf.terminal.cursor_style,
                     );

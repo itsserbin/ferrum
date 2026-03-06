@@ -59,8 +59,8 @@ mod tests {
             abs_row: abs + 23,
             col: 40,
         });
-        assert_eq!(list.pin_coord(&pin).abs_row, abs + 23);
-        assert_eq!(list.pin_coord(&pin).col, 40);
+        assert_eq!(pin.coord().abs_row, abs + 23);
+        assert_eq!(pin.coord().col, 40);
     }
 
     #[test]
@@ -81,7 +81,7 @@ mod tests {
             col: 5,
         });
         list.set_pin_col(&pin, 0);
-        assert_eq!(list.pin_coord(&pin).col, 0);
+        assert_eq!(pin.coord().col, 0);
     }
 
     #[test]
@@ -97,6 +97,6 @@ mod tests {
         });
         list.set_pin_col(&pin_a, 0);
         // pin_b is unaffected.
-        assert_eq!(list.pin_coord(&pin_b).col, 20);
+        assert_eq!(pin_b.coord().col, 20);
     }
 }
