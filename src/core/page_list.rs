@@ -128,6 +128,7 @@ impl PageList {
             *cell = GraphemeCell::default();
         }
         row_mut.wrapped = false;
+        row_mut.written_cols = 0;
         if let Some(evicted_row) = evicted {
             self.push_to_scrollback(evicted_row);
         }
@@ -143,6 +144,7 @@ impl PageList {
             *cell = GraphemeCell::default();
         }
         row_mut.wrapped = false;
+        row_mut.written_cols = 0;
     }
 
     /// Append a row to the scrollback buffer, evicting the oldest row if full.
@@ -291,9 +293,12 @@ impl PageList {
         let (logical_lines, cursor_line_idx) = self.collect_logical_lines(cursor_pin);
         let (rewrapped, cursor_row_in_rewrapped) =
             rewrap_lines(&logical_lines, new_cols, cursor_line_idx);
-        self.rebuild_from_rows(rewrapped, new_rows, new_cols);
+        let skip = self.rebuild_from_rows(rewrapped, new_rows, new_cols);
         if let Some(vrow) = cursor_row_in_rewrapped {
-            let abs = self.viewport_start_abs() + vrow;
+            // `vrow` is the index of the cursor row in the `rewrapped` Vec.
+            // `rebuild_from_rows` discards the first `skip` rows (too old for scrollback),
+            // so the correct abs index in the rebuilt buffer is `vrow - skip`.
+            let abs = vrow.saturating_sub(skip);
             cursor_pin.set_coord(PageCoord { abs_row: abs, col: 0 });
         }
     }
@@ -349,7 +354,12 @@ impl PageList {
         (lines, cursor_line_idx)
     }
 
-    fn rebuild_from_rows(&mut self, rows: Vec<PageRow>, new_rows: usize, new_cols: usize) {
+    /// Rebuilds the buffer from `rows` for the given new dimensions.
+    ///
+    /// Returns `skip`: the number of leading rows discarded because they are
+    /// too old to fit even in scrollback.  The caller uses this to map a
+    /// `rewrapped`-Vec index back to an abs index in the rebuilt buffer.
+    fn rebuild_from_rows(&mut self, rows: Vec<PageRow>, new_rows: usize, new_cols: usize) -> usize {
         let total = rows.len();
         let grid_offset = total.saturating_sub(new_rows);
         let scrollback_count = grid_offset.min(self.max_scrollback);
@@ -377,6 +387,7 @@ impl PageList {
         for _ in placed..new_rows {
             self.append_row(PageRow::new(new_cols));
         }
+        skip
     }
 }
 
