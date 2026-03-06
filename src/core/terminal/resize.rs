@@ -13,6 +13,15 @@ impl super::Terminal {
 
         let old_cols = self.screen.cols();
         if old_cols != cols && self.alt_screen.is_none() {
+            // Sync cursor_pin to the current cursor position before reflow.
+            // The pin is not updated during ordinary scrolling or cursor
+            // movement — only at resize boundaries — so it may be stale.
+            // Without this sync, reflow finds the cursor at the wrong row and
+            // the shell redraws its prompt at the wrong position after SIGWINCH.
+            let cur_abs = self.screen.viewport_start_abs() + self.cursor_row;
+            self.screen.set_pin_abs_row(&self.cursor_pin, cur_abs);
+            self.screen.set_pin_col(&self.cursor_pin, self.cursor_col);
+
             // Reflow resize: run grapheme-aware reflow on the PageList directly.
             self.screen.reflow(rows, cols, &self.cursor_pin);
             self.update_cursor_after_resize(rows, cols);
