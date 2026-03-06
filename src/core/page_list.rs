@@ -233,13 +233,18 @@ impl PageList {
     /// with the shell's internal cursor tracking (readline / zsh compute relative
     /// movements from their own state; forcing col=0 would desynchronise them).
     pub fn reflow(&mut self, new_rows: usize, new_cols: usize, cursor_pin: &TrackedPin) {
+        // Save the cursor's physical row before rebuilding the buffer.
+        // It is placed at the bottom of the rebuilt viewport (truncated to
+        // new_cols) so the active input line stays visible during resize —
+        // matching native terminal behavior.  The shell redraws the full
+        // prompt after SIGWINCH; we only need to keep it visible, not correct.
+        let cursor_physical_row = self.abs_row(cursor_pin.coord().abs_row).clone();
+
         let (mut logical_lines, cursor_info) = self.collect_logical_lines(cursor_pin);
 
-        // The cursor's logical line (the active shell prompt/input) is not reflowed.
-        // The shell redraws it after SIGWINCH anyway, so reflowing it only causes
-        // the prompt to appear duplicated when the shell redraws from the wrong
-        // position. We truncate at the cursor's line index and place a blank cursor
-        // row at the bottom of the rebuilt viewport instead.
+        // The cursor's logical line is excluded from reflow: the shell redraws
+        // it after SIGWINCH anyway, and reflowing it causes the prompt to appear
+        // duplicated when the shell redraws from the wrong position.
         let cursor_new_col = if let Some(ref ci) = cursor_info {
             logical_lines.truncate(ci.line_idx);
             ci.col_in_line.min(new_cols.saturating_sub(1))
@@ -253,9 +258,13 @@ impl PageList {
         let rows_for_content = new_rows.saturating_sub(1);
         self.rebuild_from_rows(rewrapped, rows_for_content, new_cols, None);
 
-        // Append a blank cursor row as the last viewport row and extend
-        // viewport_rows to the full new height.
-        self.append_row(PageRow::new(new_cols));
+        // Append the cursor's physical row (truncated to new_cols) as the last
+        // viewport row.  This keeps the active input line visible during resize.
+        let mut cursor_row = cursor_physical_row;
+        cursor_row.cells.resize(new_cols, GraphemeCell::default());
+        cursor_row.written_cols = cursor_row.written_cols.min(new_cols);
+        cursor_row.wrapped = false;
+        self.append_row(cursor_row);
         self.viewport_rows = new_rows;
 
         let cursor_abs = self.scrollback.len() + new_rows.saturating_sub(1);
@@ -677,13 +686,14 @@ mod tests {
         // 5-col terminal, 4 rows. Row 2 has "ABCDE" (content above cursor).
         // Cursor on row 3 (blank). After reflow to 2 cols:
         // "ABCDE" must be reflowed into rows above the cursor.
-        // The last row (cursor row) must be blank.
+        // The last row (cursor row) preserves its physical content — here it was
+        // blank, so the last row is still blank.
         let mut list = PageList::new(4, 5, 100);
         fill_viewport_row(&mut list, 2, "ABCDE");
         let cursor_abs = list.viewport_start_abs() + 3; // blank row after content
         let pin = list.pin_at(PageCoord { abs_row: cursor_abs, col: 0 });
         list.reflow(4, 2, &pin);
-        // Cursor row (last row) must be blank.
+        // Cursor row (last row) was blank — stays blank after reflow.
         assert!(list.viewport_get(3, 0).is_default(), "cursor row must be blank after reflow");
         // "ABCDE" rewraps to ["AB"(wrapped), "CD"(wrapped), "E"] = 3 rows.
         // 3 content rows fit directly into rows_for_content=3; no scrollback spill.
@@ -712,21 +722,26 @@ mod tests {
     #[test]
     fn reflow_narrow_does_not_duplicate_prompt() {
         // Simulates narrow resize: "PROMPT" is on the last row (cursor here).
-        // After reflow to 2 cols the prompt must NOT appear in the viewport —
-        // the shell redraws it after SIGWINCH, so any duplicate causes visual
-        // corruption.
+        // After reflow to 2 cols the cursor row keeps its content (truncated to
+        // "PR"), but rows above the cursor must be blank — no duplication.
         let mut list = PageList::new(4, 6, 100);
         fill_viewport_row(&mut list, 3, "PROMPT");
         let cursor_abs = list.viewport_start_abs() + 3;
         let pin = list.pin_at(PageCoord { abs_row: cursor_abs, col: 6 });
         list.reflow(4, 2, &pin);
-        // Every viewport row must be blank — no prompt content duplicated.
-        for vrow in 0..list.viewport_rows() {
+        // Rows above cursor must be blank — no duplicate prompt content.
+        for vrow in 0..list.viewport_rows() - 1 {
             assert!(
                 list.viewport_get(vrow, 0).is_default(),
                 "row {vrow} col 0 must be blank — no duplicate prompt content"
             );
         }
+        // Cursor row (last) keeps truncated content.
+        assert_eq!(
+            list.viewport_get(3, 0).grapheme(),
+            "P",
+            "cursor row must show truncated prompt content"
+        );
         // Cursor at last viewport row.
         assert_eq!(
             pin.coord().abs_row,
