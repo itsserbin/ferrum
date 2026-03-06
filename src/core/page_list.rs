@@ -228,28 +228,96 @@ impl PageList {
 
     /// Reflow all content (scrollback + viewport) to new dimensions.
     ///
-    /// After reflow, `cursor_pin` is updated to the cursor's actual position in
-    /// the reflowed buffer: the correct physical row and the correct column within
-    /// that row.  Preserving the real column keeps the terminal in sync with the
-    /// shell's internal cursor tracking (readline/zsh use relative movements based
-    /// on their own state; forcing col=0 would desynchronise them and cause
-    /// overwrites on the next SIGWINCH-triggered redraw).
+    /// After reflow, `cursor_pin` is updated to the cursor's position in the
+    /// reflowed buffer.  The column is preserved so the terminal stays in sync
+    /// with the shell's internal cursor tracking (readline / zsh compute relative
+    /// movements from their own state; forcing col=0 would desynchronise them).
+    ///
+    /// **Narrow resize** (`new_cols < old_cols`):
+    ///   • If the cursor's logical line carries content (shell prompt or active
+    ///     input), all rewrapped rows are pushed into scrollback and the viewport
+    ///     is left blank.  The blank rows preceding the cursor are flagged
+    ///     `wrapped=true` so they collapse into a single logical unit on the
+    ///     next reflow, preventing spurious blank logical lines from accumulating
+    ///     across repeated resize cycles.  This eliminates the duplicate-prompt
+    ///     glitch: the shell redraws the prompt after SIGWINCH anyway.
+    ///   • If the cursor's logical line is blank (cursor is parked on an empty
+    ///     row after output), pre-cursor content fills the viewport from the
+    ///     bottom up, keeping visible output in view.
+    ///
+    /// **Wide / equal resize** (`new_cols >= old_cols`):
+    ///   Reflow all logical lines with `grid_offset = 0` so content fills the
+    ///   viewport from the top without unnecessary scrollback spill.
     pub fn reflow(&mut self, new_rows: usize, new_cols: usize, cursor_pin: &TrackedPin) {
+        let is_narrow = new_cols < self.cols;
         let (logical_lines, cursor_info) = self.collect_logical_lines(cursor_pin);
-        let (rewrapped, cursor_pos) = rewrap_lines(&logical_lines, new_cols, cursor_info);
-        let skip = self.rebuild_from_rows(
-            rewrapped,
-            new_rows,
-            new_cols,
-            cursor_pos.as_ref().map(|p| p.row),
-        );
-        if let Some(pos) = cursor_pos {
-            // `pos.row` is the index of the cursor row in the `rewrapped` Vec.
-            // `rebuild_from_rows` discards the first `skip` rows (too old for scrollback),
-            // so the correct abs index in the rebuilt buffer is `pos.row - skip`.
-            let abs = pos.row.saturating_sub(skip);
-            cursor_pin.set_coord(PageCoord { abs_row: abs, col: pos.col });
+
+        let cursor_new_col = cursor_info
+            .as_ref()
+            .map_or_else(
+                || cursor_pin.coord().col.min(new_cols.saturating_sub(1)),
+                |ci| ci.col_in_line.min(new_cols.saturating_sub(1)),
+            );
+
+        let cursor_line_has_content = cursor_info.as_ref().is_some_and(|ci| {
+            logical_lines.get(ci.line_idx).is_some_and(|l| line_content_len(l) > 0)
+        });
+
+        if is_narrow && cursor_line_has_content {
+            // Narrow resize with active content on the cursor's line.
+            // Push all rewrapped rows into scrollback; leave the viewport blank.
+            let rewrapped = rewrap_lines(&logical_lines, new_cols);
+            let rows_for_content = new_rows.saturating_sub(1);
+
+            // cursor_row_in_rows must be large enough to make grid_offset equal to
+            // rewrapped.len(), so every row ends up in scrollback.
+            let anchor = rewrapped.len() + rows_for_content.saturating_sub(1);
+            self.rebuild_from_rows(rewrapped, rows_for_content, new_cols, Some(anchor));
+
+            // Mark the blank padding rows as wrapped so they merge into one logical
+            // unit with the cursor on the next reflow.  Without this they become
+            // separate blank logical lines that accumulate and push real content into
+            // scrollback across repeated narrow→wide resize cycles.
+            for vrow in 0..rows_for_content {
+                self.viewport_row_mut(vrow).wrapped = true;
+            }
+            self.append_row(PageRow::new(new_cols)); // cursor row (not wrapped)
+            self.viewport_rows = new_rows;
+        } else if !is_narrow {
+            // Wide / equal resize: reflow everything and fill the viewport from
+            // the top (grid_offset = 0).
+            let rewrapped = rewrap_lines(&logical_lines, new_cols);
+            self.rebuild_from_rows(
+                rewrapped,
+                new_rows,
+                new_cols,
+                Some(new_rows.saturating_sub(1)),
+            );
+            self.viewport_rows = new_rows;
+        } else {
+            // Narrow resize with blank cursor line: keep pre-cursor content visible.
+            let mut logical_lines = logical_lines;
+            if let Some(ref ci) = cursor_info {
+                logical_lines.truncate(ci.line_idx);
+            }
+            let rewrapped = rewrap_lines(&logical_lines, new_cols);
+            let rows_for_content = new_rows.saturating_sub(1);
+
+            if rows_for_content == 0 {
+                // Single viewport row: cursor occupies it directly.
+                self.rebuild_from_rows(rewrapped, new_rows, new_cols, None);
+            } else {
+                // Anchor so content fills the content area from the bottom up.
+                let anchor =
+                    rewrapped.len().saturating_sub(rows_for_content).saturating_add(1);
+                self.rebuild_from_rows(rewrapped, rows_for_content, new_cols, Some(anchor));
+                self.append_row(PageRow::new(new_cols)); // blank cursor row
+            }
+            self.viewport_rows = new_rows;
         }
+
+        let cursor_abs = self.scrollback.len() + new_rows.saturating_sub(1);
+        cursor_pin.set_coord(PageCoord { abs_row: cursor_abs, col: cursor_new_col });
     }
 
     /// Returns `(logical_lines, cursor_info)` where `cursor_info` is the cursor's
@@ -386,13 +454,6 @@ struct LogicalLine {
     min_len: usize,
 }
 
-/// Cursor position in the rewrapped row buffer: `row` is the index into the
-/// `Vec<PageRow>` returned by `rewrap_lines`, `col` is the column within that row.
-struct ReflowPos {
-    row: usize,
-    col: usize,
-}
-
 /// Cursor location within the logical-line representation produced by
 /// `collect_logical_lines`: `line_idx` is the index into the `Vec<LogicalLine>`,
 /// `col_in_line` is the column offset within that logical line.
@@ -401,34 +462,19 @@ struct CursorLineInfo {
     col_in_line: usize,
 }
 
-fn rewrap_lines(
-    lines: &[LogicalLine],
-    new_cols: usize,
-    cursor_info: Option<CursorLineInfo>,
-) -> (Vec<PageRow>, Option<ReflowPos>) {
+fn rewrap_lines(lines: &[LogicalLine], new_cols: usize) -> Vec<PageRow> {
     let mut rewrapped: Vec<PageRow> = Vec::new();
-    let mut cursor_rewrapped_pos: Option<ReflowPos> = None;
 
-    for (line_idx, line) in lines.iter().enumerate() {
+    for line in lines.iter() {
         let len = line_content_len(line);
-        let cursor_col_in_line = cursor_info
-            .as_ref()
-            .and_then(|ci| if ci.line_idx == line_idx { Some(ci.col_in_line) } else { None });
 
         if len == 0 {
-            if let Some(ccol) = cursor_col_in_line {
-                cursor_rewrapped_pos = Some(ReflowPos { row: rewrapped.len(), col: ccol });
-            }
             rewrapped.push(PageRow::new(new_cols));
             continue;
         }
 
         let content = &line.cells[..len];
         let mut pos = 0;
-        // Tracks the number of columns covered by all physical rows placed so
-        // far for *this* logical line. Used to detect which physical row
-        // contains the cursor's column-in-line position.
-        let mut cols_before_row = 0usize;
 
         while pos < content.len() {
             let mut col_count = 0usize;
@@ -448,21 +494,6 @@ fn rewrap_lines(
                 end += 1;
             }
             let wrapped = end < content.len();
-
-            // Determine whether the cursor falls in this physical row.
-            // The row spans columns [cols_before_row, cols_before_row + col_count).
-            // On the last row (wrapped=false) the cursor lands here if it hasn't
-            // been placed yet (handles cursors past the end of visible content).
-            if let Some(ccol) = cursor_col_in_line
-                && cursor_rewrapped_pos.is_none()
-            {
-                let in_range = ccol < cols_before_row + col_count;
-                if in_range || !wrapped {
-                    let col_in_row = ccol.saturating_sub(cols_before_row);
-                    cursor_rewrapped_pos =
-                        Some(ReflowPos { row: rewrapped.len(), col: col_in_row });
-                }
-            }
 
             // Build the physical row for this slice.
             let mut cells: Vec<GraphemeCell> = Vec::with_capacity(new_cols);
@@ -489,7 +520,6 @@ fn rewrap_lines(
             cells.resize(new_cols, GraphemeCell::default());
             rewrapped.push(PageRow::from_cells(cells, wrapped));
 
-            cols_before_row += col_count;
             // Advance pos, skipping any trailing spacers.
             pos = end;
             while pos < content.len() && content[pos].width == 0 {
@@ -497,7 +527,7 @@ fn rewrap_lines(
             }
         }
     }
-    (rewrapped, cursor_rewrapped_pos)
+    rewrapped
 }
 
 fn line_content_len(line: &LogicalLine) -> usize {
