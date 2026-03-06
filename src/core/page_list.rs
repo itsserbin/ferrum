@@ -1,10 +1,14 @@
+use std::collections::VecDeque;
+
 use crate::core::tracked_pin::{PageCoord, TrackedPin};
 use crate::core::{GraphemeCell, Page, PageRow, PAGE_SIZE};
 
 pub struct PageList {
+    /// Scrollback ring buffer: oldest row at the front, newest at the back.
+    /// Stored separately from the viewport so eviction is O(1).
+    scrollback: VecDeque<PageRow>,
+    /// Viewport rows only.  Physical page index 0 corresponds to viewport row 0.
     pages: Vec<Page>,
-    free_list: Vec<Page>,
-    pub scrollback_count: usize,
     viewport_rows: usize,
     cols: usize,
     max_scrollback: usize,
@@ -13,9 +17,8 @@ pub struct PageList {
 impl PageList {
     pub fn new(viewport_rows: usize, cols: usize, max_scrollback: usize) -> Self {
         let mut list = Self {
+            scrollback: VecDeque::new(),
             pages: Vec::new(),
-            free_list: Vec::new(),
-            scrollback_count: 0,
             viewport_rows,
             cols,
             max_scrollback,
@@ -35,34 +38,33 @@ impl PageList {
     }
 
     pub fn scrollback_len(&self) -> usize {
-        self.scrollback_count
+        self.scrollback.len()
     }
 
     pub fn total_rows(&self) -> usize {
-        self.scrollback_count + self.viewport_rows
-    }
-
-    /// Convert absolute row index to (page_idx, row_within_page).
-    fn abs_to_page(&self, abs_row: usize) -> (usize, usize) {
-        (abs_row / PAGE_SIZE, abs_row % PAGE_SIZE)
+        self.scrollback.len() + self.viewport_rows
     }
 
     /// Absolute index of the first viewport row.
     pub fn viewport_start_abs(&self) -> usize {
-        self.scrollback_count
+        self.scrollback.len()
     }
 
-    // ── Viewport access ──────────────────────────────────────────────────────
+    // ── Internal: viewport row → (page_idx, row_within_page) ─────────────────
+
+    fn vrow_to_page(vrow: usize) -> (usize, usize) {
+        (vrow / PAGE_SIZE, vrow % PAGE_SIZE)
+    }
+
+    // ── Viewport access ───────────────────────────────────────────────────────
 
     pub fn viewport_get(&self, row: usize, col: usize) -> &GraphemeCell {
-        let abs = self.viewport_start_abs() + row;
-        let (pi, ri) = self.abs_to_page(abs);
+        let (pi, ri) = Self::vrow_to_page(row);
         &self.pages[pi].row(ri).cells[col]
     }
 
     pub fn viewport_set(&mut self, row: usize, col: usize, cell: GraphemeCell) {
-        let abs = self.viewport_start_abs() + row;
-        let (pi, ri) = self.abs_to_page(abs);
+        let (pi, ri) = Self::vrow_to_page(row);
         let page_row = self.pages[pi].row_mut(ri);
         page_row.cells[col] = cell;
         // Track the highest column written so reflow can distinguish real content
@@ -73,14 +75,12 @@ impl PageList {
     }
 
     pub fn viewport_row(&self, row: usize) -> &PageRow {
-        let abs = self.viewport_start_abs() + row;
-        let (pi, ri) = self.abs_to_page(abs);
+        let (pi, ri) = Self::vrow_to_page(row);
         self.pages[pi].row(ri)
     }
 
     pub fn viewport_row_mut(&mut self, row: usize) -> &mut PageRow {
-        let abs = self.viewport_start_abs() + row;
-        let (pi, ri) = self.abs_to_page(abs);
+        let (pi, ri) = Self::vrow_to_page(row);
         self.pages[pi].row_mut(ri)
     }
 
@@ -92,12 +92,13 @@ impl PageList {
         self.viewport_row_mut(row).wrapped = wrapped;
     }
 
-    // ── Scrollback access ────────────────────────────────────────────────────
+    // ── Scrollback access ─────────────────────────────────────────────────────
 
     pub fn scrollback_row(&self, idx: usize) -> &PageRow {
-        let (pi, ri) = self.abs_to_page(idx);
-        self.pages[pi].row(ri)
+        &self.scrollback[idx]
     }
+
+    // ── Copy / scroll within viewport ─────────────────────────────────────────
 
     /// Copy a viewport row to another viewport row.
     pub fn viewport_copy_row(&mut self, src_row: usize, dst_row: usize) {
@@ -135,45 +136,23 @@ impl PageList {
         self.viewport_row_mut(top).clear();
     }
 
-    /// Append a row to the scrollback buffer, evicting the oldest row if full.
+    /// Push a row into the scrollback ring buffer.  O(1) amortized.
+    ///
+    /// When the buffer is at capacity the oldest row is evicted before the
+    /// new row is inserted — no data is shifted.
     pub fn push_to_scrollback(&mut self, row: PageRow) {
-        if self.scrollback_count >= self.max_scrollback {
-            // Buffer is full: evict the oldest scrollback row (abs index 0)
-            // by shifting all scrollback rows left by one slot and placing
-            // the new row at the last scrollback slot.
-            debug_assert!(self.scrollback_count > 0, "max_scrollback must be > 0");
-            for i in 1..self.scrollback_count {
-                let src = self.abs_row(i).clone();
-                *self.abs_row_mut(i - 1) = src;
-            }
-            *self.abs_row_mut(self.scrollback_count - 1) = row;
-        } else {
-            // Buffer has space: insert the new row at the scrollback/viewport
-            // boundary (abs index = scrollback_count) so it becomes the newest
-            // scrollback row.  This requires shifting all viewport rows up by 1.
-            //
-            // Step 1: append a spare row at the physical end to make room.
-            //         The new spare is at abs index (scrollback_count + viewport_rows).
-            let spare_abs = self.scrollback_count + self.viewport_rows;
-            self.append_row(PageRow::new(self.cols));
-            // Step 2: rotate viewport rows one position forward (higher abs),
-            //         working from the end toward the boundary.
-            for i in (self.scrollback_count..spare_abs).rev() {
-                let src = self.abs_row(i).clone();
-                *self.abs_row_mut(i + 1) = src;
-            }
-            // Step 3: write the new scrollback row at the boundary slot.
-            *self.abs_row_mut(self.scrollback_count) = row;
-            // Step 4: increment scrollback_count; viewport_rows stays unchanged.
-            self.scrollback_count += 1;
+        if self.scrollback.len() >= self.max_scrollback {
+            self.scrollback.pop_front(); // evict oldest — O(1)
         }
+        self.scrollback.push_back(row); // O(1) amortized
     }
+
+    // ── Recolor ───────────────────────────────────────────────────────────────
 
     /// Apply a function to every cell in the current viewport.
     pub fn viewport_recolor<F: FnMut(&mut GraphemeCell)>(&mut self, mut f: F) {
         for vrow in 0..self.viewport_rows {
-            let abs = self.viewport_start_abs() + vrow;
-            let (pi, ri) = self.abs_to_page(abs);
+            let (pi, ri) = Self::vrow_to_page(vrow);
             for cell in &mut self.pages[pi].row_mut(ri).cells {
                 f(cell);
             }
@@ -182,37 +161,30 @@ impl PageList {
 
     /// Apply a function to every cell in the scrollback buffer.
     pub fn scrollback_recolor<F: FnMut(&mut GraphemeCell)>(&mut self, mut f: F) {
-        for sb_idx in 0..self.scrollback_count {
-            let (pi, ri) = self.abs_to_page(sb_idx);
-            for cell in &mut self.pages[pi].row_mut(ri).cells {
+        for row in &mut self.scrollback {
+            for cell in &mut row.cells {
                 f(cell);
             }
         }
     }
 
-    // ── Internal: append a row to the end ───────────────────────────────────
+    // ── Internal: append a viewport row at the end ────────────────────────────
 
     pub fn append_row(&mut self, row: PageRow) {
         if self.pages.last().map(|p| p.is_full()).unwrap_or(true) {
             self.alloc_page();
         }
-        // alloc_page always pushes a page, so pages is non-empty here.
+        debug_assert!(!self.pages.is_empty(), "pages non-empty after alloc_page");
         if let Some(page) = self.pages.last_mut() {
             page.push(row);
         }
     }
 
     fn alloc_page(&mut self) {
-        let page = self
-            .free_list
-            .pop()
-            .unwrap_or_else(|| *Page::new(self.cols));
-        // Verify the recycled or new page was allocated for the current column width.
-        debug_assert_eq!(page.cols, self.cols, "page column mismatch on alloc");
-        self.pages.push(page);
+        self.pages.push(Page::new());
     }
 
-    // ── Simple resize ────────────────────────────────────────────────────────
+    // ── Simple resize ─────────────────────────────────────────────────────────
 
     pub fn simple_resize(&mut self, new_rows: usize, new_cols: usize) {
         if new_rows > self.viewport_rows {
@@ -224,35 +196,35 @@ impl PageList {
         self.viewport_rows = new_rows;
         self.cols = new_cols;
         for vrow in 0..self.viewport_rows {
-            let abs = self.viewport_start_abs() + vrow;
-            let (pi, ri) = self.abs_to_page(abs);
+            let (pi, ri) = Self::vrow_to_page(vrow);
             let row = self.pages[pi].row_mut(ri);
             row.cells.resize(new_cols, GraphemeCell::default());
             row.written_cols = row.written_cols.min(new_cols);
         }
     }
 
-    // ── Abs-row access (for reflow, used by Task 5) ──────────────────────────
+    // ── Abs-row access (for reflow) ───────────────────────────────────────────
 
-    pub fn abs_row(&self, abs: usize) -> &PageRow {
-        let (pi, ri) = self.abs_to_page(abs);
-        self.pages[pi].row(ri)
+    fn abs_row(&self, abs: usize) -> &PageRow {
+        let sb_len = self.scrollback.len();
+        if abs < sb_len {
+            &self.scrollback[abs]
+        } else {
+            let vrow = abs - sb_len;
+            let (pi, ri) = Self::vrow_to_page(vrow);
+            self.pages[pi].row(ri)
+        }
     }
 
-    pub fn abs_row_mut(&mut self, abs: usize) -> &mut PageRow {
-        let (pi, ri) = self.abs_to_page(abs);
-        self.pages[pi].row_mut(ri)
-    }
+    // ── Pin management ────────────────────────────────────────────────────────
 
-    // ── Pin management ───────────────────────────────────────────────────────
-
-    /// Returns a new tracked pin at the given coordinate.
+    /// Creates a new pin at the given coordinate.
     /// Cloning the returned handle shares the same underlying coordinate.
-    pub fn register_pin(&mut self, coord: PageCoord) -> TrackedPin {
+    pub fn pin_at(&self, coord: PageCoord) -> TrackedPin {
         TrackedPin::new(coord)
     }
 
-    // ── Reflow ───────────────────────────────────────────────────────────────
+    // ── Reflow ────────────────────────────────────────────────────────────────
 
     /// Reflow all content (scrollback + viewport) to new dimensions.
     ///
@@ -264,9 +236,13 @@ impl PageList {
     /// overwrites on the next SIGWINCH-triggered redraw).
     pub fn reflow(&mut self, new_rows: usize, new_cols: usize, cursor_pin: &TrackedPin) {
         let (logical_lines, cursor_info) = self.collect_logical_lines(cursor_pin);
-        let (rewrapped, cursor_pos) =
-            rewrap_lines(&logical_lines, new_cols, cursor_info);
-        let skip = self.rebuild_from_rows(rewrapped, new_rows, new_cols, cursor_pos.as_ref().map(|p| p.row));
+        let (rewrapped, cursor_pos) = rewrap_lines(&logical_lines, new_cols, cursor_info);
+        let skip = self.rebuild_from_rows(
+            rewrapped,
+            new_rows,
+            new_cols,
+            cursor_pos.as_ref().map(|p| p.row),
+        );
         if let Some(pos) = cursor_pos {
             // `pos.row` is the index of the cursor row in the `rewrapped` Vec.
             // `rebuild_from_rows` discards the first `skip` rows (too old for scrollback),
@@ -318,7 +294,10 @@ impl PageList {
             }
             if !row.wrapped {
                 if cursor_in_current {
-                    cursor_info = Some(CursorLineInfo { line_idx: lines.len(), col_in_line: cursor_col_in_line });
+                    cursor_info = Some(CursorLineInfo {
+                        line_idx: lines.len(),
+                        col_in_line: cursor_col_in_line,
+                    });
                     cursor_in_current = false;
                     cursor_col_in_line = 0;
                 }
@@ -331,7 +310,10 @@ impl PageList {
         }
         if !current.is_empty() {
             if cursor_in_current {
-                cursor_info = Some(CursorLineInfo { line_idx: lines.len(), col_in_line: cursor_col_in_line });
+                cursor_info = Some(CursorLineInfo {
+                    line_idx: lines.len(),
+                    col_in_line: cursor_col_in_line,
+                });
             }
             lines.push(LogicalLine { cells: current, min_len: current_min_len });
         }
@@ -368,9 +350,8 @@ impl PageList {
         let scrollback_count = grid_offset.min(self.max_scrollback);
         let skip = grid_offset.saturating_sub(scrollback_count);
 
+        self.scrollback.clear();
         self.pages.clear();
-        self.free_list.clear();
-        self.scrollback_count = 0;
         self.viewport_rows = new_rows;
         self.cols = new_cols;
 
@@ -379,8 +360,7 @@ impl PageList {
         // rows become scrollback and the next `new_rows` become the viewport.
         let mut rows_iter = rows.into_iter().skip(skip);
         for row in rows_iter.by_ref().take(scrollback_count) {
-            self.append_row(row);
-            self.scrollback_count += 1;
+            self.scrollback.push_back(row);
         }
 
         // Viewport rows: take exactly new_rows rows.
@@ -399,7 +379,7 @@ impl PageList {
     }
 }
 
-// ── Reflow helpers ───────────────────────────────────────────────────────────
+// ── Reflow helpers ────────────────────────────────────────────────────────────
 
 struct LogicalLine {
     cells: Vec<GraphemeCell>,
@@ -479,7 +459,8 @@ fn rewrap_lines(
                 let in_range = ccol < cols_before_row + col_count;
                 if in_range || !wrapped {
                     let col_in_row = ccol.saturating_sub(cols_before_row);
-                    cursor_rewrapped_pos = Some(ReflowPos { row: rewrapped.len(), col: col_in_row });
+                    cursor_rewrapped_pos =
+                        Some(ReflowPos { row: rewrapped.len(), col: col_in_row });
                 }
             }
 
@@ -574,7 +555,32 @@ mod tests {
         assert_eq!(list.viewport_row(0).cells.len(), 8);
     }
 
-    // ── Reflow tests ─────────────────────────────────────────────────────
+    #[test]
+    fn push_to_scrollback_stays_within_max() {
+        let mut list = PageList::new(3, 5, 3);
+        // Push 5 rows into a scrollback capped at 3.
+        for i in 0..5u8 {
+            let mut row = PageRow::new(5);
+            row.cells[0] = GraphemeCell::from_char(char::from(b'A' + i));
+            list.push_to_scrollback(row);
+        }
+        assert_eq!(list.scrollback_len(), 3);
+        // Oldest 2 rows were evicted; only C, D, E remain.
+        assert_eq!(list.scrollback_row(0).cells[0].grapheme(), "C");
+        assert_eq!(list.scrollback_row(1).cells[0].grapheme(), "D");
+        assert_eq!(list.scrollback_row(2).cells[0].grapheme(), "E");
+    }
+
+    #[test]
+    fn scroll_up_region_pushes_to_scrollback() {
+        let mut list = PageList::new(3, 5, 100);
+        list.viewport_set(0, 0, GraphemeCell::from_char('X'));
+        list.scroll_up_region(0, 2, true);
+        assert_eq!(list.scrollback_len(), 1);
+        assert_eq!(list.scrollback_row(0).cells[0].grapheme(), "X");
+    }
+
+    // ── Reflow tests ──────────────────────────────────────────────────────────
 
     fn fill_viewport_row(list: &mut PageList, vrow: usize, text: &str) {
         for (col, ch) in text.chars().enumerate() {
@@ -584,14 +590,13 @@ mod tests {
 
     #[test]
     fn reflow_wraps_long_line_to_narrower_width() {
-        // 10-char logical line, reflow from 10 cols to 5 cols.
-        // Rows 0+1 form one logical line (row 0 wrapped=true).
         let mut list = PageList::new(3, 10, 100);
         fill_viewport_row(&mut list, 0, "ABCDE");
         fill_viewport_row(&mut list, 1, "FGHIJ");
-        list.viewport_set_wrapped(0, true); // row 0 continues on row 1
-        let cursor_abs = list.viewport_start_abs(); // row 0 of viewport
-        let pin = list.register_pin(PageCoord { abs_row: cursor_abs, col: 0 });
+        list.viewport_set_wrapped(0, true);
+        // Cursor on blank row 2 (after the content) — realistic shell position.
+        let cursor_abs = list.viewport_start_abs() + 2;
+        let pin = list.pin_at(PageCoord { abs_row: cursor_abs, col: 0 });
         list.reflow(3, 5, &pin);
         assert_eq!(list.viewport_get(0, 0).grapheme(), "A");
         assert_eq!(list.viewport_get(0, 4).grapheme(), "E");
@@ -609,25 +614,27 @@ mod tests {
         list.viewport_set(0, 2, GraphemeCell::from_char('日'));
         list.viewport_set(0, 3, GraphemeCell::spacer());
         list.viewport_set_wrapped(0, true);
-        let cursor_abs = list.viewport_start_abs();
-        let pin = list.register_pin(PageCoord { abs_row: cursor_abs, col: 0 });
+        // Cursor on blank row 2 (after the content).
+        let cursor_abs = list.viewport_start_abs() + 2;
+        let pin = list.pin_at(PageCoord { abs_row: cursor_abs, col: 0 });
         list.reflow(3, 3, &pin);
         assert_eq!(list.viewport_get(0, 0).grapheme(), "A");
         assert_eq!(list.viewport_get(0, 1).grapheme(), "B");
         assert_eq!(list.viewport_get(1, 0).grapheme(), "日");
-        assert_eq!(list.viewport_get(1, 1).width, 0); // spacer
+        assert_eq!(list.viewport_get(1, 1).width, 0);
     }
 
     #[test]
     fn reflow_cursor_pin_preserves_col_after_reflow() {
-        // "Hello" (5 chars) in a 10-col terminal, cursor after last char (col 5).
-        // Reflow to 5 cols: "Hello" still fits in one row; cursor stays at col 5.
+        // "Hello" (5 chars) in a 10-col terminal.
+        // Cursor is on the blank row after content, at col 5.
+        // After reflow to 5 cols: cursor col is clamped to new_cols-1 = 4.
         let mut list = PageList::new(3, 10, 100);
         fill_viewport_row(&mut list, 0, "Hello");
-        let cursor_abs = list.viewport_start_abs();
-        let pin = list.register_pin(PageCoord { abs_row: cursor_abs, col: 5 });
+        let cursor_abs = list.viewport_start_abs() + 2; // blank row after content
+        let pin = list.pin_at(PageCoord { abs_row: cursor_abs, col: 5 });
         list.reflow(3, 5, &pin);
-        assert_eq!(pin.coord().col, 5);
+        assert_eq!(pin.coord().col, 4);
     }
 
     #[test]
@@ -636,20 +643,19 @@ mod tests {
         //   Row 0: "hello " (wrapped=true)  ← trailing space is a default cell
         //   Row 1: "world " (not wrapped)
         // After reflow to cols=11 it should be "hello world", not "helloworld".
-        let mut list = PageList::new(2, 6, 100);
+        let mut list = PageList::new(3, 6, 100); // 3 rows: content + content + cursor
         fill_viewport_row(&mut list, 0, "hello ");
         fill_viewport_row(&mut list, 1, "world ");
         list.viewport_set_wrapped(0, true);
-        let cursor_abs = list.viewport_start_abs();
-        let pin = list.register_pin(PageCoord { abs_row: cursor_abs, col: 0 });
+        let cursor_abs = list.viewport_start_abs() + 2; // blank cursor row
+        let pin = list.pin_at(PageCoord { abs_row: cursor_abs, col: 0 });
         list.reflow(1, 11, &pin);
-        let mut result = String::new();
-        for col in 0..5 {
-            result.push_str(list.viewport_get(0, col).grapheme());
-        }
-        // "hello" at cols 0-4, space at col 5, "world" at cols 6-10.
         assert_eq!(list.viewport_get(0, 4).grapheme(), "o", "col 4 should be 'o'");
-        assert_eq!(list.viewport_get(0, 5).grapheme(), " ", "space between words must survive reflow");
+        assert_eq!(
+            list.viewport_get(0, 5).grapheme(),
+            " ",
+            "space between words must survive reflow"
+        );
         assert_eq!(list.viewport_get(0, 6).grapheme(), "w", "col 6 should be 'w'");
     }
 
@@ -659,16 +665,28 @@ mod tests {
         //   Row 0: "   " (3 spaces, wrapped=true)  ← all default cells
         //   Row 1: "ABC" (not wrapped)
         // After reflow to cols=6 it should be "   ABC", not "ABC".
-        let mut list = PageList::new(2, 3, 100);
+        let mut list = PageList::new(3, 3, 100); // 3 rows: content + content + cursor
         fill_viewport_row(&mut list, 0, "   ");
         fill_viewport_row(&mut list, 1, "ABC");
         list.viewport_set_wrapped(0, true);
-        let cursor_abs = list.viewport_start_abs();
-        let pin = list.register_pin(PageCoord { abs_row: cursor_abs, col: 0 });
+        let cursor_abs = list.viewport_start_abs() + 2; // blank cursor row
+        let pin = list.pin_at(PageCoord { abs_row: cursor_abs, col: 0 });
         list.reflow(1, 6, &pin);
-        assert_eq!(list.viewport_get(0, 0).grapheme(), " ", "leading space 0 must survive reflow");
-        assert_eq!(list.viewport_get(0, 1).grapheme(), " ", "leading space 1 must survive reflow");
-        assert_eq!(list.viewport_get(0, 2).grapheme(), " ", "leading space 2 must survive reflow");
+        assert_eq!(
+            list.viewport_get(0, 0).grapheme(),
+            " ",
+            "leading space 0 must survive reflow"
+        );
+        assert_eq!(
+            list.viewport_get(0, 1).grapheme(),
+            " ",
+            "leading space 1 must survive reflow"
+        );
+        assert_eq!(
+            list.viewport_get(0, 2).grapheme(),
+            " ",
+            "leading space 2 must survive reflow"
+        );
         assert_eq!(list.viewport_get(0, 3).grapheme(), "A");
         assert_eq!(list.viewport_get(0, 4).grapheme(), "B");
         assert_eq!(list.viewport_get(0, 5).grapheme(), "C");
@@ -678,9 +696,9 @@ mod tests {
     fn reflow_empty_line_produces_blank_row() {
         let mut list = PageList::new(3, 10, 100);
         let cursor_abs = list.viewport_start_abs();
-        let pin = list.register_pin(PageCoord { abs_row: cursor_abs, col: 0 });
+        let pin = list.pin_at(PageCoord { abs_row: cursor_abs, col: 0 });
         list.reflow(3, 5, &pin);
         assert_eq!(list.viewport_rows(), 3);
-        assert!(list.viewport_get(0, 0).is_default());
+        assert!(list.viewport_get(2, 0).is_default()); // cursor row is last row, blank
     }
 }
