@@ -65,7 +65,13 @@ impl PageList {
     pub fn viewport_set(&mut self, row: usize, col: usize, cell: GraphemeCell) {
         let abs = self.viewport_start_abs() + row;
         let (pi, ri) = self.abs_to_page(abs);
-        self.pages[pi].get_mut(ri).cells[col] = cell;
+        let page_row = self.pages[pi].get_mut(ri);
+        page_row.cells[col] = cell;
+        // Track the highest column written so reflow can distinguish real content
+        // from unwritten padding at the end of soft-wrapped rows.
+        if col + 1 > page_row.written_cols {
+            page_row.written_cols = col + 1;
+        }
     }
 
     pub fn viewport_row(&self, row: usize) -> &PageRow {
@@ -233,6 +239,7 @@ impl PageList {
             let (pi, ri) = self.abs_to_page(abs);
             let row = self.pages[pi].get_mut(ri);
             row.cells.resize(new_cols, GraphemeCell::default());
+            row.written_cols = row.written_cols.min(new_cols);
         }
     }
 
@@ -304,17 +311,17 @@ impl PageList {
             let row = self.abs_row(abs_row);
             let line_start = current.len();
             if row.wrapped {
-                // Strip trailing default cells from wrapped rows — they are padding
-                // to fill the terminal width, not content. Only retain real content
-                // so that rewrapping doesn't re-insert blank physical rows.
-                let content_end = row
-                    .cells
-                    .iter()
-                    .rposition(|c| !c.is_default())
-                    .map(|i| i + 1)
-                    .unwrap_or(0);
-                current.extend_from_slice(&row.cells[..content_end]);
+                // For soft-wrapped rows use `written_cols` as the content boundary.
+                // Cells beyond `written_cols` are unwritten padding (e.g. the last
+                // cell left blank when a wide char couldn't fit). Using `written_cols`
+                // here preserves intentional spaces — inter-word gaps and leading
+                // indentation — that happen to fall at a wrap boundary, while still
+                // excluding trailing unwritten padding.
+                let take = row.written_cols.min(row.cells.len());
+                current.extend_from_slice(&row.cells[..take]);
             } else {
+                // Non-wrapped rows: copy all cells; `line_content_len` handles
+                // trailing-default trimming at the logical-line level.
                 current.extend_from_slice(&row.cells);
             }
             if abs_row == cursor_abs {
@@ -559,6 +566,50 @@ mod tests {
         let pin = list.register_pin(PageCoord { abs_row: cursor_abs, col: 5 });
         list.reflow(3, 5, &pin);
         assert_eq!(list.pin_coord(&pin).col, 0);
+    }
+
+    #[test]
+    fn reflow_preserves_inter_word_space_at_wrap_boundary() {
+        // "hello world" (11 chars) at cols=6 wraps as:
+        //   Row 0: "hello " (wrapped=true)  ← trailing space is a default cell
+        //   Row 1: "world " (not wrapped)
+        // After reflow to cols=11 it should be "hello world", not "helloworld".
+        let mut list = PageList::new(2, 6, 100);
+        fill_viewport_row(&mut list, 0, "hello ");
+        fill_viewport_row(&mut list, 1, "world ");
+        list.viewport_set_wrapped(0, true);
+        let cursor_abs = list.viewport_start_abs();
+        let pin = list.register_pin(PageCoord { abs_row: cursor_abs, col: 0 });
+        list.reflow(1, 11, &pin);
+        let mut result = String::new();
+        for col in 0..5 {
+            result.push_str(list.viewport_get(0, col).grapheme());
+        }
+        // "hello" at cols 0-4, space at col 5, "world" at cols 6-10.
+        assert_eq!(list.viewport_get(0, 4).grapheme(), "o", "col 4 should be 'o'");
+        assert_eq!(list.viewport_get(0, 5).grapheme(), " ", "space between words must survive reflow");
+        assert_eq!(list.viewport_get(0, 6).grapheme(), "w", "col 6 should be 'w'");
+    }
+
+    #[test]
+    fn reflow_preserves_leading_indentation_at_wrap_boundary() {
+        // "   ABC" (3-space indent + ABC = 6 chars) at cols=3 wraps as:
+        //   Row 0: "   " (3 spaces, wrapped=true)  ← all default cells
+        //   Row 1: "ABC" (not wrapped)
+        // After reflow to cols=6 it should be "   ABC", not "ABC".
+        let mut list = PageList::new(2, 3, 100);
+        fill_viewport_row(&mut list, 0, "   ");
+        fill_viewport_row(&mut list, 1, "ABC");
+        list.viewport_set_wrapped(0, true);
+        let cursor_abs = list.viewport_start_abs();
+        let pin = list.register_pin(PageCoord { abs_row: cursor_abs, col: 0 });
+        list.reflow(1, 6, &pin);
+        assert_eq!(list.viewport_get(0, 0).grapheme(), " ", "leading space 0 must survive reflow");
+        assert_eq!(list.viewport_get(0, 1).grapheme(), " ", "leading space 1 must survive reflow");
+        assert_eq!(list.viewport_get(0, 2).grapheme(), " ", "leading space 2 must survive reflow");
+        assert_eq!(list.viewport_get(0, 3).grapheme(), "A");
+        assert_eq!(list.viewport_get(0, 4).grapheme(), "B");
+        assert_eq!(list.viewport_get(0, 5).grapheme(), "C");
     }
 
     #[test]

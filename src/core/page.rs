@@ -5,6 +5,14 @@ use crate::core::GraphemeCell;
 pub struct PageRow {
     pub cells: Vec<GraphemeCell>,
     pub wrapped: bool,
+    /// Number of columns explicitly written to this row.
+    ///
+    /// Cells at indices `written_cols..cells.len()` are unwritten padding
+    /// (never touched by the terminal's print/erase path). Used during
+    /// reflow to avoid including trailing padding as logical-line content —
+    /// which would otherwise silently discard inter-word spaces and leading
+    /// indentation that fall at a soft-wrap boundary.
+    pub written_cols: usize,
 }
 
 impl PageRow {
@@ -13,12 +21,17 @@ impl PageRow {
         Self {
             cells: vec![GraphemeCell::default(); cols],
             wrapped: false,
+            written_cols: 0,
         }
     }
 
     /// Creates a row from an existing cell vector and a wrap flag.
+    ///
+    /// All cells in `cells` are considered explicitly written (reflow
+    /// computed them intentionally), so `written_cols = cells.len()`.
     pub fn from_cells(cells: Vec<GraphemeCell>, wrapped: bool) -> Self {
-        Self { cells, wrapped }
+        let written_cols = cells.len();
+        Self { cells, wrapped, written_cols }
     }
 }
 
