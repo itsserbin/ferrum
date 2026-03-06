@@ -51,11 +51,22 @@ impl super::Terminal {
 
     /// Resize when only the height changes (no col change, no reflow).
     ///
-    /// When the terminal shrinks, rows are discarded from the top only as
-    /// needed to keep the cursor visible — if there is empty space below the
-    /// cursor those rows are simply dropped and the cursor stays in place.
-    /// When the terminal grows, blank rows are added at the bottom.
+    /// When the terminal shrinks, rows are pushed from the top of the viewport
+    /// into scrollback until the cursor is within the new height.  This keeps
+    /// the cursor at its logical position in the content rather than clamping
+    /// it, which would cause the shell to overwrite content rows on the next
+    /// prompt redraw.  When the terminal grows, blank rows are added at the
+    /// bottom.
     fn simple_resize(&mut self, rows: usize, cols: usize) {
+        let old_rows = self.screen.viewport_rows();
+        if self.alt_screen.is_none() && rows < old_rows && self.cursor_row >= rows {
+            // Push enough rows from the top to scrollback so the cursor fits.
+            let excess = self.cursor_row + 1 - rows;
+            for _ in 0..excess {
+                self.screen.scroll_up_region(0, old_rows - 1, true);
+            }
+            self.cursor_row -= excess;
+        }
         self.screen.simple_resize(rows, cols);
         // Update cursor position to stay within bounds.
         self.cursor_row = self.cursor_row.min(rows.saturating_sub(1));

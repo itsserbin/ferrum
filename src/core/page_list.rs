@@ -293,7 +293,7 @@ impl PageList {
         let (logical_lines, cursor_info) = self.collect_logical_lines(cursor_pin);
         let (rewrapped, cursor_row_in_rewrapped) =
             rewrap_lines(&logical_lines, new_cols, cursor_info);
-        let skip = self.rebuild_from_rows(rewrapped, new_rows, new_cols);
+        let skip = self.rebuild_from_rows(rewrapped, new_rows, new_cols, cursor_row_in_rewrapped);
         if let Some(vrow) = cursor_row_in_rewrapped {
             // `vrow` is the index of the cursor row in the `rewrapped` Vec.
             // `rebuild_from_rows` discards the first `skip` rows (too old for scrollback),
@@ -368,12 +368,31 @@ impl PageList {
 
     /// Rebuilds the buffer from `rows` for the given new dimensions.
     ///
+    /// `cursor_row_in_rows`: when provided, anchors the viewport to the cursor
+    /// so that the cursor lands at the last viewport row.  This prevents blank
+    /// rows that trail the cursor in the rewrapped buffer from pushing real
+    /// content into scrollback — which would make the content disappear from
+    /// view after a narrow resize.  When `None`, falls back to end-of-content
+    /// anchoring (used when no cursor info is available).
+    ///
     /// Returns `skip`: the number of leading rows discarded because they are
     /// too old to fit even in scrollback.  The caller uses this to map a
     /// `rewrapped`-Vec index back to an abs index in the rebuilt buffer.
-    fn rebuild_from_rows(&mut self, rows: Vec<PageRow>, new_rows: usize, new_cols: usize) -> usize {
-        let total = rows.len();
-        let grid_offset = total.saturating_sub(new_rows);
+    fn rebuild_from_rows(
+        &mut self,
+        rows: Vec<PageRow>,
+        new_rows: usize,
+        new_cols: usize,
+        cursor_row_in_rows: Option<usize>,
+    ) -> usize {
+        // Anchor the viewport to the cursor when possible so that trailing
+        // blank rows (below the cursor) are dropped instead of pushed into
+        // the visible area at the expense of real content above the cursor.
+        let grid_offset = if let Some(cr) = cursor_row_in_rows {
+            cr.saturating_sub(new_rows.saturating_sub(1))
+        } else {
+            rows.len().saturating_sub(new_rows)
+        };
         let scrollback_count = grid_offset.min(self.max_scrollback);
         let skip = grid_offset.saturating_sub(scrollback_count);
 
@@ -389,13 +408,15 @@ impl PageList {
             self.scrollback_count += 1;
         }
 
-        // Viewport rows.
+        // Viewport rows: take exactly new_rows rows starting at viewport_start_idx.
+        // Using .take(new_rows) ensures rows that follow the cursor (e.g. blank
+        // padding) are not appended beyond the viewport boundary.
         let viewport_start_idx = skip + scrollback_count;
-        for row in rows.iter().skip(viewport_start_idx) {
+        for row in rows.iter().skip(viewport_start_idx).take(new_rows) {
             self.append_row(row.clone());
         }
         // Pad viewport if content was shorter than new_rows.
-        let placed = rows.len().saturating_sub(viewport_start_idx);
+        let placed = rows.len().saturating_sub(viewport_start_idx).min(new_rows);
         for _ in placed..new_rows {
             self.append_row(PageRow::new(new_cols));
         }
@@ -421,7 +442,7 @@ fn rewrap_lines(
     for (line_idx, line) in lines.iter().enumerate() {
         let len = line_content_len(line);
         let is_cursor_line =
-            cursor_info.map_or(false, |(cli, _)| cli == line_idx);
+            cursor_info.is_some_and(|(cli, _)| cli == line_idx);
         let cursor_col_in_line =
             cursor_info.and_then(|(cli, col)| if cli == line_idx { Some(col) } else { None });
 
@@ -465,7 +486,7 @@ fn rewrap_lines(
             // been placed yet (handles cursors past the end of visible content).
             if is_cursor_line && cursor_rewrapped_row.is_none() {
                 let in_range = cursor_col_in_line
-                    .map_or(false, |c| c < cols_before_row + col_count);
+                    .is_some_and(|c| c < cols_before_row + col_count);
                 if in_range || !wrapped {
                     cursor_rewrapped_row = Some(rewrapped.len());
                 }

@@ -425,7 +425,11 @@ fn reflow_cursor_row_points_to_correct_physical_row_after_narrow_resize() {
 
     term.resize(3, 4);
 
-    assert_eq!(term.cursor_row, 1, "cursor should be on EFG row (viewport row 1), not on ABCD row (viewport row 0)");
+    // With cursor-bottom anchoring the viewport is positioned so the cursor
+    // lands at the last row (new_rows - 1 = 2).  Viewport = [XXXX, ABCD, EFG],
+    // cursor on EFG (vrow 2).  Content above stays visible instead of being
+    // pushed into scrollback.
+    assert_eq!(term.cursor_row, 2, "cursor should be on EFG row (viewport row 2), not on ABCD row (viewport row 1)");
     assert_eq!(term.cursor_col, 0, "cursor_col is reset to 0 for SIGWINCH compatibility");
 }
 
@@ -448,7 +452,44 @@ fn reflow_cursor_row_correct_when_logical_line_wraps_three_times() {
 
     term.resize(5, 4);
 
-    assert_eq!(term.cursor_row, 1, "cursor should be on IJK row (viewport row 1), not on EFGH row (viewport row 0)");
+    // With cursor-bottom anchoring the viewport is [XXXX, XXXX, ABCD, EFGH, IJK],
+    // cursor on IJK at viewport row 4 (new_rows - 1).  More content visible than
+    // with the old end-of-buffer anchor that pushed XXXX rows into scrollback.
+    assert_eq!(term.cursor_row, 4, "cursor should be on IJK row (viewport row 4), not on EFGH row (viewport row 3)");
+}
+
+#[test]
+fn reflow_cursor_stays_at_prompt_not_in_content_area() {
+    // Simulate: 8 rows of `ls`-like output (8 chars each) followed by a
+    // short shell prompt "$ " (cursor at col 2).  Terminal is 10×8.
+    // After narrow resize (10×4): each content row wraps to 2 rows → 16
+    // content rows.  With new_rows=10: grid_offset=16+1+1-10=8, scrollback=8,
+    // skip=0.  The prompt row is rewrapped row 16; cursor_row in viewport = 8.
+    //
+    // With the OLD bug cursor_rewrapped_row = 16 (start of prompt logical line,
+    // which is a single row), so cursor_row = 16 - 8 - 8 = 0.  The shell
+    // would then clear from row 0 to end — erasing all content.
+    let mut term = Terminal::new(10, 8);
+    // 8 rows of content then prompt "$ ".
+    for _ in 0..8 {
+        term.process(b"XXXXXXXX\r\n");
+    }
+    term.process(b"$ ");
+    assert_eq!(term.cursor_row, 8);
+    assert_eq!(term.cursor_col, 2);
+
+    term.resize(10, 4);
+
+    // After narrow reflow: prompt is at some viewport row >= 0.
+    // The important invariant: cursor_row must be at the prompt row, which is
+    // BELOW the content rows.  Concretely, with the layout above, cursor_row
+    // should equal 8 (the 9th viewport row), NOT 0.
+    // With cursor-bottom anchoring cursor lands at new_rows - 1 = 9 (last row).
+    // The trailing blank row is dropped; cursor is still BELOW all content rows.
+    assert_eq!(
+        term.cursor_row, 9,
+        "cursor should be at the last viewport row (9), not in the content area"
+    );
 }
 
 // ── Reflow content preservation ──

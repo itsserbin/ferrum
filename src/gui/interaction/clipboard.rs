@@ -133,13 +133,6 @@ impl FerrumWindow {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::GraphemeCell;
-
-    fn set_row(terminal: &mut Terminal, row: usize, text: &str) {
-        for (col, ch) in text.chars().take(terminal.screen.cols()).enumerate() {
-            terminal.screen.viewport_set(row, col, GraphemeCell::from_char(ch));
-        }
-    }
 
     #[test]
     fn selected_text_reads_viewport_and_scrollback() {
