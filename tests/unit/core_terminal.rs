@@ -498,14 +498,17 @@ fn reflow_cursor_stays_at_prompt_not_in_content_area() {
 
 #[test]
 fn reflow_single_narrow_wide_restores_all_rows() {
-    // 5 rows × 10 cols; each row has a distinct char (A–E) in col 0.
-    let mut term = Terminal::new(5, 10);
-    term.process(b"AAAAAAAA\r\nBBBBBBBB\r\nCCCCCCCC\r\nDDDDDDDD\r\nEEEEEEEE");
+    // 6 rows × 10 cols; rows 0–4 have distinct chars (A–E), row 5 is blank (cursor).
+    // The trailing \r\n advances the cursor to the blank row 5 so all content
+    // rows are treated as completed output — not the active input line — and are
+    // therefore preserved across reflow cycles.
+    let mut term = Terminal::new(6, 10);
+    term.process(b"AAAAAAAA\r\nBBBBBBBB\r\nCCCCCCCC\r\nDDDDDDDD\r\nEEEEEEEE\r\n");
 
     // Narrow resize → rows wrap (8-char content → 2 physical rows each at 4 cols).
-    term.resize(5, 4);
+    term.resize(6, 4);
     // Wide resize → rows should unwrap back.
-    term.resize(5, 10);
+    term.resize(6, 10);
 
     assert_eq!(get_char(&term, 0, 0), 'A', "row A missing after single reflow cycle");
     assert_eq!(get_char(&term, 1, 0), 'B', "row B missing after single reflow cycle");
@@ -516,14 +519,16 @@ fn reflow_single_narrow_wide_restores_all_rows() {
 
 #[test]
 fn reflow_intensive_preserves_content_rows() {
-    // Same setup: 5 rows × 10 cols with A–E in each row.
-    let mut term = Terminal::new(5, 10);
-    term.process(b"AAAAAAAA\r\nBBBBBBBB\r\nCCCCCCCC\r\nDDDDDDDD\r\nEEEEEEEE");
+    // 6 rows × 10 cols; rows 0–4 have distinct chars (A–E), row 5 is blank (cursor).
+    // The trailing \r\n keeps the cursor on the blank row so all content survives
+    // repeated narrow→wide reflow cycles.
+    let mut term = Terminal::new(6, 10);
+    term.process(b"AAAAAAAA\r\nBBBBBBBB\r\nCCCCCCCC\r\nDDDDDDDD\r\nEEEEEEEE\r\n");
 
     // Five narrow→wide cycles to simulate "intensive reflow".
     for _ in 0..5 {
-        term.resize(5, 4);
-        term.resize(5, 10);
+        term.resize(6, 4);
+        term.resize(6, 10);
     }
 
     assert_eq!(get_char(&term, 0, 0), 'A', "row A lost after intensive reflow");
@@ -535,8 +540,11 @@ fn reflow_intensive_preserves_content_rows() {
 
 #[test]
 fn reflow_intensive_varying_sizes_preserves_content() {
-    // Larger terminal, more content rows, irregular resize pattern.
-    let mut term = Terminal::new(10, 20);
+    // 11 rows × 20 cols; rows 0–9 have distinct chars (A–J), row 10 is blank
+    // (cursor). Each content line ends with \r\n so the cursor advances to the
+    // blank row — all content rows are treated as completed output and survive
+    // every resize cycle.
+    let mut term = Terminal::new(11, 20);
     term.process(b"AAAAAAAAAAAAAAAA\r\n");
     term.process(b"BBBBBBBBBBBBBBBB\r\n");
     term.process(b"CCCCCCCCCCCCCCCC\r\n");
@@ -546,15 +554,15 @@ fn reflow_intensive_varying_sizes_preserves_content() {
     term.process(b"GGGGGGGGGGGGGGGG\r\n");
     term.process(b"HHHHHHHHHHHHHHHH\r\n");
     term.process(b"IIIIIIIIIIIIIIII\r\n");
-    term.process(b"JJJJJJJJJJJJJJJJ");
+    term.process(b"JJJJJJJJJJJJJJJJ\r\n");
 
     // Irregular resize sequence.
-    term.resize(10, 5);
-    term.resize(10, 30);
-    term.resize(10, 8);
-    term.resize(10, 20);
-    term.resize(10, 3);
-    term.resize(10, 20);
+    term.resize(11, 5);
+    term.resize(11, 30);
+    term.resize(11, 8);
+    term.resize(11, 20);
+    term.resize(11, 3);
+    term.resize(11, 20);
 
     assert_eq!(get_char(&term, 0, 0), 'A', "row A lost after varying reflow");
     assert_eq!(get_char(&term, 1, 0), 'B', "row B lost after varying reflow");

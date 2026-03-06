@@ -232,89 +232,31 @@ impl PageList {
     /// reflowed buffer.  The column is preserved so the terminal stays in sync
     /// with the shell's internal cursor tracking (readline / zsh compute relative
     /// movements from their own state; forcing col=0 would desynchronise them).
-    ///
-    /// **Narrow resize** (`new_cols < old_cols`):
-    ///   • If the cursor's logical line carries content (shell prompt or active
-    ///     input), all rewrapped rows are pushed into scrollback and the viewport
-    ///     is left blank.  The blank rows preceding the cursor are flagged
-    ///     `wrapped=true` so they collapse into a single logical unit on the
-    ///     next reflow, preventing spurious blank logical lines from accumulating
-    ///     across repeated resize cycles.  This eliminates the duplicate-prompt
-    ///     glitch: the shell redraws the prompt after SIGWINCH anyway.
-    ///   • If the cursor's logical line is blank (cursor is parked on an empty
-    ///     row after output), pre-cursor content fills the viewport from the
-    ///     bottom up, keeping visible output in view.
-    ///
-    /// **Wide / equal resize** (`new_cols >= old_cols`):
-    ///   Reflow all logical lines with `grid_offset = 0` so content fills the
-    ///   viewport from the top without unnecessary scrollback spill.
     pub fn reflow(&mut self, new_rows: usize, new_cols: usize, cursor_pin: &TrackedPin) {
-        let is_narrow = new_cols < self.cols;
-        let (logical_lines, cursor_info) = self.collect_logical_lines(cursor_pin);
+        let (mut logical_lines, cursor_info) = self.collect_logical_lines(cursor_pin);
 
-        let cursor_new_col = cursor_info
-            .as_ref()
-            .map_or_else(
-                || cursor_pin.coord().col.min(new_cols.saturating_sub(1)),
-                |ci| ci.col_in_line.min(new_cols.saturating_sub(1)),
-            );
-
-        let cursor_line_has_content = cursor_info.as_ref().is_some_and(|ci| {
-            logical_lines.get(ci.line_idx).is_some_and(|l| line_content_len(l) > 0)
-        });
-
-        if is_narrow && cursor_line_has_content {
-            // Narrow resize with active content on the cursor's line.
-            // Push all rewrapped rows into scrollback; leave the viewport blank.
-            let rewrapped = rewrap_lines(&logical_lines, new_cols);
-            let rows_for_content = new_rows.saturating_sub(1);
-
-            // cursor_row_in_rows must be large enough to make grid_offset equal to
-            // rewrapped.len(), so every row ends up in scrollback.
-            let anchor = rewrapped.len() + rows_for_content.saturating_sub(1);
-            self.rebuild_from_rows(rewrapped, rows_for_content, new_cols, Some(anchor));
-
-            // Mark the blank padding rows as wrapped so they merge into one logical
-            // unit with the cursor on the next reflow.  Without this they become
-            // separate blank logical lines that accumulate and push real content into
-            // scrollback across repeated narrow→wide resize cycles.
-            for vrow in 0..rows_for_content {
-                self.viewport_row_mut(vrow).wrapped = true;
-            }
-            self.append_row(PageRow::new(new_cols)); // cursor row (not wrapped)
-            self.viewport_rows = new_rows;
-        } else if !is_narrow {
-            // Wide / equal resize: reflow everything and fill the viewport from
-            // the top (grid_offset = 0).
-            let rewrapped = rewrap_lines(&logical_lines, new_cols);
-            self.rebuild_from_rows(
-                rewrapped,
-                new_rows,
-                new_cols,
-                Some(new_rows.saturating_sub(1)),
-            );
-            self.viewport_rows = new_rows;
+        // The cursor's logical line (the active shell prompt/input) is not reflowed.
+        // The shell redraws it after SIGWINCH anyway, so reflowing it only causes
+        // the prompt to appear duplicated when the shell redraws from the wrong
+        // position. We truncate at the cursor's line index and place a blank cursor
+        // row at the bottom of the rebuilt viewport instead.
+        let cursor_new_col = if let Some(ref ci) = cursor_info {
+            logical_lines.truncate(ci.line_idx);
+            ci.col_in_line.min(new_cols.saturating_sub(1))
         } else {
-            // Narrow resize with blank cursor line: keep pre-cursor content visible.
-            let mut logical_lines = logical_lines;
-            if let Some(ref ci) = cursor_info {
-                logical_lines.truncate(ci.line_idx);
-            }
-            let rewrapped = rewrap_lines(&logical_lines, new_cols);
-            let rows_for_content = new_rows.saturating_sub(1);
+            cursor_pin.coord().col.min(new_cols.saturating_sub(1))
+        };
 
-            if rows_for_content == 0 {
-                // Single viewport row: cursor occupies it directly.
-                self.rebuild_from_rows(rewrapped, new_rows, new_cols, None);
-            } else {
-                // Anchor so content fills the content area from the bottom up.
-                let anchor =
-                    rewrapped.len().saturating_sub(rows_for_content).saturating_add(1);
-                self.rebuild_from_rows(rewrapped, rows_for_content, new_cols, Some(anchor));
-                self.append_row(PageRow::new(new_cols)); // blank cursor row
-            }
-            self.viewport_rows = new_rows;
-        }
+        let rewrapped = rewrap_lines(&logical_lines, new_cols);
+
+        // Build viewport with (new_rows - 1) rows for reflowed content above cursor.
+        let rows_for_content = new_rows.saturating_sub(1);
+        self.rebuild_from_rows(rewrapped, rows_for_content, new_cols, None);
+
+        // Append a blank cursor row as the last viewport row and extend
+        // viewport_rows to the full new height.
+        self.append_row(PageRow::new(new_cols));
+        self.viewport_rows = new_rows;
 
         let cursor_abs = self.scrollback.len() + new_rows.saturating_sub(1);
         cursor_pin.set_coord(PageCoord { abs_row: cursor_abs, col: cursor_new_col });
@@ -367,7 +309,6 @@ impl PageList {
                         col_in_line: cursor_col_in_line,
                     });
                     cursor_in_current = false;
-                    cursor_col_in_line = 0;
                 }
                 lines.push(LogicalLine {
                     cells: std::mem::take(&mut current),
@@ -396,17 +337,13 @@ impl PageList {
     /// content into scrollback — which would make the content disappear from
     /// view after a narrow resize.  When `None`, falls back to end-of-content
     /// anchoring (used when no cursor info is available).
-    ///
-    /// Returns `skip`: the number of leading rows discarded because they are
-    /// too old to fit even in scrollback.  The caller uses this to map a
-    /// `rewrapped`-Vec index back to an abs index in the rebuilt buffer.
     fn rebuild_from_rows(
         &mut self,
         rows: Vec<PageRow>,
         new_rows: usize,
         new_cols: usize,
         cursor_row_in_rows: Option<usize>,
-    ) -> usize {
+    ) {
         // Anchor the viewport to the cursor when possible so that trailing
         // blank rows (below the cursor) are dropped instead of pushed into
         // the visible area at the expense of real content above the cursor.
@@ -443,7 +380,6 @@ impl PageList {
         for _ in placed..new_rows {
             self.append_row(PageRow::new(new_cols));
         }
-        skip
     }
 }
 
@@ -681,7 +617,8 @@ mod tests {
         list.viewport_set_wrapped(0, true);
         let cursor_abs = list.viewport_start_abs() + 2; // blank cursor row
         let pin = list.pin_at(PageCoord { abs_row: cursor_abs, col: 0 });
-        list.reflow(1, 11, &pin);
+        // Use 2 rows so row 0 holds the reflowed content and row 1 is the cursor row.
+        list.reflow(2, 11, &pin);
         assert_eq!(list.viewport_get(0, 4).grapheme(), "o", "col 4 should be 'o'");
         assert_eq!(
             list.viewport_get(0, 5).grapheme(),
@@ -703,7 +640,8 @@ mod tests {
         list.viewport_set_wrapped(0, true);
         let cursor_abs = list.viewport_start_abs() + 2; // blank cursor row
         let pin = list.pin_at(PageCoord { abs_row: cursor_abs, col: 0 });
-        list.reflow(1, 6, &pin);
+        // Use 2 rows so row 0 holds the reflowed content and row 1 is the cursor row.
+        list.reflow(2, 6, &pin);
         assert_eq!(
             list.viewport_get(0, 0).grapheme(),
             " ",
@@ -747,9 +685,10 @@ mod tests {
         list.reflow(4, 2, &pin);
         // Cursor row (last row) must be blank.
         assert!(list.viewport_get(3, 0).is_default(), "cursor row must be blank after reflow");
-        // Content above cursor must have been reflowed.
-        assert_eq!(list.viewport_get(1, 0).grapheme(), "A", "reflowed content row 1 col 0");
-        assert_eq!(list.viewport_get(2, 0).grapheme(), "C", "reflowed content row 2 col 0");
+        // "ABCDE" rewraps to ["AB"(wrapped), "CD"(wrapped), "E"] = 3 rows.
+        // 3 content rows fit directly into rows_for_content=3; no scrollback spill.
+        assert_eq!(list.viewport_get(0, 0).grapheme(), "A", "reflowed content row 0 col 0");
+        assert_eq!(list.viewport_get(1, 0).grapheme(), "C", "reflowed content row 1 col 0");
     }
 
     #[test]
