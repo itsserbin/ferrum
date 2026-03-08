@@ -184,14 +184,18 @@ impl PageList {
         self.pages.push(Page::new());
     }
 
+    fn append_blank_rows(&mut self, count: usize, cols: usize) {
+        for _ in 0..count {
+            self.append_row(PageRow::new(cols));
+        }
+    }
+
     // ── Simple resize ─────────────────────────────────────────────────────────
 
     pub fn simple_resize(&mut self, new_rows: usize, new_cols: usize) {
         if new_rows > self.viewport_rows {
             let extra = new_rows - self.viewport_rows;
-            for _ in 0..extra {
-                self.append_row(PageRow::new(new_cols));
-            }
+            self.append_blank_rows(extra, new_cols);
         } else if new_rows < self.viewport_rows && new_rows > 0 {
             // Drop ghost rows beyond the new boundary so they don't waste memory.
             let (last_pi, last_ri) = Self::vrow_to_page(new_rows - 1);
@@ -275,9 +279,7 @@ impl PageList {
 
         // Fill any remaining rows below the cursor with blank rows so the
         // viewport reaches its full new height.
-        for _ in (cursor_viewport_row + 1)..new_rows {
-            self.append_row(PageRow::new(new_cols));
-        }
+        self.append_blank_rows(new_rows.saturating_sub(cursor_viewport_row + 1), new_cols);
         self.viewport_rows = new_rows;
 
         let cursor_abs = self.scrollback.len() + cursor_viewport_row;
@@ -399,9 +401,7 @@ impl PageList {
             placed += 1;
         }
         // Pad viewport if content was shorter than new_rows.
-        for _ in placed..new_rows {
-            self.append_row(PageRow::new(new_cols));
-        }
+        self.append_blank_rows(new_rows.saturating_sub(placed), new_cols);
     }
 }
 
