@@ -3,6 +3,35 @@ use super::RenderTarget;
 use crate::core::{Color, PageList, UnderlineStyle};
 use crate::gui::pane::PaneRect;
 
+/// Draws a single horizontal line of pixels spanning one cell width.
+///
+/// Pixels are only written inside the buffer bounds (`target.height`, `target.width`)
+/// and where `x < max_x` (use `target.width` for no extra clip, or `buf_width.min(rect_right)`
+/// when rendering into a sub-rectangle).
+fn draw_horizontal_cell_line(
+    target: &mut RenderTarget<'_>,
+    x: usize,
+    y: u32,
+    cell_width: usize,
+    pixel: u32,
+    max_x: usize,
+) {
+    let y = y as usize;
+    if y >= target.height {
+        return;
+    }
+    let buf_width = target.width;
+    for dx in 0..cell_width {
+        let px = x + dx;
+        if px < max_x {
+            let idx = y * buf_width + px;
+            if idx < target.buffer.len() {
+                target.buffer[idx] = pixel;
+            }
+        }
+    }
+}
+
 impl CpuRenderer {
     /// Maps sentinel default colors to the current theme palette.
     ///
@@ -82,35 +111,19 @@ impl CpuRenderer {
                 // Underline
                 if !is_spacer && cell.underline_style != UnderlineStyle::None {
                     let underline_y = y + self.metrics.cell_height - 2;
-                    if (underline_y as usize) < buf_height {
-                        let pixel = fg.to_pixel();
-                        for dx in 0..self.metrics.cell_width as usize {
-                            let px = x as usize + dx;
-                            if px < buf_width {
-                                let idx = underline_y as usize * buf_width + px;
-                                if idx < target.buffer.len() {
-                                    target.buffer[idx] = pixel;
-                                }
-                            }
-                        }
-                    }
+                    draw_horizontal_cell_line(
+                        target, x as usize, underline_y,
+                        self.metrics.cell_width as usize, fg.to_pixel(), buf_width,
+                    );
                 }
 
                 // Strikethrough
                 if !is_spacer && cell.strikethrough {
                     let strike_y = y + self.metrics.cell_height / 2;
-                    if (strike_y as usize) < buf_height {
-                        let pixel = fg.to_pixel();
-                        for dx in 0..self.metrics.cell_width as usize {
-                            let px = x as usize + dx;
-                            if px < buf_width {
-                                let idx = strike_y as usize * buf_width + px;
-                                if idx < target.buffer.len() {
-                                    target.buffer[idx] = pixel;
-                                }
-                            }
-                        }
-                    }
+                    draw_horizontal_cell_line(
+                        target, x as usize, strike_y,
+                        self.metrics.cell_width as usize, fg.to_pixel(), buf_width,
+                    );
                 }
             }
         }
@@ -195,34 +208,24 @@ impl CpuRenderer {
 
                 if !is_spacer && cell.underline_style != UnderlineStyle::None {
                     let underline_y = y + self.metrics.cell_height - 2;
-                    if (underline_y as usize) < buf_height && (underline_y as usize) < rect_bottom {
-                        let pixel = fg.to_pixel();
-                        for dx in 0..self.metrics.cell_width as usize {
-                            let px = x as usize + dx;
-                            if px < buf_width && px < rect_right {
-                                let idx = underline_y as usize * buf_width + px;
-                                if idx < target.buffer.len() {
-                                    target.buffer[idx] = pixel;
-                                }
-                            }
-                        }
+                    if (underline_y as usize) < rect_bottom {
+                        draw_horizontal_cell_line(
+                            target, x as usize, underline_y,
+                            self.metrics.cell_width as usize, fg.to_pixel(),
+                            buf_width.min(rect_right),
+                        );
                     }
                 }
 
                 // Strikethrough
                 if !is_spacer && cell.strikethrough {
                     let strike_y = y + self.metrics.cell_height / 2;
-                    if (strike_y as usize) < buf_height && (strike_y as usize) < rect_bottom {
-                        let pixel = fg.to_pixel();
-                        for dx in 0..self.metrics.cell_width as usize {
-                            let px = x as usize + dx;
-                            if px < buf_width && px < rect_right {
-                                let idx = strike_y as usize * buf_width + px;
-                                if idx < target.buffer.len() {
-                                    target.buffer[idx] = pixel;
-                                }
-                            }
-                        }
+                    if (strike_y as usize) < rect_bottom {
+                        draw_horizontal_cell_line(
+                            target, x as usize, strike_y,
+                            self.metrics.cell_width as usize, fg.to_pixel(),
+                            buf_width.min(rect_right),
+                        );
                     }
                 }
             }

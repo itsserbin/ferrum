@@ -266,13 +266,7 @@ impl ApplicationHandler for App {
             // Also update the global available_release if a new version was found.
             if let crate::update::ManualCheckResult::Found(release) = result {
                 self.available_release = Some(release);
-                for win in self.windows.values_mut() {
-                    win.pending_update_tag = self
-                        .available_release
-                        .as_ref()
-                        .map(|r| r.tag_name.clone());
-                    win.window.request_redraw();
-                }
+                self.broadcast_available_release();
             }
             self.manual_check_rx = None;
         }
@@ -435,12 +429,19 @@ impl App {
                 release.tag_name, release.html_url
             );
             self.available_release = Some(release);
-            for win in self.windows.values_mut() {
-                win.pending_update_tag = self.available_release
-                    .as_ref()
-                    .map(|r| r.tag_name.clone());
-                win.window.request_redraw();
-            }
+            self.broadcast_available_release();
+        }
+    }
+}
+
+impl App {
+    /// Propagates the current `available_release` tag to every open window,
+    /// requesting a redraw so the update banner appears.
+    fn broadcast_available_release(&mut self) {
+        let tag = self.available_release.as_ref().map(|r| r.tag_name.clone());
+        for win in self.windows.values_mut() {
+            win.pending_update_tag = tag.clone();
+            win.window.request_redraw();
         }
     }
 }

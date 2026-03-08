@@ -2,9 +2,18 @@
 use crate::core::Color;
 
 use super::super::shared::{tab_math, ui_layout};
+use super::super::shared::tab_math::TabLayoutMetrics;
 use super::super::traits::Renderer;
 use super::super::types::{RenderTarget, TabSlot};
 use super::super::CpuRenderer;
+
+/// Shared setup values computed identically by `draw_tab_number` and `draw_tab_content`.
+struct TabTextState {
+    m: TabLayoutMetrics,
+    text_y: u32,
+    fg: Color,
+    show_close: bool,
+}
 
 impl CpuRenderer {
     /// Renders a tab number (1-based) in overflow/compressed mode.
@@ -13,40 +22,21 @@ impl CpuRenderer {
         target: &mut RenderTarget<'_>,
         slot: &TabSlot,
     ) {
-        let m = self.tab_layout_metrics();
-        let text_y = tab_math::tab_text_y(&m);
-        let fg = if slot.tab.is_active {
-            self.palette.tab_text_active
-        } else {
-            self.palette.tab_text_inactive
-        };
+        let state = self.tab_text_state(slot);
 
         let number_str = (slot.index + 1).to_string();
-        let show_close = tab_math::should_show_close_button(
-            slot.tab.is_active,
-            slot.is_hovered,
-            slot.tab.hover_progress,
-        );
-        let close_reserved = if show_close {
-            tab_math::close_button_reserved_width(&m)
+        let close_reserved = if state.show_close {
+            tab_math::close_button_reserved_width(&state.m)
         } else {
             0
         };
         let text_w = number_str.len() as u32 * self.metrics.cell_width;
         let text_x = slot.x + (slot.width.saturating_sub(text_w + close_reserved)) / 2;
 
-        for (ci, ch) in number_str.chars().enumerate() {
-            let cx = text_x + ci as u32 * self.metrics.cell_width;
-            self.draw_char(target, cx, text_y, ch, fg);
-        }
+        self.draw_text_at(target, text_x, state.text_y, &number_str, state.fg);
 
-        if show_close {
-            self.draw_close_button(
-                target,
-                slot.index,
-                slot.width,
-                slot.tab.close_hover_progress,
-            );
+        if state.show_close {
+            self.draw_close_button(target, slot.index, slot.width, slot.tab.close_hover_progress);
         }
     }
 
@@ -56,38 +46,33 @@ impl CpuRenderer {
         target: &mut RenderTarget<'_>,
         slot: &TabSlot,
     ) {
+        let state = self.tab_text_state(slot);
+        let tab_padding_h = state.m.scaled_px(tab_math::TAB_PADDING_H);
+        let max_chars = tab_math::tab_title_max_chars(&state.m, slot.width, state.show_close);
+
+        let text_x = slot.x + tab_padding_h;
+        self.draw_tab_title(target, slot.tab, text_x, state.text_y, state.fg, max_chars);
+
+        if state.show_close {
+            self.draw_close_button(target, slot.index, slot.width, slot.tab.close_hover_progress);
+        }
+    }
+
+    /// Computes shared layout state used by both `draw_tab_number` and `draw_tab_content`.
+    fn tab_text_state(&self, slot: &TabSlot) -> TabTextState {
         let m = self.tab_layout_metrics();
         let text_y = tab_math::tab_text_y(&m);
-        let tab_padding_h = m.scaled_px(tab_math::TAB_PADDING_H);
         let fg = if slot.tab.is_active {
             self.palette.tab_text_active
         } else {
             self.palette.tab_text_inactive
         };
-
         let show_close = tab_math::should_show_close_button(
             slot.tab.is_active,
             slot.is_hovered,
             slot.tab.hover_progress,
         );
-        let max_chars = tab_math::tab_title_max_chars(
-            &m,
-            slot.width,
-            show_close,
-        );
-
-        let text_x = slot.x + tab_padding_h;
-        self.draw_tab_title(target, slot.tab, text_x, text_y, fg, max_chars);
-
-
-        if show_close {
-            self.draw_close_button(
-                target,
-                slot.index,
-                slot.width,
-                slot.tab.close_hover_progress,
-            );
-        }
+        TabTextState { m, text_y, fg, show_close }
     }
 
     /// Renders the tab title text with truncation.
@@ -104,10 +89,7 @@ impl CpuRenderer {
         let fallback = format!("#{}", tab.index + 1);
         let title = format_tab_path(tab.title, max_chars, &fallback);
 
-        for (ci, ch) in title.chars().enumerate() {
-            let cx = text_x + ci as u32 * self.metrics.cell_width;
-            self.draw_char(target, cx, text_y, ch, fg);
-        }
+        self.draw_text_at(target, text_x, text_y, &title, fg);
     }
 
 

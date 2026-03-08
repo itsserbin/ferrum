@@ -3,12 +3,16 @@ use crate::gui::renderer::WindowButton;
 use crate::gui::*;
 
 impl FerrumWindow {
-    /// Handles a click on a tab: double-click rename, switch, drag.
-    #[cfg(target_os = "macos")]
-    pub(in crate::gui::events::mouse) fn handle_tab_click(
-        &mut self,
-        idx: usize,
-    ) {
+    /// Clears both click-tracking timestamps.
+    #[cfg(not(target_os = "macos"))]
+    pub(in crate::gui::events::mouse) fn clear_click_state(&mut self) {
+        self.last_topbar_empty_click = None;
+        self.last_tab_click = None;
+    }
+
+    /// Shared double-click rename detection and tab switch logic.
+    /// Returns `true` if a rename was started (caller should not proceed further).
+    fn handle_tab_click_impl(&mut self, idx: usize) -> bool {
         self.last_topbar_empty_click = None;
         let now = std::time::Instant::now();
         if self.last_tab_click.is_some_and(|(last_idx, last_time)| {
@@ -17,10 +21,17 @@ impl FerrumWindow {
         }) {
             self.start_rename(idx);
             self.last_tab_click = None;
-            return;
+            return true;
         }
         self.last_tab_click = Some((idx, now));
         self.switch_tab(idx);
+        false
+    }
+
+    /// Handles a click on a tab: double-click rename, switch.
+    #[cfg(target_os = "macos")]
+    pub(in crate::gui::events::mouse) fn handle_tab_click(&mut self, idx: usize) {
+        self.handle_tab_click_impl(idx);
     }
 
     /// Handles a click on a tab: double-click rename, switch, drag.
@@ -32,26 +43,15 @@ impl FerrumWindow {
         my: f64,
         had_rename: bool,
     ) {
-        self.last_topbar_empty_click = None;
-        let now = std::time::Instant::now();
-        if self.last_tab_click.is_some_and(|(last_idx, last_time)| {
-            last_idx == idx
-                && now.duration_since(last_time).as_millis() < super::MULTI_CLICK_TIMEOUT_MS
-        }) {
-            self.start_rename(idx);
-            self.last_tab_click = None;
-            return;
+        if !self.handle_tab_click_impl(idx) {
+            self.start_drag(idx, mx, my, had_rename);
         }
-        self.last_tab_click = Some((idx, now));
-        self.switch_tab(idx);
-        self.start_drag(idx, mx, my, had_rename);
     }
 
     /// Handles a click on a window button (minimize/maximize/close).
     #[cfg(not(target_os = "macos"))]
     pub(in crate::gui::events::mouse) fn handle_window_button_click(&mut self, btn: WindowButton) {
-        self.last_topbar_empty_click = None;
-        self.last_tab_click = None;
+        self.clear_click_state();
         match btn {
             WindowButton::Minimize => {
                 self.window.set_minimized(true);

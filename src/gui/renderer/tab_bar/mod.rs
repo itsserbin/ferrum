@@ -78,18 +78,7 @@ impl CpuRenderer {
             let plus_hover = tab_math::point_in_rect(params.mouse_pos.0, params.mouse_pos.1, plus_rect);
             if plus_hover {
                 let (px, py, pw, ph) = plus_rect;
-                self.draw_rounded_rect(
-                    target,
-                    &RoundedShape {
-                        x: px as i32,
-                        y: py as i32,
-                        w: pw,
-                        h: ph,
-                        radius: self.scaled_px(5),
-                        color: self.palette.inactive_tab_hover.to_pixel(),
-                        alpha: 255,
-                    },
-                );
+                self.draw_button_hover_bg(target, px, py, pw, ph);
             }
             let plus_fg = if plus_hover {
                 self.palette.tab_text_active
@@ -135,45 +124,43 @@ impl CpuRenderer {
         tab_bar_height: u32,
     ) {
         let hover_t = slot.tab.hover_progress.clamp(0.0, 1.0);
-        let bar_h = target.height;
-        let buf_width = target.width;
 
         if slot.tab.is_active {
-            // Active tab: flat fill that merges with terminal.
-            let fill_bg = self.palette.active_tab_bg.to_pixel();
-            for py in 0..tab_bar_height as usize {
-                if py >= bar_h {
-                    break;
-                }
-                for dx in 0..slot.width as usize {
-                    let px = slot.x as usize + dx;
-                    if px < buf_width {
-                        let idx = py * buf_width + px;
-                        if idx < target.buffer.len() {
-                            target.buffer[idx] = fill_bg;
-                        }
-                    }
-                }
-            }
+            // Active tab: flat fill that merges with terminal (fully opaque).
+            fill_tab_rect(target, slot.x, slot.width, tab_bar_height, self.palette.active_tab_bg.to_pixel(), 255);
         } else if hover_t > 0.01 {
-            // Inactive tab hover: flat fill highlight.
-            let fill_bg = self.palette.inactive_tab_hover.to_pixel();
+            // Inactive tab hover: blended fill highlight.
             let alpha = (hover_t * 220.0).round().clamp(0.0, 255.0) as u8;
-            for py in 0..tab_bar_height as usize {
-                if py >= bar_h {
-                    break;
-                }
-                for dx in 0..slot.width as usize {
-                    let px = slot.x as usize + dx;
-                    if px < buf_width {
-                        let idx = py * buf_width + px;
-                        if idx < target.buffer.len() {
-                            target.buffer[idx] = crate::gui::renderer::blend_rgb(target.buffer[idx], fill_bg, alpha);
-                        }
-                    }
+            fill_tab_rect(target, slot.x, slot.width, tab_bar_height, self.palette.inactive_tab_hover.to_pixel(), alpha);
+        }
+        // Inactive non-hovered: no background (BAR_BG shows through).
+    }
+}
+
+/// Fills a tab-width column of the pixel buffer from row 0 up to `height` rows,
+/// blending `color` over the existing pixels with `alpha` (255 = opaque).
+fn fill_tab_rect(
+    target: &mut RenderTarget<'_>,
+    tab_x: u32,
+    tab_width: u32,
+    height: u32,
+    color: u32,
+    alpha: u8,
+) {
+    let bar_h = target.height;
+    let buf_width = target.width;
+    for py in 0..height as usize {
+        if py >= bar_h {
+            break;
+        }
+        for dx in 0..tab_width as usize {
+            let px = tab_x as usize + dx;
+            if px < buf_width {
+                let idx = py * buf_width + px;
+                if idx < target.buffer.len() {
+                    target.buffer[idx] = crate::gui::renderer::blend_rgb(target.buffer[idx], color, alpha);
                 }
             }
         }
-        // Inactive non-hovered: no background (BAR_BG shows through).
     }
 }

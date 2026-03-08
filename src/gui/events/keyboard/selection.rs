@@ -149,15 +149,8 @@ impl FerrumWindow {
 
 #[cfg(test)]
 mod tests {
-    use crate::gui::{FerrumWindow, ModifiersState};
-
-    fn mods(ctrl: bool, shift: bool, alt: bool) -> ModifiersState {
-        let mut state = ModifiersState::empty();
-        state.set(ModifiersState::CONTROL, ctrl);
-        state.set(ModifiersState::SHIFT, shift);
-        state.set(ModifiersState::ALT, alt);
-        state
-    }
+    use crate::gui::FerrumWindow;
+    use super::super::mods;
 
     #[test]
     fn selection_from_cursor_bounds_selects_left_character() {

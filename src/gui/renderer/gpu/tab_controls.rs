@@ -4,6 +4,19 @@ use super::super::traits::Renderer;
 use super::super::types::RoundedRectCmd;
 
 impl super::GpuRenderer {
+    /// Draws a standard hover-highlight rounded rect for a tab-bar button.
+    fn push_button_hover_bg(&mut self, x: u32, y: u32, w: u32, h: u32) {
+        self.push_rounded_rect_cmd(&RoundedRectCmd {
+            x: x as f32,
+            y: y as f32,
+            w: w as f32,
+            h: h as f32,
+            radius: self.metrics.scaled_px(5) as f32,
+            color: self.palette.inactive_tab_hover.to_pixel(),
+            opacity: 1.0,
+        });
+    }
+
     /// Draws the new-tab (+) button with hover highlight.
     pub(super) fn plus_button_commands(
         &mut self,
@@ -15,15 +28,7 @@ impl super::GpuRenderer {
         let plus_hover = tab_math::point_in_rect(mouse_pos.0, mouse_pos.1, plus_rect);
         if plus_hover {
             let (px, py, pw, ph) = plus_rect;
-            self.push_rounded_rect_cmd(&RoundedRectCmd {
-                x: px as f32,
-                y: py as f32,
-                w: pw as f32,
-                h: ph as f32,
-                radius: self.metrics.scaled_px(5) as f32,
-                color: self.palette.inactive_tab_hover.to_pixel(),
-                opacity: 1.0,
-            });
+            self.push_button_hover_bg(px, py, pw, ph);
         }
         let plus_fg = if plus_hover {
             self.palette.tab_text_active.to_pixel()
@@ -46,59 +51,27 @@ impl super::GpuRenderer {
 
         // Draw hover background.
         if is_hovered {
-            self.push_rounded_rect_cmd(&RoundedRectCmd {
-                x: pin_x as f32,
-                y: pin_y as f32,
-                w: pin_w as f32,
-                h: pin_h as f32,
-                radius: self.metrics.scaled_px(5) as f32,
-                color: self.palette.inactive_tab_hover.to_pixel(),
-                opacity: 1.0,
-            });
+            self.push_button_hover_bg(pin_x, pin_y, pin_w, pin_h);
         }
 
-        let cx = pin_x as f32 + pin_w as f32 / 2.0;
-        let cy = pin_y as f32 + pin_h as f32 / 2.0;
-        let colors = super::super::types::PinColors {
-            active: self.palette.pin_active_color.to_pixel(),
-            hover: self.palette.tab_text_active.to_pixel(),
-            inactive: self.palette.tab_text_inactive.to_pixel(),
-        };
-        let layout = ui_layout::pin_icon_layout(
-            cx,
-            cy,
+        let layout = ui_layout::compute_pin_button_layout(
+            pin_x,
+            pin_y,
+            pin_w,
+            pin_h,
             self.metrics.ui_scale as f32,
             pinned,
             is_hovered,
-            &colors,
+            self.palette.pin_active_color.to_pixel(),
+            self.palette.tab_text_active.to_pixel(),
+            self.palette.tab_text_inactive.to_pixel(),
         );
 
         // Draw Bootstrap-style vertical pushpin icon from layout.
         let color = layout.color;
-        self.push_rect(
-            layout.head.0,
-            layout.head.1,
-            layout.head.2,
-            layout.head.3,
-            color,
-            1.0,
-        );
-        self.push_rect(
-            layout.body.0,
-            layout.body.1,
-            layout.body.2,
-            layout.body.3,
-            color,
-            1.0,
-        );
-        self.push_rect(
-            layout.platform.0,
-            layout.platform.1,
-            layout.platform.2,
-            layout.platform.3,
-            color,
-            1.0,
-        );
+        for &(x, y, w, h) in &[layout.head, layout.body, layout.platform] {
+            self.push_rect(x, y, w, h, color, 1.0);
+        }
         let (x0, y0, x1, y1) = layout.needle;
         self.push_line((x0, y0), (x1, y1), layout.needle_thickness, color, 1.0);
     }
@@ -155,28 +128,22 @@ impl super::GpuRenderer {
             opacity: 1.0,
         });
 
-        // Cut out inner ring with background color.
-        let inner_size = layout.ring_inner_radius * 2.0;
-        self.push_rounded_rect_cmd(&RoundedRectCmd {
-            x: layout.ring_cx - layout.ring_inner_radius,
-            y: layout.ring_cy - layout.ring_inner_radius,
-            w: inner_size,
-            h: inner_size,
-            radius: layout.ring_inner_radius,
-            color: self.palette.bar_bg.to_pixel(),
-            opacity: 1.0,
-        });
-
-        // Cut out center hole with background color.
-        let hole_size = layout.hole_radius * 2.0;
-        self.push_rounded_rect_cmd(&RoundedRectCmd {
-            x: layout.hole_cx - layout.hole_radius,
-            y: layout.hole_cy - layout.hole_radius,
-            w: hole_size,
-            h: hole_size,
-            radius: layout.hole_radius,
-            color: self.palette.bar_bg.to_pixel(),
-            opacity: 1.0,
-        });
+        // Cut out inner ring and center hole with background color.
+        let bar_bg = self.palette.bar_bg.to_pixel();
+        for (cx, cy, r) in [
+            (layout.ring_cx, layout.ring_cy, layout.ring_inner_radius),
+            (layout.hole_cx, layout.hole_cy, layout.hole_radius),
+        ] {
+            let size = r * 2.0;
+            self.push_rounded_rect_cmd(&RoundedRectCmd {
+                x: cx - r,
+                y: cy - r,
+                w: size,
+                h: size,
+                radius: r,
+                color: bar_bg,
+                opacity: 1.0,
+            });
+        }
     }
 }

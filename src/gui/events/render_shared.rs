@@ -102,6 +102,93 @@ pub(in crate::gui::events) struct FrameParams<'a> {
     pub update_banner: Option<UpdateBannerLayout>,
 }
 
+/// Window-level inputs for [`build_frame_params`], grouping the fields that are
+/// borrowed from `FerrumWindow` by name.
+///
+/// Using a struct keeps [`build_frame_params`] within the clippy argument-count limit
+/// while still avoiding a whole-`self` borrow (which would conflict with the
+/// simultaneous mutable borrow of `self.backend`).
+pub(in crate::gui::events) struct FrameParamsInput<'a> {
+    pub tabs: &'a [crate::gui::state::TabState],
+    pub active_tab: usize,
+    pub cursor_blink_start: std::time::Instant,
+    pub cursor_blink_interval_ms: u64,
+    pub sigwinch_deadline: Option<std::time::Instant>,
+    #[cfg(not(target_os = "macos"))]
+    pub hovered_tab: Option<usize>,
+    #[cfg(not(target_os = "macos"))]
+    pub mouse_pos: (f64, f64),
+    #[cfg(not(target_os = "macos"))]
+    pub pinned: bool,
+    pub update_banner_dismissed: bool,
+    pub update_install_state: &'a crate::gui::state::UpdateInstallState,
+    pub pending_update_tag: Option<&'a str>,
+}
+
+/// Constructs a [`FrameParamsInput`] from a `FerrumWindow` reference.
+///
+/// Using a macro instead of a method avoids a whole-`self` borrow conflict
+/// when `self.backend` is already mutably borrowed by the caller.
+macro_rules! make_frame_params_input {
+    ($self:ident) => {
+        $crate::gui::events::render_shared::FrameParamsInput {
+            tabs: &$self.tabs,
+            active_tab: $self.active_tab,
+            cursor_blink_start: $self.cursor_blink_start,
+            cursor_blink_interval_ms: $self.cursor_blink_interval_ms,
+            sigwinch_deadline: $self.sigwinch_deadline,
+            #[cfg(not(target_os = "macos"))]
+            hovered_tab: $self.hovered_tab,
+            #[cfg(not(target_os = "macos"))]
+            mouse_pos: $self.mouse_pos,
+            #[cfg(not(target_os = "macos"))]
+            pinned: $self.pinned,
+            update_banner_dismissed: $self.update_banner_dismissed,
+            update_install_state: &$self.update_install_state,
+            pending_update_tag: $self.pending_update_tag.as_deref(),
+        }
+    };
+}
+pub(in crate::gui::events) use make_frame_params_input;
+
+/// Builds the read-only [`FrameParams`] snapshot used by both CPU and GPU render paths.
+///
+/// Accepts individual fields from `FerrumWindow` (via [`FrameParamsInput`]) rather than
+/// `&self`, so callers can hold a simultaneous mutable borrow of `self.backend` without
+/// triggering a split-borrow conflict.
+///
+/// `tab_layout_metrics` and `tab_bar_h` must be read from `self.backend` before the caller
+/// pattern-matches the backend variant mutably.
+pub(in crate::gui::events) fn build_frame_params<'a>(
+    input: FrameParamsInput<'a>,
+    tab_layout_metrics: &crate::gui::renderer::shared::tab_math::TabLayoutMetrics,
+    tab_bar_h: u32,
+    bw: u32,
+    bh: u32,
+) -> FrameParams<'a> {
+    FrameParams {
+        tab: input.tabs.get(input.active_tab),
+        cursor_blink_start: input.cursor_blink_start,
+        cursor_blink_interval_ms: input.cursor_blink_interval_ms,
+        suppress_cursor: input.sigwinch_deadline.is_some(),
+        #[cfg(not(target_os = "macos"))]
+        hovered_tab: input.hovered_tab,
+        #[cfg(not(target_os = "macos"))]
+        mouse_pos: input.mouse_pos,
+        #[cfg(not(target_os = "macos"))]
+        pinned: input.pinned,
+        update_banner: compute_banner(
+            input.update_banner_dismissed,
+            input.update_install_state,
+            input.pending_update_tag,
+            tab_layout_metrics,
+            tab_bar_h,
+            bw,
+            bh,
+        ),
+    }
+}
+
 impl FerrumWindow {
     /// Builds the per-frame tab bar metadata shared by both render paths.
     ///
@@ -224,6 +311,41 @@ impl FerrumWindow {
             tab_bar_visible,
         }
     }
+}
+
+/// Computes the optional update banner layout for a frame.
+///
+/// Extracted from both CPU and GPU render paths to eliminate the duplicated
+/// banner-visibility guard and `compute_update_banner_layout` call.
+///
+/// # Arguments
+/// * `dismissed` — `true` when the user has dismissed the banner.
+/// * `install_state` — current install phase; `Done` hides the banner.
+/// * `pending_tag` — version tag string when an update is pending, `None` otherwise.
+/// * `tab_layout_metrics` — pre-computed renderer metrics.
+/// * `tab_bar_h` — tab bar height in physical pixels.
+/// * `bw`, `bh` — frame buffer width/height in physical pixels.
+pub(in crate::gui::events) fn compute_banner(
+    dismissed: bool,
+    install_state: &crate::gui::state::UpdateInstallState,
+    pending_tag: Option<&str>,
+    tab_layout_metrics: &crate::gui::renderer::shared::tab_math::TabLayoutMetrics,
+    tab_bar_h: u32,
+    bw: u32,
+    bh: u32,
+) -> Option<UpdateBannerLayout> {
+    use crate::gui::renderer::shared::banner_layout::compute_update_banner_layout;
+    use crate::gui::state::UpdateInstallState;
+
+    if dismissed || *install_state == UpdateInstallState::Done {
+        return None;
+    }
+    pending_tag.and_then(|tag| {
+        compute_update_banner_layout(tag, tab_layout_metrics, bw, bh, tab_bar_h).map(|mut layout| {
+            layout.installing = *install_state == UpdateInstallState::Installing;
+            layout
+        })
+    })
 }
 
 /// Draws the complete terminal frame content using the given renderer.

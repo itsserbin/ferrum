@@ -229,12 +229,7 @@ pub fn selected_tab_index() -> usize {
     CURRENT_TAB.load(Ordering::Relaxed).max(0) as usize
 }
 
-/// Closes the settings window and reopens it at the given tab with fresh translations.
-pub fn request_reopen(config: &AppConfig, tx: mpsc::Sender<AppConfig>, tab_index: usize) {
-    *REOPEN_DATA.lock().unwrap() = Some((config.clone(), tx));
-    REOPEN_WITH_TAB.store(tab_index as isize, Ordering::Relaxed);
-    close_settings_window();
-}
+crate::gui::platform::impl_settings_request_reopen!();
 
 pub fn open_settings_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>) {
     if WINDOW_OPEN

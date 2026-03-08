@@ -45,12 +45,7 @@ pub fn selected_tab_index() -> usize {
     NOTEBOOK_PAGE.load(Ordering::Relaxed).max(0) as usize
 }
 
-/// Closes the settings window and reopens it at the given tab with fresh translations.
-pub fn request_reopen(config: &AppConfig, tx: mpsc::Sender<AppConfig>, tab_index: usize) {
-    *REOPEN_DATA.lock().unwrap() = Some((config.clone(), tx));
-    REOPEN_WITH_TAB.store(tab_index as isize, Ordering::Relaxed);
-    close_settings_window();
-}
+crate::gui::platform::impl_settings_request_reopen!();
 
 /// Ensures GTK4 is initialized exactly once on a dedicated thread.
 /// That thread runs a `glib::MainLoop` forever; subsequent windows are
@@ -224,17 +219,9 @@ fn build_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>, initial_tab: us
     }
 
     // Connect DropDown selection-changed for font family, theme, and language.
-    {
+    for combo in [&controls.font_family, &controls.theme, &controls.language] {
         let send = build_and_send.clone();
-        controls.font_family.connect_selected_notify(move |_| send());
-    }
-    {
-        let send = build_and_send.clone();
-        controls.theme.connect_selected_notify(move |_| send());
-    }
-    {
-        let send = build_and_send.clone();
-        controls.language.connect_selected_notify(move |_| send());
+        combo.connect_selected_notify(move |_| send());
     }
 
     // Security mode combo — apply presets, then send.
@@ -421,10 +408,7 @@ fn build_window(config: &AppConfig, tx: mpsc::Sender<AppConfig>, initial_tab: us
 // ── Tab builders ─────────────────────────────────────────────────────
 
 fn build_font_tab(config: &AppConfig, t: &crate::i18n::Translations) -> (gtk4::Box, SpinButton, DropDown, SpinButton) {
-    let vbox = gtk4::Box::new(Orientation::Vertical, 12);
-    vbox.set_margin_top(16);
-    vbox.set_margin_start(16);
-    vbox.set_margin_end(16);
+    let vbox = tab_vbox();
 
     let font_size = labeled_spin(
         &vbox,
@@ -448,10 +432,7 @@ fn build_font_tab(config: &AppConfig, t: &crate::i18n::Translations) -> (gtk4::B
 }
 
 fn build_theme_tab(config: &AppConfig, t: &crate::i18n::Translations) -> (gtk4::Box, DropDown) {
-    let vbox = gtk4::Box::new(Orientation::Vertical, 12);
-    vbox.set_margin_top(16);
-    vbox.set_margin_start(16);
-    vbox.set_margin_end(16);
+    let vbox = tab_vbox();
 
     let selected = match config.theme {
         ThemeChoice::FerrumDark => 0,
@@ -463,10 +444,7 @@ fn build_theme_tab(config: &AppConfig, t: &crate::i18n::Translations) -> (gtk4::
 }
 
 fn build_terminal_tab(config: &AppConfig, t: &crate::i18n::Translations) -> (gtk4::Box, DropDown, SpinButton, SpinButton) {
-    let vbox = gtk4::Box::new(Orientation::Vertical, 12);
-    vbox.set_margin_top(16);
-    vbox.set_margin_start(16);
-    vbox.set_margin_end(16);
+    let vbox = tab_vbox();
 
     let language = labeled_combo(
         &vbox,
@@ -500,10 +478,7 @@ fn build_layout_tab(
     config: &AppConfig,
     t: &crate::i18n::Translations,
 ) -> (gtk4::Box, SpinButton, SpinButton, SpinButton, SpinButton) {
-    let vbox = gtk4::Box::new(Orientation::Vertical, 12);
-    vbox.set_margin_top(16);
-    vbox.set_margin_start(16);
-    vbox.set_margin_end(16);
+    let vbox = tab_vbox();
 
     let win_padding = labeled_spin(
         &vbox,
@@ -549,10 +524,7 @@ fn build_security_tab(
     config: &AppConfig,
     t: &crate::i18n::Translations,
 ) -> (gtk4::Box, DropDown, Switch, Switch, Switch, Switch) {
-    let vbox = gtk4::Box::new(Orientation::Vertical, 12);
-    vbox.set_margin_top(16);
-    vbox.set_margin_start(16);
-    vbox.set_margin_end(16);
+    let vbox = tab_vbox();
 
     let mode_index = match config.security.mode {
         SecurityMode::Disabled => 0,
@@ -586,10 +558,7 @@ fn build_updates_tab(
     config: &AppConfig,
     t: &crate::i18n::Translations,
 ) -> (gtk4::Box, Switch, gtk4::Button, Label, gtk4::Button) {
-    let vbox = gtk4::Box::new(Orientation::Vertical, 12);
-    vbox.set_margin_top(16);
-    vbox.set_margin_start(16);
-    vbox.set_margin_end(16);
+    let vbox = tab_vbox();
 
     let version_text = format!("{}: {}", t.update_current_version, env!("CARGO_PKG_VERSION"));
     let version_label = Label::new(Some(&version_text));
@@ -619,6 +588,11 @@ fn build_updates_tab(
 }
 
 // ── Widget helpers ───────────────────────────────────────────────────
+
+fn tab_vbox() -> gtk4::Box {
+    let vbox = tab_vbox();
+    vbox
+}
 
 fn labeled_spin(
     parent: &gtk4::Box,
@@ -756,30 +730,39 @@ fn build_config(c: &Controls) -> AppConfig {
 
 // ── Security sync ────────────────────────────────────────────────────
 
-fn apply_security_preset(c: &Controls, active: Option<usize>) {
-    let switches = [&c.paste, &c.block_title, &c.limit_cursor, &c.clear_mouse];
-    match active {
+/// Applies active/sensitive state to all security switches based on the selected mode index.
+///
+/// - `Some(0)` (Disabled): all switches turned off and made insensitive.
+/// - `Some(1)` (Standard): all switches turned on and made sensitive.
+/// - `_`       (Custom):   keeps current values, makes switches sensitive.
+fn apply_security_switches_state(switches: &[&Switch], mode: Option<usize>) {
+    match mode {
         Some(0) => {
-            // Disabled: all off, insensitive.
-            for sw in &switches {
+            for sw in switches {
                 sw.set_active(false);
                 sw.set_sensitive(false);
             }
         }
         Some(1) => {
-            // Standard: all on, sensitive.
-            for sw in &switches {
+            for sw in switches {
                 sw.set_active(true);
                 sw.set_sensitive(true);
             }
         }
         _ => {
-            // Custom: keep values, make sensitive.
-            for sw in &switches {
+            for sw in switches {
                 sw.set_sensitive(true);
             }
         }
     }
+}
+
+fn security_switches(c: &Controls) -> [&Switch; 4] {
+    [&c.paste, &c.block_title, &c.limit_cursor, &c.clear_mouse]
+}
+
+fn apply_security_preset(c: &Controls, active: Option<usize>) {
+    apply_security_switches_state(&security_switches(c), active);
 }
 
 fn infer_security_mode(c: &Controls) {
@@ -799,10 +782,7 @@ fn infer_security_mode(c: &Controls) {
     c.security_mode.set_selected(new_index as u32);
 
     if matches!(inferred, SecurityMode::Disabled) {
-        let switches = [&c.paste, &c.block_title, &c.limit_cursor, &c.clear_mouse];
-        for sw in &switches {
-            sw.set_sensitive(false);
-        }
+        apply_security_switches_state(&security_switches(c), Some(0));
     }
 }
 

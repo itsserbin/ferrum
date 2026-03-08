@@ -6,6 +6,14 @@ use crate::gui::*;
 #[cfg(not(target_os = "macos"))]
 const RESIZE_EDGE: u32 = 4;
 
+/// Returns the appropriate cursor icon for a pane divider split direction.
+fn divider_cursor_icon(direction: SplitDirection) -> CursorIcon {
+    match direction {
+        SplitDirection::Horizontal => CursorIcon::ColResize,
+        SplitDirection::Vertical => CursorIcon::RowResize,
+    }
+}
+
 /// Detects whether the cursor is near a window edge for resize purposes.
 /// Returns the resize direction if within the edge zone, None otherwise.
 #[cfg(not(target_os = "macos"))]
@@ -142,11 +150,7 @@ impl FerrumWindow {
         };
 
         // Set appropriate resize cursor during drag.
-        let cursor = match direction {
-            SplitDirection::Horizontal => CursorIcon::ColResize,
-            SplitDirection::Vertical => CursorIcon::RowResize,
-        };
-        self.window.set_cursor(cursor);
+        self.window.set_cursor(divider_cursor_icon(direction));
 
         // Compute the new pixel position based on drag direction.
         let new_pixel_pos = match direction {
@@ -199,11 +203,7 @@ impl FerrumWindow {
                 DIVIDER_HIT_ZONE,
             )
         {
-            let cursor = match hit.direction {
-                SplitDirection::Horizontal => CursorIcon::ColResize,
-                SplitDirection::Vertical => CursorIcon::RowResize,
-            };
-            self.window.set_cursor(cursor);
+            self.window.set_cursor(divider_cursor_icon(hit.direction));
             return true;
         }
 
@@ -243,16 +243,19 @@ impl FerrumWindow {
                 let delta_y = my - drag_start_y;
                 let lines_per_pixel = scrollback_len as f64 / scrollable_track as f64;
                 let new_offset = drag_start_offset as f64 - delta_y * lines_per_pixel;
-                let new_offset = new_offset.round() as isize;
-                let clamped = new_offset.max(0) as usize;
-                if let Some(leaf) = self.active_leaf_mut() {
-                    leaf.scroll_offset = clamped.min(leaf.terminal.screen.scrollback_len());
-                    leaf.scrollbar.last_activity = std::time::Instant::now();
-                }
+                self.apply_scroll_offset(new_offset.round().max(0.0) as usize);
             }
         }
         self.window.request_redraw();
         true
+    }
+
+    /// Applies a clamped scroll offset to the active leaf and records activity time.
+    pub(in crate::gui::events::mouse) fn apply_scroll_offset(&mut self, clamped: usize) {
+        if let Some(leaf) = self.active_leaf_mut() {
+            leaf.scroll_offset = clamped.min(leaf.terminal.screen.scrollback_len());
+            leaf.scrollbar.last_activity = std::time::Instant::now();
+        }
     }
 
     /// Updates the scrollbar hover state based on mouse position.

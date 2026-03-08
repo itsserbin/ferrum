@@ -155,6 +155,24 @@ impl FerrumWindow {
         }
     }
 
+    /// Returns the content rectangle for the given pane, with inner padding applied.
+    ///
+    /// Combines `terminal_content_rect` + pane layout + inner padding into one call,
+    /// eliminating the duplicated three-step lookup in geometry and wheel code.
+    fn pane_content_rect(&self, pane_id: pane::PaneId) -> Option<pane::PaneRect> {
+        let tab = self.active_tab_ref()?;
+        let terminal_rect = self.terminal_content_rect();
+        let pane_pad = if tab.has_multiple_panes() {
+            self.backend.pane_inner_padding_px()
+        } else {
+            0
+        };
+        tab.pane_tree
+            .layout(terminal_rect, pane::DIVIDER_WIDTH)
+            .into_iter()
+            .find_map(|(id, rect)| (id == pane_id).then_some(rect.inset(pane_pad)))
+    }
+
     fn compose_window_title(&self, update: Option<&crate::update::AvailableRelease>) -> String {
         let base = self
             .active_tab_ref()

@@ -4,6 +4,7 @@ use softbuffer::Surface;
 use winit::window::Window;
 
 use crate::config::AppConfig;
+use super::shared::tab_math::TabLayoutMetrics;
 use super::traits::Renderer;
 #[cfg(not(target_os = "macos"))]
 use super::TabInfo;
@@ -113,6 +114,10 @@ impl RendererBackend {
 
     pub fn tab_bar_height_px(&self) -> u32 {
         self.as_renderer().tab_bar_height_px()
+    }
+
+    pub fn tab_layout_metrics(&self) -> TabLayoutMetrics {
+        self.as_renderer().tab_layout_metrics()
     }
 
     pub fn window_padding_px(&self) -> u32 {

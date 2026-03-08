@@ -2,6 +2,24 @@ use crate::gui::*;
 
 use super::word_motion::HorizontalMotion;
 
+/// Returns `Some(true)` for Backspace, `Some(false)` for Delete, `None` for any other key.
+fn parse_delete_key(key: &Key) -> Option<bool> {
+    if matches!(key, Key::Named(NamedKey::Backspace)) {
+        Some(true)
+    } else if matches!(key, Key::Named(NamedKey::Delete)) {
+        Some(false)
+    } else {
+        None
+    }
+}
+
+fn append_delete_seq(bytes: &mut Vec<u8>, count: usize, use_backspace: bool) {
+    let seq: &[u8] = if use_backspace { b"\x7f" } else { b"\x1b[3~" };
+    for _ in 0..count {
+        bytes.extend_from_slice(seq);
+    }
+}
+
 impl FerrumWindow {
     fn build_selection_delete_bytes(
         cursor_col: usize,
@@ -12,12 +30,7 @@ impl FerrumWindow {
         let mut bytes = Vec::new();
 
         bytes.extend(Self::build_horizontal_cursor_move_bytes(cursor_col, target_col));
-
-        let delete_seq: &[u8] = if use_backspace { b"\x7f" } else { b"\x1b[3~" };
-        for _ in 0..cells_to_delete {
-            bytes.extend_from_slice(delete_seq);
-        }
-
+        append_delete_seq(&mut bytes, cells_to_delete, use_backspace);
         bytes
     }
 
@@ -76,11 +89,9 @@ impl FerrumWindow {
     }
 
     pub(super) fn handle_selection_delete_key(&mut self, key: &Key) -> bool {
-        let use_backspace = matches!(key, Key::Named(NamedKey::Backspace));
-        let use_delete = matches!(key, Key::Named(NamedKey::Delete));
-        if !use_backspace && !use_delete {
+        let Some(use_backspace) = parse_delete_key(key) else {
             return false;
-        }
+        };
 
         // Only plain Backspace/Delete should delete active terminal selection.
         if self.modifiers.shift_key()
@@ -102,28 +113,21 @@ impl FerrumWindow {
 
     fn build_word_delete_bytes(cells_to_delete: usize, use_backspace: bool) -> Vec<u8> {
         let mut bytes = Vec::new();
-        let delete_seq: &[u8] = if use_backspace { b"\x7f" } else { b"\x1b[3~" };
-        for _ in 0..cells_to_delete {
-            bytes.extend_from_slice(delete_seq);
-        }
+        append_delete_seq(&mut bytes, cells_to_delete, use_backspace);
         bytes
     }
 
     fn build_forward_word_delete_bytes(cursor_col: usize, target_col: usize) -> Vec<u8> {
         let cells_to_delete = target_col.saturating_sub(cursor_col);
         let mut bytes = Self::build_horizontal_cursor_move_bytes(cursor_col, target_col);
-        for _ in 0..cells_to_delete {
-            bytes.extend_from_slice(b"\x7f");
-        }
+        append_delete_seq(&mut bytes, cells_to_delete, true);
         bytes
     }
 
     pub(super) fn handle_word_delete_key(&mut self, key: &Key) -> bool {
-        let use_backspace = matches!(key, Key::Named(NamedKey::Backspace));
-        let use_delete = matches!(key, Key::Named(NamedKey::Delete));
-        if !use_backspace && !use_delete {
+        let Some(use_backspace) = parse_delete_key(key) else {
             return false;
-        }
+        };
 
         if !Self::is_word_delete_modifier(self.modifiers) {
             return false;
@@ -174,15 +178,8 @@ impl FerrumWindow {
 
 #[cfg(test)]
 mod tests {
-    use crate::gui::{FerrumWindow, ModifiersState};
-
-    fn mods(ctrl: bool, shift: bool, alt: bool) -> ModifiersState {
-        let mut state = ModifiersState::empty();
-        state.set(ModifiersState::CONTROL, ctrl);
-        state.set(ModifiersState::SHIFT, shift);
-        state.set(ModifiersState::ALT, alt);
-        state
-    }
+    use crate::gui::FerrumWindow;
+    use super::super::mods;
 
     #[test]
     fn selection_delete_bytes_with_backspace_moves_to_right_edge_then_erases() {

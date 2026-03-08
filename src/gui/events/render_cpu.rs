@@ -3,9 +3,7 @@
 use crate::gui::renderer::backend::RendererBackend;
 use crate::gui::*;
 
-use crate::gui::renderer::shared::banner_layout::compute_update_banner_layout;
-use crate::gui::state::UpdateInstallState;
-use super::render_shared::{FrameParams, draw_frame_content};
+use super::render_shared::{build_frame_params, draw_frame_content, make_frame_params_input};
 
 impl FerrumWindow {
     /// CPU rendering path: acquires the softbuffer surface, clears it,
@@ -16,6 +14,12 @@ impl FerrumWindow {
         let state = self.build_tab_bar_state(bw);
         #[cfg(not(target_os = "macos"))]
         let frame_tab_infos = state.render_tab_infos();
+
+        // Extract metrics from the backend before pattern-matching it mutably,
+        // so the borrow checker sees separate borrows for the backend and the
+        // remaining FerrumWindow fields used to build FrameParams.
+        let tab_layout_metrics = self.backend.tab_layout_metrics();
+        let tab_bar_h = self.backend.tab_bar_height_px();
 
         let RendererBackend::Cpu { renderer, surface } = &mut self.backend else {
             return;
@@ -34,32 +38,13 @@ impl FerrumWindow {
 
         // Build read-only frame params from the other fields of self
         // (split borrow: self.backend is already mutably borrowed above).
-        let params = FrameParams {
-            tab: self.tabs.get(self.active_tab),
-            cursor_blink_start: self.cursor_blink_start,
-            cursor_blink_interval_ms: self.cursor_blink_interval_ms,
-            suppress_cursor: self.sigwinch_deadline.is_some(),
-            #[cfg(not(target_os = "macos"))]
-            hovered_tab: self.hovered_tab,
-            #[cfg(not(target_os = "macos"))]
-            mouse_pos: self.mouse_pos,
-            #[cfg(not(target_os = "macos"))]
-            pinned: self.pinned,
-            update_banner: if self.update_banner_dismissed
-                || self.update_install_state == UpdateInstallState::Done
-            {
-                None
-            } else {
-                self.pending_update_tag.as_deref().and_then(|tag| {
-                    let m = renderer.tab_layout_metrics();
-                    let tab_bar_h = renderer.tab_bar_height_px();
-                    compute_update_banner_layout(tag, &m, bw as u32, bh as u32, tab_bar_h).map(|mut layout| {
-                        layout.installing = self.update_install_state == UpdateInstallState::Installing;
-                        layout
-                    })
-                })
-            },
-        };
+        let params = build_frame_params(
+            make_frame_params_input!(self),
+            &tab_layout_metrics,
+            tab_bar_h,
+            bw as u32,
+            bh as u32,
+        );
 
         draw_frame_content(
             renderer.as_mut(),

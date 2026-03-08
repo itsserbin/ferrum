@@ -68,16 +68,18 @@ impl FerrumWindow {
 }
 
 #[cfg(test)]
-mod tests {
-    use crate::gui::{FerrumWindow, Key, KeyCode, ModifiersState, NamedKey, PhysicalKey};
+pub(crate) fn mods(ctrl: bool, shift: bool, alt: bool) -> ModifiersState {
+    let mut state = ModifiersState::empty();
+    state.set(ModifiersState::CONTROL, ctrl);
+    state.set(ModifiersState::SHIFT, shift);
+    state.set(ModifiersState::ALT, alt);
+    state
+}
 
-    fn mods(ctrl: bool, shift: bool, alt: bool) -> ModifiersState {
-        let mut state = ModifiersState::empty();
-        state.set(ModifiersState::CONTROL, ctrl);
-        state.set(ModifiersState::SHIFT, shift);
-        state.set(ModifiersState::ALT, alt);
-        state
-    }
+#[cfg(test)]
+mod tests {
+    use crate::gui::{FerrumWindow, Key, KeyCode, NamedKey, PhysicalKey};
+    use super::mods;
 
     #[test]
     fn normalize_non_text_key_maps_character_arrow_from_physical_code() {

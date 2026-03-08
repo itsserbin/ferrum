@@ -118,4 +118,71 @@ impl CpuRenderer {
     pub(crate) fn scrollbar_margin_px(&self) -> u32 {
         self.metrics.scrollbar_margin_px()
     }
+
+    /// Draws a standard hover-highlight rounded rect for a tab-bar button.
+    #[cfg(not(target_os = "macos"))]
+    pub(in crate::gui::renderer) fn draw_button_hover_bg(
+        &self,
+        target: &mut super::types::RenderTarget<'_>,
+        x: u32,
+        y: u32,
+        w: u32,
+        h: u32,
+    ) {
+        use super::RoundedShape;
+        self.draw_rounded_rect(
+            target,
+            &RoundedShape {
+                x: x as i32,
+                y: y as i32,
+                w,
+                h,
+                radius: self.scaled_px(5),
+                color: self.palette.inactive_tab_hover.to_pixel(),
+                alpha: 255,
+            },
+        );
+    }
+
+    /// Draws a floating overlay box: a filled rounded rect with a subtle border on top.
+    /// Used for tooltips, banners, and other overlay UI elements.
+    #[cfg(not(target_os = "macos"))]
+    pub(in crate::gui::renderer) fn draw_overlay_box(
+        &self,
+        target: &mut super::types::RenderTarget<'_>,
+        bg_x: i32,
+        bg_y: i32,
+        bg_w: u32,
+        bg_h: u32,
+        radius: u32,
+    ) {
+        use super::RoundedShape;
+
+        // Background fill.
+        self.draw_rounded_rect(
+            target,
+            &RoundedShape {
+                x: bg_x,
+                y: bg_y,
+                w: bg_w,
+                h: bg_h,
+                radius,
+                color: self.palette.active_tab_bg.to_pixel(),
+                alpha: 245,
+            },
+        );
+        // Subtle border.
+        self.draw_rounded_rect(
+            target,
+            &RoundedShape {
+                x: bg_x,
+                y: bg_y,
+                w: bg_w,
+                h: bg_h,
+                radius,
+                color: self.palette.tab_border.to_pixel(),
+                alpha: 80,
+            },
+        );
+    }
 }

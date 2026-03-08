@@ -165,6 +165,29 @@ impl PaneLeaf {
             eprintln!("[ferrum] PTY flush failed for pane {}: {e}", self.id);
         }
     }
+
+    /// Processes incoming PTY bytes, records any security events they generate,
+    /// and writes any terminal responses back to the PTY.
+    pub(in crate::gui) fn process_and_flush(&mut self, bytes: &[u8]) {
+        self.terminal.process(bytes);
+
+        for event in self.terminal.drain_security_events() {
+            self.security.record(event);
+        }
+
+        let responses = self.terminal.drain_responses();
+        if !responses.is_empty() {
+            self.write_pty(&responses);
+        }
+    }
+
+    /// Runs post-exit cleanup on the terminal and records any resulting security events.
+    pub(in crate::gui) fn cleanup_and_drain_security(&mut self) {
+        self.terminal.cleanup_after_process_exit();
+        for event in self.terminal.drain_security_events() {
+            self.security.record(event);
+        }
+    }
 }
 
 /// An internal split node holding two children.

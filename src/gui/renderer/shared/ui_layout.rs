@@ -28,6 +28,42 @@ pub struct PinIconLayout {
     pub color: u32,
 }
 
+/// Computes the full pushpin icon layout from a button rectangle.
+///
+/// Combines the `is_hovered` test, center computation, `PinColors` construction,
+/// and the [`pin_icon_layout`] call that are duplicated in both the CPU
+/// (`buttons.rs`) and GPU (`tab_controls.rs`) renderers.
+///
+/// # Arguments
+/// * `pin_x`, `pin_y` — top-left corner of the button rectangle (physical pixels).
+/// * `pin_w`, `pin_h` — width and height of the button rectangle (physical pixels).
+/// * `ui_scale` — HiDPI scale factor.
+/// * `pinned` — whether the window is currently pinned (always-on-top).
+/// * `is_hovered` — whether the mouse is currently over the button.
+/// * `active_color`, `hover_color`, `inactive_color` — resolved 0xRRGGBB colors.
+#[cfg(not(target_os = "macos"))]
+pub fn compute_pin_button_layout(
+    pin_x: u32,
+    pin_y: u32,
+    pin_w: u32,
+    pin_h: u32,
+    ui_scale: f32,
+    pinned: bool,
+    is_hovered: bool,
+    active_color: u32,
+    hover_color: u32,
+    inactive_color: u32,
+) -> PinIconLayout {
+    let cx = pin_x as f32 + pin_w as f32 / 2.0;
+    let cy = pin_y as f32 + pin_h as f32 / 2.0;
+    let colors = crate::gui::renderer::types::PinColors {
+        active: active_color,
+        hover: hover_color,
+        inactive: inactive_color,
+    };
+    pin_icon_layout(cx, cy, ui_scale, pinned, is_hovered, &colors)
+}
+
 /// Computes the pushpin icon layout centered in the given rectangle.
 ///
 /// # Arguments
