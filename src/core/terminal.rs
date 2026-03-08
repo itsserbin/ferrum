@@ -109,8 +109,8 @@ impl Terminal {
         default_bg: Color,
         ansi_palette: [Color; 16],
     ) -> Self {
-        let mut screen = PageList::new(rows, cols, max_scrollback);
-        let cursor_pin = screen.register_pin(PageCoord { abs_row: 0, col: 0 });
+        let screen = PageList::new(rows, cols, max_scrollback);
+        let cursor_pin = screen.pin_at(PageCoord { abs_row: 0, col: 0 });
         Self {
             screen,
             cursor_pin,
@@ -195,8 +195,8 @@ impl Terminal {
         let rows = self.screen.viewport_rows();
         let cols = self.screen.cols();
         let max_sb = self.max_scrollback;
-        let mut new_screen = PageList::new(rows, cols, max_sb);
-        self.cursor_pin = new_screen.register_pin(PageCoord { abs_row: 0, col: 0 });
+        let new_screen = PageList::new(rows, cols, max_sb);
+        self.cursor_pin = new_screen.pin_at(PageCoord { abs_row: 0, col: 0 });
         self.screen = new_screen;
         self.reset_scroll_region();
     }
@@ -204,14 +204,6 @@ impl Terminal {
     /// Drains all pending PTY response bytes.
     pub fn drain_responses(&mut self) -> Vec<u8> {
         std::mem::take(&mut self.pending_responses)
-    }
-
-    /// No-op: scrollback_popped tracking removed — selection uses screen coords.
-    ///
-    /// TODO: Remove this stub and the unreachable `adjust_for_scrollback_pop` branch
-    /// in `src/gui/events/pty.rs` once the `PageList` eviction model is settled.
-    pub fn drain_scrollback_popped(&mut self) -> usize {
-        0
     }
 
     /// Registers a tracked selection-start pin at the given absolute row/col.
@@ -229,7 +221,7 @@ impl Terminal {
     /// Creates a tracked pin at the given absolute row/col.
     fn make_selection_pin(&mut self, abs_row: usize, col: usize) -> TrackedPin {
         let coord = PageCoord { abs_row, col };
-        self.screen.register_pin(coord)
+        self.screen.pin_at(coord)
     }
 
     /// Clears both selection tracking pins.
@@ -469,8 +461,8 @@ impl Terminal {
         self.cwd = None;
         self.reset_attributes();
         self.parser = Parser::new();
-        let mut screen = PageList::new(rows, cols, max_scrollback);
-        self.cursor_pin = screen.register_pin(PageCoord { abs_row: 0, col: 0 });
+        let screen = PageList::new(rows, cols, max_scrollback);
+        self.cursor_pin = screen.pin_at(PageCoord { abs_row: 0, col: 0 });
         self.screen = screen;
     }
 

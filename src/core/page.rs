@@ -12,7 +12,10 @@ pub struct PageRow {
     /// reflow to avoid including trailing padding as logical-line content —
     /// which would otherwise silently discard inter-word spaces and leading
     /// indentation that fall at a soft-wrap boundary.
-    pub written_cols: usize,
+    ///
+    /// Intentionally not `pub`: all writes to `cells` must go through
+    /// `PageList::viewport_set`, which keeps this field in sync.
+    pub(crate) written_cols: usize,
 }
 
 impl PageRow {
@@ -53,39 +56,31 @@ impl PageRow {
 /// Maximum number of rows a single `Page` can hold.
 pub const PAGE_SIZE: usize = 256;
 
-/// A fixed-size block of up to [`PAGE_SIZE`] rows, heap-allocated to avoid
-/// stack overflow when holding 256 × cols cells.
+/// A lazily-populated block of up to [`PAGE_SIZE`] rows.
+///
+/// Rows are allocated on demand via [`push`] rather than upfront, so a freshly
+/// created page consumes only a small Vec header until rows are actually added.
 pub struct Page {
-    rows: Box<[PageRow; PAGE_SIZE]>,
-    pub len: usize,
-    pub cols: usize,
+    rows: Vec<PageRow>,
 }
 
 impl Page {
-    /// Allocates a new `Page` on the heap.
+    /// Creates an empty page.
     ///
-    /// The length is exactly `PAGE_SIZE` by construction (the iterator
-    /// produces precisely that many items), so the `try_into` conversion
-    /// always succeeds.
-    pub fn new(cols: usize) -> Box<Self> {
-        let rows: Box<[PageRow; PAGE_SIZE]> = (0..PAGE_SIZE)
-            .map(|_| PageRow::new(cols))
-            .collect::<Vec<_>>()
-            .try_into()
-            .expect("PAGE_SIZE rows");
-        Box::new(Self { rows, len: 0, cols })
+    /// No rows are allocated until [`push`] is called.
+    pub fn new() -> Self {
+        Self { rows: Vec::with_capacity(PAGE_SIZE) }
     }
 
     /// Returns `true` when no more rows can be pushed.
     pub fn is_full(&self) -> bool {
-        self.len >= PAGE_SIZE
+        self.rows.len() >= PAGE_SIZE
     }
 
     /// Appends a row. Panics in debug builds if the page is already full.
     pub fn push(&mut self, row: PageRow) {
         debug_assert!(!self.is_full(), "Page::push called on a full page");
-        self.rows[self.len] = row;
-        self.len += 1;
+        self.rows.push(row);
     }
 
     /// Returns a reference to the row at `idx`.
@@ -106,24 +101,23 @@ mod tests {
 
     #[test]
     fn page_new_has_empty_rows() {
-        let page = Page::new(80);
-        assert_eq!(page.len, 0);
-        assert_eq!(page.cols, 80);
+        let page = Page::new();
+        assert!(!page.is_full());
     }
 
     #[test]
     fn page_push_and_get_row() {
-        let mut page = Page::new(5);
+        let mut page = Page::new();
         let mut row = PageRow::new(5);
         row.cells[0] = GraphemeCell::from_char('A');
         page.push(row);
-        assert_eq!(page.len, 1);
+        assert_eq!(page.rows.len(), 1);
         assert_eq!(page.row(0).cells[0].grapheme(), "A");
     }
 
     #[test]
     fn page_row_wrapped_flag() {
-        let mut page = Page::new(5);
+        let mut page = Page::new();
         let mut row = PageRow::new(5);
         row.wrapped = true;
         page.push(row);
@@ -132,7 +126,7 @@ mod tests {
 
     #[test]
     fn page_is_full_at_capacity() {
-        let mut page = Page::new(5);
+        let mut page = Page::new();
         for _ in 0..PAGE_SIZE {
             page.push(PageRow::new(5));
         }
@@ -159,8 +153,8 @@ mod tests {
     }
 
     #[test]
-    fn page_get_mut_allows_mutation() {
-        let mut page = Page::new(3);
+    fn page_row_mut_allows_mutation() {
+        let mut page = Page::new();
         page.push(PageRow::new(3));
         page.row_mut(0).cells[1] = GraphemeCell::from_char('Z');
         assert_eq!(page.row(0).cells[1].grapheme(), "Z");

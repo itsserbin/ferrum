@@ -51,9 +51,9 @@ mod tests {
 
     #[test]
     fn pin_tracks_viewport_position() {
-        let mut list = PageList::new(24, 80, 1000);
+        let list = PageList::new(24, 80, 1000);
         let abs = list.viewport_start_abs();
-        let pin = list.register_pin(PageCoord {
+        let pin = list.pin_at(PageCoord {
             abs_row: abs + 23,
             col: 40,
         });
@@ -63,8 +63,8 @@ mod tests {
 
     #[test]
     fn pin_clone_shares_coordinate() {
-        let mut list = PageList::new(24, 80, 1000);
-        let pin = list.register_pin(PageCoord { abs_row: 0, col: 5 });
+        let list = PageList::new(24, 80, 1000);
+        let pin = list.pin_at(PageCoord { abs_row: 0, col: 5 });
         let pin_clone = pin.clone();
         pin.set_col(0);
         // The clone sees the same update.
@@ -73,8 +73,8 @@ mod tests {
 
     #[test]
     fn pin_col_can_be_reset() {
-        let mut list = PageList::new(24, 80, 1000);
-        let pin = list.register_pin(PageCoord {
+        let list = PageList::new(24, 80, 1000);
+        let pin = list.pin_at(PageCoord {
             abs_row: 10,
             col: 5,
         });
@@ -84,12 +84,12 @@ mod tests {
 
     #[test]
     fn multiple_pins_are_independent() {
-        let mut list = PageList::new(24, 80, 1000);
-        let pin_a = list.register_pin(PageCoord {
+        let list = PageList::new(24, 80, 1000);
+        let pin_a = list.pin_at(PageCoord {
             abs_row: 1,
             col: 10,
         });
-        let pin_b = list.register_pin(PageCoord {
+        let pin_b = list.pin_at(PageCoord {
             abs_row: 2,
             col: 20,
         });

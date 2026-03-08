@@ -15,23 +15,6 @@ impl FerrumWindow {
                 {
                     leaf.terminal.process(bytes);
 
-                    let popped = leaf.terminal.drain_scrollback_popped();
-                    if popped > 0 {
-                        leaf.selection = leaf
-                            .selection
-                            .and_then(|sel| sel.adjust_for_scrollback_pop(popped));
-                        // Keep pins in sync with the adjusted selection.
-                        match leaf.selection {
-                            Some(sel) => {
-                                leaf.terminal.set_selection_start(sel.start.abs_row, sel.start.col);
-                                leaf.terminal.set_selection_end(sel.end.abs_row, sel.end.col);
-                            }
-                            None => {
-                                leaf.terminal.clear_selection_pins();
-                            }
-                        }
-                    }
-
                     for event in leaf.terminal.drain_security_events() {
                         leaf.security.record(event);
                     }

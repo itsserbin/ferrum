@@ -25,7 +25,7 @@ impl super::Terminal {
             self.alt_screen = Some(main_screen);
             // Register a new cursor pin on the alt screen at (0, 0).
             let new_cursor_coord = PageCoord { abs_row: abs_start, col: 0 };
-            self.cursor_pin = self.screen.register_pin(new_cursor_coord);
+            self.cursor_pin = self.screen.pin_at(new_cursor_coord);
 
             self.saved_scroll_top = self.scroll_top;
             self.saved_scroll_bottom = self.scroll_bottom;
@@ -47,7 +47,7 @@ impl super::Terminal {
             let cols = self.screen.cols();
             let row = saved.abs_row.saturating_sub(vstart).min(rows.saturating_sub(1));
             let col = saved.col.min(cols.saturating_sub(1));
-            self.cursor_pin = self.screen.register_pin(PageCoord {
+            self.cursor_pin = self.screen.pin_at(PageCoord {
                 abs_row: vstart + row,
                 col,
             });

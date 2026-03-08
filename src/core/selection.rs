@@ -36,30 +36,6 @@ impl Selection {
         true
     }
 
-    /// Adjust selection after scrollback overflow: decrement rows by popped count.
-    /// Returns None if selection is entirely invalidated.
-    pub fn adjust_for_scrollback_pop(&self, popped: usize) -> Option<Selection> {
-        if popped == 0 {
-            return Some(*self);
-        }
-        if self.start.abs_row < popped && self.end.abs_row < popped {
-            return None;
-        }
-        let (_norm_start, norm_end) = self.normalized();
-        if norm_end.abs_row < popped {
-            return None;
-        }
-        Some(Selection {
-            start: PageCoord {
-                abs_row: self.start.abs_row.saturating_sub(popped),
-                col: self.start.col,
-            },
-            end: PageCoord {
-                abs_row: self.end.abs_row.saturating_sub(popped),
-                col: self.end.col,
-            },
-        })
-    }
 }
 
 #[cfg(test)]
@@ -121,45 +97,4 @@ mod tests {
         assert_eq!(e.col, 7);
     }
 
-    #[test]
-    fn adjust_for_scrollback_pop_zero() {
-        let sel = Selection {
-            start: PageCoord { abs_row: 10, col: 0 },
-            end: PageCoord { abs_row: 15, col: 5 },
-        };
-        let adjusted = sel.adjust_for_scrollback_pop(0).unwrap();
-        assert_eq!(adjusted, sel);
-    }
-
-    #[test]
-    fn adjust_for_scrollback_pop_partial() {
-        let sel = Selection {
-            start: PageCoord { abs_row: 10, col: 0 },
-            end: PageCoord { abs_row: 15, col: 5 },
-        };
-        let adjusted = sel.adjust_for_scrollback_pop(1).unwrap();
-        assert_eq!(adjusted.start.abs_row, 9);
-        assert_eq!(adjusted.end.abs_row, 14);
-    }
-
-    #[test]
-    fn adjust_for_scrollback_pop_invalidates() {
-        let sel = Selection {
-            start: PageCoord { abs_row: 0, col: 0 },
-            end: PageCoord { abs_row: 0, col: 5 },
-        };
-        assert!(sel.adjust_for_scrollback_pop(1).is_none());
-    }
-
-    #[test]
-    fn adjust_for_scrollback_pop_start_underflows() {
-        let sel = Selection {
-            start: PageCoord { abs_row: 0, col: 0 },
-            end: PageCoord { abs_row: 5, col: 5 },
-        };
-        let adjusted = sel.adjust_for_scrollback_pop(2).unwrap();
-        assert_eq!(adjusted.start.abs_row, 0);
-        assert_eq!(adjusted.start.col, 0);
-        assert_eq!(adjusted.end.abs_row, 3);
-    }
 }

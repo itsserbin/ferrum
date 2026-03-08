@@ -25,9 +25,9 @@ mod tests {
 
     #[test]
     fn page_types_are_accessible_via_core() {
-        let mut page = Page::new(4);
+        let mut page = Page::new();
         page.push(PageRow::new(4));
-        assert_eq!(page.len, 1);
+        assert!(!page.is_full());
         assert_eq!(PAGE_SIZE, 256);
     }
 
