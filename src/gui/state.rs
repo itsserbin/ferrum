@@ -205,8 +205,8 @@ pub(super) struct FerrumWindow {
     pub(super) last_click_time: std::time::Instant,
     pub(super) last_click_pos: Position,
     pub(super) click_streak: u8,
-    pub(super) selection_anchor: Option<crate::core::SelectionPoint>,
-    pub(super) keyboard_selection_anchor: Option<crate::core::SelectionPoint>,
+    pub(super) selection_anchor: Option<crate::core::PageCoord>,
+    pub(super) keyboard_selection_anchor: Option<crate::core::PageCoord>,
     pub(super) selection_drag_mode: SelectionDragMode,
     pub(super) hovered_tab: Option<usize>,
     #[cfg(not(target_os = "linux"))]

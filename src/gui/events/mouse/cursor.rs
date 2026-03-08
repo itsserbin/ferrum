@@ -223,8 +223,8 @@ impl FerrumWindow {
         let Some(leaf) = self.active_leaf_ref() else {
             return false;
         };
-        let scrollback_len = leaf.terminal.scrollback.len();
-        let grid_rows = leaf.terminal.grid.rows;
+        let scrollback_len = leaf.terminal.screen.scrollback_len();
+        let grid_rows = leaf.terminal.screen.viewport_rows();
         let drag_start_y = leaf.scrollbar.drag_start_y;
         let drag_start_offset = leaf.scrollbar.drag_start_offset;
 
@@ -246,7 +246,7 @@ impl FerrumWindow {
                 let new_offset = new_offset.round() as isize;
                 let clamped = new_offset.max(0) as usize;
                 if let Some(leaf) = self.active_leaf_mut() {
-                    leaf.scroll_offset = clamped.min(leaf.terminal.scrollback.len());
+                    leaf.scroll_offset = clamped.min(leaf.terminal.screen.scrollback_len());
                     leaf.scrollbar.last_activity = std::time::Instant::now();
                 }
             }
@@ -262,7 +262,7 @@ impl FerrumWindow {
         let in_zone = self.is_in_scrollbar_zone(mx, size.width);
         let has_scrollback = self
             .active_leaf_ref()
-            .is_some_and(|l| !l.terminal.scrollback.is_empty());
+            .is_some_and(|l| !l.terminal.screen.scrollback_len() == 0);
         let track_top = tab_bar_height + window_padding;
         let track_bottom = size.height as f64 - window_padding;
         let in_track = my >= track_top && my <= track_bottom;

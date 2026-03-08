@@ -113,13 +113,12 @@ mod tests {
     #[test]
     fn alt_screen_enter() {
         let mut term = Terminal::new(4, 10);
-        term.cursor_row = 2;
-        term.cursor_col = 5;
+        term.set_cursor(2, 5);
         term.process(b"\x1b[?1049h");
 
         assert!(term.is_alt_screen());
-        assert_eq!(term.cursor_row, 0);
-        assert_eq!(term.cursor_col, 0);
+        assert_eq!(term.cursor_row(), 0);
+        assert_eq!(term.cursor_col(), 0);
     }
 
     #[test]
@@ -127,8 +126,8 @@ mod tests {
         let mut term = Terminal::new(4, 10);
         // Write something on main screen
         term.process(b"Hello");
-        let saved_row = term.cursor_row;
-        let saved_col = term.cursor_col;
+        let saved_row = term.cursor_row();
+        let saved_col = term.cursor_col();
 
         // Enter alt screen, write something different
         term.process(b"\x1b[?1049h");
@@ -140,12 +139,12 @@ mod tests {
         assert!(!term.is_alt_screen());
 
         // Cursor restored
-        assert_eq!(term.cursor_row, saved_row);
-        assert_eq!(term.cursor_col, saved_col);
+        assert_eq!(term.cursor_row(), saved_row);
+        assert_eq!(term.cursor_col(), saved_col);
 
         // Original grid restored: "Hello" should still be there
-        assert_eq!(term.grid.get_unchecked(0, 0).character, 'H');
-        assert_eq!(term.grid.get_unchecked(0, 4).character, 'o');
+        assert_eq!(term.screen.viewport_get(0, 0).first_char(), 'H');
+        assert_eq!(term.screen.viewport_get(0, 4).first_char(), 'o');
     }
 
     #[test]
@@ -184,8 +183,7 @@ mod tests {
     #[test]
     fn private_query_not_swallowed_by_mode_handler() {
         let mut term = Terminal::new(4, 10);
-        term.cursor_row = 1;
-        term.cursor_col = 2;
+        term.set_cursor(1, 2);
 
         term.process(b"\x1b[?6n");
         assert_eq!(term.drain_responses(), b"\x1b[2;3R".to_vec());

@@ -1,6 +1,6 @@
 //! Cursor rendering for the GPU renderer (block, underline, bar styles).
 
-use crate::core::{Cell, CursorStyle, Grid};
+use crate::core::{CursorStyle, PageList};
 use crate::gui::pane::PaneRect;
 
 impl super::GpuRenderer {
@@ -8,7 +8,7 @@ impl super::GpuRenderer {
         &mut self,
         row: usize,
         col: usize,
-        grid: &Grid,
+        screen: &PageList,
         style: CursorStyle,
         origin_x: f32,
         origin_y: f32,
@@ -22,9 +22,13 @@ impl super::GpuRenderer {
         match style {
             CursorStyle::BlinkingBlock | CursorStyle::SteadyBlock => {
                 self.push_rect(x, y, cw, ch, cursor_color, 1.0);
-                let cell = grid.get(row, col).unwrap_or(&Cell::DEFAULT);
-                if cell.character != ' ' {
-                    let cp = cell.character as u32;
+                let ch = if row < screen.viewport_rows() && col < screen.cols() {
+                    screen.viewport_get(row, col).first_char()
+                } else {
+                    ' '
+                };
+                if ch != ' ' {
+                    let cp = ch as u32;
                     let info = self.atlas.get_or_insert(
                         cp,
                         &self.font,
@@ -58,22 +62,22 @@ impl super::GpuRenderer {
         &mut self,
         row: usize,
         col: usize,
-        grid: &Grid,
+        screen: &PageList,
         style: CursorStyle,
     ) {
         let origin_x = self.metrics.window_padding_px() as f32;
         let origin_y = (self.metrics.tab_bar_height_px() + self.metrics.window_padding_px()) as f32;
-        self.draw_cursor_with_origin(row, col, grid, style, origin_x, origin_y);
+        self.draw_cursor_with_origin(row, col, screen, style, origin_x, origin_y);
     }
 
     pub(super) fn draw_cursor_in_rect_impl(
         &mut self,
         row: usize,
         col: usize,
-        grid: &Grid,
+        screen: &PageList,
         style: CursorStyle,
         rect: PaneRect,
     ) {
-        self.draw_cursor_with_origin(row, col, grid, style, rect.x as f32, rect.y as f32);
+        self.draw_cursor_with_origin(row, col, screen, style, rect.x as f32, rect.y as f32);
     }
 }

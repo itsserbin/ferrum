@@ -142,6 +142,19 @@ impl PaneLeaf {
         })
     }
 
+    /// Sets the current selection and registers tracking pins on the terminal.
+    pub(super) fn set_selection(&mut self, sel: Selection) {
+        self.terminal.set_selection_start(sel.start.abs_row, sel.start.col);
+        self.terminal.set_selection_end(sel.end.abs_row, sel.end.col);
+        self.selection = Some(sel);
+    }
+
+    /// Clears the current selection and drops the terminal tracking pins.
+    pub(super) fn clear_selection(&mut self) {
+        self.terminal.clear_selection_pins();
+        self.selection = None;
+    }
+
     /// Writes bytes to this pane's PTY, logging errors instead of silently discarding them.
     pub(super) fn write_pty(&mut self, bytes: &[u8]) {
         if let Err(e) = self.pty_writer.write_all(bytes) {

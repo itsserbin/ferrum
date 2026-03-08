@@ -9,7 +9,7 @@ pub(in super::super) fn handle_scroll_csi(
     match action {
         'r' => {
             // DECSTBM — Set Top and Bottom Margins
-            let rows = term.grid.rows;
+            let rows = term.screen.viewport_rows();
             let mut iter = params.iter();
             let top = iter.next().and_then(|p| p.first().copied()).unwrap_or(1);
             let bottom = iter
@@ -28,8 +28,7 @@ pub(in super::super) fn handle_scroll_csi(
             term.scroll_top = top_1_based - 1;
             term.scroll_bottom = bottom_1_based - 1;
             // VT spec: DECSTBM resets cursor to home position (0,0).
-            term.cursor_row = 0;
-            term.cursor_col = 0;
+            term.set_cursor(0, 0);
             true
         }
         'S' => {
@@ -50,23 +49,25 @@ pub(in super::super) fn handle_scroll_csi(
         }
         'L' => {
             // Insert Lines
-            if term.cursor_row < term.scroll_top || term.cursor_row > term.scroll_bottom {
+            let cr = term.cursor_row();
+            if cr < term.scroll_top || cr > term.scroll_bottom {
                 return true;
             }
             let n = term.param(params, 1).max(1) as usize;
             for _ in 0..n {
-                term.scroll_down_region(term.cursor_row, term.scroll_bottom);
+                term.scroll_down_region(cr, term.scroll_bottom);
             }
             true
         }
         'M' => {
             // Delete Lines
-            if term.cursor_row < term.scroll_top || term.cursor_row > term.scroll_bottom {
+            let cr = term.cursor_row();
+            if cr < term.scroll_top || cr > term.scroll_bottom {
                 return true;
             }
             let n = term.param(params, 1).max(1) as usize;
             for _ in 0..n {
-                term.scroll_up_region(term.cursor_row, term.scroll_bottom);
+                term.scroll_up_region(cr, term.scroll_bottom);
             }
             true
         }
@@ -76,7 +77,7 @@ pub(in super::super) fn handle_scroll_csi(
 
 #[cfg(test)]
 mod tests {
-    use crate::core::Cell;
+    use crate::core::GraphemeCell;
     use crate::core::terminal::Terminal;
 
     /// Helper: fill each row with a distinct character ('A' for row 0, 'B' for row 1, etc.)
@@ -85,14 +86,7 @@ mod tests {
         for r in 0..rows {
             let ch = (b'A' + r as u8) as char;
             for c in 0..cols {
-                term.grid.set(
-                    r,
-                    c,
-                    Cell {
-                        character: ch,
-                        ..Cell::default()
-                    },
-                );
+                term.screen.viewport_set(r, c, GraphemeCell::from_char(ch));
             }
         }
         term
@@ -101,8 +95,7 @@ mod tests {
     /// Helper: get the character in every column of a row as a single char
     /// (assumes all cols in a row have the same char for our tests).
     fn row_char(term: &Terminal, row: usize) -> char {
-        // Safe: tests use known valid coordinates
-        term.grid.get_unchecked(row, 0).character
+        term.screen.viewport_get(row, 0).first_char()
     }
 
     #[test]
@@ -110,27 +103,19 @@ mod tests {
         // \x1b[2;5r on a 10-row grid sets scroll region rows 1..4 (0-based).
         // VT spec: DECSTBM resets cursor to home (0,0).
         let mut term = Terminal::new(10, 10);
-        term.cursor_row = 3;
-        term.cursor_col = 5;
+        term.set_cursor(3, 5);
         term.process(b"\x1b[2;5r");
 
         // Cursor reset to home
-        assert_eq!(term.cursor_row, 0);
-        assert_eq!(term.cursor_col, 0);
+        assert_eq!(term.cursor_row(), 0);
+        assert_eq!(term.cursor_col(), 0);
 
         // Verify margins are set correctly by filling rows and scrolling.
         // Fill rows 0..9 with distinct chars.
         for r in 0..10 {
             let ch = (b'A' + r as u8) as char;
             for c in 0..10 {
-                term.grid.set(
-                    r,
-                    c,
-                    Cell {
-                        character: ch,
-                        ..Cell::default()
-                    },
-                );
+                term.screen.viewport_set(r, c, GraphemeCell::from_char(ch));
             }
         }
 
@@ -163,14 +148,7 @@ mod tests {
         for r in 0..6 {
             let ch = (b'A' + r as u8) as char;
             for c in 0..5 {
-                term.grid.set(
-                    r,
-                    c,
-                    Cell {
-                        character: ch,
-                        ..Cell::default()
-                    },
-                );
+                term.screen.viewport_set(r, c, GraphemeCell::from_char(ch));
             }
         }
         term.process(b"\x1b[1S");
@@ -194,8 +172,8 @@ mod tests {
         assert_eq!(row_char(&term, 3), ' ');
 
         // Row A should be in scrollback
-        assert_eq!(term.scrollback.len(), 1);
-        assert_eq!(term.scrollback[0].cells[0].character, 'A');
+        assert_eq!(term.screen.scrollback_len(), 1);
+        assert_eq!(term.screen.scrollback_row(0).cells[0].first_char(), 'A');
     }
 
     #[test]
@@ -215,7 +193,7 @@ mod tests {
         // Rows ['A','B','C','D'], cursor at row 1, insert 1 line
         // => ['A',' ','B','C'], row D lost
         let mut term = filled_term(4, 5);
-        term.cursor_row = 1;
+        term.set_cursor_row(1);
         term.process(b"\x1b[1L");
 
         assert_eq!(row_char(&term, 0), 'A');
@@ -229,7 +207,7 @@ mod tests {
         // Rows ['A','B','C','D'], cursor at row 1, delete 1 line
         // => ['A','C','D',' ']
         let mut term = filled_term(4, 5);
-        term.cursor_row = 1;
+        term.set_cursor_row(1);
         term.process(b"\x1b[1M");
 
         assert_eq!(row_char(&term, 0), 'A');
@@ -249,14 +227,7 @@ mod tests {
         for r in 0..4 {
             let ch = (b'A' + r as u8) as char;
             for c in 0..5 {
-                term.grid.set(
-                    r,
-                    c,
-                    Cell {
-                        character: ch,
-                        ..Cell::default()
-                    },
-                );
+                term.screen.viewport_set(r, c, GraphemeCell::from_char(ch));
             }
         }
 
@@ -275,20 +246,19 @@ mod tests {
     #[test]
     fn decstbm_invalid_region_is_ignored() {
         let mut term = Terminal::new(6, 5);
-        term.cursor_row = 5;
-        term.cursor_col = 3;
+        term.set_cursor(5, 3);
 
         term.process(b"\x1b[5;2r");
 
-        assert_eq!(term.cursor_row, 5);
-        assert_eq!(term.cursor_col, 3);
+        assert_eq!(term.cursor_row(), 5);
+        assert_eq!(term.cursor_col(), 3);
     }
 
     #[test]
     fn il_outside_scroll_region_is_noop() {
         let mut term = filled_term(5, 4);
         term.process(b"\x1b[2;4r"); // region: rows 1..3 (0-based)
-        term.cursor_row = 0; // outside region
+        term.set_cursor_row(0); // outside region
 
         let before: Vec<char> = (0..5).map(|row| row_char(&term, row)).collect();
         term.process(b"\x1b[1L");
@@ -301,7 +271,7 @@ mod tests {
     fn dl_outside_scroll_region_is_noop() {
         let mut term = filled_term(5, 4);
         term.process(b"\x1b[2;4r"); // region: rows 1..3 (0-based)
-        term.cursor_row = 4; // outside region
+        term.set_cursor_row(4); // outside region
 
         let before: Vec<char> = (0..5).map(|row| row_char(&term, row)).collect();
         term.process(b"\x1b[1M");

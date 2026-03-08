@@ -1,4 +1,4 @@
-use crate::core::{CursorStyle, Grid, Selection};
+use crate::core::{CursorStyle, PageList, Selection};
 use crate::gui::pane::PaneRect;
 
 use super::shared::banner_layout::UpdateBannerLayout;
@@ -58,9 +58,9 @@ pub trait Renderer {
     fn render(
         &mut self,
         target: &mut RenderTarget<'_>,
-        grid: &Grid,
+        screen: &PageList,
         selection: Option<&Selection>,
-        viewport_start: usize,
+        scroll_offset: usize,
     );
 
     fn draw_cursor(
@@ -68,7 +68,7 @@ pub trait Renderer {
         target: &mut RenderTarget<'_>,
         row: usize,
         col: usize,
-        grid: &Grid,
+        screen: &PageList,
         style: CursorStyle,
     );
 
@@ -80,9 +80,9 @@ pub trait Renderer {
     fn render_in_rect(
         &mut self,
         _target: &mut RenderTarget<'_>,
-        _grid: &Grid,
+        _screen: &PageList,
         _selection: Option<&Selection>,
-        _viewport_start: usize,
+        _scroll_offset: usize,
         _rect: PaneRect,
         _fg_dim: f32,
     ) {
@@ -96,7 +96,7 @@ pub trait Renderer {
         _target: &mut RenderTarget<'_>,
         _row: usize,
         _col: usize,
-        _grid: &Grid,
+        _screen: &PageList,
         _style: CursorStyle,
         _rect: PaneRect,
     ) {

@@ -1,6 +1,6 @@
 use super::*;
 use super::RenderTarget;
-use crate::core::Cell;
+use crate::core::PageList;
 use crate::gui::pane::PaneRect;
 
 impl CpuRenderer {
@@ -9,7 +9,7 @@ impl CpuRenderer {
         target: &mut RenderTarget<'_>,
         row: usize,
         col: usize,
-        grid: &Grid,
+        screen: &PageList,
         style: CursorStyle,
     ) {
         let buf_width = target.width;
@@ -23,10 +23,14 @@ impl CpuRenderer {
         match style {
             CursorStyle::BlinkingBlock | CursorStyle::SteadyBlock => {
                 // Filled block with inverted foreground/background.
-                let cell = grid.get(row, col).unwrap_or(&Cell::DEFAULT);
                 self.draw_bg(target, x, y, self.palette.default_fg);
-                if cell.character != ' ' {
-                    self.draw_char(target, x, y, cell.character, self.palette.default_bg);
+                let ch = if row < screen.viewport_rows() && col < screen.cols() {
+                    screen.viewport_get(row, col).first_char()
+                } else {
+                    ' '
+                };
+                if ch != ' ' {
+                    self.draw_char(target, x, y, ch, self.palette.default_bg);
                 }
             }
             CursorStyle::BlinkingUnderline | CursorStyle::SteadyUnderline => {
@@ -71,7 +75,7 @@ impl CpuRenderer {
         target: &mut RenderTarget<'_>,
         row: usize,
         col: usize,
-        grid: &Grid,
+        screen: &PageList,
         style: CursorStyle,
         rect: PaneRect,
     ) {
@@ -86,10 +90,14 @@ impl CpuRenderer {
 
         match style {
             CursorStyle::BlinkingBlock | CursorStyle::SteadyBlock => {
-                let cell = grid.get(row, col).unwrap_or(&Cell::DEFAULT);
                 self.draw_bg(target, x, y, self.palette.default_fg);
-                if cell.character != ' ' {
-                    self.draw_char(target, x, y, cell.character, self.palette.default_bg);
+                let ch = if row < screen.viewport_rows() && col < screen.cols() {
+                    screen.viewport_get(row, col).first_char()
+                } else {
+                    ' '
+                };
+                if ch != ' ' {
+                    self.draw_char(target, x, y, ch, self.palette.default_bg);
                 }
             }
             CursorStyle::BlinkingUnderline | CursorStyle::SteadyUnderline => {

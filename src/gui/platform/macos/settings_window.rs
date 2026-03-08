@@ -379,7 +379,7 @@ pub fn send_current_config() {
     };
     sync_security_controls(state);
     let config = build_config_from_controls(state);
-    let _ = state.sender.send(config);
+    state.sender.send(config).ok();
 }
 
 /// Parses editable text field values and updates the corresponding steppers.
@@ -819,9 +819,9 @@ pub fn open_settings_window(config: &AppConfig, sender: mpsc::Sender<AppConfig>)
             parent: &terminal_view,
             label_text: t.terminal_max_scrollback_label,
             value: config.terminal.max_scrollback as f64,
-            min: 0.0,
-            max: 50000.0,
-            step: 100.0,
+            min: TerminalConfig::SCROLLBACK_MIN as f64,
+            max: TerminalConfig::SCROLLBACK_MAX as f64,
+            step: TerminalConfig::SCROLLBACK_STEP as f64,
             y_offset: 230.0,
         },
     );

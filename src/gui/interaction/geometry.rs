@@ -61,9 +61,9 @@ impl FerrumWindow {
         let local_y = (y as u32).saturating_sub(pane_rect.y);
         let col = ((local_x + self.backend.cell_width() / 2) as usize
             / self.backend.cell_width() as usize)
-            .min(leaf.terminal.grid.cols.saturating_sub(1));
+            .min(leaf.terminal.screen.cols().saturating_sub(1));
         let row = (local_y as usize / self.backend.cell_height() as usize)
-            .min(leaf.terminal.grid.rows.saturating_sub(1));
+            .min(leaf.terminal.screen.viewport_rows().saturating_sub(1));
         (row, col)
     }
 

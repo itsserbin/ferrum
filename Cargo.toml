@@ -25,6 +25,7 @@ portable-pty = "0.9.0"
 anyhow = "1"
 vte = "0.15"
 unicode-width = "0.2"
+unicode-segmentation = "1"
 arboard = "3"
 ron = "0.12"
 wgpu = { version = "28", optional = true }

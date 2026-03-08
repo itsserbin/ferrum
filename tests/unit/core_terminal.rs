@@ -2,6 +2,10 @@ use super::Terminal;
 use crate::config::ThemeChoice;
 use crate::core::Color;
 
+fn get_char(term: &Terminal, row: usize, col: usize) -> char {
+    term.screen.viewport_get(row, col).first_char()
+}
+
 // ── Alternate screen mode ──
 
 #[test]
@@ -23,8 +27,8 @@ fn applies_sgr_and_resets_attributes() {
     let mut term = Terminal::new(2, 4);
     term.process(b"\x1b[31mA\x1b[0mB");
 
-    assert_eq!(term.grid.get(0, 0).unwrap().fg, term.ansi_palette[1]);
-    assert_eq!(term.grid.get(0, 1).unwrap().fg, Color::SENTINEL_FG);
+    assert_eq!(term.screen.viewport_get(0, 0).fg, term.ansi_palette[1]);
+    assert_eq!(term.screen.viewport_get(0, 1).fg, Color::SENTINEL_FG);
 }
 
 // ── Device status reports ──
@@ -32,8 +36,8 @@ fn applies_sgr_and_resets_attributes() {
 #[test]
 fn reports_cursor_position_response() {
     let mut term = Terminal::new(3, 5);
-    term.cursor_row = 1;
-    term.cursor_col = 3;
+    term.set_cursor_row(1);
+    term.set_cursor_col(3);
 
     term.process(b"\x1b[6n");
 
@@ -43,8 +47,8 @@ fn reports_cursor_position_response() {
 #[test]
 fn reports_cursor_position_response_for_private_query() {
     let mut term = Terminal::new(3, 5);
-    term.cursor_row = 2;
-    term.cursor_col = 4;
+    term.set_cursor_row(2);
+    term.set_cursor_col(4);
 
     term.process(b"\x1b[?6n");
 
@@ -58,12 +62,12 @@ fn print_simple_text() {
     let mut term = Terminal::new(4, 80);
     term.process(b"Hello");
 
-    assert_eq!(term.grid.get(0, 0).unwrap().character, 'H');
-    assert_eq!(term.grid.get(0, 1).unwrap().character, 'e');
-    assert_eq!(term.grid.get(0, 2).unwrap().character, 'l');
-    assert_eq!(term.grid.get(0, 3).unwrap().character, 'l');
-    assert_eq!(term.grid.get(0, 4).unwrap().character, 'o');
-    assert_eq!(term.cursor_col, 5);
+    assert_eq!(get_char(&term, 0, 0), 'H');
+    assert_eq!(get_char(&term, 0, 1), 'e');
+    assert_eq!(get_char(&term, 0, 2), 'l');
+    assert_eq!(get_char(&term, 0, 3), 'l');
+    assert_eq!(get_char(&term, 0, 4), 'o');
+    assert_eq!(term.cursor_col(), 5);
 }
 
 #[test]
@@ -74,14 +78,14 @@ fn print_wraps_at_edge() {
     term.process(text.as_bytes());
 
     // Row 0 should be full (80 chars)
-    assert_eq!(term.grid.get(0, 0).unwrap().character, 'A');
-    assert_eq!(term.grid.get(0, 79).unwrap().character, 'B'); // index 79: 79%26=1 -> 'B'
+    assert_eq!(get_char(&term, 0, 0), 'A');
+    assert_eq!(get_char(&term, 0, 79), 'B'); // index 79: 79%26=1 -> 'B'
 
     // Row 1 should have 2 chars
-    assert_eq!(term.grid.get(1, 0).unwrap().character, 'C'); // index 80: 80%26=2 -> 'C'
-    assert_eq!(term.grid.get(1, 1).unwrap().character, 'D'); // index 81: 81%26=3 -> 'D'
-    assert_eq!(term.cursor_row, 1);
-    assert_eq!(term.cursor_col, 2);
+    assert_eq!(get_char(&term, 1, 0), 'C'); // index 80: 80%26=2 -> 'C'
+    assert_eq!(get_char(&term, 1, 1), 'D'); // index 81: 81%26=3 -> 'D'
+    assert_eq!(term.cursor_row(), 1);
+    assert_eq!(term.cursor_col(), 2);
 }
 
 #[test]
@@ -90,9 +94,9 @@ fn print_wide_char() {
     // CJK character is 2 columns wide
     term.process("漢".as_bytes());
 
-    assert_eq!(term.grid.get(0, 0).unwrap().character, '漢');
-    assert_eq!(term.grid.get(0, 1).unwrap().character, ' '); // placeholder
-    assert_eq!(term.cursor_col, 2);
+    assert_eq!(get_char(&term, 0, 0), '漢');
+    assert_eq!(get_char(&term, 0, 1), ' '); // placeholder
+    assert_eq!(term.cursor_col(), 2);
 }
 
 #[test]
@@ -100,9 +104,9 @@ fn print_combining_mark_is_not_dropped() {
     let mut term = Terminal::new(4, 80);
     term.process("e\u{0301}".as_bytes()); // e + combining acute accent
 
-    assert_eq!(term.grid.get(0, 0).unwrap().character, 'e');
-    assert_eq!(term.grid.get(0, 1).unwrap().character, '\u{0301}');
-    assert_eq!(term.cursor_col, 2);
+    assert_eq!(get_char(&term, 0, 0), 'e');
+    assert_eq!(get_char(&term, 0, 1), '\u{0301}');
+    assert_eq!(term.cursor_col(), 2);
 }
 
 // ── Perform trait: execute ──
@@ -112,9 +116,9 @@ fn execute_lf() {
     let mut term = Terminal::new(4, 80);
     term.process(b"A\nB");
 
-    assert_eq!(term.grid.get(0, 0).unwrap().character, 'A');
+    assert_eq!(get_char(&term, 0, 0), 'A');
     // LF moves down one row; col stays after A (col 1).
-    assert_eq!(term.grid.get(1, 1).unwrap().character, 'B');
+    assert_eq!(get_char(&term, 1, 1), 'B');
 }
 
 #[test]
@@ -122,9 +126,9 @@ fn execute_vt_and_ff_behave_like_newline() {
     let mut term = Terminal::new(6, 80);
     term.process(b"A\x0bB\x0cC");
 
-    assert_eq!(term.grid.get(0, 0).unwrap().character, 'A');
-    assert_eq!(term.grid.get(1, 1).unwrap().character, 'B');
-    assert_eq!(term.grid.get(2, 2).unwrap().character, 'C');
+    assert_eq!(get_char(&term, 0, 0), 'A');
+    assert_eq!(get_char(&term, 1, 1), 'B');
+    assert_eq!(get_char(&term, 2, 2), 'C');
 }
 
 #[test]
@@ -133,9 +137,9 @@ fn execute_cr() {
     term.process(b"ABC\rX");
 
     // CR resets col to 0, X overwrites A
-    assert_eq!(term.grid.get(0, 0).unwrap().character, 'X');
-    assert_eq!(term.grid.get(0, 1).unwrap().character, 'B');
-    assert_eq!(term.grid.get(0, 2).unwrap().character, 'C');
+    assert_eq!(get_char(&term, 0, 0), 'X');
+    assert_eq!(get_char(&term, 0, 1), 'B');
+    assert_eq!(get_char(&term, 0, 2), 'C');
 }
 
 #[test]
@@ -144,8 +148,8 @@ fn execute_backspace() {
     term.process(b"AB\x08X");
 
     // Backspace moves cursor back one; X overwrites B
-    assert_eq!(term.grid.get(0, 0).unwrap().character, 'A');
-    assert_eq!(term.grid.get(0, 1).unwrap().character, 'X');
+    assert_eq!(get_char(&term, 0, 0), 'A');
+    assert_eq!(get_char(&term, 0, 1), 'X');
 }
 
 #[test]
@@ -154,8 +158,8 @@ fn execute_tab() {
     term.process(b"\tX");
 
     // Tab stops every 8 columns: col 0 -> col 8
-    assert_eq!(term.grid.get(0, 8).unwrap().character, 'X');
-    assert_eq!(term.cursor_col, 9);
+    assert_eq!(get_char(&term, 0, 8), 'X');
+    assert_eq!(term.cursor_col(), 9);
 }
 
 // ── Perform trait: esc_dispatch ──
@@ -165,21 +169,21 @@ fn esc_save_restore_cursor() {
     let mut term = Terminal::new(10, 80);
     // Move cursor to (3, 5) using CUP
     term.process(b"\x1b[4;6H"); // 1-based: row 4, col 6 -> 0-based: (3, 5)
-    assert_eq!(term.cursor_row, 3);
-    assert_eq!(term.cursor_col, 5);
+    assert_eq!(term.cursor_row(), 3);
+    assert_eq!(term.cursor_col(), 5);
 
     // ESC 7 = save cursor
     term.process(b"\x1b7");
 
     // Move somewhere else
     term.process(b"\x1b[1;1H"); // move to (0, 0)
-    assert_eq!(term.cursor_row, 0);
-    assert_eq!(term.cursor_col, 0);
+    assert_eq!(term.cursor_row(), 0);
+    assert_eq!(term.cursor_col(), 0);
 
     // ESC 8 = restore cursor
     term.process(b"\x1b8");
-    assert_eq!(term.cursor_row, 3);
-    assert_eq!(term.cursor_col, 5);
+    assert_eq!(term.cursor_row(), 3);
+    assert_eq!(term.cursor_col(), 5);
 }
 
 #[test]
@@ -188,22 +192,22 @@ fn esc_reverse_index_at_top() {
     // Fill rows with identifiable content
     term.process(b"AAAAAAAAAA"); // row 0
     term.process(b"\n");
-    term.cursor_col = 0;
+    term.set_cursor_col(0);
     term.process(b"BBBBBBBBBB"); // row 1
 
     // Move cursor to row 0
     term.process(b"\x1b[1;1H"); // CUP to (0, 0)
-    assert_eq!(term.cursor_row, 0);
+    assert_eq!(term.cursor_row(), 0);
 
     // ESC M = Reverse Index at top => scroll_down_region
     term.process(b"\x1bM");
 
     // Row 0 should now be blank (scroll_down inserts blank at top)
-    assert_eq!(term.grid.get(0, 0).unwrap().character, ' ');
+    assert_eq!(get_char(&term, 0, 0), ' ');
     // Old row 0 ('A') should have moved to row 1
-    assert_eq!(term.grid.get(1, 0).unwrap().character, 'A');
+    assert_eq!(get_char(&term, 1, 0), 'A');
     // Old row 1 ('B') should have moved to row 2
-    assert_eq!(term.grid.get(2, 0).unwrap().character, 'B');
+    assert_eq!(get_char(&term, 2, 0), 'B');
 }
 
 #[test]
@@ -211,16 +215,16 @@ fn esc_ris_full_reset() {
     let mut term = Terminal::new(4, 80);
     // Set some attributes and move cursor
     term.process(b"\x1b[1;31mHello");
-    assert!(term.grid.get(0, 0).unwrap().bold);
-    assert_eq!(term.cursor_col, 5);
+    assert!(term.screen.viewport_get(0, 0).bold);
+    assert_eq!(term.cursor_col(), 5);
 
     // ESC c = RIS (full reset)
     term.process(b"\x1bc");
 
-    assert_eq!(term.cursor_row, 0);
-    assert_eq!(term.cursor_col, 0);
-    assert_eq!(term.grid.get(0, 0).unwrap().character, ' '); // grid cleared
-    assert!(term.scrollback.is_empty());
+    assert_eq!(term.cursor_row(), 0);
+    assert_eq!(term.cursor_col(), 0);
+    assert_eq!(get_char(&term, 0, 0), ' '); // grid cleared
+    assert!(term.screen.scrollback_len() == 0);
     assert!(term.cursor_visible);
     assert!(!term.decckm);
 }
@@ -236,25 +240,25 @@ fn lf_at_bottom_scrolls() {
         term.process(&line);
         if *row_char != b'D' {
             term.process(b"\n");
-            term.cursor_col = 0;
+            term.set_cursor_col(0);
         }
     }
     // Cursor should be at row 3 (bottom)
-    assert_eq!(term.cursor_row, 3);
-    assert_eq!(term.grid.get(0, 0).unwrap().character, 'A');
+    assert_eq!(term.cursor_row(), 3);
+    assert_eq!(get_char(&term, 0, 0), 'A');
 
     // LF at bottom triggers scroll
     term.process(b"\n");
 
     // Row A should go to scrollback
-    assert_eq!(term.scrollback.len(), 1);
-    assert_eq!(term.scrollback[0].cells[0].character, 'A');
+    assert_eq!(term.screen.scrollback_len(), 1);
+    assert_eq!(term.screen.scrollback_row(0).cells[0].first_char(), 'A');
 
     // Content shifts up: B->row0, C->row1, D->row2, blank->row3
-    assert_eq!(term.grid.get(0, 0).unwrap().character, 'B');
-    assert_eq!(term.grid.get(1, 0).unwrap().character, 'C');
-    assert_eq!(term.grid.get(2, 0).unwrap().character, 'D');
-    assert_eq!(term.grid.get(3, 0).unwrap().character, ' ');
+    assert_eq!(get_char(&term, 0, 0), 'B');
+    assert_eq!(get_char(&term, 1, 0), 'C');
+    assert_eq!(get_char(&term, 2, 0), 'D');
+    assert_eq!(get_char(&term, 3, 0), ' ');
 }
 
 #[test]
@@ -267,14 +271,14 @@ fn scrollback_preserved() {
         let line: Vec<u8> = vec![ch; 10];
         term.process(&line);
         term.process(b"\n");
-        term.cursor_col = 0;
+        term.set_cursor_col(0);
     }
 
     // We scrolled 17 times (20 lines - 4 visible + 1 for the last \n)
     // Scrollback should have grown
-    assert!(!term.scrollback.is_empty());
+    assert!(term.screen.scrollback_len() > 0);
     // Scrollback should not exceed max (1000)
-    assert!(term.scrollback.len() <= 1000);
+    assert!(term.screen.scrollback_len() <= 1000);
 }
 
 // ── OSC 7: working directory reporting ──
@@ -350,13 +354,13 @@ fn recolor_remaps_default_fg_bg() {
     let ansi = ThemeChoice::FerrumDark.resolve().ansi;
 
     let mut term = Terminal::new(4, 4);
-    assert_eq!(term.grid.get(0, 0).unwrap().fg, old_fg);
-    assert_eq!(term.grid.get(0, 0).unwrap().bg, old_bg);
+    assert_eq!(term.screen.viewport_get(0, 0).fg, old_fg);
+    assert_eq!(term.screen.viewport_get(0, 0).bg, old_bg);
 
     term.recolor(old_fg, old_bg, &ansi, new_fg, new_bg, &ansi);
 
-    assert_eq!(term.grid.get(0, 0).unwrap().fg, new_fg);
-    assert_eq!(term.grid.get(0, 0).unwrap().bg, new_bg);
+    assert_eq!(term.screen.viewport_get(0, 0).fg, new_fg);
+    assert_eq!(term.screen.viewport_get(0, 0).bg, new_bg);
     assert_eq!(term.default_fg, new_fg);
     assert_eq!(term.default_bg, new_bg);
 }
@@ -373,12 +377,12 @@ fn recolor_leaves_custom_sgr_colors_untouched() {
     term.process(b"\x1b[38;2;255;128;0mHello");
 
     let custom_fg = Color { r: 255, g: 128, b: 0 };
-    assert_eq!(term.grid.get(0, 0).unwrap().fg, custom_fg);
+    assert_eq!(term.screen.viewport_get(0, 0).fg, custom_fg);
 
     term.recolor(old_fg, old_bg, &ansi, new_fg, new_bg, &ansi);
 
-    assert_eq!(term.grid.get(0, 0).unwrap().fg, custom_fg);
-    assert_eq!(term.grid.get(0, 0).unwrap().bg, new_bg);
+    assert_eq!(term.screen.viewport_get(0, 0).fg, custom_fg);
+    assert_eq!(term.screen.viewport_get(0, 0).bg, new_bg);
 }
 
 #[test]
@@ -395,9 +399,179 @@ fn recolor_remaps_ansi_palette_colors() {
     let mut term = Terminal::new(4, 10);
     term.process(b"\x1b[31mRed");
 
-    assert_eq!(term.grid.get(0, 0).unwrap().fg, old_ansi[1]);
+    assert_eq!(term.screen.viewport_get(0, 0).fg, old_ansi[1]);
 
     term.recolor(old_fg, old_bg, &old_ansi, old_fg, old_bg, &new_ansi);
 
-    assert_eq!(term.grid.get(0, 0).unwrap().fg, new_ansi[1]);
+    assert_eq!(term.screen.viewport_get(0, 0).fg, new_ansi[1]);
+}
+
+// ── Reflow cursor tracking ──
+
+#[test]
+fn reflow_cursor_row_points_to_correct_physical_row_after_narrow_resize() {
+    // Terminal 3×8. Write "XXXXXXXX\r\nABCDEFG".
+    //   Row 0: X×8  (output, non-cursor)
+    //   Row 1: ABCDEFG (cursor at col 7, non-wrapped)
+    // Resize to 3×4.  Rewrap:
+    //   Rows 0,1 (from X×8):     [X×4 wrapped] [X×4]     → scrollback (2 rows)
+    //   Rows 2,3 (from ABCDEFG): [ABCD wrapped] [EFG.]    → viewport rows 0,1
+    // Cursor (col 7 in logical line) falls in the EFG row (cols 4-6) — viewport row 1.
+    // With the bug: cursor placed on row 0 (ABCD), not row 1 (EFG).
+    let mut term = Terminal::new(3, 8);
+    term.process(b"XXXXXXXX\r\nABCDEFG");
+    assert_eq!(term.cursor_row(), 1);
+    assert_eq!(term.cursor_col(), 7);
+
+    term.resize(3, 4);
+
+    // With cursor-bottom anchoring the viewport is positioned so the cursor
+    // lands at the last row (new_rows - 1 = 2).  Viewport = [XXXX, ABCD, EFG],
+    // cursor on EFG (vrow 2).  Content above stays visible instead of being
+    // pushed into scrollback.
+    assert_eq!(term.cursor_row(), 2, "cursor should be on EFG row (viewport row 2), not on ABCD row (viewport row 1)");
+    // cursor at col 7 in logical "ABCDEFG"; after reflow to 4 cols the cursor
+    // falls in the "EFG." row at col 3 (7 - 4 cols consumed by "ABCD" row).
+    assert_eq!(term.cursor_col(), 3, "cursor col should reflect actual position in reflowed row");
+}
+
+#[test]
+fn reflow_cursor_row_correct_when_logical_line_wraps_three_times() {
+    // Terminal 5×12. Write "XXXXXXXXXXXX\r\nABCDEFGHIJK".
+    //   Row 0: X×12 (output)
+    //   Row 1: ABCDEFGHIJK — cursor at col 11, non-wrapped
+    // Resize to 5×4.  Rewrap:
+    //   From X×12: [X×4 w] [X×4 w] [X×4]   → scrollback rows 0-2
+    //   From ABCDEFGHIJK (11 chars):
+    //     [ABCD w] → scrollback row 3
+    //     [EFGH w] → viewport row 0
+    //     [IJK.]   → viewport row 1  ← cursor (col 11 in logical = 8+3 col range)
+    // Cursor must be at viewport row 1, not row 0.
+    let mut term = Terminal::new(5, 12);
+    term.process(b"XXXXXXXXXXXX\r\nABCDEFGHIJK");
+    assert_eq!(term.cursor_row(), 1);
+    assert_eq!(term.cursor_col(), 11);
+
+    term.resize(5, 4);
+
+    // With cursor-bottom anchoring the viewport is [XXXX, XXXX, ABCD, EFGH, IJK],
+    // cursor on IJK at viewport row 4 (new_rows - 1).  More content visible than
+    // with the old end-of-buffer anchor that pushed XXXX rows into scrollback.
+    assert_eq!(term.cursor_row(), 4, "cursor should be on IJK row (viewport row 4), not on EFGH row (viewport row 3)");
+}
+
+#[test]
+fn reflow_cursor_stays_at_prompt_not_in_content_area() {
+    // Simulate: 8 rows of `ls`-like output (8 chars each) followed by a
+    // short shell prompt "$ " (cursor at col 2).  Terminal is 10×8.
+    // After narrow resize (10×4): each content row wraps to 2 rows → 16
+    // content rows.  With new_rows=10: grid_offset=16+1+1-10=8, scrollback=8,
+    // skip=0.  The prompt row is rewrapped row 16; cursor_row in viewport = 8.
+    //
+    // With the OLD bug cursor_rewrapped_row = 16 (start of prompt logical line,
+    // which is a single row), so cursor_row = 16 - 8 - 8 = 0.  The shell
+    // would then clear from row 0 to end — erasing all content.
+    let mut term = Terminal::new(10, 8);
+    // 8 rows of content then prompt "$ ".
+    for _ in 0..8 {
+        term.process(b"XXXXXXXX\r\n");
+    }
+    term.process(b"$ ");
+    assert_eq!(term.cursor_row(), 8);
+    assert_eq!(term.cursor_col(), 2);
+
+    term.resize(10, 4);
+
+    // After narrow reflow: prompt is at some viewport row >= 0.
+    // The important invariant: cursor_row must be at the prompt row, which is
+    // BELOW the content rows.  Concretely, with the layout above, cursor_row
+    // should equal 8 (the 9th viewport row), NOT 0.
+    // With cursor-bottom anchoring cursor lands at new_rows - 1 = 9 (last row).
+    // The trailing blank row is dropped; cursor is still BELOW all content rows.
+    assert_eq!(
+        term.cursor_row(), 9,
+        "cursor should be at the last viewport row (9), not in the content area"
+    );
+}
+
+// ── Reflow content preservation ──
+
+#[test]
+fn reflow_single_narrow_wide_restores_all_rows() {
+    // 6 rows × 10 cols; rows 0–4 have distinct chars (A–E), row 5 is blank (cursor).
+    // The trailing \r\n advances the cursor to the blank row 5 so all content
+    // rows are treated as completed output — not the active input line — and are
+    // therefore preserved across reflow cycles.
+    let mut term = Terminal::new(6, 10);
+    term.process(b"AAAAAAAA\r\nBBBBBBBB\r\nCCCCCCCC\r\nDDDDDDDD\r\nEEEEEEEE\r\n");
+
+    // Narrow resize → rows wrap (8-char content → 2 physical rows each at 4 cols).
+    term.resize(6, 4);
+    // Wide resize → rows should unwrap back.
+    term.resize(6, 10);
+
+    assert_eq!(get_char(&term, 0, 0), 'A', "row A missing after single reflow cycle");
+    assert_eq!(get_char(&term, 1, 0), 'B', "row B missing after single reflow cycle");
+    assert_eq!(get_char(&term, 2, 0), 'C', "row C missing after single reflow cycle");
+    assert_eq!(get_char(&term, 3, 0), 'D', "row D missing after single reflow cycle");
+    assert_eq!(get_char(&term, 4, 0), 'E', "row E missing after single reflow cycle");
+}
+
+#[test]
+fn reflow_intensive_preserves_content_rows() {
+    // 6 rows × 10 cols; rows 0–4 have distinct chars (A–E), row 5 is blank (cursor).
+    // The trailing \r\n keeps the cursor on the blank row so all content survives
+    // repeated narrow→wide reflow cycles.
+    let mut term = Terminal::new(6, 10);
+    term.process(b"AAAAAAAA\r\nBBBBBBBB\r\nCCCCCCCC\r\nDDDDDDDD\r\nEEEEEEEE\r\n");
+
+    // Five narrow→wide cycles to simulate "intensive reflow".
+    for _ in 0..5 {
+        term.resize(6, 4);
+        term.resize(6, 10);
+    }
+
+    assert_eq!(get_char(&term, 0, 0), 'A', "row A lost after intensive reflow");
+    assert_eq!(get_char(&term, 1, 0), 'B', "row B lost after intensive reflow");
+    assert_eq!(get_char(&term, 2, 0), 'C', "row C lost after intensive reflow");
+    assert_eq!(get_char(&term, 3, 0), 'D', "row D lost after intensive reflow");
+    assert_eq!(get_char(&term, 4, 0), 'E', "row E lost after intensive reflow");
+}
+
+#[test]
+fn reflow_intensive_varying_sizes_preserves_content() {
+    // 11 rows × 20 cols; rows 0–9 have distinct chars (A–J), row 10 is blank
+    // (cursor). Each content line ends with \r\n so the cursor advances to the
+    // blank row — all content rows are treated as completed output and survive
+    // every resize cycle.
+    let mut term = Terminal::new(11, 20);
+    term.process(b"AAAAAAAAAAAAAAAA\r\n");
+    term.process(b"BBBBBBBBBBBBBBBB\r\n");
+    term.process(b"CCCCCCCCCCCCCCCC\r\n");
+    term.process(b"DDDDDDDDDDDDDDDD\r\n");
+    term.process(b"EEEEEEEEEEEEEEEE\r\n");
+    term.process(b"FFFFFFFFFFFFFFFF\r\n");
+    term.process(b"GGGGGGGGGGGGGGGG\r\n");
+    term.process(b"HHHHHHHHHHHHHHHH\r\n");
+    term.process(b"IIIIIIIIIIIIIIII\r\n");
+    term.process(b"JJJJJJJJJJJJJJJJ\r\n");
+
+    // Irregular resize sequence.
+    term.resize(11, 5);
+    term.resize(11, 30);
+    term.resize(11, 8);
+    term.resize(11, 20);
+    term.resize(11, 3);
+    term.resize(11, 20);
+
+    assert_eq!(get_char(&term, 0, 0), 'A', "row A lost after varying reflow");
+    assert_eq!(get_char(&term, 1, 0), 'B', "row B lost after varying reflow");
+    assert_eq!(get_char(&term, 2, 0), 'C', "row C lost after varying reflow");
+    assert_eq!(get_char(&term, 3, 0), 'D', "row D lost after varying reflow");
+    assert_eq!(get_char(&term, 4, 0), 'E', "row E lost after varying reflow");
+    assert_eq!(get_char(&term, 5, 0), 'F', "row F lost after varying reflow");
+    assert_eq!(get_char(&term, 6, 0), 'G', "row G lost after varying reflow");
+    assert_eq!(get_char(&term, 7, 0), 'H', "row H lost after varying reflow");
+    assert_eq!(get_char(&term, 8, 0), 'I', "row I lost after varying reflow");
+    assert_eq!(get_char(&term, 9, 0), 'J', "row J lost after varying reflow");
 }

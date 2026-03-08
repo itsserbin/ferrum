@@ -51,12 +51,12 @@ impl FerrumWindow {
         }
 
         Some(Selection {
-            start: crate::core::SelectionPoint {
-                row: abs_row,
+            start: crate::core::PageCoord {
+                abs_row,
                 col: start_col,
             },
-            end: crate::core::SelectionPoint {
-                row: abs_row,
+            end: crate::core::PageCoord {
+                abs_row,
                 col: end_col,
             },
         })
@@ -83,12 +83,12 @@ impl FerrumWindow {
                 return false;
             }
 
-            let grid_cols = leaf.terminal.grid.cols;
+            let grid_cols = leaf.terminal.screen.cols();
             if grid_cols == 0 {
                 return false;
             }
 
-            let cursor_col = leaf.terminal.cursor_col.min(grid_cols);
+            let cursor_col = leaf.terminal.cursor_col().min(grid_cols);
             let target_col = if word_motion {
                 Self::word_motion_target_col_from_leaf(leaf, cursor_col, motion)
             } else {
@@ -98,10 +98,10 @@ impl FerrumWindow {
                 }
             };
 
-            let abs_row = leaf.terminal.scrollback.len() + leaf.terminal.cursor_row;
+            let abs_row = leaf.terminal.screen.scrollback_len() + leaf.terminal.cursor_row();
             let anchor_col = self
                 .keyboard_selection_anchor
-                .filter(|anchor| anchor.row == abs_row)
+                .filter(|anchor| anchor.abs_row == abs_row)
                 .map(|anchor| anchor.col)
                 .unwrap_or(cursor_col);
 
@@ -126,14 +126,21 @@ impl FerrumWindow {
             leaf.write_pty(&bytes);
         }
 
-        self.keyboard_selection_anchor = Some(crate::core::SelectionPoint {
-            row: abs_row,
+        self.keyboard_selection_anchor = Some(crate::core::PageCoord {
+            abs_row,
             col: anchor_col,
         });
 
         if let Some(leaf) = self.active_leaf_mut() {
             leaf.selection =
                 Self::selection_from_cursor_bounds(abs_row, anchor_col, target_col, grid_cols);
+            // Keep pins in sync with the updated keyboard selection.
+            if let Some(sel) = leaf.selection {
+                leaf.terminal.set_selection_start(sel.start.abs_row, sel.start.col);
+                leaf.terminal.set_selection_end(sel.end.abs_row, sel.end.col);
+            } else {
+                leaf.terminal.clear_selection_pins();
+            }
         }
 
         true
@@ -156,8 +163,8 @@ mod tests {
     fn selection_from_cursor_bounds_selects_left_character() {
         let selection = FerrumWindow::selection_from_cursor_bounds(12, 5, 4, 80)
             .expect("selection should exist");
-        assert_eq!(selection.start.row, 12);
-        assert_eq!(selection.end.row, 12);
+        assert_eq!(selection.start.abs_row, 12);
+        assert_eq!(selection.end.abs_row, 12);
         assert_eq!(selection.start.col, 4);
         assert_eq!(selection.end.col, 4);
     }

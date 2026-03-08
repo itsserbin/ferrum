@@ -13,7 +13,7 @@ pub(in super::super) fn handle_device_csi(
                 6 => {
                     // CPR — Cursor Position Report (1-indexed)
                     let response =
-                        format!("\x1b[{};{}R", term.cursor_row + 1, term.cursor_col + 1,);
+                        format!("\x1b[{};{}R", term.cursor_row() + 1, term.cursor_col() + 1,);
                     term.respond(response.as_bytes());
                 }
                 5 => {

@@ -1,5 +1,5 @@
 use crate::config::AppConfig;
-use crate::core::{Grid, Selection, SelectionPoint};
+use crate::core::{PageCoord, Selection};
 use crate::gui::menus::MenuAction;
 use crate::gui::pane::SplitDirection;
 use crate::gui::*;
@@ -42,13 +42,13 @@ impl FerrumWindow {
             MenuAction::Paste => self.paste_clipboard(),
             MenuAction::SelectAll => {
                 if let Some(leaf) = self.active_leaf_mut() {
-                    let last_row = leaf.terminal.scrollback.len()
-                        + leaf.terminal.grid.rows.saturating_sub(1);
-                    let last_col = leaf.terminal.grid.cols.saturating_sub(1);
-                    leaf.selection = Some(Selection {
-                        start: SelectionPoint { row: 0, col: 0 },
-                        end: SelectionPoint {
-                            row: last_row,
+                    let last_row = leaf.terminal.screen.scrollback_len()
+                        + leaf.terminal.screen.viewport_rows().saturating_sub(1);
+                    let last_col = leaf.terminal.screen.cols().saturating_sub(1);
+                    leaf.set_selection(Selection {
+                        start: PageCoord { abs_row: 0, col: 0 },
+                        end: PageCoord {
+                            abs_row: last_row,
                             col: last_col,
                         },
                     });
@@ -56,7 +56,7 @@ impl FerrumWindow {
             }
             MenuAction::ClearSelection => {
                 if let Some(leaf) = self.active_leaf_mut() {
-                    leaf.selection = None;
+                    leaf.clear_selection();
                 }
                 self.selection_anchor = None;
                 self.keyboard_selection_anchor = None;
@@ -78,15 +78,9 @@ impl FerrumWindow {
             }
             MenuAction::ClearTerminal => {
                 if let Some(leaf) = self.active_leaf_mut() {
-                    let rows = leaf.terminal.grid.rows;
-                    let cols = leaf.terminal.grid.cols;
-                    leaf.terminal.grid = Grid::new(rows, cols);
-                    leaf.terminal.scrollback.clear();
-                    leaf.terminal.cursor_row = 0;
-                    leaf.terminal.cursor_col = 0;
-                    leaf.terminal.reset_scroll_region();
+                    leaf.terminal.clear_screen();
                     leaf.scroll_offset = 0;
-                    leaf.selection = None;
+                    leaf.clear_selection();
                     leaf.write_pty(Self::CLEAR_PTY_SEQUENCE);
                 }
                 self.selection_anchor = None;
@@ -96,7 +90,7 @@ impl FerrumWindow {
                 if let Some(leaf) = self.active_leaf_mut() {
                     leaf.terminal.full_reset();
                     leaf.scroll_offset = 0;
-                    leaf.selection = None;
+                    leaf.clear_selection();
                     leaf.write_pty(Self::CLEAR_PTY_SEQUENCE);
                 }
                 self.selection_anchor = None;

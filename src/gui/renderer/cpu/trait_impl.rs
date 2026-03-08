@@ -1,4 +1,4 @@
-use crate::core::{CursorStyle, Grid, Selection};
+use crate::core::{CursorStyle, PageList, Selection};
 use crate::gui::pane::PaneRect;
 
 use super::super::traits;
@@ -62,11 +62,11 @@ impl traits::Renderer for CpuRenderer {
     fn render(
         &mut self,
         target: &mut RenderTarget<'_>,
-        grid: &Grid,
+        screen: &PageList,
         selection: Option<&Selection>,
-        viewport_start: usize,
+        scroll_offset: usize,
     ) {
-        CpuRenderer::render(self, target, grid, selection, viewport_start);
+        CpuRenderer::render(self, target, screen, selection, scroll_offset);
     }
 
     fn draw_cursor(
@@ -74,22 +74,22 @@ impl traits::Renderer for CpuRenderer {
         target: &mut RenderTarget<'_>,
         row: usize,
         col: usize,
-        grid: &Grid,
+        screen: &PageList,
         style: CursorStyle,
     ) {
-        CpuRenderer::draw_cursor(self, target, row, col, grid, style);
+        CpuRenderer::draw_cursor(self, target, row, col, screen, style);
     }
 
     fn render_in_rect(
         &mut self,
         target: &mut RenderTarget<'_>,
-        grid: &Grid,
+        screen: &PageList,
         selection: Option<&Selection>,
-        viewport_start: usize,
+        scroll_offset: usize,
         rect: PaneRect,
         fg_dim: f32,
     ) {
-        CpuRenderer::render_in_rect(self, target, grid, selection, viewport_start, rect, fg_dim);
+        CpuRenderer::render_in_rect(self, target, screen, selection, scroll_offset, rect, fg_dim);
     }
 
     fn draw_cursor_in_rect(
@@ -97,11 +97,11 @@ impl traits::Renderer for CpuRenderer {
         target: &mut RenderTarget<'_>,
         row: usize,
         col: usize,
-        grid: &Grid,
+        screen: &PageList,
         style: CursorStyle,
         rect: PaneRect,
     ) {
-        CpuRenderer::draw_cursor_in_rect(self, target, row, col, grid, style, rect);
+        CpuRenderer::draw_cursor_in_rect(self, target, row, col, screen, style, rect);
     }
 
     fn render_scrollbar_in_rect(

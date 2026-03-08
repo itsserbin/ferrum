@@ -11,15 +11,7 @@ impl FerrumWindow {
     ) -> Vec<u8> {
         let mut bytes = Vec::new();
 
-        if target_col < cursor_col {
-            for _ in 0..(cursor_col - target_col) {
-                bytes.extend_from_slice(b"\x1b[D");
-            }
-        } else if target_col > cursor_col {
-            for _ in 0..(target_col - cursor_col) {
-                bytes.extend_from_slice(b"\x1b[C");
-            }
-        }
+        bytes.extend(Self::build_horizontal_cursor_move_bytes(cursor_col, target_col));
 
         let delete_seq: &[u8] = if use_backspace { b"\x7f" } else { b"\x1b[3~" };
         for _ in 0..cells_to_delete {
@@ -38,12 +30,12 @@ impl FerrumWindow {
                 return false;
             };
             let (start, end) = selection.normalized();
-            let cursor_abs_row = leaf.terminal.scrollback.len() + leaf.terminal.cursor_row;
-            if start.row != end.row || start.row != cursor_abs_row {
+            let cursor_abs_row = leaf.terminal.screen.scrollback_len() + leaf.terminal.cursor_row();
+            if start.abs_row != end.abs_row || start.abs_row != cursor_abs_row {
                 return false;
             }
 
-            (leaf.terminal.cursor_col, start.col, end.col)
+            (leaf.terminal.cursor_col(), start.col, end.col)
         };
 
         let target_col = if use_backspace {
@@ -76,7 +68,7 @@ impl FerrumWindow {
         self.copy_selection();
         if !self.delete_terminal_selection(false) {
             if let Some(leaf) = self.active_leaf_mut() {
-                leaf.selection = None;
+                leaf.clear_selection();
             }
             self.keyboard_selection_anchor = None;
         }
@@ -153,12 +145,12 @@ impl FerrumWindow {
                 return false;
             }
 
-            let grid_cols = leaf.terminal.grid.cols;
+            let grid_cols = leaf.terminal.screen.cols();
             if grid_cols == 0 {
                 return false;
             }
 
-            let cursor_col = leaf.terminal.cursor_col.min(grid_cols);
+            let cursor_col = leaf.terminal.cursor_col().min(grid_cols);
             let target_col = if use_backspace {
                 Self::word_motion_target_col_from_leaf(leaf, cursor_col, HorizontalMotion::Left)
             } else {

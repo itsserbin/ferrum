@@ -12,7 +12,7 @@ mod terminal;
 pub mod traits;
 pub mod types;
 
-use crate::core::{CursorStyle, Grid, Selection};
+use crate::core::{CursorStyle, GraphemeCell, PageList, Selection};
 
 pub use backend::RendererBackend;
 pub use cpu::CpuRenderer;
@@ -30,6 +30,24 @@ pub const SCROLLBAR_MARGIN: u32 = 2;
 
 /// Minimum scrollbar thumb height in base UI pixels.
 pub(super) const SCROLLBAR_MIN_THUMB: u32 = 20;
+
+/// Returns the cell to render for a given (row, col) in the display,
+/// taking `scroll_offset` into account. When scrolled, rows above the
+/// viewport come from the scrollback buffer.
+pub(super) fn display_cell(screen: &PageList, scroll_offset: usize, row: usize, col: usize) -> GraphemeCell {
+    if row < scroll_offset {
+        let sb_idx = screen.scrollback_len().saturating_sub(scroll_offset) + row;
+        if sb_idx < screen.scrollback_len() {
+            let sb_row = screen.scrollback_row(sb_idx);
+            if col < sb_row.cells.len() {
+                return sb_row.cells[col].clone();
+            }
+        }
+        GraphemeCell::default()
+    } else {
+        screen.viewport_get(row - scroll_offset, col).clone()
+    }
+}
 
 /// Sanitizes a DPI scale factor to a safe, finite range.
 ///

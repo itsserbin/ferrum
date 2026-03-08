@@ -545,7 +545,7 @@ fn on_value_changed(state: &Win32State) {
     update_all_displays(state);
     SUPPRESS.store(false, Ordering::Relaxed);
     let config = build_config(state);
-    let _ = state.tx.send(config);
+    state.tx.send(config).ok();
 }
 
 fn on_manual_check_result(state: &Win32State) {
@@ -592,25 +592,25 @@ fn on_command(state: &Win32State, wparam: WPARAM) {
             reset_controls(state);
             SUPPRESS.store(false, Ordering::Relaxed);
             let config = build_config(state);
-            let _ = state.tx.send(config);
+            state.tx.send(config).ok();
         }
         (id::SECURITY_MODE_COMBO, CBN_SELCHANGE) => {
             SUPPRESS.store(true, Ordering::Relaxed);
             apply_security_preset(state);
             SUPPRESS.store(false, Ordering::Relaxed);
             let config = build_config(state);
-            let _ = state.tx.send(config);
+            state.tx.send(config).ok();
         }
         (id::PASTE_CHECK | id::BLOCK_TITLE_CHECK | id::LIMIT_CURSOR_CHECK | id::CLEAR_MOUSE_CHECK, BN_CLICKED) => {
             SUPPRESS.store(true, Ordering::Relaxed);
             infer_security_mode(state);
             SUPPRESS.store(false, Ordering::Relaxed);
             let config = build_config(state);
-            let _ = state.tx.send(config);
+            state.tx.send(config).ok();
         }
         (id::AUTO_CHECK_CHECK, BN_CLICKED) => {
             let config = build_config(state);
-            let _ = state.tx.send(config);
+            state.tx.send(config).ok();
         }
         (id::CHECK_NOW_BTN, BN_CLICKED) => {
             // Disable the button and show "Checking…" while check runs.
@@ -656,7 +656,7 @@ fn on_command(state: &Win32State, wparam: WPARAM) {
         }
         (id::FONT_FAMILY_COMBO | id::THEME_COMBO | id::LANGUAGE_COMBO, CBN_SELCHANGE) => {
             let config = build_config(state);
-            let _ = state.tx.send(config);
+            state.tx.send(config).ok();
         }
         _ => {}
     }
@@ -783,11 +783,13 @@ unsafe fn create_controls(
     });
     terminal_page.append(&mut ctrls);
 
-    // Scrollback (updown: 0..500 → 0..50000, step 100)
-    let scrollback_initial = config.terminal.max_scrollback as i32 / 100;
+    // Scrollback (updown step index → actual rows via SCROLLBACK_STEP)
+    let scrollback_initial = (config.terminal.max_scrollback / TerminalConfig::SCROLLBACK_STEP) as i32;
     let (scrollback_updown, scrollback_edit, mut ctrls) = create_spin_row(&ctx, &SpinRowParams {
         label_text: t.terminal_max_scrollback_label, x: x0, y: y0 + sp,
-        range_min: 0, range_max: 500, initial: scrollback_initial,
+        range_min: (TerminalConfig::SCROLLBACK_MIN / TerminalConfig::SCROLLBACK_STEP) as i32,
+        range_max: (TerminalConfig::SCROLLBACK_MAX / TerminalConfig::SCROLLBACK_STEP) as i32,
+        initial: scrollback_initial,
         updown_id: id::SCROLLBACK_UPDOWN, edit_id: id::SCROLLBACK_EDIT,
     });
     terminal_page.append(&mut ctrls);
@@ -1182,7 +1184,7 @@ fn build_config(state: &Win32State) -> AppConfig {
         let theme_idx = SendMessageW(state.theme_combo, CB_GETCURSEL, 0, 0);
 
         let scrollback_pos = SendMessageW(state.scrollback_updown, UDM_GETPOS32, 0, 0) as usize;
-        let scrollback = scrollback_pos * 100;
+        let scrollback = scrollback_pos * TerminalConfig::SCROLLBACK_STEP;
 
         let blink_pos = SendMessageW(state.cursor_blink_updown, UDM_GETPOS32, 0, 0) as u64;
         let cursor_blink = TerminalConfig::BLINK_MS_MIN + blink_pos * TerminalConfig::BLINK_MS_STEP;
@@ -1251,7 +1253,7 @@ fn update_all_displays(state: &Win32State) {
         let line_padding = SendMessageW(state.line_padding_updown, UDM_GETPOS32, 0, 0);
         set_edit_text(state.line_padding_edit, &line_padding.to_string());
 
-        let scrollback = SendMessageW(state.scrollback_updown, UDM_GETPOS32, 0, 0) as usize * 100;
+        let scrollback = SendMessageW(state.scrollback_updown, UDM_GETPOS32, 0, 0) as usize * TerminalConfig::SCROLLBACK_STEP;
         set_edit_text(state.scrollback_edit, &scrollback.to_string());
 
         let blink = TerminalConfig::BLINK_MS_MIN + SendMessageW(state.cursor_blink_updown, UDM_GETPOS32, 0, 0) as u64 * TerminalConfig::BLINK_MS_STEP;
@@ -1363,7 +1365,7 @@ fn reset_controls(state: &Win32State) {
 
         // Terminal
         SendMessageW(state.language_combo, CB_SETCURSEL, crate::i18n::Locale::default().index(), 0);
-        SendMessageW(state.scrollback_updown, UDM_SETPOS32, 0, (d.terminal.max_scrollback / 100) as LPARAM);
+        SendMessageW(state.scrollback_updown, UDM_SETPOS32, 0, (d.terminal.max_scrollback / TerminalConfig::SCROLLBACK_STEP) as LPARAM);
         let blink_pos = (d.terminal.cursor_blink_interval_ms as i64 - TerminalConfig::BLINK_MS_MIN as i64) / TerminalConfig::BLINK_MS_STEP as i64;
         SendMessageW(state.cursor_blink_updown, UDM_SETPOS32, 0, blink_pos as LPARAM);
 

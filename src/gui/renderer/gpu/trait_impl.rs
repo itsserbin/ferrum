@@ -1,4 +1,4 @@
-use crate::core::{CursorStyle, Grid, Selection};
+use crate::core::{CursorStyle, PageList, Selection};
 use crate::gui::pane::PaneRect;
 
 use super::super::traits;
@@ -70,9 +70,9 @@ impl traits::Renderer for GpuRenderer {
     fn render(
         &mut self,
         _target: &mut RenderTarget<'_>,
-        grid: &Grid,
+        screen: &PageList,
         selection: Option<&Selection>,
-        viewport_start: usize,
+        scroll_offset: usize,
     ) {
         let padding = self.metrics.window_padding_px();
         let max_width = self.width.saturating_sub(padding.saturating_mul(2));
@@ -80,7 +80,7 @@ impl traits::Renderer for GpuRenderer {
             .height
             .saturating_sub(self.metrics.tab_bar_height_px() + padding.saturating_mul(2));
         let region = PaneRect { x: 0, y: 0, width: max_width, height: max_height };
-        self.queue_grid_batch(grid, selection, viewport_start, region, 0.0);
+        self.queue_grid_batch(screen, selection, scroll_offset, region, 0.0);
     }
 
     fn draw_cursor(
@@ -88,18 +88,18 @@ impl traits::Renderer for GpuRenderer {
         _target: &mut RenderTarget<'_>,
         row: usize,
         col: usize,
-        grid: &Grid,
+        screen: &PageList,
         style: CursorStyle,
     ) {
-        self.draw_cursor_impl(row, col, grid, style);
+        self.draw_cursor_impl(row, col, screen, style);
     }
 
     fn render_in_rect(
         &mut self,
         _target: &mut RenderTarget<'_>,
-        grid: &Grid,
+        screen: &PageList,
         selection: Option<&Selection>,
-        viewport_start: usize,
+        scroll_offset: usize,
         rect: PaneRect,
         fg_dim: f32,
     ) {
@@ -108,7 +108,7 @@ impl traits::Renderer for GpuRenderer {
         let origin_x = rect.x.saturating_sub(padding);
         let origin_y = rect.y.saturating_sub(top);
         let region = PaneRect { x: origin_x, y: origin_y, width: rect.width, height: rect.height };
-        self.queue_grid_batch(grid, selection, viewport_start, region, fg_dim);
+        self.queue_grid_batch(screen, selection, scroll_offset, region, fg_dim);
     }
 
     fn draw_cursor_in_rect(
@@ -116,11 +116,11 @@ impl traits::Renderer for GpuRenderer {
         _target: &mut RenderTarget<'_>,
         row: usize,
         col: usize,
-        grid: &Grid,
+        screen: &PageList,
         style: CursorStyle,
         rect: PaneRect,
     ) {
-        self.draw_cursor_in_rect_impl(row, col, grid, style, rect);
+        self.draw_cursor_in_rect_impl(row, col, screen, style, rect);
     }
 
     fn render_scrollbar_in_rect(

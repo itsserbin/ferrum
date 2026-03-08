@@ -1,12 +1,13 @@
-use crate::core::{Cell, Color, Grid, Row, SecurityConfig, SecurityEventKind, UnderlineStyle};
-use std::collections::VecDeque;
+use crate::core::{
+    Color, GraphemeCell, PageCoord, PageList, SecurityConfig,
+    SecurityEventKind, TrackedPin, UnderlineStyle,
+};
 use unicode_width::UnicodeWidthChar;
 use vte::{Params, Parser, Perform};
 
 mod alt_screen;
 mod grid_ops;
 mod handlers;
-mod reflow;
 mod resize;
 
 /// Cursor style reported by DECSCUSR.
@@ -41,12 +42,14 @@ pub enum MouseMode {
 }
 
 pub struct Terminal {
-    pub grid: Grid,
-    alt_grid: Option<Grid>,
-    pub cursor_row: usize,
-    pub cursor_col: usize,
-    saved_cursor: (usize, usize),     // ESC 7 / ESC 8 (DECSC/DECRC)
-    alt_saved_cursor: (usize, usize), // Saved separately for alt-screen enter/leave.
+    // ── Primary state (PageList + TrackedPin) ────────────────────────────────
+    pub screen: PageList,
+    cursor_pin: TrackedPin,
+    saved_cursor: PageCoord,
+    alt_saved_cursor: PageCoord,
+    alt_screen: Option<PageList>,
+
+    // ── Colour and attribute state ───────────────────────────────────────────
     current_fg: Color,
     current_bg: Color,
     pub default_fg: Color,
@@ -58,12 +61,17 @@ pub struct Terminal {
     current_reverse: bool,
     current_underline_style: UnderlineStyle,
     current_strikethrough: bool,
+
+    // ── Scroll region ────────────────────────────────────────────────────────
     scroll_top: usize,
     scroll_bottom: usize,
     saved_scroll_top: usize,
     saved_scroll_bottom: usize,
-    pub scrollback: VecDeque<Row>,
+
+    // ── Limits ───────────────────────────────────────────────────────────────
     pub max_scrollback: usize,
+
+    // ── Mode flags ───────────────────────────────────────────────────────────
     pub decckm: bool,               // Application Cursor Key Mode (ESC[?1h/l)
     pub cursor_visible: bool,       // DECTCEM (mode 25)
     pub pending_responses: Vec<u8>, // Bytes queued for PTY replies.
@@ -75,7 +83,12 @@ pub struct Terminal {
     pending_security_events: Vec<SecurityEventKind>,
     pub cursor_style: CursorStyle,
     pub resize_at: Option<std::time::Instant>,
-    scrollback_popped: usize,
+
+    // ── Selection pins ───────────────────────────────────────────────────────
+    pub selection_start_pin: Option<TrackedPin>,
+    pub selection_end_pin: Option<TrackedPin>,
+
+    // ── Misc ─────────────────────────────────────────────────────────────────
     parser: Parser,
     pub cwd: Option<String>,
     /// Window/icon title set by OSC 0/1/2.
@@ -96,13 +109,14 @@ impl Terminal {
         default_bg: Color,
         ansi_palette: [Color; 16],
     ) -> Self {
+        let screen = PageList::new(rows, cols, max_scrollback);
+        let cursor_pin = PageList::pin_at(PageCoord { abs_row: 0, col: 0 });
         Self {
-            grid: Grid::new(rows, cols),
-            alt_grid: None,
-            cursor_row: 0,
-            cursor_col: 0,
-            saved_cursor: (0, 0),
-            alt_saved_cursor: (0, 0),
+            screen,
+            cursor_pin,
+            saved_cursor: PageCoord { abs_row: 0, col: 0 },
+            alt_saved_cursor: PageCoord { abs_row: 0, col: 0 },
+            alt_screen: None,
             current_fg: default_fg,
             current_bg: default_bg,
             default_fg,
@@ -118,7 +132,6 @@ impl Terminal {
             scroll_bottom: rows - 1,
             saved_scroll_top: 0,
             saved_scroll_bottom: rows - 1,
-            scrollback: VecDeque::new(),
             max_scrollback,
             decckm: false,
             cursor_visible: true,
@@ -131,7 +144,8 @@ impl Terminal {
             pending_security_events: Vec::new(),
             cursor_style: CursorStyle::default(),
             resize_at: None,
-            scrollback_popped: 0,
+            selection_start_pin: None,
+            selection_end_pin: None,
             parser: Parser::new(),
             cwd: None,
             title: None,
@@ -166,15 +180,25 @@ impl Terminal {
         self.pending_responses.extend_from_slice(data);
     }
 
-    /// Creates a blank cell that inherits the current foreground and background colors.
-    /// Per xterm spec, erase operations fill with the current SGR background.
-    pub(crate) fn make_blank_cell(&self) -> Cell {
-        Cell {
-            character: ' ',
-            fg: self.current_fg,
-            bg: self.current_bg,
-            ..Cell::DEFAULT
-        }
+    /// Creates a blank `GraphemeCell` that inherits the current fg/bg.
+    pub(crate) fn make_blank_grapheme_cell(&self) -> GraphemeCell {
+        let mut gc = GraphemeCell::default();
+        gc.fg = self.current_fg;
+        gc.bg = self.current_bg;
+        gc
+    }
+
+    /// Clears the screen and scrollback, resetting cursor to (0,0).
+    ///
+    /// Unlike `full_reset()`, this preserves terminal attributes and mode flags.
+    pub fn clear_screen(&mut self) {
+        let rows = self.screen.viewport_rows();
+        let cols = self.screen.cols();
+        let max_sb = self.max_scrollback;
+        let new_screen = PageList::new(rows, cols, max_sb);
+        self.cursor_pin = PageList::pin_at(PageCoord { abs_row: 0, col: 0 });
+        self.screen = new_screen;
+        self.reset_scroll_region();
     }
 
     /// Drains all pending PTY response bytes.
@@ -182,15 +206,34 @@ impl Terminal {
         std::mem::take(&mut self.pending_responses)
     }
 
-    /// Returns and resets the accumulated scrollback-popped counter.
-    pub fn drain_scrollback_popped(&mut self) -> usize {
-        std::mem::take(&mut self.scrollback_popped)
+    /// Registers a tracked selection-start pin at the given absolute row/col.
+    pub fn set_selection_start(&mut self, abs_row: usize, col: usize) {
+        let pin = self.make_selection_pin(abs_row, col);
+        self.selection_start_pin = Some(pin);
+    }
+
+    /// Registers a tracked selection-end pin at the given absolute row/col.
+    pub fn set_selection_end(&mut self, abs_row: usize, col: usize) {
+        let pin = self.make_selection_pin(abs_row, col);
+        self.selection_end_pin = Some(pin);
+    }
+
+    /// Creates a tracked pin at the given absolute row/col.
+    fn make_selection_pin(&mut self, abs_row: usize, col: usize) -> TrackedPin {
+        let coord = PageCoord { abs_row, col };
+        PageList::pin_at(coord)
+    }
+
+    /// Clears both selection tracking pins.
+    pub fn clear_selection_pins(&mut self) {
+        self.selection_start_pin = None;
+        self.selection_end_pin = None;
     }
 
     /// Resets the scroll region to span the entire visible grid.
     pub fn reset_scroll_region(&mut self) {
         self.scroll_top = 0;
-        self.scroll_bottom = self.grid.rows.saturating_sub(1);
+        self.scroll_bottom = self.screen.viewport_rows().saturating_sub(1);
     }
 
     /// Drains security events detected while parsing terminal output.
@@ -286,6 +329,36 @@ impl Terminal {
     /// are not flagged as security events (shells legitimately redraw prompts).
     pub(crate) const RESIZE_CURSOR_JUMP_GRACE_SECS: u64 = 2;
 
+    /// Returns the viewport-relative cursor row (derived from `cursor_pin`).
+    pub fn cursor_row(&self) -> usize {
+        self.cursor_pin
+            .coord()
+            .abs_row
+            .saturating_sub(self.screen.viewport_start_abs())
+    }
+
+    /// Returns the cursor column (derived from `cursor_pin`).
+    pub fn cursor_col(&self) -> usize {
+        self.cursor_pin.coord().col
+    }
+
+    /// Sets the cursor row and keeps `cursor_pin` in sync.
+    pub fn set_cursor_row(&mut self, row: usize) {
+        let abs = self.screen.viewport_start_abs() + row;
+        self.cursor_pin.set_abs_row(abs);
+    }
+
+    /// Sets the cursor column and keeps `cursor_pin` in sync.
+    pub fn set_cursor_col(&mut self, col: usize) {
+        self.cursor_pin.set_col(col);
+    }
+
+    /// Sets both cursor row and column, keeping `cursor_pin` in sync.
+    pub fn set_cursor(&mut self, row: usize, col: usize) {
+        self.set_cursor_row(row);
+        self.set_cursor_col(col);
+    }
+
     fn maybe_record_cursor_rewrite(&mut self, from_row: usize, to_row: usize) {
         if !self.security_config.limit_cursor_jumps || self.is_alt_screen() || to_row >= from_row {
             return;
@@ -300,12 +373,11 @@ impl Terminal {
         }
 
         // Check if to_row is within bounds
-        if to_row >= self.grid.rows {
+        if to_row >= self.screen.viewport_rows() {
             return;
         }
         let row_has_content =
-            // Safe: col < grid.cols and to_row < grid.rows checked above
-            (0..self.grid.cols).any(|col| self.grid.get_unchecked(to_row, col).character != ' ');
+            (0..self.screen.cols()).any(|col| self.screen.viewport_get(to_row, col).first_char() != ' ');
         if row_has_content {
             self.emit_security_event(SecurityEventKind::CursorRewrite);
         }
@@ -345,23 +417,19 @@ impl Terminal {
             color
         };
 
-        self.grid.recolor_cells(|cell| {
-            cell.fg = remap(cell.fg);
-            cell.bg = remap(cell.bg);
+        self.screen.viewport_recolor(|gc: &mut GraphemeCell| {
+            gc.fg = remap(gc.fg);
+            gc.bg = remap(gc.bg);
         });
-
-        if let Some(ref mut alt) = self.alt_grid {
-            alt.recolor_cells(|cell| {
-                cell.fg = remap(cell.fg);
-                cell.bg = remap(cell.bg);
+        self.screen.scrollback_recolor(|gc| {
+            gc.fg = remap(gc.fg);
+            gc.bg = remap(gc.bg);
+        });
+        if let Some(ref mut alt) = self.alt_screen {
+            alt.viewport_recolor(|gc| {
+                gc.fg = remap(gc.fg);
+                gc.bg = remap(gc.bg);
             });
-        }
-
-        for row in &mut self.scrollback {
-            for cell in &mut row.cells {
-                cell.fg = remap(cell.fg);
-                cell.bg = remap(cell.bg);
-            }
         }
 
         self.current_fg = remap(self.current_fg);
@@ -372,19 +440,16 @@ impl Terminal {
     }
 
     pub fn full_reset(&mut self) {
-        let rows = self.grid.rows;
-        let cols = self.grid.cols;
+        let rows = self.screen.viewport_rows();
+        let cols = self.screen.cols();
+        let max_scrollback = self.max_scrollback;
 
-        self.alt_grid = None;
-        self.grid = Grid::new(rows, cols);
-        self.cursor_row = 0;
-        self.cursor_col = 0;
-        self.saved_cursor = (0, 0);
-        self.alt_saved_cursor = (0, 0);
+        self.alt_screen = None;
+        self.saved_cursor = PageCoord { abs_row: 0, col: 0 };
+        self.alt_saved_cursor = PageCoord { abs_row: 0, col: 0 };
         self.reset_scroll_region();
         self.saved_scroll_top = 0;
         self.saved_scroll_bottom = rows.saturating_sub(1);
-        self.scrollback.clear();
         self.decckm = false;
         self.cursor_visible = true;
         self.cursor_style = CursorStyle::default();
@@ -396,6 +461,9 @@ impl Terminal {
         self.cwd = None;
         self.reset_attributes();
         self.parser = Parser::new();
+        let screen = PageList::new(rows, cols, max_scrollback);
+        self.cursor_pin = PageList::pin_at(PageCoord { abs_row: 0, col: 0 });
+        self.screen = screen;
     }
 
     fn handle_private_mode(&mut self, params: &Params, intermediates: &[u8], action: char) -> bool {
@@ -416,10 +484,10 @@ impl Terminal {
     }
 
     fn handle_cursor_csi(&mut self, action: char, params: &Params) -> bool {
-        let from_row = self.cursor_row;
+        let from_row = self.cursor_row();
         let handled = handlers::cursor::handle_cursor_csi(self, action, params);
         if handled {
-            self.maybe_record_cursor_rewrite(from_row, self.cursor_row);
+            self.maybe_record_cursor_rewrite(from_row, self.cursor_row());
         }
         handled
     }
@@ -449,53 +517,40 @@ impl Perform for Terminal {
             width = 1;
         }
 
-        if self.cursor_col + width > self.grid.cols {
-            // Mark current row as soft-wrapped before moving to next row
-            self.grid.set_wrapped(self.cursor_row, true);
-            self.cursor_col = 0;
-            self.cursor_row += 1;
-            if self.cursor_row > self.scroll_bottom {
+        if self.cursor_col() + width > self.screen.cols() {
+            // Mark current row as soft-wrapped before moving to next row.
+            let cr = self.cursor_row();
+            self.screen.viewport_set_wrapped(cr, true);
+            self.set_cursor_col(0);
+            let next_row = self.cursor_row() + 1;
+            if next_row > self.scroll_bottom {
                 self.scroll_up_region(self.scroll_top, self.scroll_bottom);
-                self.cursor_row = self.scroll_bottom;
+                self.set_cursor_row(self.scroll_bottom);
+            } else {
+                self.set_cursor_row(next_row);
             }
         }
 
-        self.grid.set(
-            self.cursor_row,
-            self.cursor_col,
-            Cell {
-                character: c,
-                fg: self.current_fg,
-                bg: self.current_bg,
-                bold: self.current_bold,
-                dim: self.current_dim,
-                italic: self.current_italic,
-                reverse: self.current_reverse,
-                underline_style: self.current_underline_style,
-                strikethrough: self.current_strikethrough,
-            },
-        );
+        let cr = self.cursor_row();
+        let cc = self.cursor_col();
+        let mut gc = GraphemeCell::from_char(c);
+        gc.fg = self.current_fg;
+        gc.bg = self.current_bg;
+        gc.bold = self.current_bold;
+        gc.dim = self.current_dim;
+        gc.italic = self.current_italic;
+        gc.reverse = self.current_reverse;
+        gc.underline_style = self.current_underline_style;
+        gc.strikethrough = self.current_strikethrough;
+        self.screen.viewport_set(cr, cc, gc);
 
         // Reserve the trailing cell for wide glyphs.
-        if width == 2 && self.cursor_col + 1 < self.grid.cols {
-            self.grid.set(
-                self.cursor_row,
-                self.cursor_col + 1,
-                Cell {
-                    character: ' ',
-                    fg: self.current_fg,
-                    bg: self.current_bg,
-                    bold: self.current_bold,
-                    dim: self.current_dim,
-                    italic: self.current_italic,
-                    reverse: self.current_reverse,
-                    underline_style: self.current_underline_style,
-                    strikethrough: self.current_strikethrough,
-                },
-            );
+        if width == 2 && cc + 1 < self.screen.cols() {
+            let spacer_gc = GraphemeCell::spacer();
+            self.screen.viewport_set(cr, cc + 1, spacer_gc);
         }
 
-        self.cursor_col += width;
+        self.set_cursor_col(cc + width);
     }
 
     fn execute(&mut self, byte: u8) {
@@ -503,27 +558,29 @@ impl Perform for Terminal {
             10..=12 => {
                 // LF/VT/FF: move to next row, keep current column.
                 // Mark current row as NOT wrapped (hard line break).
-                self.grid.set_wrapped(self.cursor_row, false);
-                self.cursor_row += 1;
-                if self.cursor_row > self.scroll_bottom {
+                let cr = self.cursor_row();
+                self.screen.viewport_set_wrapped(cr, false);
+                let next_row = cr + 1;
+                if next_row > self.scroll_bottom {
                     self.scroll_up_region(self.scroll_top, self.scroll_bottom);
-                    self.cursor_row = self.scroll_bottom;
+                    self.set_cursor_row(self.scroll_bottom);
+                } else {
+                    self.set_cursor_row(next_row);
                 }
             }
             13 => {
-                self.cursor_col = 0;
+                self.set_cursor_col(0);
             }
             8 => {
-                if self.cursor_col > 0 {
-                    self.cursor_col -= 1;
+                if self.cursor_col() > 0 {
+                    self.set_cursor_col(self.cursor_col() - 1);
                 }
             }
             9 => {
                 const DEFAULT_TAB_WIDTH: usize = 8;
-                self.cursor_col = (self.cursor_col + DEFAULT_TAB_WIDTH) & !(DEFAULT_TAB_WIDTH - 1);
-                if self.cursor_col >= self.grid.cols {
-                    self.cursor_col = self.grid.cols - 1;
-                }
+                let new_col =
+                    (self.cursor_col() + DEFAULT_TAB_WIDTH) & !(DEFAULT_TAB_WIDTH - 1);
+                self.set_cursor_col(new_col.min(self.screen.cols() - 1));
             }
             _ => {}
         }
@@ -585,27 +642,35 @@ impl Perform for Terminal {
         if self.handle_erase_csi(action, params) {
             return;
         }
-        let _ = self.handle_device_csi(action, params, intermediates);
+        self.handle_device_csi(action, params, intermediates);
     }
 
     fn esc_dispatch(&mut self, _intermediates: &[u8], _ignore: bool, byte: u8) {
         match byte {
-            b'7' => self.saved_cursor = (self.cursor_row, self.cursor_col),
+            b'7' => {
+                self.saved_cursor = PageCoord {
+                    abs_row: self.cursor_pin.coord().abs_row,
+                    col: self.cursor_col(),
+                };
+            }
             b'8' => {
-                let from_row = self.cursor_row;
-                self.cursor_row = self.saved_cursor.0;
-                self.cursor_col = self.saved_cursor.1;
-                self.maybe_record_cursor_rewrite(from_row, self.cursor_row);
+                let from_row = self.cursor_row();
+                let vstart = self.screen.viewport_start_abs();
+                let row = self.saved_cursor.abs_row.saturating_sub(vstart)
+                    .min(self.screen.viewport_rows().saturating_sub(1));
+                let col = self.saved_cursor.col.min(self.screen.cols().saturating_sub(1));
+                self.set_cursor(row, col);
+                self.maybe_record_cursor_rewrite(from_row, self.cursor_row());
             }
             b'M' => {
-                let from_row = self.cursor_row;
+                let from_row = self.cursor_row();
                 // Reverse Index: cursor up, scroll down if at top of region
-                if self.cursor_row == self.scroll_top {
+                if self.cursor_row() == self.scroll_top {
                     self.scroll_down_region(self.scroll_top, self.scroll_bottom);
                 } else {
-                    self.cursor_row = self.cursor_row.saturating_sub(1);
+                    self.set_cursor_row(self.cursor_row().saturating_sub(1));
                 }
-                self.maybe_record_cursor_rewrite(from_row, self.cursor_row);
+                self.maybe_record_cursor_rewrite(from_row, self.cursor_row());
             }
             b'c' => self.full_reset(), // RIS - full terminal reset
             _ => {}

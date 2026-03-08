@@ -15,7 +15,7 @@ enum MotionClass {
 }
 
 impl FerrumWindow {
-    pub(super) fn build_horizontal_cursor_move_bytes(
+    pub(in crate::gui) fn build_horizontal_cursor_move_bytes(
         cursor_col: usize,
         target_col: usize,
     ) -> Vec<u8> {
@@ -106,17 +106,17 @@ impl FerrumWindow {
         cursor_col: usize,
         motion: HorizontalMotion,
     ) -> usize {
-        let rows = leaf.terminal.grid.rows;
-        let cols = leaf.terminal.grid.cols;
+        let rows = leaf.terminal.screen.viewport_rows();
+        let cols = leaf.terminal.screen.cols();
         if rows == 0 || cols == 0 {
             return 0;
         }
 
-        let row = leaf.terminal.cursor_row.min(rows.saturating_sub(1));
+        let row = leaf.terminal.cursor_row().min(rows.saturating_sub(1));
         let mut line = Vec::with_capacity(cols);
         for col in 0..cols {
-            // Safe: col < cols and row < rows
-            line.push(leaf.terminal.grid.get_unchecked(row, col).character);
+            let ch = leaf.terminal.screen.viewport_get(row, col).first_char();
+            line.push(ch);
         }
 
         Self::word_motion_target_col_for_line(&line, cursor_col, motion)

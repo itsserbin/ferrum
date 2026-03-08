@@ -15,13 +15,6 @@ impl FerrumWindow {
                 {
                     leaf.terminal.process(bytes);
 
-                    let popped = leaf.terminal.drain_scrollback_popped();
-                    if popped > 0 {
-                        leaf.selection = leaf
-                            .selection
-                            .and_then(|sel| sel.adjust_for_scrollback_pop(popped));
-                    }
-
                     for event in leaf.terminal.drain_security_events() {
                         leaf.security.record(event);
                     }

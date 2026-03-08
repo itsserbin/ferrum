@@ -2,9 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project Overview
 
+## Project Overview
 Ferrum is a GPU-accelerated terminal emulator written in Rust. Cross-platform (Linux, macOS, Windows) with tab support, pane splitting, detachable windows, and dual CPU/GPU rendering backends.
+
+Primary languages: Rust (terminal emulator project), TypeScript/JavaScript (web projects). When using external tools/actions, check for latest versions before suggesting (e.g., GitHub Actions).
 
 ## Build Commands
 

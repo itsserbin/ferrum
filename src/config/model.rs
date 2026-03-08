@@ -61,13 +61,16 @@ pub(crate) struct TerminalConfig {
 impl Default for TerminalConfig {
     fn default() -> Self {
         Self {
-            max_scrollback: 1000,
+            max_scrollback: 30_000,
             cursor_blink_interval_ms: 500,
         }
     }
 }
 
 impl TerminalConfig {
+    pub const SCROLLBACK_MIN: usize = 1_000;
+    pub const SCROLLBACK_MAX: usize = 100_000;
+    pub const SCROLLBACK_STEP: usize = 1_000;
     pub const BLINK_MS_MIN: u64 = 100;
     pub const BLINK_MS_MAX: u64 = 2000;
     pub const BLINK_MS_STEP: u64 = 50;
@@ -229,7 +232,7 @@ mod tests {
         let deserialized: AppConfig = ron::from_str(&serialized).expect("deserialize");
         assert_eq!(deserialized.font.size, 14.0);
         assert_eq!(deserialized.theme, ThemeChoice::FerrumDark);
-        assert_eq!(deserialized.terminal.max_scrollback, 1000);
+        assert_eq!(deserialized.terminal.max_scrollback, 30_000);
         assert_eq!(deserialized.layout.window_padding, 8);
     }
 
@@ -239,7 +242,7 @@ mod tests {
         let config: AppConfig = ron::from_str(partial).expect("deserialize partial");
         assert_eq!(config.theme, ThemeChoice::FerrumLight);
         assert_eq!(config.font.size, 14.0);
-        assert_eq!(config.terminal.max_scrollback, 1000);
+        assert_eq!(config.terminal.max_scrollback, 30_000);
     }
 
     #[test]
@@ -248,7 +251,7 @@ mod tests {
         assert_eq!(config.font.size, 14.0);
         assert_eq!(config.font.family, FontFamily::JetBrainsMono);
         assert_eq!(config.font.line_padding, 0);
-        assert_eq!(config.terminal.max_scrollback, 1000);
+        assert_eq!(config.terminal.max_scrollback, 30_000);
         assert_eq!(config.terminal.cursor_blink_interval_ms, 500);
         assert_eq!(config.layout.window_padding, 8);
         assert_eq!(config.layout.tab_bar_height, 36);
