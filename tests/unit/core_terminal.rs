@@ -454,10 +454,12 @@ fn reflow_cursor_row_correct_when_logical_line_wraps_three_times() {
 
     term.resize(5, 4);
 
-    // With cursor-bottom anchoring the viewport is [XXXX, XXXX, ABCD, EFGH, IJK],
-    // cursor on IJK at viewport row 4 (new_rows - 1).  More content visible than
-    // with the old end-of-buffer anchor that pushed XXXX rows into scrollback.
-    assert_eq!(term.cursor_row(), 4, "cursor should be on IJK row (viewport row 4), not on EFGH row (viewport row 3)");
+    // With content-anchor reflow the cursor's logical line ("ABCDEFGHIJK") is not
+    // reflowed — it is placed as the cursor's physical row (truncated to 4 cols:
+    // "ABCD").  The three XXXX rows fill viewport rows 0-2, then the cursor row
+    // sits at row 3, with a blank row 4 below it.
+    // rewrapped.len() = 3 (three XXXX rows), cursor_viewport_row = min(3, 4) = 3.
+    assert_eq!(term.cursor_row(), 3, "cursor should anchor after the 3 XXXX rows (viewport row 3)");
 }
 
 #[test]
