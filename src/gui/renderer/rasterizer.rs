@@ -166,7 +166,7 @@ impl GlyphRasterizer {
         let font = FontRef::from_index(self.font_data, 0)
             .expect("primary font data is valid");
         let m = font.metrics(&[]).scale(self.font_size);
-        let cell_height = (m.ascent - m.descent + m.leading).ceil() as u32;
+        let cell_height = (m.ascent + m.descent + m.leading).ceil() as u32;
 
         let m_id = font.charmap().map('M');
         let adv = font.glyph_metrics(&[]).scale(self.font_size).advance_width(m_id);
