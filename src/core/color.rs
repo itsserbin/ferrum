@@ -71,6 +71,8 @@ impl Color {
     }
 
     /// Converts a linear light value (0.0–1.0) to an sRGB-encoded byte (0–255).
+    ///
+    /// Rounds to nearest rather than truncating.
     pub fn channel_to_srgb(c: f32) -> u8 {
         (c.clamp(0.0, 1.0).powf(1.0 / 2.2) * 255.0 + 0.5) as u8
     }
@@ -176,6 +178,9 @@ mod tests {
         // Pure black and white survive the roundtrip exactly.
         assert_eq!(Color::channel_to_srgb(Color::channel_to_linear(0)), 0);
         assert_eq!(Color::channel_to_srgb(Color::channel_to_linear(255)), 255);
+        // Interior values survive with at most 1 byte of rounding error.
+        assert!((Color::channel_to_srgb(Color::channel_to_linear(128)) as i32 - 128).abs() <= 1);
+        assert!((Color::channel_to_srgb(Color::channel_to_linear(200)) as i32 - 200).abs() <= 1);
     }
 
     #[test]
