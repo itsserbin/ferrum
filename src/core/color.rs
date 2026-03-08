@@ -63,6 +63,18 @@ impl Color {
         }
     }
 
+    /// Converts an sRGB-encoded byte (0–255) to a linear light value (0.0–1.0).
+    ///
+    /// Uses the γ = 2.2 approximation. Sufficient for terminal rendering.
+    pub fn channel_to_linear(c: u8) -> f32 {
+        (c as f32 / 255.0).powf(2.2)
+    }
+
+    /// Converts a linear light value (0.0–1.0) to an sRGB-encoded byte (0–255).
+    pub fn channel_to_srgb(c: f32) -> u8 {
+        (c.clamp(0.0, 1.0).powf(1.0 / 2.2) * 255.0 + 0.5) as u8
+    }
+
     /// 256-color palette lookup for indices 16-255 (color cube + grayscale).
     ///
     /// Indices 0-15 require a theme palette — use [`Terminal::color_from_256`]
@@ -157,6 +169,27 @@ mod tests {
         let ansi = test_ansi_palette();
         let custom = Color { r: 1, g: 2, b: 3 };
         assert_eq!(custom.bold_bright_with_palette(&ansi), custom);
+    }
+
+    #[test]
+    fn channel_roundtrip() {
+        // Pure black and white survive the roundtrip exactly.
+        assert_eq!(Color::channel_to_srgb(Color::channel_to_linear(0)), 0);
+        assert_eq!(Color::channel_to_srgb(Color::channel_to_linear(255)), 255);
+    }
+
+    #[test]
+    fn channel_to_linear_midpoint() {
+        // sRGB 128 should decode to roughly 0.216 linear (γ=2.2: (128/255)^2.2).
+        let v = Color::channel_to_linear(128);
+        assert!((v - 0.216).abs() < 0.005, "got {v}");
+    }
+
+    #[test]
+    fn channel_to_srgb_midpoint() {
+        // linear 0.5 should encode to roughly 186 in sRGB (0.5^(1/2.2) * 255).
+        let v = Color::channel_to_srgb(0.5);
+        assert!((v as i32 - 186).abs() <= 1, "got {v}");
     }
 
     #[test]
