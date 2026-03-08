@@ -1,9 +1,8 @@
-// Grid render shader — renders terminal cells into a Rgba8UnormSrgb texture.
+// Grid render shader — renders terminal cells into a Rgba8Unorm texture.
 //
 // A fullscreen triangle is drawn. The fragment shader determines which cell
 // each pixel belongs to, blends glyph coverage against palette colors in
-// linear light space, and outputs linear values. The Rgba8UnormSrgb attachment
-// encodes them to sRGB automatically.
+// linear light space, and explicitly encodes the result to sRGB before output.
 
 // ---- Uniforms ----
 
@@ -69,14 +68,34 @@ struct VertexOutput {
 
 // ---- Helpers ----
 
-/// Unpack 0xRRGGBB and decode sRGB → linear (γ = 2.2 approximation).
+/// Decode one sRGB channel to linear light (IEC 61966-2-1).
+fn srgb_to_linear(c: f32) -> f32 {
+    if c <= 0.04045 {
+        return c / 12.92;
+    }
+    return pow((c + 0.055) / 1.055, 2.4);
+}
+
+/// Unpack 0xRRGGBB and decode sRGB → linear (IEC 61966-2-1, exact inverse of linear_to_srgb).
 fn unpack_linear(c: u32) -> vec3<f32> {
     let s = vec3<f32>(
         f32((c >> 16u) & 0xFFu) / 255.0,
         f32((c >>  8u) & 0xFFu) / 255.0,
         f32( c         & 0xFFu) / 255.0,
     );
-    return pow(s, vec3<f32>(2.2));
+    return vec3<f32>(srgb_to_linear(s.r), srgb_to_linear(s.g), srgb_to_linear(s.b));
+}
+
+/// Encode one linear channel to sRGB (IEC 61966-2-1).
+fn linear_to_srgb(c: f32) -> f32 {
+    if c <= 0.0031308 {
+        return c * 12.92;
+    }
+    return 1.055 * pow(c, 1.0 / 2.4) - 0.055;
+}
+
+fn linear_to_srgb3(c: vec3<f32>) -> vec3<f32> {
+    return vec3<f32>(linear_to_srgb(c.r), linear_to_srgb(c.g), linear_to_srgb(c.b));
 }
 
 // ---- Vertex stage: fullscreen triangle ----
@@ -189,6 +208,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         color = decor_lin;
     }
 
-    // Output linear. The Rgba8UnormSrgb attachment encodes → sRGB automatically.
-    return vec4<f32>(color, 1.0);
+    // Encode linear → sRGB explicitly before writing to Rgba8Unorm attachment.
+    return vec4<f32>(linear_to_srgb3(color), 1.0);
 }

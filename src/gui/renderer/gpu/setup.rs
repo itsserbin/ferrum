@@ -46,11 +46,9 @@ impl super::GpuRenderer {
             }))?;
 
         // Surface configuration.
-        // Prefer a non-sRGB format so the GPU doesn't apply automatic gamma
-        // correction when writing to the surface. Our shaders output colors in
-        // the same space as the palette constants (already perceptual/sRGB values
-        // stored in linear textures), so an extra hardware sRGB conversion would
-        // double-gamma and wash out colors.
+        // Prefer a non-sRGB format: the composite shader writes sRGB-encoded values
+        // directly (grid.wgsl encodes linear→sRGB explicitly; UI shader writes sRGB
+        // palette colors as-is), so no hardware sRGB encoding is needed on output.
         let surface_caps = surface.get_capabilities(&adapter);
         let surface_format = surface_caps
             .formats
@@ -93,7 +91,7 @@ impl super::GpuRenderer {
 
         // Create intermediate textures.
         let (grid_texture, grid_texture_view) = Self::create_offscreen_texture(
-            &device, width, height, "grid_texture", wgpu::TextureFormat::Rgba8UnormSrgb,
+            &device, width, height, "grid_texture", wgpu::TextureFormat::Rgba8Unorm,
         );
         let (ui_texture, ui_texture_view) = Self::create_offscreen_texture(
             &device, width, height, "ui_texture", wgpu::TextureFormat::Rgba8Unorm,
@@ -242,7 +240,7 @@ impl super::GpuRenderer {
     pub(super) fn resize_textures(&mut self) {
         let (gt, gtv) = Self::create_offscreen_texture(
             &self.device, self.width, self.height, "grid_texture",
-            wgpu::TextureFormat::Rgba8UnormSrgb,
+            wgpu::TextureFormat::Rgba8Unorm,
         );
         self.grid_texture = gt;
         self.grid_texture_view = gtv;

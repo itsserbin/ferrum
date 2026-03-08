@@ -95,7 +95,7 @@ pub fn create_grid_pipeline(
             module:      &shader,
             entry_point: Some("fs_main"),
             targets: &[Some(wgpu::ColorTargetState {
-                format:     wgpu::TextureFormat::Rgba8UnormSrgb,
+                format:     wgpu::TextureFormat::Rgba8Unorm,
                 blend:      None,
                 write_mask: wgpu::ColorWrites::ALL,
             })],
