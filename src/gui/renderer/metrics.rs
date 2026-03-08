@@ -1,5 +1,5 @@
 use super::{SCROLLBAR_HIT_ZONE, SCROLLBAR_MARGIN};
-use fontdue::Font;
+use crate::gui::renderer::rasterizer::GlyphRasterizer;
 
 /// Font metrics shared across renderers.
 ///
@@ -42,23 +42,20 @@ impl FontMetrics {
         }
     }
 
-    /// Recomputes all metrics from the given font and current ui_scale.
-    pub fn recompute(&mut self, font: &Font) {
+    /// Recomputes all metrics using the rasterizer and the current ui_scale.
+    ///
+    /// Updates the rasterizer's font size to `base_font_size * ui_scale` before
+    /// querying cell metrics, so cell dimensions reflect DPI scaling.
+    pub fn recompute(&mut self, rasterizer: &mut GlyphRasterizer) {
         let scaled_font_size = (self.base_font_size as f64 * self.ui_scale).max(1.0) as f32;
+        if rasterizer.font_size != scaled_font_size {
+            rasterizer.rebuild(scaled_font_size, rasterizer.mode);
+        }
         let line_padding = self.scaled_px(self.base_line_padding);
-        let line_metrics = font
-            .horizontal_line_metrics(scaled_font_size)
-            .expect("no horizontal line metrics");
-        // Use ceil for ascent (round up to not clip tops of glyphs)
-        // and ceil for descent magnitude (round towards zero to tighten cell).
-        let asc = line_metrics.ascent.ceil() as i32;
-        let desc = line_metrics.descent.ceil() as i32; // negative, ceil = towards zero
-        self.ascent = asc + line_padding as i32 / 2;
-        self.cell_height = ((asc - desc).max(1) as u32) + line_padding;
-
-        // Measure advance width from 'M'
-        let (m_metrics, _) = font.rasterize('M', scaled_font_size);
-        self.cell_width = m_metrics.advance_width.round().max(1.0) as u32;
+        let cell_metrics = rasterizer.metrics();
+        self.ascent = cell_metrics.ascent + (line_padding / 2) as i32;
+        self.cell_height = cell_metrics.cell_height + line_padding;
+        self.cell_width = cell_metrics.cell_width;
         self.font_size = scaled_font_size;
     }
 

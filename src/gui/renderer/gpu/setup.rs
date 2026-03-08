@@ -19,6 +19,7 @@ impl super::GpuRenderer {
         let size = window.inner_size();
         let width = size.width.max(1);
         let height = size.height.max(1);
+        let scale_factor = window.scale_factor();
 
         // Initialize wgpu.
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
@@ -45,11 +46,9 @@ impl super::GpuRenderer {
             }))?;
 
         // Surface configuration.
-        // Prefer a non-sRGB format so the GPU doesn't apply automatic gamma
-        // correction when writing to the surface. Our shaders output colors in
-        // the same space as the palette constants (already perceptual/sRGB values
-        // stored in linear textures), so an extra hardware sRGB conversion would
-        // double-gamma and wash out colors.
+        // Prefer a non-sRGB format: the composite shader writes sRGB-encoded values
+        // directly (grid.wgsl encodes linear→sRGB explicitly; UI shader writes sRGB
+        // palette colors as-is), so no hardware sRGB encoding is needed on output.
         let surface_caps = surface.get_capabilities(&adapter);
         let surface_format = surface_caps
             .formats
@@ -71,15 +70,18 @@ impl super::GpuRenderer {
         surface.configure(&device, &surface_config);
 
         // Font setup.
-        let (font, fallback_fonts) = crate::config::load_fonts(config.font.family);
-
+        let (font_data, fallback_data) = crate::config::load_fonts(config.font.family);
+        let mode = crate::gui::renderer::rasterizer::RasterMode::from_scale_factor(scale_factor);
+        let mut rasterizer = crate::gui::renderer::rasterizer::GlyphRasterizer::new(
+            font_data, fallback_data, config.font.size, mode,
+        );
         let mut metrics = FontMetrics::from_config(config);
-        metrics.recompute(&font);
+        metrics.recompute(&mut rasterizer);
 
         let palette = config.theme.resolve();
 
         // Create glyph atlas.
-        let atlas = GlyphAtlas::new(&device, &queue, &font, &fallback_fonts, metrics.font_size, metrics.ascent);
+        let atlas = GlyphAtlas::new(&device, &queue, &mut rasterizer);
 
         // Create pipelines.
         let (grid_pipeline, grid_bind_group_layout) = pipelines::create_grid_pipeline(&device);
@@ -88,10 +90,12 @@ impl super::GpuRenderer {
             pipelines::create_composite_pipeline(&device, surface_format);
 
         // Create intermediate textures.
-        let (grid_texture, grid_texture_view) =
-            Self::create_offscreen_texture(&device, width, height, "grid_texture", true);
-        let (ui_texture, ui_texture_view) =
-            Self::create_offscreen_texture(&device, width, height, "ui_texture", false);
+        let (grid_texture, grid_texture_view) = Self::create_offscreen_texture(
+            &device, width, height, "grid_texture", wgpu::TextureFormat::Rgba8Unorm,
+        );
+        let (ui_texture, ui_texture_view) = Self::create_offscreen_texture(
+            &device, width, height, "ui_texture", wgpu::TextureFormat::Rgba8Unorm,
+        );
 
         // Create buffers.
         let grid_uniform_buffer = Self::create_uniform_buffer(
@@ -155,8 +159,7 @@ impl super::GpuRenderer {
             composite_uniform_buffer,
             sampler,
             atlas,
-            font,
-            fallback_fonts,
+            rasterizer,
             metrics,
             palette,
             commands: Vec::with_capacity(MAX_UI_COMMANDS),
@@ -171,29 +174,23 @@ impl super::GpuRenderer {
 
     pub(super) fn create_offscreen_texture(
         device: &wgpu::Device,
-        width: u32,
+        width:  u32,
         height: u32,
-        label: &str,
-        storage: bool,
+        label:  &str,
+        format: wgpu::TextureFormat,
     ) -> (wgpu::Texture, wgpu::TextureView) {
-        let usage = if storage {
-            wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::STORAGE_BINDING
-        } else {
-            wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::RENDER_ATTACHMENT
-        };
-
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some(label),
             size: wgpu::Extent3d {
-                width: width.max(1),
-                height: height.max(1),
+                width:                 width.max(1),
+                height:                height.max(1),
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage,
+            sample_count:    1,
+            dimension:       wgpu::TextureDimension::D2,
+            format,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::RENDER_ATTACHMENT,
             view_formats: &[],
         });
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -242,21 +239,15 @@ impl super::GpuRenderer {
     /// Rebuilds grid and UI textures after a window resize.
     pub(super) fn resize_textures(&mut self) {
         let (gt, gtv) = Self::create_offscreen_texture(
-            &self.device,
-            self.width,
-            self.height,
-            "grid_texture",
-            true,
+            &self.device, self.width, self.height, "grid_texture",
+            wgpu::TextureFormat::Rgba8Unorm,
         );
         self.grid_texture = gt;
         self.grid_texture_view = gtv;
 
         let (ut, utv) = Self::create_offscreen_texture(
-            &self.device,
-            self.width,
-            self.height,
-            "ui_texture",
-            false,
+            &self.device, self.width, self.height, "ui_texture",
+            wgpu::TextureFormat::Rgba8Unorm,
         );
         self.ui_texture = ut;
         self.ui_texture_view = utv;
@@ -264,25 +255,28 @@ impl super::GpuRenderer {
 
     /// Applies config changes (font, metrics, atlas, palette).
     pub(in crate::gui::renderer) fn apply_config(&mut self, config: &crate::config::AppConfig) {
-        let (font, fallback_fonts) = crate::config::load_fonts(config.font.family);
-        self.font = font;
-        self.fallback_fonts = fallback_fonts;
+        let (font_data, fallback_data) = crate::config::load_fonts(config.font.family);
+        self.rasterizer = crate::gui::renderer::rasterizer::GlyphRasterizer::new(
+            font_data, fallback_data, config.font.size, self.rasterizer.mode,
+        );
         self.metrics.update_bases(config);
-        self.metrics.recompute(&self.font);
+        self.metrics.recompute(&mut self.rasterizer);
         self.rebuild_atlas();
         self.palette = config.theme.resolve();
     }
 
+    /// Returns glyph info for `codepoint`, lazily inserting it into the atlas.
+    ///
+    /// Binds `queue` as a local to satisfy the borrow checker: `get_or_insert`
+    /// needs `&mut self.rasterizer` and `&self.queue` at the same time.
+    pub(super) fn get_or_insert_glyph(&mut self, codepoint: u32) -> super::atlas::GlyphInfo {
+        let queue = &self.queue;
+        self.atlas.get_or_insert(codepoint, &mut self.rasterizer, queue)
+    }
+
     /// Rebuilds glyph atlas and related buffer after scale change.
     pub(super) fn rebuild_atlas(&mut self) {
-        self.atlas = GlyphAtlas::new(
-            &self.device,
-            &self.queue,
-            &self.font,
-            &self.fallback_fonts,
-            self.metrics.font_size,
-            self.metrics.ascent,
-        );
+        self.atlas = GlyphAtlas::new(&self.device, &self.queue, &mut self.rasterizer);
         let glyph_data = self.atlas.glyph_info_buffer_data();
         self.glyph_info_buffer = Self::create_storage_buffer_init(
             &self.device,

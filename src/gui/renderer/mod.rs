@@ -4,6 +4,7 @@ mod cursor;
 #[cfg(feature = "gpu")]
 pub mod gpu;
 pub mod metrics;
+pub mod rasterizer;
 mod scrollbar;
 pub mod shared;
 #[cfg(not(target_os = "macos"))]

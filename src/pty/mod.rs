@@ -185,6 +185,7 @@ impl Session {
         #[cfg(target_os = "macos")]
         cmd.arg("-l");
         cmd.env("TERM", "xterm-256color");
+        cmd.env("COLORTERM", "truecolor");
 
         // Shell integration: set marker env and configure per-shell sourcing.
         cmd.env("FERRUM_SHELL_INTEGRATION", "1");

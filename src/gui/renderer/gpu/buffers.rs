@@ -36,7 +36,8 @@ pub struct GridUniforms {
     pub origin_x: u32,
     pub origin_y: u32,
     pub bg_color: u32,
-    pub _pad0: u32,
+    /// 1 = LCD subpixel atlas (3-channel), 0 = grayscale atlas.
+    pub is_lcd: u32,
     pub tex_width: u32,
     pub tex_height: u32,
     pub _pad1: u32,

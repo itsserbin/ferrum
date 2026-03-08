@@ -1,24 +1,22 @@
-// Grid compute shader — renders terminal cells into a texture.
+// Grid render shader — renders terminal cells into a Rgba8Unorm texture.
 //
-// Each workgroup thread handles one pixel. The shader determines which
-// cell the pixel belongs to, fills the background color, samples the
-// glyph from the atlas, applies foreground color with alpha blending,
-// and draws underlines. Each dispatch renders one batch at `origin_x/y`
-// in the grid texture.
+// A fullscreen triangle is drawn. The fragment shader determines which cell
+// each pixel belongs to, blends glyph coverage against palette colors in
+// linear light space, and explicitly encodes the result to sRGB before output.
 
-// ---- Uniforms (48 bytes, 16-byte aligned) ----
+// ---- Uniforms ----
 
 struct GridUniforms {
-    cols:         u32,   // terminal column count
-    rows:         u32,   // terminal row count
-    cell_width:   u32,   // cell width in pixels
-    cell_height:  u32,   // cell height in pixels
-    origin_x:     u32,   // batch origin X in grid texture pixels
-    origin_y:     u32,   // batch origin Y in grid texture pixels
-    bg_color:     u32,   // default background color as 0xRRGGBB
-    _pad0:        u32,
-    tex_width:    u32,   // output texture width in pixels
-    tex_height:   u32,   // output texture height in pixels
+    cols:         u32,
+    rows:         u32,
+    cell_width:   u32,
+    cell_height:  u32,
+    origin_x:     u32,
+    origin_y:     u32,
+    bg_color:     u32,   // default background 0xRRGGBB (sRGB) — reserved, each cell stores its own bg
+    is_lcd:       u32,   // 1 = LCD subpixel atlas, 0 = grayscale atlas
+    tex_width:    u32,
+    tex_height:   u32,
     _pad1:        u32,
     _pad2:        u32,
 }
@@ -26,27 +24,29 @@ struct GridUniforms {
 // ---- Per-cell data (16 bytes, tightly packed) ----
 
 struct Cell {
-    codepoint: u32,      // Unicode codepoint (0 = empty, 32 = space)
-    fg:        u32,      // foreground  0xRRGGBB
-    bg:        u32,      // background  0xRRGGBB
-    attrs:     u32,      // bit 0: bold
-                         // bit 1: italic
-                         // bit 2: underline (any style)
-                         // bit 3: reverse video
-                         // bit 4: dim
-                         // bit 5: strikethrough
-                         // bits 6-7: underline style (0=none, 1=single, 2=double, 3=reserved)
+    codepoint: u32,
+    fg:        u32,   // 0xRRGGBB sRGB
+    bg:        u32,   // 0xRRGGBB sRGB
+    attrs:     u32,
+                      // bit 0: bold
+                      // bit 1: italic
+                      // bit 2: underline (any style)
+                      // bit 3: reverse video
+                      // bit 4: dim
+                      // bit 5: strikethrough
+                      // bits 6-7: underline style (0=none, 1=single, 2=double, 3=reserved)
+                      // bit 8: wide-right spacer
 }
 
 // ---- Glyph lookup entry (32 bytes, 16-byte aligned) ----
 
 struct GlyphInfo {
-    x:        f32,       // atlas pixel X
-    y:        f32,       // atlas pixel Y
-    w:        f32,       // glyph width  in atlas pixels
-    h:        f32,       // glyph height in atlas pixels
-    offset_x: f32,       // X offset from cell origin
-    offset_y: f32,       // Y offset from cell top
+    x:        f32,
+    y:        f32,
+    w:        f32,
+    h:        f32,
+    offset_x: f32,
+    offset_y: f32,
     _pad1:    f32,
     _pad2:    f32,
 }
@@ -57,129 +57,163 @@ struct GlyphInfo {
 @group(0) @binding(1) var<storage, read> cells:    array<Cell>;
 @group(0) @binding(2) var<storage, read> glyphs:   array<GlyphInfo>;
 @group(0) @binding(3) var               atlas:     texture_2d<f32>;
-@group(0) @binding(4) var               output:    texture_storage_2d<rgba8unorm, write>;
+@group(0) @binding(4) var               atlas_smp: sampler;
+
+// ---- Vertex / Fragment IO ----
+
+struct VertexOutput {
+    @builtin(position) position: vec4<f32>,
+}
 
 // ---- Helpers ----
 
-// Unpack 0xRRGGBB into linear vec3<f32>.
-fn unpack_rgb(c: u32) -> vec3<f32> {
-    return vec3<f32>(
+/// Decode one sRGB channel to linear light (IEC 61966-2-1).
+fn srgb_to_linear(c: f32) -> f32 {
+    if c <= 0.04045 {
+        return c / 12.92;
+    }
+    return pow((c + 0.055) / 1.055, 2.4);
+}
+
+/// Unpack 0xRRGGBB and decode sRGB → linear (IEC 61966-2-1, exact inverse of linear_to_srgb).
+fn unpack_linear(c: u32) -> vec3<f32> {
+    let s = vec3<f32>(
         f32((c >> 16u) & 0xFFu) / 255.0,
         f32((c >>  8u) & 0xFFu) / 255.0,
         f32( c         & 0xFFu) / 255.0,
     );
+    return vec3<f32>(srgb_to_linear(s.r), srgb_to_linear(s.g), srgb_to_linear(s.b));
 }
 
-// ---- Entry point ----
+/// Encode one linear channel to sRGB (IEC 61966-2-1).
+fn linear_to_srgb(c: f32) -> f32 {
+    if c <= 0.0031308 {
+        return c * 12.92;
+    }
+    return 1.055 * pow(c, 1.0 / 2.4) - 0.055;
+}
 
-@compute @workgroup_size(16, 16)
-fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let local_x = gid.x;
-    let local_y = gid.y;
-    let pixel_x = local_x + uniforms.origin_x;
-    let pixel_y = local_y + uniforms.origin_y;
+fn linear_to_srgb3(c: vec3<f32>) -> vec3<f32> {
+    return vec3<f32>(linear_to_srgb(c.r), linear_to_srgb(c.g), linear_to_srgb(c.b));
+}
 
-    // Out-of-texture guard (dispatch may overshoot texture dimensions).
-    if pixel_x >= uniforms.tex_width || pixel_y >= uniforms.tex_height {
-        return;
+// ---- Vertex stage: fullscreen triangle ----
+
+@vertex
+fn vs_main(@builtin(vertex_index) vi: u32) -> VertexOutput {
+    let x = f32(i32(vi) / 2) * 4.0 - 1.0;
+    let y = f32(i32(vi) % 2) * 4.0 - 1.0;
+    var out: VertexOutput;
+    out.position = vec4<f32>(x, y, 0.0, 1.0);
+    return out;
+}
+
+// ---- Fragment stage ----
+
+@fragment
+fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    let px = u32(in.position.x);
+    let py = u32(in.position.y);
+
+    // Guard against u32 underflow before subtracting the batch origin.
+    if px < uniforms.origin_x || py < uniforms.origin_y {
+        discard;
     }
 
-    // Batch-local bounds (dispatch can overshoot because of workgroup ceil-div).
+    let pixel_x = px - uniforms.origin_x;
+    let pixel_y = py - uniforms.origin_y;
+
+    // Batch-local bounds guard.
     let batch_w = uniforms.cols * uniforms.cell_width;
     let batch_h = uniforms.rows * uniforms.cell_height;
-    if local_x >= batch_w || local_y >= batch_h {
-        return;
+    if pixel_x >= batch_w || pixel_y >= batch_h {
+        discard;
     }
 
-    // Which cell does this pixel belong to?
-    let col = local_x / uniforms.cell_width;
-    let row = local_y / uniforms.cell_height;
+    let col      = pixel_x / uniforms.cell_width;
+    let row      = pixel_y / uniforms.cell_height;
     let cell_idx = row * uniforms.cols + col;
-    let cell = cells[cell_idx];
+    let cell     = cells[cell_idx];
 
-    // Local position within the cell.
-    let cell_x = local_x - col * uniforms.cell_width;
-    let cell_y = local_y - row * uniforms.cell_height;
+    let cell_x = pixel_x - col * uniforms.cell_width;
+    let cell_y = pixel_y - row * uniforms.cell_height;
 
-    // For spacer cells (right half of wide chars), shift the glyph sample
-    // left by one cell width so both halves render from the same glyph.
+    // Wide-right spacer: shift glyph sample left by one cell.
     let is_wide_right = (cell.attrs & 256u) != 0u;
-    var adjusted_cell_x = cell_x;
+    var adj_cell_x = cell_x;
     if is_wide_right {
-        adjusted_cell_x = cell_x + uniforms.cell_width;
+        adj_cell_x = cell_x + uniforms.cell_width;
     }
 
-    // Resolve foreground / background, honoring reverse video.
+    // Resolve fg/bg with reverse video.
     var fg = cell.fg;
     var bg = cell.bg;
-    let is_reverse = (cell.attrs & 8u) != 0u;
-    if is_reverse {
+    if (cell.attrs & 8u) != 0u {
         let tmp = fg;
         fg = bg;
         bg = tmp;
     }
 
-    // Dim: reduce foreground intensity by 40%
     let is_dim = (cell.attrs & 16u) != 0u;
 
-    // Start with background color.
-    var color = vec4<f32>(unpack_rgb(bg), 1.0);
+    // Decode sRGB palette → linear light.
+    var fg_lin = unpack_linear(fg);
+    let bg_lin = unpack_linear(bg);
 
-    // Sample glyph from atlas for visible codepoints (skip space and below).
+    if is_dim {
+        fg_lin = fg_lin * 0.6;
+    }
+
+    // Start with background.
+    var color = bg_lin;
+
+    // Glyph blending — blend in linear space.
     let glyph_count = arrayLength(&glyphs);
     if cell.codepoint > 32u && cell.codepoint < glyph_count {
         let glyph = glyphs[cell.codepoint];
-
         if glyph.w > 0.0 {
-            // Pixel position relative to glyph bounding box.
-            // For wide-right spacer cells, adjusted_cell_x shifts sample to the right half.
-            let gx = f32(adjusted_cell_x) - glyph.offset_x;
-            let gy = f32(cell_y) - glyph.offset_y;
+            let gx = f32(adj_cell_x) - glyph.offset_x;
+            let gy = f32(cell_y)     - glyph.offset_y;
 
             if gx >= 0.0 && gx < glyph.w && gy >= 0.0 && gy < glyph.h {
-                // Integer texel coordinates into the atlas.
-                let tex_x = i32(glyph.x + gx);
-                let tex_y = i32(glyph.y + gy);
-
-                // textureLoad is the correct function for compute shaders
-                // (no sampler needed, integer coordinates, explicit mip level).
-                let alpha = textureLoad(atlas, vec2<i32>(tex_x, tex_y), 0).r;
-
-                // Blend foreground over background using glyph alpha.
-                var fg_color = unpack_rgb(fg);
-                if is_dim {
-                    fg_color = fg_color * 0.6;
-                }
-                color = vec4<f32>(
-                    mix(color.rgb, fg_color, alpha),
-                    1.0,
+                let atlas_size = vec2<f32>(textureDimensions(atlas));
+                let uv = vec2<f32>(
+                    (glyph.x + gx) / atlas_size.x,
+                    (glyph.y + gy) / atlas_size.y,
                 );
+                let sample = textureSampleLevel(atlas, atlas_smp, uv, 0.0);
+
+                if uniforms.is_lcd == 1u {
+                    // LCD: per-channel blend in linear space.
+                    color = vec3<f32>(
+                        mix(bg_lin.r, fg_lin.r, sample.r),
+                        mix(bg_lin.g, fg_lin.g, sample.g),
+                        mix(bg_lin.b, fg_lin.b, sample.b),
+                    );
+                } else {
+                    // Grayscale: single-alpha blend in linear space.
+                    color = mix(bg_lin, fg_lin, sample.r);
+                }
             }
         }
     }
 
-    // Compute potentially dimmed foreground for decorations.
-    var decor_fg = unpack_rgb(fg);
-    if is_dim {
-        decor_fg = decor_fg * 0.6;
-    }
-
-    // Underline styles (bits 6-7)
+    // Decorations (underline, strikethrough) — use (potentially dimmed) fg.
+    let decor_lin = fg_lin;
     let underline_style = (cell.attrs >> 6u) & 3u;
     if underline_style == 1u && cell_y >= uniforms.cell_height - 2u {
-        // Single underline: 2px at bottom
-        color = vec4<f32>(decor_fg, 1.0);
-    } else if underline_style == 2u && (cell_y == uniforms.cell_height - 1u || cell_y == uniforms.cell_height - 3u) {
-        // Double underline: two 1px lines
-        color = vec4<f32>(decor_fg, 1.0);
+        // Single underline: 2px at bottom.
+        color = decor_lin;
+    } else if underline_style == 2u &&
+              (cell_y == uniforms.cell_height - 1u || cell_y == uniforms.cell_height - 3u) {
+        // Double underline: two 1px lines.
+        color = decor_lin;
     }
-    // value 3 reserved for future use
-
-    // Strikethrough: 1px line at vertical center
-    let is_strikethrough = (cell.attrs & 32u) != 0u;
-    if is_strikethrough && cell_y == uniforms.cell_height / 2u {
-        color = vec4<f32>(decor_fg, 1.0);
+    // Strikethrough: 1px line at vertical center.
+    if (cell.attrs & 32u) != 0u && cell_y == uniforms.cell_height / 2u {
+        color = decor_lin;
     }
 
-    textureStore(output, vec2<i32>(i32(pixel_x), i32(pixel_y)), color);
+    // Encode linear → sRGB explicitly before writing to Rgba8Unorm attachment.
+    return vec4<f32>(linear_to_srgb3(color), 1.0);
 }

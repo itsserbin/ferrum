@@ -80,7 +80,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         base_color = bg;
     } else if gx >= 0.0 && gx < uniforms.grid_pixel_width &&
               gy >= 0.0 && gy < uniforms.grid_pixel_height {
-        // Inside the grid area: sample from grid texture using pixel coordinates.
+        // Inside the grid area: sample from grid texture.
+        // Grid content is stored at (0,0) in the texture; gx/gy are grid-local offsets.
         let tex_size = vec2<f32>(textureDimensions(grid_texture));
         let grid_uv = vec2<f32>(gx / tex_size.x, gy / tex_size.y);
         base_color = textureSampleLevel(grid_texture, tex_sampler, grid_uv, 0.0);

@@ -11,12 +11,19 @@ use super::GpuRenderer;
 
 impl traits::Renderer for GpuRenderer {
     fn set_scale(&mut self, scale_factor: f64) {
+        use crate::gui::renderer::rasterizer::RasterMode;
         let scale = super::super::sanitize_scale(scale_factor);
         if !super::super::scale_changed(self.metrics.ui_scale, scale) {
             return;
         }
         self.metrics.ui_scale = scale;
-        self.metrics.recompute(&self.font);
+        // Rebuild rasterizer (resets ScaleContext) whenever mode changes so
+        // the glyph cache is not populated with stale grayscale/LCD coverage.
+        let new_mode = RasterMode::from_scale_factor(scale);
+        if self.rasterizer.mode != new_mode {
+            self.rasterizer.rebuild(self.metrics.font_size, new_mode);
+        }
+        self.metrics.recompute(&mut self.rasterizer);
         self.rebuild_atlas();
     }
 

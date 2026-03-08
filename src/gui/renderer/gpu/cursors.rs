@@ -29,13 +29,7 @@ impl super::GpuRenderer {
                 };
                 if ch != ' ' {
                     let cp = ch as u32;
-                    let info = self.atlas.get_or_insert(
-                        cp,
-                        &self.font,
-                        &self.fallback_fonts,
-                        self.metrics.font_size,
-                        &self.queue,
-                    );
+                    let info = self.get_or_insert_glyph(cp);
                     if info.w > 0.0 && info.h > 0.0 {
                         let gx = x + info.offset_x;
                         let gy = y + info.offset_y;

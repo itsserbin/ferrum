@@ -82,14 +82,6 @@ pub enum WindowButton {
     Close,
 }
 
-pub(super) struct GlyphBitmap {
-    pub(super) data: Vec<u8>,
-    pub(super) width: usize,
-    pub(super) height: usize,
-    pub(super) left: i32,
-    pub(super) top: i32,
-}
-
 /// Pixel buffer surface passed to rendering methods.
 ///
 /// Groups the `(buffer, width, height)` triple that appears in every

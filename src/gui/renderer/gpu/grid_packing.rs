@@ -2,6 +2,7 @@
 
 use crate::core::{Color, PageList, Selection, UnderlineStyle};
 use crate::gui::pane::PaneRect;
+use crate::gui::renderer::rasterizer::RasterMode;
 
 use super::GridBatch;
 use super::buffers::{GridUniforms, PackedCell};
@@ -18,6 +19,11 @@ const ATTR_STRIKETHROUGH: u32 = 1 << 5;
 const ATTR_WIDE_RIGHT: u32 = 1 << 8;
 
 impl super::GpuRenderer {
+    /// Returns `1` if the current rasterizer mode is LCD subpixel, `0` for grayscale.
+    fn is_lcd_flag(&self) -> u32 {
+        if self.rasterizer.mode == RasterMode::LcdSubpixel { 1 } else { 0 }
+    }
+
     pub(super) fn terminal_texture_extent(&self) -> (u32, u32) {
         let padding = self.metrics.window_padding_px();
         let tab_bar_height = self.metrics.tab_bar_height_px();
@@ -42,6 +48,7 @@ impl super::GpuRenderer {
         }
 
         let bg = self.palette.default_bg.to_pixel();
+        let is_lcd = self.is_lcd_flag();
         self.grid_batches.push(GridBatch {
             cells: vec![PackedCell {
                 codepoint: 0,
@@ -57,7 +64,7 @@ impl super::GpuRenderer {
                 origin_x: 0,
                 origin_y: 0,
                 bg_color: bg,
-                _pad0: 0,
+                is_lcd,
                 tex_width: self.width,
                 tex_height: self.height,
                 _pad1: 0,
@@ -100,13 +107,7 @@ impl super::GpuRenderer {
 
                 // Ensure non-ASCII terminal glyphs exist in the atlas.
                 if codepoint >= 128 {
-                    let _ = self.atlas.get_or_insert(
-                        codepoint,
-                        &self.font,
-                        &self.fallback_fonts,
-                        self.metrics.font_size,
-                        &self.queue,
-                    );
+                    let _ = self.get_or_insert_glyph(codepoint);
                 }
 
                 let mut attrs = attrs_wide;
@@ -175,6 +176,7 @@ impl super::GpuRenderer {
             return;
         }
 
+        let is_lcd = self.is_lcd_flag();
         let cells = self.pack_grid_cells(screen, selection, scroll_offset, fg_dim);
         self.grid_batches.push(GridBatch {
             cells,
@@ -186,7 +188,7 @@ impl super::GpuRenderer {
                 origin_x: region.x,
                 origin_y: region.y,
                 bg_color: self.palette.default_bg.to_pixel(),
-                _pad0: 0,
+                is_lcd,
                 tex_width: self.width,
                 tex_height: self.height,
                 _pad1: 0,

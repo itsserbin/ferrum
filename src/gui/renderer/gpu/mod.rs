@@ -25,10 +25,10 @@ mod trait_impl;
 mod ui_commands;
 mod window_buttons;
 
-use fontdue::Font;
 use wgpu;
 
 use crate::config::ThemePalette;
+use crate::gui::renderer::rasterizer::GlyphRasterizer;
 use super::metrics::FontMetrics;
 
 use atlas::GlyphAtlas;
@@ -63,7 +63,7 @@ pub struct GpuRenderer {
     ui_texture_view: wgpu::TextureView,
 
     // Pipelines
-    grid_pipeline: wgpu::ComputePipeline,
+    grid_pipeline: wgpu::RenderPipeline,
     ui_pipeline: wgpu::RenderPipeline,
     composite_pipeline: wgpu::RenderPipeline,
 
@@ -86,9 +86,8 @@ pub struct GpuRenderer {
     // Atlas
     atlas: GlyphAtlas,
 
-    // Font & metrics
-    font: Font,
-    fallback_fonts: Vec<Font>,
+    // Rasterizer & metrics
+    pub(super) rasterizer: GlyphRasterizer,
     metrics: FontMetrics,
     pub(in crate::gui::renderer) palette: ThemePalette,
 

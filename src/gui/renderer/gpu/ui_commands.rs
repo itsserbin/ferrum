@@ -118,9 +118,7 @@ impl super::GpuRenderer {
         let cw = self.metrics.cell_width as f32;
         for (i, ch) in text.chars().enumerate() {
             let cp = ch as u32;
-            let info =
-                self.atlas
-                    .get_or_insert(cp, &self.font, &self.fallback_fonts, self.metrics.font_size, &self.queue);
+            let info = self.get_or_insert_glyph(cp);
             if info.w > 0.0 && info.h > 0.0 {
                 let gx = x + i as f32 * cw + info.offset_x;
                 let gy = y + info.offset_y;
