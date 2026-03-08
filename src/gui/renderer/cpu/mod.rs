@@ -5,23 +5,14 @@ mod trait_impl;
 use std::collections::HashMap;
 
 use crate::config::{AppConfig, ThemePalette};
-use crate::gui::renderer::rasterizer::{GlyphCoverage, GlyphRasterizer, RasterMode};
+use crate::gui::renderer::rasterizer::{GlyphRasterizer, RasterMode, RasterizedGlyph};
 use super::metrics::FontMetrics;
-
-/// Cached rasterized glyph data for the CPU renderer.
-pub(super) struct CachedGlyph {
-    pub(super) coverage: GlyphCoverage,
-    pub(super) width:    u32,
-    pub(super) height:   u32,
-    pub(super) left:     i32,
-    pub(super) top:      i32,
-}
 
 /// CPU-based software renderer using softbuffer pixel buffers.
 pub struct CpuRenderer {
     pub(in crate::gui::renderer) rasterizer:     GlyphRasterizer,
     pub(in crate::gui::renderer) metrics:        FontMetrics,
-    pub(in crate::gui::renderer) glyph_cache:    HashMap<char, CachedGlyph>,
+    pub(in crate::gui::renderer) glyph_cache:    HashMap<char, RasterizedGlyph>,
     pub(in crate::gui::renderer) srgb_to_linear: [f32; 256],
     pub(in crate::gui::renderer) palette:        ThemePalette,
 }

@@ -82,10 +82,11 @@ impl GlyphRasterizer {
     }
 
     /// Updates font size and/or raster mode. Call on settings change or DPI change.
+    ///
+    /// `ScaleContext` is reusable across size and mode changes — it is not recreated here.
     pub fn rebuild(&mut self, font_size: f32, mode: RasterMode) {
         self.font_size = font_size;
         self.mode = mode;
-        self.scale_ctx = ScaleContext::new();
     }
 
     /// Returns the font bytes and whether it is the primary font.

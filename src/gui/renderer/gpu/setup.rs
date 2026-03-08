@@ -265,6 +265,15 @@ impl super::GpuRenderer {
         self.palette = config.theme.resolve();
     }
 
+    /// Returns glyph info for `codepoint`, lazily inserting it into the atlas.
+    ///
+    /// Binds `queue` as a local to satisfy the borrow checker: `get_or_insert`
+    /// needs `&mut self.rasterizer` and `&self.queue` at the same time.
+    pub(super) fn get_or_insert_glyph(&mut self, codepoint: u32) -> super::atlas::GlyphInfo {
+        let queue = &self.queue;
+        self.atlas.get_or_insert(codepoint, &mut self.rasterizer, queue)
+    }
+
     /// Rebuilds glyph atlas and related buffer after scale change.
     pub(super) fn rebuild_atlas(&mut self) {
         self.atlas = GlyphAtlas::new(&self.device, &self.queue, &mut self.rasterizer);

@@ -3,7 +3,7 @@ use crate::core::Color;
 #[cfg(not(target_os = "macos"))]
 use super::super::types::RoundedShape;
 use super::super::types::RenderTarget;
-use super::{CachedGlyph, CpuRenderer};
+use super::CpuRenderer;
 use crate::gui::renderer::rasterizer::GlyphCoverage;
 
 impl CpuRenderer {
@@ -38,23 +38,12 @@ impl CpuRenderer {
         character: char,
         fg: Color,
     ) {
-        // Rasterize and cache on first use; skip spaces / empty glyphs.
-        if !self.glyph_cache.contains_key(&character) {
-            if let Some(g) = self.rasterizer.rasterize(character) {
-                self.glyph_cache.insert(character, CachedGlyph {
-                    width:    g.width,
-                    height:   g.height,
-                    left:     g.left,
-                    top:      g.top,
-                    coverage: g.coverage,
-                });
-            } else {
-                return;
-            }
-        }
-        let glyph = match self.glyph_cache.get(&character) {
-            Some(g) => g,
-            None    => return,
+        // Cache hit: 1 lookup. Cache miss: rasterize then entry().or_insert() (insert + ref, no second lookup).
+        let glyph = if let Some(g) = self.glyph_cache.get(&character) {
+            g
+        } else {
+            let Some(rasterized) = self.rasterizer.rasterize(character) else { return; };
+            self.glyph_cache.entry(character).or_insert(rasterized)
         };
 
         let ascent = self.metrics.ascent;

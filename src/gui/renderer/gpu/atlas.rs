@@ -132,6 +132,9 @@ impl GlyphAtlas {
 
         let gw = glyph.width;
         let gh = glyph.height;
+        // Extract scalar fields before consuming glyph.coverage by value.
+        let offset_x = glyph.left as f32;
+        let offset_y = (self.ascent - glyph.top) as f32;
 
         // Row packing: advance to next row if this glyph doesn't fit.
         if self.next_x + gw > self.atlas_width {
@@ -146,8 +149,8 @@ impl GlyphAtlas {
             return;
         }
 
-        let (bytes_per_row, upload_data): (u32, Vec<u8>) = match &glyph.coverage {
-            GlyphCoverage::Grayscale(data) => (gw, data.clone()),
+        let (bytes_per_row, upload_data): (u32, Vec<u8>) = match glyph.coverage {
+            GlyphCoverage::Grayscale(data) => (gw, data),
             GlyphCoverage::Lcd(data) => {
                 // Pack [R, G, B] into RGBA: A=0 (unused).
                 let rgba: Vec<u8> = data.iter()
@@ -173,9 +176,6 @@ impl GlyphAtlas {
             },
             wgpu::Extent3d { width: gw, height: gh, depth_or_array_layers: 1 },
         );
-
-        let offset_x = glyph.left as f32;
-        let offset_y = (self.ascent - glyph.top) as f32;
 
         self.glyphs.insert(codepoint, GlyphInfo {
             x:        self.next_x as f32,

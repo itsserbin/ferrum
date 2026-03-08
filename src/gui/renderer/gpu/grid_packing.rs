@@ -107,10 +107,7 @@ impl super::GpuRenderer {
 
                 // Ensure non-ASCII terminal glyphs exist in the atlas.
                 if codepoint >= 128 {
-                    // Bind queue separately to satisfy the borrow checker:
-                    // atlas.get_or_insert needs &mut self.rasterizer and &self.queue simultaneously.
-                    let queue = &self.queue;
-                    let _ = self.atlas.get_or_insert(codepoint, &mut self.rasterizer, queue);
+                    let _ = self.get_or_insert_glyph(codepoint);
                 }
 
                 let mut attrs = attrs_wide;
