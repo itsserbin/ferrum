@@ -3,7 +3,8 @@ use crate::core::Color;
 #[cfg(not(target_os = "macos"))]
 use super::super::types::RoundedShape;
 use super::super::types::RenderTarget;
-use super::CpuRenderer;
+use super::{CachedGlyph, CpuRenderer};
+use crate::gui::renderer::rasterizer::GlyphCoverage;
 
 impl CpuRenderer {
     pub(in crate::gui::renderer) fn draw_bg(
@@ -37,69 +38,69 @@ impl CpuRenderer {
         character: char,
         fg: Color,
     ) {
-        use std::collections::hash_map::Entry;
-        let glyph_entry = self.glyph_cache.entry(character);
-        let glyph = match glyph_entry {
-            Entry::Occupied(entry) => entry.into_mut(),
-            Entry::Vacant(entry) => {
-                let is_primary = self.font.has_glyph(character);
-                let font = if is_primary {
-                    &self.font
-                } else {
-                    self.fallback_fonts
-                        .iter()
-                        .find(|f| f.has_glyph(character))
-                        .unwrap_or(&self.font)
-                };
-                let font_size = if is_primary {
-                    self.metrics.font_size
-                } else {
-                    // Scale down fallback glyphs that exceed cell width.
-                    let m = font.metrics(character, self.metrics.font_size);
-                    if m.advance_width > self.metrics.cell_width as f32 {
-                        self.metrics.font_size * (self.metrics.cell_width as f32 / m.advance_width)
-                    } else {
-                        self.metrics.font_size
-                    }
-                };
-                let (metrics, bitmap) = font.rasterize(character, font_size);
-                entry.insert(super::super::types::GlyphBitmap {
-                    data: bitmap,
-                    width: metrics.width,
-                    height: metrics.height,
-                    left: metrics.xmin,
-                    top: metrics.height as i32 + metrics.ymin,
-                })
+        // Rasterize and cache on first use; skip spaces / empty glyphs.
+        if !self.glyph_cache.contains_key(&character) {
+            if let Some(g) = self.rasterizer.rasterize(character) {
+                self.glyph_cache.insert(character, CachedGlyph {
+                    width:    g.width,
+                    height:   g.height,
+                    left:     g.left,
+                    top:      g.top,
+                    coverage: g.coverage,
+                });
+            } else {
+                return;
             }
+        }
+        let glyph = match self.glyph_cache.get(&character) {
+            Some(g) => g,
+            None    => return,
         };
 
-        for gy in 0..glyph.height {
-            for gx in 0..glyph.width {
-                let alpha = glyph.data[gy * glyph.width + gx];
-                if alpha == 0 {
+        let ascent = self.metrics.ascent;
+
+        // Decode foreground to linear using the precomputed LUT.
+        let fg_lr = self.srgb_to_linear[fg.r as usize];
+        let fg_lg = self.srgb_to_linear[fg.g as usize];
+        let fg_lb = self.srgb_to_linear[fg.b as usize];
+
+        for gy in 0..glyph.height as usize {
+            for gx in 0..glyph.width as usize {
+                let sx = x as i32 + glyph.left + gx as i32;
+                let sy = y as i32 + (ascent - glyph.top) + gy as i32;
+                if sx < 0
+                    || sy < 0
+                    || sx as usize >= target.width
+                    || sy as usize >= target.height
+                {
                     continue;
                 }
+                let idx = sy as usize * target.width + sx as usize;
+                let bg_pixel = target.buffer[idx];
+                let bg_lr = self.srgb_to_linear[((bg_pixel >> 16) & 0xFF) as usize];
+                let bg_lg = self.srgb_to_linear[((bg_pixel >>  8) & 0xFF) as usize];
+                let bg_lb = self.srgb_to_linear[ (bg_pixel        & 0xFF) as usize];
 
-                let sx = x as i32 + glyph.left + gx as i32;
-                let sy = y as i32 + (self.metrics.ascent - glyph.top) + gy as i32;
-
-                if sx >= 0
-                    && sy >= 0
-                    && (sx as usize) < target.width
-                    && (sy as usize) < target.height
-                {
-                    let idx = sy as usize * target.width + sx as usize;
-                    let a = alpha as u32;
-                    let inv_a = 255 - a;
-                    let bg_pixel = target.buffer[idx];
-                    let bg_r = (bg_pixel >> 16) & 0xFF;
-                    let bg_g = (bg_pixel >> 8) & 0xFF;
-                    let bg_b = bg_pixel & 0xFF;
-                    let r = (fg.r as u32 * a + bg_r * inv_a) / 255;
-                    let g = (fg.g as u32 * a + bg_g * inv_a) / 255;
-                    let b = (fg.b as u32 * a + bg_b * inv_a) / 255;
-                    target.buffer[idx] = (r << 16) | (g << 8) | b;
-                }
+                let pixel = match &glyph.coverage {
+                    GlyphCoverage::Grayscale(data) => {
+                        let t = data[gy * glyph.width as usize + gx] as f32 / 255.0;
+                        let r = Color::channel_to_srgb(fg_lr * t + bg_lr * (1.0 - t));
+                        let g = Color::channel_to_srgb(fg_lg * t + bg_lg * (1.0 - t));
+                        let b = Color::channel_to_srgb(fg_lb * t + bg_lb * (1.0 - t));
+                        (r as u32) << 16 | (g as u32) << 8 | b as u32
+                    }
+                    GlyphCoverage::Lcd(data) => {
+                        let [rt, gt, bt] = data[gy * glyph.width as usize + gx];
+                        let r = Color::channel_to_srgb(
+                            fg_lr * rt as f32 / 255.0 + bg_lr * (1.0 - rt as f32 / 255.0));
+                        let g = Color::channel_to_srgb(
+                            fg_lg * gt as f32 / 255.0 + bg_lg * (1.0 - gt as f32 / 255.0));
+                        let b = Color::channel_to_srgb(
+                            fg_lb * bt as f32 / 255.0 + bg_lb * (1.0 - bt as f32 / 255.0));
+                        (r as u32) << 16 | (g as u32) << 8 | b as u32
+                    }
+                };
+                target.buffer[idx] = pixel;
             }
         }
     }

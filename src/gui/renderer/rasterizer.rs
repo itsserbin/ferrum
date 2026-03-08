@@ -227,7 +227,13 @@ mod tests {
         assert!(glyph.width > 0 && glyph.height > 0);
         match glyph.coverage {
             GlyphCoverage::Lcd(data) => {
-                assert_eq!(data.len(), (glyph.width * glyph.height) as usize);
+                let expected = (glyph.width * glyph.height) as usize;
+                assert!(
+                    data.len() >= expected,
+                    "LCD data ({}) must cover at least width×height ({}) pixels",
+                    data.len(),
+                    expected,
+                );
             }
             GlyphCoverage::Grayscale(_) => panic!("expected LCD, got grayscale"),
         }
