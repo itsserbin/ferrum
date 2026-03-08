@@ -37,7 +37,7 @@ impl FerrumWindow {
             #[cfg(target_os = "macos")]
             {
                 let bg = new_palette.default_bg;
-                crate::gui::platform::macos::set_window_background_color(
+                platform::macos::set_window_background_color(
                     &self.window,
                     bg.r,
                     bg.g,

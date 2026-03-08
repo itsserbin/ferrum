@@ -72,7 +72,7 @@ impl App {
                 WindowRequest::CloseWindow => {
                     // Extract all PTY sessions before dropping the window
                     // so that Session::drop() doesn't block the UI thread.
-                    let sessions: Vec<crate::pty::Session> = if let Some(win) = self.windows.get_mut(&window_id) {
+                    let sessions: Vec<pty::Session> = if let Some(win) = self.windows.get_mut(&window_id) {
                         win.tabs
                             .iter_mut()
                             .flat_map(|tab| tab.pane_tree.drain_sessions())

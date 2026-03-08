@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use crate::gui::pane::{DIVIDER_HIT_ZONE, DIVIDER_WIDTH, SplitDirection};
 use crate::gui::renderer::TabBarHit;
 use crate::gui::*;
@@ -254,7 +256,7 @@ impl FerrumWindow {
     pub(in crate::gui::events::mouse) fn apply_scroll_offset(&mut self, clamped: usize) {
         if let Some(leaf) = self.active_leaf_mut() {
             leaf.scroll_offset = clamped.min(leaf.terminal.screen.scrollback_len());
-            leaf.scrollbar.last_activity = std::time::Instant::now();
+            leaf.scrollbar.last_activity = Instant::now();
         }
     }
 
@@ -275,7 +277,7 @@ impl FerrumWindow {
             let was_hover = leaf.scrollbar.hover;
             leaf.scrollbar.hover = new_hover;
             if new_hover != was_hover {
-                leaf.scrollbar.last_activity = std::time::Instant::now();
+                leaf.scrollbar.last_activity = Instant::now();
             }
         }
 

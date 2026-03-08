@@ -224,7 +224,7 @@ fn esc_ris_full_reset() {
     assert_eq!(term.cursor_row(), 0);
     assert_eq!(term.cursor_col(), 0);
     assert_eq!(get_char(&term, 0, 0), ' '); // grid cleared
-    assert!(term.screen.scrollback_len() == 0);
+    assert_eq!(term.screen.scrollback_len(), 0);
     assert!(term.cursor_visible);
     assert!(!term.decckm);
 }

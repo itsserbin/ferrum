@@ -46,6 +46,6 @@ pub(crate) fn is_settings_window_open() -> bool {
     {
         return linux::settings_window::is_settings_window_open();
     }
-    #[allow(unreachable_code)]
+    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
     false
 }

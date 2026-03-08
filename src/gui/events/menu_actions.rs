@@ -15,7 +15,7 @@ impl FerrumWindow {
     #[cfg(windows)]
     const CLEAR_PTY_SEQUENCE: &[u8] = b"cls\r\n";
 
-    fn focus_menu_target_pane(&mut self, pane_id: Option<crate::gui::pane::PaneId>) {
+    fn focus_menu_target_pane(&mut self, pane_id: Option<pane::PaneId>) {
         let Some(pane_id) = pane_id else {
             return;
         };
@@ -30,7 +30,7 @@ impl FerrumWindow {
         &mut self,
         action: MenuAction,
         tab_index: Option<usize>,
-        pane_id: Option<crate::gui::pane::PaneId>,
+        pane_id: Option<pane::PaneId>,
         next_tab_id: &mut u64,
         tx: &mpsc::Sender<PtyEvent>,
         config: &AppConfig,

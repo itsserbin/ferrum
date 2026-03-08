@@ -63,7 +63,6 @@ mod tests {
 
     #[test]
     fn pin_clone_shares_coordinate() {
-        let list = PageList::new(24, 80, 1000);
         let pin = PageList::pin_at(PageCoord { abs_row: 0, col: 5 });
         let pin_clone = pin.clone();
         pin.set_col(0);
@@ -73,7 +72,6 @@ mod tests {
 
     #[test]
     fn pin_col_can_be_reset() {
-        let list = PageList::new(24, 80, 1000);
         let pin = PageList::pin_at(PageCoord {
             abs_row: 10,
             col: 5,
@@ -84,7 +82,6 @@ mod tests {
 
     #[test]
     fn multiple_pins_are_independent() {
-        let list = PageList::new(24, 80, 1000);
         let pin_a = PageList::pin_at(PageCoord {
             abs_row: 1,
             col: 10,

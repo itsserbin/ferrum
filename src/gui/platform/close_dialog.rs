@@ -5,20 +5,20 @@ use winit::window::Window;
 pub fn confirm_window_close(window: &Window) -> bool {
     #[cfg(target_os = "macos")]
     {
-        return confirm_window_close_macos(window);
+        confirm_window_close_macos(window)
     }
 
     #[cfg(target_os = "windows")]
     {
-        return confirm_window_close_windows(window);
+        confirm_window_close_windows(window)
     }
 
     #[cfg(target_os = "linux")]
     {
-        return confirm_window_close_linux(window);
+        confirm_window_close_linux(window)
     }
 
-    #[allow(unreachable_code)]
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
         let _ = window;
         true

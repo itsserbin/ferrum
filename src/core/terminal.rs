@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use crate::core::{
     Color, GraphemeCell, PageCoord, PageList, SecurityConfig,
     SecurityEventKind, TrackedPin, UnderlineStyle,
@@ -82,7 +84,7 @@ pub struct Terminal {
     pub security_config: SecurityConfig,
     pending_security_events: Vec<SecurityEventKind>,
     pub cursor_style: CursorStyle,
-    pub resize_at: Option<std::time::Instant>,
+    pub resize_at: Option<Instant>,
 
     // ── Selection pins ───────────────────────────────────────────────────────
     pub selection_start_pin: Option<TrackedPin>,

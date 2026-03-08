@@ -3,6 +3,8 @@
 //! Extracts common frame-preparation logic that was previously duplicated
 //! verbatim in `render_cpu.rs` and `render_gpu.rs`.
 
+use std::time::Instant;
+
 use crate::core::terminal::CursorStyle;
 use crate::gui::pane::{DIVIDER_WIDTH, PaneLeaf, PaneNode, PaneRect, SplitDirection, split_rect};
 use crate::gui::renderer::traits::Renderer;
@@ -85,8 +87,8 @@ impl TabBarFrameState {
 /// `self.backend`, enabling split borrows between the renderer and the
 /// remaining `FerrumWindow` fields.
 pub(in crate::gui::events) struct FrameParams<'a> {
-    pub tab: Option<&'a crate::gui::state::TabState>,
-    pub cursor_blink_start: std::time::Instant,
+    pub tab: Option<&'a state::TabState>,
+    pub cursor_blink_start: Instant,
     pub cursor_blink_interval_ms: u64,
     /// When `true`, the terminal text cursor is not drawn.
     /// Set during resize so the cursor does not visually jump to an intermediate
@@ -109,11 +111,11 @@ pub(in crate::gui::events) struct FrameParams<'a> {
 /// while still avoiding a whole-`self` borrow (which would conflict with the
 /// simultaneous mutable borrow of `self.backend`).
 pub(in crate::gui::events) struct FrameParamsInput<'a> {
-    pub tabs: &'a [crate::gui::state::TabState],
+    pub tabs: &'a [state::TabState],
     pub active_tab: usize,
-    pub cursor_blink_start: std::time::Instant,
+    pub cursor_blink_start: Instant,
     pub cursor_blink_interval_ms: u64,
-    pub sigwinch_deadline: Option<std::time::Instant>,
+    pub sigwinch_deadline: Option<Instant>,
     #[cfg(not(target_os = "macos"))]
     pub hovered_tab: Option<usize>,
     #[cfg(not(target_os = "macos"))]
@@ -121,7 +123,7 @@ pub(in crate::gui::events) struct FrameParamsInput<'a> {
     #[cfg(not(target_os = "macos"))]
     pub pinned: bool,
     pub update_banner_dismissed: bool,
-    pub update_install_state: &'a crate::gui::state::UpdateInstallState,
+    pub update_install_state: &'a state::UpdateInstallState,
     pub pending_update_tag: Option<&'a str>,
 }
 
@@ -161,7 +163,7 @@ pub(in crate::gui::events) use make_frame_params_input;
 /// pattern-matches the backend variant mutably.
 pub(in crate::gui::events) fn build_frame_params<'a>(
     input: FrameParamsInput<'a>,
-    tab_layout_metrics: &crate::gui::renderer::shared::tab_math::TabLayoutMetrics,
+    tab_layout_metrics: &renderer::shared::tab_math::TabLayoutMetrics,
     tab_bar_h: u32,
     bw: u32,
     bh: u32,
@@ -327,15 +329,15 @@ impl FerrumWindow {
 /// * `bw`, `bh` — frame buffer width/height in physical pixels.
 pub(in crate::gui::events) fn compute_banner(
     dismissed: bool,
-    install_state: &crate::gui::state::UpdateInstallState,
+    install_state: &state::UpdateInstallState,
     pending_tag: Option<&str>,
-    tab_layout_metrics: &crate::gui::renderer::shared::tab_math::TabLayoutMetrics,
+    tab_layout_metrics: &renderer::shared::tab_math::TabLayoutMetrics,
     tab_bar_h: u32,
     bw: u32,
     bh: u32,
 ) -> Option<UpdateBannerLayout> {
-    use crate::gui::renderer::shared::banner_layout::compute_update_banner_layout;
-    use crate::gui::state::UpdateInstallState;
+    use renderer::shared::banner_layout::compute_update_banner_layout;
+    use state::UpdateInstallState;
 
     if dismissed || *install_state == UpdateInstallState::Done {
         return None;
@@ -471,13 +473,13 @@ pub(in crate::gui::events) fn draw_frame_content(
     #[cfg(not(target_os = "macos"))]
     {
         if tab_bar.tab_bar_visible {
-            let tab_bar_params = crate::gui::renderer::TabBarDrawParams {
+            let tab_bar_params = renderer::TabBarDrawParams {
                 tabs: frame_tab_infos,
                 hovered_tab: params.hovered_tab,
                 mouse_pos: params.mouse_pos,
                 tab_offsets: tab_bar.tab_offsets.as_deref(),
                 pinned: params.pinned,
-                settings_open: crate::gui::platform::is_settings_window_open(),
+                settings_open: platform::is_settings_window_open(),
             };
             renderer.draw_tab_bar(
                 &mut target,
@@ -600,7 +602,7 @@ fn draw_dividers_with_renderer(
 pub(in crate::gui::events) fn scrollbar_opacity(
     hover: bool,
     dragging: bool,
-    last_activity: std::time::Instant,
+    last_activity: Instant,
 ) -> f32 {
     if hover || dragging {
         1.0
@@ -619,7 +621,7 @@ pub(in crate::gui::events) fn scrollbar_opacity(
 /// Determines whether the cursor should be visible this frame, accounting
 /// for blinking.
 pub(in crate::gui::events) fn should_show_cursor(
-    blink_start: std::time::Instant,
+    blink_start: Instant,
     style: CursorStyle,
     interval_ms: u64,
 ) -> bool {
