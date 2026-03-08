@@ -11,11 +11,16 @@ use super::GpuRenderer;
 
 impl traits::Renderer for GpuRenderer {
     fn set_scale(&mut self, scale_factor: f64) {
+        use crate::gui::renderer::rasterizer::RasterMode;
         let scale = super::super::sanitize_scale(scale_factor);
         if !super::super::scale_changed(self.metrics.ui_scale, scale) {
             return;
         }
         self.metrics.ui_scale = scale;
+        let new_mode = RasterMode::from_scale_factor(scale_factor);
+        if self.rasterizer.mode != new_mode {
+            self.rasterizer.mode = new_mode;
+        }
         self.metrics.recompute(&mut self.rasterizer);
         self.rebuild_atlas();
     }
