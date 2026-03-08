@@ -92,10 +92,12 @@ impl super::GpuRenderer {
             pipelines::create_composite_pipeline(&device, surface_format);
 
         // Create intermediate textures.
-        let (grid_texture, grid_texture_view) =
-            Self::create_offscreen_texture(&device, width, height, "grid_texture", true);
-        let (ui_texture, ui_texture_view) =
-            Self::create_offscreen_texture(&device, width, height, "ui_texture", false);
+        let (grid_texture, grid_texture_view) = Self::create_offscreen_texture(
+            &device, width, height, "grid_texture", wgpu::TextureFormat::Rgba8UnormSrgb,
+        );
+        let (ui_texture, ui_texture_view) = Self::create_offscreen_texture(
+            &device, width, height, "ui_texture", wgpu::TextureFormat::Rgba8Unorm,
+        );
 
         // Create buffers.
         let grid_uniform_buffer = Self::create_uniform_buffer(
@@ -174,29 +176,23 @@ impl super::GpuRenderer {
 
     pub(super) fn create_offscreen_texture(
         device: &wgpu::Device,
-        width: u32,
+        width:  u32,
         height: u32,
-        label: &str,
-        storage: bool,
+        label:  &str,
+        format: wgpu::TextureFormat,
     ) -> (wgpu::Texture, wgpu::TextureView) {
-        let usage = if storage {
-            wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::STORAGE_BINDING
-        } else {
-            wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::RENDER_ATTACHMENT
-        };
-
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some(label),
             size: wgpu::Extent3d {
-                width: width.max(1),
-                height: height.max(1),
+                width:                 width.max(1),
+                height:                height.max(1),
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage,
+            sample_count:    1,
+            dimension:       wgpu::TextureDimension::D2,
+            format,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::RENDER_ATTACHMENT,
             view_formats: &[],
         });
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -245,21 +241,15 @@ impl super::GpuRenderer {
     /// Rebuilds grid and UI textures after a window resize.
     pub(super) fn resize_textures(&mut self) {
         let (gt, gtv) = Self::create_offscreen_texture(
-            &self.device,
-            self.width,
-            self.height,
-            "grid_texture",
-            true,
+            &self.device, self.width, self.height, "grid_texture",
+            wgpu::TextureFormat::Rgba8UnormSrgb,
         );
         self.grid_texture = gt;
         self.grid_texture_view = gtv;
 
         let (ut, utv) = Self::create_offscreen_texture(
-            &self.device,
-            self.width,
-            self.height,
-            "ui_texture",
-            false,
+            &self.device, self.width, self.height, "ui_texture",
+            wgpu::TextureFormat::Rgba8Unorm,
         );
         self.ui_texture = ut;
         self.ui_texture_view = utv;

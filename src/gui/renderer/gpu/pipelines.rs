@@ -2,30 +2,30 @@
 
 use wgpu;
 
-/// Creates the grid compute pipeline and its bind group layout.
+/// Creates the grid render pipeline and its bind group layout.
 ///
 /// Bindings:
 ///   0: GridUniforms (uniform)
-///   1: cells array (storage, read-only)
+///   1: cells array  (storage, read-only)
 ///   2: glyphs array (storage, read-only)
 ///   3: atlas texture (texture_2d<f32>)
-///   4: output texture (storage texture, rgba8unorm, write)
+///   4: atlas sampler
 pub fn create_grid_pipeline(
     device: &wgpu::Device,
-) -> (wgpu::ComputePipeline, wgpu::BindGroupLayout) {
+) -> (wgpu::RenderPipeline, wgpu::BindGroupLayout) {
     let shader_src = include_str!("shaders/grid.wgsl");
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label: Some("grid_shader"),
+        label:  Some("grid_shader"),
         source: wgpu::ShaderSource::Wgsl(shader_src.into()),
     });
 
     let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        label: Some("grid_bind_group_layout"),
+        label:   Some("grid_bind_group_layout"),
         entries: &[
             // 0: uniforms
             wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::COMPUTE,
+                binding:    0,
+                visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
                     has_dynamic_offset: false,
@@ -35,8 +35,8 @@ pub fn create_grid_pipeline(
             },
             // 1: cells
             wgpu::BindGroupLayoutEntry {
-                binding: 1,
-                visibility: wgpu::ShaderStages::COMPUTE,
+                binding:    1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Storage { read_only: true },
                     has_dynamic_offset: false,
@@ -46,8 +46,8 @@ pub fn create_grid_pipeline(
             },
             // 2: glyphs
             wgpu::BindGroupLayoutEntry {
-                binding: 2,
-                visibility: wgpu::ShaderStages::COMPUTE,
+                binding:    2,
+                visibility: wgpu::ShaderStages::FRAGMENT,
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Storage { read_only: true },
                     has_dynamic_offset: false,
@@ -57,42 +57,58 @@ pub fn create_grid_pipeline(
             },
             // 3: atlas texture
             wgpu::BindGroupLayoutEntry {
-                binding: 3,
-                visibility: wgpu::ShaderStages::COMPUTE,
+                binding:    3,
+                visibility: wgpu::ShaderStages::FRAGMENT,
                 ty: wgpu::BindingType::Texture {
-                    multisampled: false,
+                    multisampled:   false,
                     view_dimension: wgpu::TextureViewDimension::D2,
-                    sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                    sample_type:    wgpu::TextureSampleType::Float { filterable: true },
                 },
                 count: None,
             },
-            // 4: output texture (storage)
+            // 4: atlas sampler
             wgpu::BindGroupLayoutEntry {
-                binding: 4,
-                visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::StorageTexture {
-                    access: wgpu::StorageTextureAccess::WriteOnly,
-                    format: wgpu::TextureFormat::Rgba8Unorm,
-                    view_dimension: wgpu::TextureViewDimension::D2,
-                },
+                binding:    4,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                 count: None,
             },
         ],
     });
 
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: Some("grid_pipeline_layout"),
+        label:              Some("grid_pipeline_layout"),
         bind_group_layouts: &[&bind_group_layout],
-        immediate_size: 0,
+        immediate_size:     0,
     });
 
-    let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-        label: Some("grid_compute_pipeline"),
+    let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label:  Some("grid_render_pipeline"),
         layout: Some(&pipeline_layout),
-        module: &shader,
-        entry_point: Some("main"),
-        compilation_options: Default::default(),
-        cache: None,
+        vertex: wgpu::VertexState {
+            module:              &shader,
+            entry_point:         Some("vs_main"),
+            buffers:             &[],
+            compilation_options: Default::default(),
+        },
+        fragment: Some(wgpu::FragmentState {
+            module:      &shader,
+            entry_point: Some("fs_main"),
+            targets: &[Some(wgpu::ColorTargetState {
+                format:     wgpu::TextureFormat::Rgba8UnormSrgb,
+                blend:      None,
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+            compilation_options: Default::default(),
+        }),
+        primitive: wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList,
+            ..Default::default()
+        },
+        depth_stencil:  None,
+        multisample:    wgpu::MultisampleState::default(),
+        multiview_mask: None,
+        cache:          None,
     });
 
     (pipeline, bind_group_layout)

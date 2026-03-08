@@ -63,7 +63,7 @@ pub struct GpuRenderer {
     ui_texture_view: wgpu::TextureView,
 
     // Pipelines
-    grid_pipeline: wgpu::ComputePipeline,
+    grid_pipeline: wgpu::RenderPipeline,
     ui_pipeline: wgpu::RenderPipeline,
     composite_pipeline: wgpu::RenderPipeline,
 

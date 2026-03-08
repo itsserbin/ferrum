@@ -3,11 +3,11 @@
 use wgpu;
 
 impl super::GpuRenderer {
-    /// Encodes one grid compute batch.
+    /// Encodes one grid render batch (Pass 1).
     pub(super) fn encode_grid_batch_pass(
         &self,
-        encoder: &mut wgpu::CommandEncoder,
-        dispatch_width: u32,
+        encoder:         &mut wgpu::CommandEncoder,
+        dispatch_width:  u32,
         dispatch_height: u32,
     ) {
         if dispatch_width == 0 || dispatch_height == 0 {
@@ -15,42 +15,51 @@ impl super::GpuRenderer {
         }
 
         let grid_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("grid_bind_group"),
-            layout: &self.grid_bind_group_layout,
+            label:   Some("grid_bind_group"),
+            layout:  &self.grid_bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
-                    binding: 0,
+                    binding:  0,
                     resource: self.grid_uniform_buffer.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
-                    binding: 1,
+                    binding:  1,
                     resource: self.grid_cell_buffer.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
-                    binding: 2,
+                    binding:  2,
                     resource: self.glyph_info_buffer.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
-                    binding: 3,
+                    binding:  3,
                     resource: wgpu::BindingResource::TextureView(&self.atlas.texture_view),
                 },
                 wgpu::BindGroupEntry {
-                    binding: 4,
-                    resource: wgpu::BindingResource::TextureView(&self.grid_texture_view),
+                    binding:  4,
+                    resource: wgpu::BindingResource::Sampler(&self.sampler),
                 },
             ],
         });
 
-        let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("grid_compute_pass"),
-            timestamp_writes: None,
+        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("grid_render_pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view:           &self.grid_texture_view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load:  wgpu::LoadOp::Load,   // grid_packing clears first batch
+                    store: wgpu::StoreOp::Store,
+                },
+                depth_slice: None,
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes:         None,
+            occlusion_query_set:      None,
+            multiview_mask:           None,
         });
-        compute_pass.set_pipeline(&self.grid_pipeline);
-        compute_pass.set_bind_group(0, &grid_bind_group, &[]);
-
-        let wg_x = dispatch_width.div_ceil(16);
-        let wg_y = dispatch_height.div_ceil(16);
-        compute_pass.dispatch_workgroups(wg_x, wg_y, 1);
+        render_pass.set_pipeline(&self.grid_pipeline);
+        render_pass.set_bind_group(0, &grid_bind_group, &[]);
+        render_pass.draw(0..3, 0..1);
     }
 
     /// Encodes the UI render pass (Pass 2).

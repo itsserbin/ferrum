@@ -2,6 +2,7 @@
 
 use crate::core::{Color, PageList, Selection, UnderlineStyle};
 use crate::gui::pane::PaneRect;
+use crate::gui::renderer::rasterizer::RasterMode;
 
 use super::GridBatch;
 use super::buffers::{GridUniforms, PackedCell};
@@ -42,6 +43,7 @@ impl super::GpuRenderer {
         }
 
         let bg = self.palette.default_bg.to_pixel();
+        let is_lcd = if self.rasterizer.mode == RasterMode::LcdSubpixel { 1 } else { 0 };
         self.grid_batches.push(GridBatch {
             cells: vec![PackedCell {
                 codepoint: 0,
@@ -57,7 +59,7 @@ impl super::GpuRenderer {
                 origin_x: 0,
                 origin_y: 0,
                 bg_color: bg,
-                _pad0: 0,
+                is_lcd,
                 tex_width: self.width,
                 tex_height: self.height,
                 _pad1: 0,
@@ -174,6 +176,7 @@ impl super::GpuRenderer {
             return;
         }
 
+        let is_lcd = if self.rasterizer.mode == RasterMode::LcdSubpixel { 1 } else { 0 };
         let cells = self.pack_grid_cells(screen, selection, scroll_offset, fg_dim);
         self.grid_batches.push(GridBatch {
             cells,
@@ -185,7 +188,7 @@ impl super::GpuRenderer {
                 origin_x: region.x,
                 origin_y: region.y,
                 bg_color: self.palette.default_bg.to_pixel(),
-                _pad0: 0,
+                is_lcd,
                 tex_width: self.width,
                 tex_height: self.height,
                 _pad1: 0,
