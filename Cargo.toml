@@ -20,7 +20,7 @@ gpu = ["wgpu", "pollster", "bytemuck"]
 [dependencies]
 winit = "0.30"
 softbuffer = "0.4"
-fontdue = "0.9"
+swash = "0.1"
 portable-pty = "0.9.0"
 anyhow = "1"
 vte = "0.15"
