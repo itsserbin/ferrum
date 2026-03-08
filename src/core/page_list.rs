@@ -261,20 +261,31 @@ impl PageList {
 
         let rewrapped = rewrap_lines(&logical_lines, new_cols);
 
-        // Build viewport with (new_rows - 1) rows for reflowed content above cursor.
-        let rows_for_content = new_rows.saturating_sub(1);
-        self.rebuild_from_rows(rewrapped, rows_for_content, new_cols, None);
+        // Anchor the cursor to its natural position in the reflowed content rather
+        // than always pushing it to the last viewport row.  When the viewport has
+        // more rows than reflowed content (sparse screen — e.g. a fresh shell with
+        // only a few lines of output), the cursor lands directly after the content
+        // instead of jumping to the bottom.  When content overflows the viewport,
+        // the min() keeps the cursor at the last row, preserving existing behaviour.
+        let cursor_viewport_row = rewrapped.len().min(new_rows.saturating_sub(1));
 
-        // Append the cursor's physical row (truncated to new_cols) as the last
-        // viewport row.  This keeps the active input line visible during resize.
+        self.rebuild_from_rows(rewrapped, cursor_viewport_row, new_cols, None);
+
+        // Append the cursor's physical row (truncated to new_cols).
         let mut cursor_row = cursor_physical_row;
         cursor_row.cells.resize(new_cols, GraphemeCell::default());
         cursor_row.written_cols = cursor_row.written_cols.min(new_cols);
         cursor_row.wrapped = false;
         self.append_row(cursor_row);
+
+        // Fill any remaining rows below the cursor with blank rows so the
+        // viewport reaches its full new height.
+        for _ in (cursor_viewport_row + 1)..new_rows {
+            self.append_row(PageRow::new(new_cols));
+        }
         self.viewport_rows = new_rows;
 
-        let cursor_abs = self.scrollback.len() + new_rows.saturating_sub(1);
+        let cursor_abs = self.scrollback.len() + cursor_viewport_row;
         cursor_pin.set_coord(PageCoord { abs_row: cursor_abs, col: cursor_new_col });
     }
 
@@ -723,6 +734,58 @@ mod tests {
             pin.coord().abs_row,
             expected_last_row_abs,
             "cursor must be at last viewport row after reflow"
+        );
+    }
+
+    #[test]
+    fn reflow_cursor_anchors_near_content_in_sparse_viewport() {
+        // 24-row terminal, only 2 lines of content, cursor at row 2.
+        // Rows 3-23 are blank (sparse screen — fresh shell session).
+        // After column resize the cursor must stay at row 2, not jump to row 23.
+        let mut list = PageList::new(24, 80, 1000);
+        fill_viewport_row(&mut list, 0, "hello world");
+        fill_viewport_row(&mut list, 1, "output here");
+        let cursor_abs = list.viewport_start_abs() + 2;
+        let pin = PageList::pin_at(PageCoord { abs_row: cursor_abs, col: 0 });
+        list.reflow(24, 40, &pin);
+        // Content rows survive reflow.
+        assert_eq!(list.viewport_get(0, 0).grapheme(), "h");
+        assert_eq!(list.viewport_get(1, 0).grapheme(), "o");
+        // Cursor must be anchored right after the 2 content rows (row 2),
+        // not pushed to the bottom of the 24-row viewport (row 23).
+        let expected_cursor_abs = list.viewport_start_abs() + 2;
+        assert_eq!(
+            pin.coord().abs_row,
+            expected_cursor_abs,
+            "cursor must anchor near content, not jump to bottom of sparse viewport"
+        );
+        // Rows below cursor must be blank.
+        for vrow in 3..24 {
+            assert!(
+                list.viewport_get(vrow, 0).is_default(),
+                "row {vrow} below cursor must be blank"
+            );
+        }
+        assert_eq!(list.viewport_rows(), 24);
+    }
+
+    #[test]
+    fn reflow_cursor_at_bottom_when_content_fills_viewport() {
+        // 4-row terminal fully filled with content, cursor at last row.
+        // After narrow reflow, content overflows → cursor must stay at last row.
+        let mut list = PageList::new(4, 10, 100);
+        fill_viewport_row(&mut list, 0, "AAAAAAAAAA");
+        fill_viewport_row(&mut list, 1, "BBBBBBBBBB");
+        fill_viewport_row(&mut list, 2, "CCCCCCCCCC");
+        let cursor_abs = list.viewport_start_abs() + 3;
+        let pin = PageList::pin_at(PageCoord { abs_row: cursor_abs, col: 0 });
+        list.reflow(4, 5, &pin);
+        // 3 lines × 2 rows each = 6 physical rows > 3 rows_for_content → overflow.
+        let expected_last = list.viewport_start_abs() + list.viewport_rows() - 1;
+        assert_eq!(
+            pin.coord().abs_row,
+            expected_last,
+            "cursor must be at last viewport row when content overflows"
         );
     }
 
