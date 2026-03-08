@@ -51,7 +51,7 @@ pub(in super::super) fn handle_erase_csi(
                     }
                     let abs = new_screen.viewport_start_abs() + cr;
                     let new_cursor_pin =
-                        new_screen.pin_at(crate::core::PageCoord { abs_row: abs, col: cc });
+                        crate::core::PageList::pin_at(crate::core::PageCoord { abs_row: abs, col: cc });
                     term.cursor_pin = new_cursor_pin;
                     term.screen = new_screen;
                 }

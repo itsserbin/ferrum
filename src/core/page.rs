@@ -92,6 +92,11 @@ impl Page {
     pub fn row_mut(&mut self, idx: usize) -> &mut PageRow {
         &mut self.rows[idx]
     }
+
+    /// Truncates to `len` rows, dropping any beyond that index.
+    pub(crate) fn truncate(&mut self, len: usize) {
+        self.rows.truncate(len);
+    }
 }
 
 #[cfg(test)]

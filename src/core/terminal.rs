@@ -110,7 +110,7 @@ impl Terminal {
         ansi_palette: [Color; 16],
     ) -> Self {
         let screen = PageList::new(rows, cols, max_scrollback);
-        let cursor_pin = screen.pin_at(PageCoord { abs_row: 0, col: 0 });
+        let cursor_pin = PageList::pin_at(PageCoord { abs_row: 0, col: 0 });
         Self {
             screen,
             cursor_pin,
@@ -196,7 +196,7 @@ impl Terminal {
         let cols = self.screen.cols();
         let max_sb = self.max_scrollback;
         let new_screen = PageList::new(rows, cols, max_sb);
-        self.cursor_pin = new_screen.pin_at(PageCoord { abs_row: 0, col: 0 });
+        self.cursor_pin = PageList::pin_at(PageCoord { abs_row: 0, col: 0 });
         self.screen = new_screen;
         self.reset_scroll_region();
     }
@@ -221,7 +221,7 @@ impl Terminal {
     /// Creates a tracked pin at the given absolute row/col.
     fn make_selection_pin(&mut self, abs_row: usize, col: usize) -> TrackedPin {
         let coord = PageCoord { abs_row, col };
-        self.screen.pin_at(coord)
+        PageList::pin_at(coord)
     }
 
     /// Clears both selection tracking pins.
@@ -462,7 +462,7 @@ impl Terminal {
         self.reset_attributes();
         self.parser = Parser::new();
         let screen = PageList::new(rows, cols, max_scrollback);
-        self.cursor_pin = screen.pin_at(PageCoord { abs_row: 0, col: 0 });
+        self.cursor_pin = PageList::pin_at(PageCoord { abs_row: 0, col: 0 });
         self.screen = screen;
     }
 

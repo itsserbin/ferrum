@@ -192,6 +192,13 @@ impl PageList {
             for _ in 0..extra {
                 self.append_row(PageRow::new(new_cols));
             }
+        } else if new_rows < self.viewport_rows && new_rows > 0 {
+            // Drop ghost rows beyond the new boundary so they don't waste memory.
+            let (last_pi, last_ri) = Self::vrow_to_page(new_rows - 1);
+            self.pages.truncate(last_pi + 1);
+            if let Some(last_page) = self.pages.last_mut() {
+                last_page.truncate(last_ri + 1);
+            }
         }
         self.viewport_rows = new_rows;
         self.cols = new_cols;
@@ -220,7 +227,7 @@ impl PageList {
 
     /// Creates a new pin at the given coordinate.
     /// Cloning the returned handle shares the same underlying coordinate.
-    pub fn pin_at(&self, coord: PageCoord) -> TrackedPin {
+    pub fn pin_at(coord: PageCoord) -> TrackedPin {
         TrackedPin::new(coord)
     }
 
@@ -573,7 +580,7 @@ mod tests {
         list.viewport_set_wrapped(0, true);
         // Cursor on blank row 2 (after the content) — realistic shell position.
         let cursor_abs = list.viewport_start_abs() + 2;
-        let pin = list.pin_at(PageCoord { abs_row: cursor_abs, col: 0 });
+        let pin = PageList::pin_at(PageCoord { abs_row: cursor_abs, col: 0 });
         list.reflow(3, 5, &pin);
         assert_eq!(list.viewport_get(0, 0).grapheme(), "A");
         assert_eq!(list.viewport_get(0, 4).grapheme(), "E");
@@ -593,7 +600,7 @@ mod tests {
         list.viewport_set_wrapped(0, true);
         // Cursor on blank row 2 (after the content).
         let cursor_abs = list.viewport_start_abs() + 2;
-        let pin = list.pin_at(PageCoord { abs_row: cursor_abs, col: 0 });
+        let pin = PageList::pin_at(PageCoord { abs_row: cursor_abs, col: 0 });
         list.reflow(3, 3, &pin);
         assert_eq!(list.viewport_get(0, 0).grapheme(), "A");
         assert_eq!(list.viewport_get(0, 1).grapheme(), "B");
@@ -609,7 +616,7 @@ mod tests {
         let mut list = PageList::new(3, 10, 100);
         fill_viewport_row(&mut list, 0, "Hello");
         let cursor_abs = list.viewport_start_abs() + 2; // blank row after content
-        let pin = list.pin_at(PageCoord { abs_row: cursor_abs, col: 5 });
+        let pin = PageList::pin_at(PageCoord { abs_row: cursor_abs, col: 5 });
         list.reflow(3, 5, &pin);
         assert_eq!(pin.coord().col, 4);
     }
@@ -625,7 +632,7 @@ mod tests {
         fill_viewport_row(&mut list, 1, "world ");
         list.viewport_set_wrapped(0, true);
         let cursor_abs = list.viewport_start_abs() + 2; // blank cursor row
-        let pin = list.pin_at(PageCoord { abs_row: cursor_abs, col: 0 });
+        let pin = PageList::pin_at(PageCoord { abs_row: cursor_abs, col: 0 });
         // Use 2 rows so row 0 holds the reflowed content and row 1 is the cursor row.
         list.reflow(2, 11, &pin);
         assert_eq!(list.viewport_get(0, 4).grapheme(), "o", "col 4 should be 'o'");
@@ -648,7 +655,7 @@ mod tests {
         fill_viewport_row(&mut list, 1, "ABC");
         list.viewport_set_wrapped(0, true);
         let cursor_abs = list.viewport_start_abs() + 2; // blank cursor row
-        let pin = list.pin_at(PageCoord { abs_row: cursor_abs, col: 0 });
+        let pin = PageList::pin_at(PageCoord { abs_row: cursor_abs, col: 0 });
         // Use 2 rows so row 0 holds the reflowed content and row 1 is the cursor row.
         list.reflow(2, 6, &pin);
         assert_eq!(
@@ -675,7 +682,7 @@ mod tests {
     fn reflow_empty_line_produces_blank_row() {
         let mut list = PageList::new(3, 10, 100);
         let cursor_abs = list.viewport_start_abs();
-        let pin = list.pin_at(PageCoord { abs_row: cursor_abs, col: 0 });
+        let pin = PageList::pin_at(PageCoord { abs_row: cursor_abs, col: 0 });
         list.reflow(3, 5, &pin);
         assert_eq!(list.viewport_rows(), 3);
         assert!(list.viewport_get(2, 0).is_default()); // cursor row is last row, blank
@@ -691,7 +698,7 @@ mod tests {
         let mut list = PageList::new(4, 5, 100);
         fill_viewport_row(&mut list, 2, "ABCDE");
         let cursor_abs = list.viewport_start_abs() + 3; // blank row after content
-        let pin = list.pin_at(PageCoord { abs_row: cursor_abs, col: 0 });
+        let pin = PageList::pin_at(PageCoord { abs_row: cursor_abs, col: 0 });
         list.reflow(4, 2, &pin);
         // Cursor row (last row) was blank — stays blank after reflow.
         assert!(list.viewport_get(3, 0).is_default(), "cursor row must be blank after reflow");
@@ -709,7 +716,7 @@ mod tests {
         fill_viewport_row(&mut list, 1, "world");
         list.viewport_set_wrapped(0, true);
         let cursor_abs = list.viewport_start_abs() + 3;
-        let pin = list.pin_at(PageCoord { abs_row: cursor_abs, col: 3 });
+        let pin = PageList::pin_at(PageCoord { abs_row: cursor_abs, col: 3 });
         list.reflow(4, 3, &pin);
         let expected_last_row_abs = list.viewport_start_abs() + list.viewport_rows() - 1;
         assert_eq!(
@@ -727,7 +734,7 @@ mod tests {
         let mut list = PageList::new(4, 6, 100);
         fill_viewport_row(&mut list, 3, "PROMPT");
         let cursor_abs = list.viewport_start_abs() + 3;
-        let pin = list.pin_at(PageCoord { abs_row: cursor_abs, col: 6 });
+        let pin = PageList::pin_at(PageCoord { abs_row: cursor_abs, col: 6 });
         list.reflow(4, 2, &pin);
         // Rows above cursor must be blank — no duplicate prompt content.
         for vrow in 0..list.viewport_rows() - 1 {
