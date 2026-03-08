@@ -19,6 +19,11 @@ const ATTR_STRIKETHROUGH: u32 = 1 << 5;
 const ATTR_WIDE_RIGHT: u32 = 1 << 8;
 
 impl super::GpuRenderer {
+    /// Returns `1` if the current rasterizer mode is LCD subpixel, `0` for grayscale.
+    fn is_lcd_flag(&self) -> u32 {
+        if self.rasterizer.mode == RasterMode::LcdSubpixel { 1 } else { 0 }
+    }
+
     pub(super) fn terminal_texture_extent(&self) -> (u32, u32) {
         let padding = self.metrics.window_padding_px();
         let tab_bar_height = self.metrics.tab_bar_height_px();
@@ -43,7 +48,7 @@ impl super::GpuRenderer {
         }
 
         let bg = self.palette.default_bg.to_pixel();
-        let is_lcd = if self.rasterizer.mode == RasterMode::LcdSubpixel { 1 } else { 0 };
+        let is_lcd = self.is_lcd_flag();
         self.grid_batches.push(GridBatch {
             cells: vec![PackedCell {
                 codepoint: 0,
@@ -102,12 +107,10 @@ impl super::GpuRenderer {
 
                 // Ensure non-ASCII terminal glyphs exist in the atlas.
                 if codepoint >= 128 {
+                    // Bind queue separately to satisfy the borrow checker:
+                    // atlas.get_or_insert needs &mut self.rasterizer and &self.queue simultaneously.
                     let queue = &self.queue;
-                    let _ = self.atlas.get_or_insert(
-                        codepoint,
-                        &mut self.rasterizer,
-                        queue,
-                    );
+                    let _ = self.atlas.get_or_insert(codepoint, &mut self.rasterizer, queue);
                 }
 
                 let mut attrs = attrs_wide;
@@ -176,7 +179,7 @@ impl super::GpuRenderer {
             return;
         }
 
-        let is_lcd = if self.rasterizer.mode == RasterMode::LcdSubpixel { 1 } else { 0 };
+        let is_lcd = self.is_lcd_flag();
         let cells = self.pack_grid_cells(screen, selection, scroll_offset, fg_dim);
         self.grid_batches.push(GridBatch {
             cells,

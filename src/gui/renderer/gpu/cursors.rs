@@ -29,12 +29,10 @@ impl super::GpuRenderer {
                 };
                 if ch != ' ' {
                     let cp = ch as u32;
+                    // Bind queue separately to satisfy the borrow checker:
+                    // atlas.get_or_insert needs &mut self.rasterizer and &self.queue simultaneously.
                     let queue = &self.queue;
-                    let info = self.atlas.get_or_insert(
-                        cp,
-                        &mut self.rasterizer,
-                        queue,
-                    );
+                    let info = self.atlas.get_or_insert(cp, &mut self.rasterizer, queue);
                     if info.w > 0.0 && info.h > 0.0 {
                         let gx = x + info.offset_x;
                         let gy = y + info.offset_y;

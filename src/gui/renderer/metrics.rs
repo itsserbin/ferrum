@@ -48,9 +48,8 @@ impl FontMetrics {
     /// querying cell metrics, so cell dimensions reflect DPI scaling.
     pub fn recompute(&mut self, rasterizer: &mut GlyphRasterizer) {
         let scaled_font_size = (self.base_font_size as f64 * self.ui_scale).max(1.0) as f32;
-        let mode = rasterizer.mode;
-        if rasterizer.font_size != scaled_font_size || rasterizer.mode != mode {
-            rasterizer.rebuild(scaled_font_size, mode);
+        if rasterizer.font_size != scaled_font_size {
+            rasterizer.rebuild(scaled_font_size, rasterizer.mode);
         }
         let line_padding = self.scaled_px(self.base_line_padding);
         let cell_metrics = rasterizer.metrics();

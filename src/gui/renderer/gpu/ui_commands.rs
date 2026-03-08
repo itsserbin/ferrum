@@ -118,6 +118,8 @@ impl super::GpuRenderer {
         let cw = self.metrics.cell_width as f32;
         for (i, ch) in text.chars().enumerate() {
             let cp = ch as u32;
+            // Bind queue separately to satisfy the borrow checker:
+            // atlas.get_or_insert needs &mut self.rasterizer and &self.queue simultaneously.
             let queue = &self.queue;
             let info = self.atlas.get_or_insert(cp, &mut self.rasterizer, queue);
             if info.w > 0.0 && info.h > 0.0 {

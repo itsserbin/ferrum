@@ -88,36 +88,36 @@ impl GlyphRasterizer {
         self.scale_ctx = ScaleContext::new();
     }
 
-    /// Returns the static font bytes for the given character — primary font if it has
-    /// the glyph, otherwise the first fallback that does, or the primary as a last resort.
+    /// Returns the font bytes and whether it is the primary font.
     ///
-    /// Returning `&'static [u8]` instead of `FontRef<'_>` avoids a split-borrow
-    /// conflict between `self.font_data` (immutable) and `self.scale_ctx` (mutable).
-    fn font_bytes_for_char(&self, ch: char) -> &'static [u8] {
+    /// Returning `(&'static [u8], bool)` instead of `FontRef<'_>` avoids a
+    /// split-borrow conflict between `self.font_data` (immutable) and
+    /// `self.scale_ctx` (mutable).
+    fn font_bytes_for_char(&self, ch: char) -> (&'static [u8], bool) {
         // Font bytes are &'static data compiled into the binary.
         // FontRef::from_index returns None only for malformed data, which is
         // validated by tests — fall back to primary silently if it ever fails.
         let Some(primary) = FontRef::from_index(self.font_data, 0) else {
-            return self.font_data;
+            return (self.font_data, true);
         };
         if primary.charmap().map(ch) != 0 {
-            return self.font_data;
+            return (self.font_data, true);
         }
         for fb in &self.fallback_data {
             if let Some(f) = FontRef::from_index(fb, 0)
                 && f.charmap().map(ch) != 0
             {
-                return fb;
+                return (fb, false);
             }
         }
-        self.font_data
+        (self.font_data, true)
     }
 
     /// Rasterizes `ch` and returns coverage data, or `None` for empty glyphs (e.g. space).
     pub fn rasterize(&mut self, ch: char) -> Option<RasterizedGlyph> {
         // Resolve font bytes first to avoid a split-borrow conflict between
         // font_data (immutable) and scale_ctx (mutable).
-        let font_bytes = self.font_bytes_for_char(ch);
+        let (font_bytes, is_primary) = self.font_bytes_for_char(ch);
         let font = FontRef::from_index(font_bytes, 0)?;
         let glyph_id = font.charmap().map(ch);
         if glyph_id == 0 {
@@ -126,7 +126,7 @@ impl GlyphRasterizer {
 
         // Fallback fonts may contain wide glyphs (e.g. box-drawing symbols wider than
         // the primary font's em). Scale the render size down so the glyph fits in one cell.
-        let render_size = if !std::ptr::eq(font_bytes as *const _, self.font_data as *const _) {
+        let render_size = if !is_primary {
             let primary = FontRef::from_index(self.font_data, 0)?;
             let m_id  = primary.charmap().map('M');
             let cell_w = primary
