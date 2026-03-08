@@ -15,8 +15,9 @@ impl super::Terminal {
         if old_cols != cols && self.alt_screen.is_none() {
             // cursor_pin is always current (every cursor movement updates it),
             // so reflow can use it directly without a prior sync.
+            // reflow() places the cursor at the last viewport row with the column
+            // clamped to new_cols-1, so no post-reflow cursor adjustment is needed.
             self.screen.reflow(rows, cols, &self.cursor_pin);
-            self.update_cursor_after_resize(rows, cols);
         } else {
             // Height-only resize or alt-screen present: use simple resize logic.
             self.simple_resize(rows, cols);
@@ -27,13 +28,6 @@ impl super::Terminal {
         self.scroll_bottom = rows - 1;
 
         self.resize_at = Some(std::time::Instant::now());
-    }
-
-    /// Clamp the cursor to the new bounds after a reflow resize.
-    fn update_cursor_after_resize(&mut self, new_rows: usize, new_cols: usize) {
-        let clamped_row = self.cursor_row().min(new_rows.saturating_sub(1));
-        let clamped_col = self.cursor_col().min(new_cols.saturating_sub(1));
-        self.set_cursor(clamped_row, clamped_col);
     }
 
     /// Resize when only the height changes (no col change, no reflow).
