@@ -261,12 +261,7 @@ impl PageList {
 
         let rewrapped = rewrap_lines(&logical_lines, new_cols);
 
-        // Anchor the cursor to its natural position in the reflowed content rather
-        // than always pushing it to the last viewport row.  When the viewport has
-        // more rows than reflowed content (sparse screen — e.g. a fresh shell with
-        // only a few lines of output), the cursor lands directly after the content
-        // instead of jumping to the bottom.  When content overflows the viewport,
-        // the min() keeps the cursor at the last row, preserving existing behaviour.
+        // Anchor cursor after reflowed content; clamp to last row when content overflows.
         let cursor_viewport_row = rewrapped.len().min(new_rows.saturating_sub(1));
 
         self.rebuild_from_rows(rewrapped, cursor_viewport_row, new_cols, None);
