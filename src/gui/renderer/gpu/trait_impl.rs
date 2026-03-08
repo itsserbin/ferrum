@@ -19,7 +19,7 @@ impl traits::Renderer for GpuRenderer {
         self.metrics.ui_scale = scale;
         // Rebuild rasterizer (resets ScaleContext) whenever mode changes so
         // the glyph cache is not populated with stale grayscale/LCD coverage.
-        let new_mode = RasterMode::from_scale_factor(scale_factor);
+        let new_mode = RasterMode::from_scale_factor(scale);
         if self.rasterizer.mode != new_mode {
             self.rasterizer.rebuild(self.metrics.font_size, new_mode);
         }

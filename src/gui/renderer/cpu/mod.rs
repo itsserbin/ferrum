@@ -14,6 +14,9 @@ pub struct CpuRenderer {
     pub(in crate::gui::renderer) metrics:        FontMetrics,
     pub(in crate::gui::renderer) glyph_cache:    HashMap<char, RasterizedGlyph>,
     pub(in crate::gui::renderer) srgb_to_linear: [f32; 256],
+    /// sRGB encode LUT: index is `(linear * 255 + 0.5) as u8`, value is the sRGB byte.
+    /// Avoids a `powf` call per pixel in the glyph blend inner loop.
+    pub(in crate::gui::renderer) linear_to_srgb: [u8; 256],
     pub(in crate::gui::renderer) palette:        ThemePalette,
 }
 
@@ -21,6 +24,14 @@ fn build_srgb_lut() -> [f32; 256] {
     let mut lut = [0f32; 256];
     for (i, v) in lut.iter_mut().enumerate() {
         *v = crate::core::Color::channel_to_linear(i as u8);
+    }
+    lut
+}
+
+fn build_linear_to_srgb_lut() -> [u8; 256] {
+    let mut lut = [0u8; 256];
+    for (i, v) in lut.iter_mut().enumerate() {
+        *v = crate::core::Color::channel_to_srgb(i as f32 / 255.0);
     }
     lut
 }
@@ -42,6 +53,7 @@ impl CpuRenderer {
             metrics,
             glyph_cache: HashMap::new(),
             srgb_to_linear: build_srgb_lut(),
+            linear_to_srgb: build_linear_to_srgb_lut(),
             palette,
         }
     }
@@ -67,7 +79,7 @@ impl CpuRenderer {
             return;
         }
         self.metrics.ui_scale = scale;
-        let new_mode = RasterMode::from_scale_factor(scale_factor);
+        let new_mode = RasterMode::from_scale_factor(scale);
         if self.rasterizer.mode != new_mode {
             self.rasterizer.rebuild(self.metrics.font_size, new_mode);
         }
