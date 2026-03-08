@@ -100,12 +100,11 @@ impl super::GpuRenderer {
 
                 // Ensure non-ASCII terminal glyphs exist in the atlas.
                 if codepoint >= 128 {
+                    let queue = &self.queue;
                     let _ = self.atlas.get_or_insert(
                         codepoint,
-                        &self.font,
-                        &self.fallback_fonts,
-                        self.metrics.font_size,
-                        &self.queue,
+                        &mut self.rasterizer,
+                        queue,
                     );
                 }
 

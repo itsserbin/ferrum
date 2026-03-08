@@ -19,6 +19,7 @@ impl super::GpuRenderer {
         let size = window.inner_size();
         let width = size.width.max(1);
         let height = size.height.max(1);
+        let scale_factor = window.scale_factor();
 
         // Initialize wgpu.
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
@@ -71,15 +72,18 @@ impl super::GpuRenderer {
         surface.configure(&device, &surface_config);
 
         // Font setup.
-        let (font, fallback_fonts) = crate::config::load_fonts(config.font.family);
-
+        let (font_data, fallback_data) = crate::config::load_fonts(config.font.family);
+        let mode = crate::gui::renderer::rasterizer::RasterMode::from_scale_factor(scale_factor);
+        let mut rasterizer = crate::gui::renderer::rasterizer::GlyphRasterizer::new(
+            font_data, fallback_data, config.font.size, mode,
+        );
         let mut metrics = FontMetrics::from_config(config);
-        metrics.recompute(&font);
+        metrics.recompute(&mut rasterizer);
 
         let palette = config.theme.resolve();
 
         // Create glyph atlas.
-        let atlas = GlyphAtlas::new(&device, &queue, &font, &fallback_fonts, metrics.font_size, metrics.ascent);
+        let atlas = GlyphAtlas::new(&device, &queue, &mut rasterizer);
 
         // Create pipelines.
         let (grid_pipeline, grid_bind_group_layout) = pipelines::create_grid_pipeline(&device);
@@ -155,8 +159,7 @@ impl super::GpuRenderer {
             composite_uniform_buffer,
             sampler,
             atlas,
-            font,
-            fallback_fonts,
+            rasterizer,
             metrics,
             palette,
             commands: Vec::with_capacity(MAX_UI_COMMANDS),
@@ -264,25 +267,19 @@ impl super::GpuRenderer {
 
     /// Applies config changes (font, metrics, atlas, palette).
     pub(in crate::gui::renderer) fn apply_config(&mut self, config: &crate::config::AppConfig) {
-        let (font, fallback_fonts) = crate::config::load_fonts(config.font.family);
-        self.font = font;
-        self.fallback_fonts = fallback_fonts;
+        let (font_data, fallback_data) = crate::config::load_fonts(config.font.family);
+        self.rasterizer = crate::gui::renderer::rasterizer::GlyphRasterizer::new(
+            font_data, fallback_data, config.font.size, self.rasterizer.mode,
+        );
         self.metrics.update_bases(config);
-        self.metrics.recompute(&self.font);
+        self.metrics.recompute(&mut self.rasterizer);
         self.rebuild_atlas();
         self.palette = config.theme.resolve();
     }
 
     /// Rebuilds glyph atlas and related buffer after scale change.
     pub(super) fn rebuild_atlas(&mut self) {
-        self.atlas = GlyphAtlas::new(
-            &self.device,
-            &self.queue,
-            &self.font,
-            &self.fallback_fonts,
-            self.metrics.font_size,
-            self.metrics.ascent,
-        );
+        self.atlas = GlyphAtlas::new(&self.device, &self.queue, &mut self.rasterizer);
         let glyph_data = self.atlas.glyph_info_buffer_data();
         self.glyph_info_buffer = Self::create_storage_buffer_init(
             &self.device,

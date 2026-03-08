@@ -16,7 +16,7 @@ impl traits::Renderer for GpuRenderer {
             return;
         }
         self.metrics.ui_scale = scale;
-        self.metrics.recompute(&self.font);
+        self.metrics.recompute(&mut self.rasterizer);
         self.rebuild_atlas();
     }
 

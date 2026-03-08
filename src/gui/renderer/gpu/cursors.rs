@@ -29,12 +29,11 @@ impl super::GpuRenderer {
                 };
                 if ch != ' ' {
                     let cp = ch as u32;
+                    let queue = &self.queue;
                     let info = self.atlas.get_or_insert(
                         cp,
-                        &self.font,
-                        &self.fallback_fonts,
-                        self.metrics.font_size,
-                        &self.queue,
+                        &mut self.rasterizer,
+                        queue,
                     );
                     if info.w > 0.0 && info.h > 0.0 {
                         let gx = x + info.offset_x;
