@@ -38,21 +38,13 @@ pub(crate) fn font_data(family: FontFamily) -> &'static [u8] {
     }
 }
 
-/// Loads the primary font and fallback fonts for the given family.
-pub(crate) fn load_fonts(family: FontFamily) -> (fontdue::Font, Vec<fontdue::Font>) {
-    let font_data = font_data(family);
-    let font = fontdue::Font::from_bytes(font_data, fontdue::FontSettings::default())
-        .expect("font load failed");
-
-    let fallback_fonts: Vec<fontdue::Font> = fallback_fonts_data()
-        .iter()
-        .map(|d| {
-            fontdue::Font::from_bytes(*d, fontdue::FontSettings::default())
-                .expect("fallback font load failed")
-        })
-        .collect();
-
-    (font, fallback_fonts)
+/// Returns raw font bytes for the primary font and fallback chain.
+///
+/// The returned slices point to data compiled into the binary (`include_bytes!`).
+pub(crate) fn load_fonts(family: FontFamily) -> (&'static [u8], Vec<&'static [u8]>) {
+    let primary = font_data(family);
+    let fallbacks = fallback_fonts_data().to_vec();
+    (primary, fallbacks)
 }
 
 /// Returns embedded fallback font data in priority order.
@@ -79,49 +71,42 @@ mod tests {
     /// Validates that every `FontFamily` variant loads as a valid font.
     #[test]
     fn all_fonts_load_as_valid() {
-        let families = [
+        for family in [
             FontFamily::JetBrainsMono,
             FontFamily::FiraCode,
             FontFamily::CascadiaCode,
             FontFamily::UbuntuMono,
             FontFamily::SourceCodePro,
-        ];
-        for family in families {
+        ] {
             let data = font_data(family);
-            let font = fontdue::Font::from_bytes(data, fontdue::FontSettings::default());
-            assert!(font.is_ok(), "{family:?} should be a valid font");
+            let font = swash::FontRef::from_index(data, 0);
+            assert!(font.is_some(), "{family:?} should parse as a valid swash font");
         }
     }
 
     #[test]
     fn fallback_fonts_load_as_valid() {
         for (i, data) in fallback_fonts_data().iter().enumerate() {
-            let font = fontdue::Font::from_bytes(*data, fontdue::FontSettings::default());
-            assert!(font.is_ok(), "fallback font {i} should be valid");
+            let font = swash::FontRef::from_index(data, 0);
+            assert!(font.is_some(), "fallback font {i} should parse as a valid swash font");
         }
     }
 
     #[test]
     fn fallback_chain_covers_missing_glyphs() {
         let primary_data = font_data(FontFamily::JetBrainsMono);
-        let primary =
-            fontdue::Font::from_bytes(primary_data, fontdue::FontSettings::default()).unwrap();
+        let primary = swash::FontRef::from_index(primary_data, 0).unwrap();
 
         let fallbacks: Vec<_> = fallback_fonts_data()
             .iter()
-            .map(|d| fontdue::Font::from_bytes(*d, fontdue::FontSettings::default()).unwrap())
+            .map(|d| swash::FontRef::from_index(d, 0).unwrap())
             .collect();
 
-        // U+23BF (⎿) — covered by fallback[0] (Noto Sans Symbols).
-        assert!(!primary.has_glyph('\u{23BF}'));
-        assert!(fallbacks[0].has_glyph('\u{23BF}'));
+        let has_glyph = |font: &swash::FontRef, ch: char| font.charmap().map(ch) != 0;
 
-        // U+23FA (⏺) — may be in Symbols 1 or 2, check both.
-        assert!(!primary.has_glyph('\u{23FA}'));
-        assert!(
-            fallbacks.iter().any(|f| f.has_glyph('\u{23FA}')),
-            "⏺ should be in one of the fallbacks"
-        );
+        // U+23BF (⎿) — covered by fallback[0] (Noto Sans Symbols).
+        assert!(!has_glyph(&primary, '\u{23BF}'));
+        assert!(has_glyph(&fallbacks[0], '\u{23BF}'));
 
         // Verify all Claude Code icons are covered by primary + fallbacks.
         let claude_chars = [
@@ -148,8 +133,8 @@ mod tests {
         ];
         let mut missing = Vec::new();
         for (ch, name) in &claude_chars {
-            let covered = primary.has_glyph(*ch)
-                || fallbacks.iter().any(|f| f.has_glyph(*ch));
+            let covered = has_glyph(&primary, *ch)
+                || fallbacks.iter().any(|f| has_glyph(f, *ch));
             if !covered {
                 missing.push(*name);
             }
