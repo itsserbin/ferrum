@@ -13,7 +13,7 @@ struct GridUniforms {
     cell_height:  u32,
     origin_x:     u32,
     origin_y:     u32,
-    bg_color:     u32,   // default background 0xRRGGBB (sRGB)
+    bg_color:     u32,   // default background 0xRRGGBB (sRGB) — reserved, each cell stores its own bg
     is_lcd:       u32,   // 1 = LCD subpixel atlas, 0 = grayscale atlas
     tex_width:    u32,
     tex_height:   u32,
@@ -63,7 +63,6 @@ struct GlyphInfo {
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
-    @location(0)       uv:       vec2<f32>,
 }
 
 // ---- Helpers ----
@@ -106,7 +105,6 @@ fn vs_main(@builtin(vertex_index) vi: u32) -> VertexOutput {
     let y = f32(i32(vi) % 2) * 4.0 - 1.0;
     var out: VertexOutput;
     out.position = vec4<f32>(x, y, 0.0, 1.0);
-    out.uv       = vec2<f32>((x + 1.0) * 0.5, (1.0 - y) * 0.5);
     return out;
 }
 
@@ -114,8 +112,16 @@ fn vs_main(@builtin(vertex_index) vi: u32) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let pixel_x = u32(in.position.x) - uniforms.origin_x;
-    let pixel_y = u32(in.position.y) - uniforms.origin_y;
+    let px = u32(in.position.x);
+    let py = u32(in.position.y);
+
+    // Guard against u32 underflow before subtracting the batch origin.
+    if px < uniforms.origin_x || py < uniforms.origin_y {
+        discard;
+    }
+
+    let pixel_x = px - uniforms.origin_x;
+    let pixel_y = py - uniforms.origin_y;
 
     // Batch-local bounds guard.
     let batch_w = uniforms.cols * uniforms.cell_width;

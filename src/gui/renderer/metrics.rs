@@ -49,7 +49,9 @@ impl FontMetrics {
     pub fn recompute(&mut self, rasterizer: &mut GlyphRasterizer) {
         let scaled_font_size = (self.base_font_size as f64 * self.ui_scale).max(1.0) as f32;
         let mode = rasterizer.mode;
-        rasterizer.rebuild(scaled_font_size, mode);
+        if rasterizer.font_size != scaled_font_size || rasterizer.mode != mode {
+            rasterizer.rebuild(scaled_font_size, mode);
+        }
         let line_padding = self.scaled_px(self.base_line_padding);
         let cell_metrics = rasterizer.metrics();
         self.ascent = cell_metrics.ascent + (line_padding / 2) as i32;

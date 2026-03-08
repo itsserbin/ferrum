@@ -108,6 +108,13 @@ mod tests {
         assert!(!has_glyph(&primary, '\u{23BF}'));
         assert!(has_glyph(&fallbacks[0], '\u{23BF}'));
 
+        // U+23FA (⏺) — must NOT be in primary, must be in at least one fallback.
+        assert!(!has_glyph(&primary, '\u{23FA}'), "⏺ should not be in the primary font");
+        assert!(
+            fallbacks.iter().any(|f| has_glyph(f, '\u{23FA}')),
+            "⏺ should be covered by at least one fallback font"
+        );
+
         // Verify all Claude Code icons are covered by primary + fallbacks.
         let claude_chars = [
             ('\u{23FA}', "⏺ prompt"),

@@ -40,6 +40,9 @@ pub struct GlyphAtlas {
     next_x:           u32,
     next_y:           u32,
     row_height:       u32,
+    /// Cached ascent from the primary font at creation time.
+    /// Used to compute glyph vertical offsets without re-querying font metrics per glyph.
+    ascent:           i32,
 }
 
 impl GlyphAtlas {
@@ -75,6 +78,8 @@ impl GlyphAtlas {
 
         let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
 
+        let ascent = rasterizer.metrics().ascent;
+
         let mut atlas = GlyphAtlas {
             texture,
             texture_view,
@@ -84,6 +89,7 @@ impl GlyphAtlas {
             next_x: 0,
             next_y: 0,
             row_height: 0,
+            ascent,
         };
 
         for cp in 32u32..127 {
@@ -168,9 +174,8 @@ impl GlyphAtlas {
             wgpu::Extent3d { width: gw, height: gh, depth_or_array_layers: 1 },
         );
 
-        let metrics = rasterizer.metrics();
         let offset_x = glyph.left as f32;
-        let offset_y = (metrics.ascent - glyph.top) as f32;
+        let offset_y = (self.ascent - glyph.top) as f32;
 
         self.glyphs.insert(codepoint, GlyphInfo {
             x:        self.next_x as f32,

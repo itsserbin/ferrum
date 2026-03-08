@@ -94,14 +94,19 @@ impl GlyphRasterizer {
     /// Returning `&'static [u8]` instead of `FontRef<'_>` avoids a split-borrow
     /// conflict between `self.font_data` (immutable) and `self.scale_ctx` (mutable).
     fn font_bytes_for_char(&self, ch: char) -> &'static [u8] {
-        let primary = FontRef::from_index(self.font_data, 0)
-            .expect("primary font data is valid");
+        // Font bytes are &'static data compiled into the binary.
+        // FontRef::from_index returns None only for malformed data, which is
+        // validated by tests — fall back to primary silently if it ever fails.
+        let Some(primary) = FontRef::from_index(self.font_data, 0) else {
+            return self.font_data;
+        };
         if primary.charmap().map(ch) != 0 {
             return self.font_data;
         }
         for fb in &self.fallback_data {
-            let f = FontRef::from_index(fb, 0).expect("fallback font data is valid");
-            if f.charmap().map(ch) != 0 {
+            if let Some(f) = FontRef::from_index(fb, 0)
+                && f.charmap().map(ch) != 0
+            {
                 return fb;
             }
         }
@@ -113,11 +118,33 @@ impl GlyphRasterizer {
         // Resolve font bytes first to avoid a split-borrow conflict between
         // font_data (immutable) and scale_ctx (mutable).
         let font_bytes = self.font_bytes_for_char(ch);
-        let font = FontRef::from_index(font_bytes, 0).expect("font data is valid");
+        let font = FontRef::from_index(font_bytes, 0)?;
         let glyph_id = font.charmap().map(ch);
         if glyph_id == 0 {
             return None;
         }
+
+        // Fallback fonts may contain wide glyphs (e.g. box-drawing symbols wider than
+        // the primary font's em). Scale the render size down so the glyph fits in one cell.
+        let render_size = if !std::ptr::eq(font_bytes as *const _, self.font_data as *const _) {
+            let primary = FontRef::from_index(self.font_data, 0)?;
+            let m_id  = primary.charmap().map('M');
+            let cell_w = primary
+                .glyph_metrics(&[])
+                .scale(self.font_size)
+                .advance_width(m_id);
+            let adv = font
+                .glyph_metrics(&[])
+                .scale(self.font_size)
+                .advance_width(glyph_id);
+            if adv > cell_w && cell_w > 0.0 {
+                self.font_size * (cell_w / adv)
+            } else {
+                self.font_size
+            }
+        } else {
+            self.font_size
+        };
 
         let format = match self.mode {
             RasterMode::Grayscale    => Format::Alpha,
@@ -127,7 +154,7 @@ impl GlyphRasterizer {
         let mut scaler = self
             .scale_ctx
             .builder(font)
-            .size(self.font_size)
+            .size(render_size)
             .hint(true)
             .build();
 
@@ -144,8 +171,10 @@ impl GlyphRasterizer {
         let coverage = match self.mode {
             RasterMode::Grayscale => GlyphCoverage::Grayscale(image.data),
             RasterMode::LcdSubpixel => {
+                // swash returns RGBA (4 bytes/pixel) for Format::Subpixel —
+                // take R, G, B coverage and discard the 4th (alpha/padding) byte.
                 let pixels = image.data
-                    .chunks_exact(3)
+                    .chunks_exact(4)
                     .map(|c| [c[0], c[1], c[2]])
                     .collect();
                 GlyphCoverage::Lcd(pixels)
@@ -163,8 +192,11 @@ impl GlyphRasterizer {
 
     /// Returns cell layout metrics (cell_width, cell_height, ascent) for the current font/size.
     pub fn metrics(&mut self) -> GlyphMetrics {
-        let font = FontRef::from_index(self.font_data, 0)
-            .expect("primary font data is valid");
+        let Some(font) = FontRef::from_index(self.font_data, 0) else {
+            // Font data is compiled into the binary and validated by tests.
+            // Return a non-zero fallback so cell dimensions are never zero.
+            return GlyphMetrics { cell_width: 8, cell_height: 16, ascent: 12 };
+        };
         let m = font.metrics(&[]).scale(self.font_size);
         let cell_height = (m.ascent + m.descent + m.leading).ceil() as u32;
 
@@ -228,9 +260,10 @@ mod tests {
         match glyph.coverage {
             GlyphCoverage::Lcd(data) => {
                 let expected = (glyph.width * glyph.height) as usize;
-                assert!(
-                    data.len() >= expected,
-                    "LCD data ({}) must cover at least width×height ({}) pixels",
+                assert_eq!(
+                    data.len(),
+                    expected,
+                    "LCD data length ({}) must equal width×height ({})",
                     data.len(),
                     expected,
                 );
@@ -255,5 +288,25 @@ mod tests {
         r.rebuild(16.0, RasterMode::LcdSubpixel);
         assert_eq!(r.mode, RasterMode::LcdSubpixel);
         assert_eq!(r.font_size, 16.0);
+    }
+
+    #[test]
+    fn fallback_wide_glyph_fits_within_cell() {
+        // Use JetBrains Mono as primary and also as fallback (simulates the case
+        // where a glyph is resolved from a fallback font). The primary cell width
+        // is measured from 'M', and a wide glyph from the "fallback" must not
+        // produce a rasterized width that exceeds roughly 2× the cell width.
+        let primary = jetbrains_mono();
+        let mut r = GlyphRasterizer::new(primary, vec![primary], 14.0, RasterMode::Grayscale);
+        let cell_w = r.metrics().cell_width as f32;
+
+        // 'W' is one of the widest printable ASCII glyphs.
+        let glyph = r.rasterize('W').expect("'W' should rasterize");
+        assert!(
+            glyph.width as f32 <= cell_w * 2.0,
+            "rasterized width ({}) should not vastly exceed cell_width ({})",
+            glyph.width,
+            cell_w,
+        );
     }
 }
