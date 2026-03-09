@@ -178,7 +178,7 @@ impl FerrumWindow {
         }
         if resized {
             // Apply terminal/PTTY resize immediately so width reflow is visible while dragging.
-            self.resize_all_panes(true);
+            self.resize_all_panes();
         }
 
         self.window.request_redraw();

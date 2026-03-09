@@ -26,9 +26,7 @@ impl FerrumWindow {
             // Resize terminal grids so rendering is correct.
             // Cursor stays hidden until SIGWINCH is sent (see sigwinch_deadline),
             // at which point the shell redraws to the correct position.
-            // Skip reflow: the shell will redraw via SIGWINCH, so intermediate
-            // reflow only produces visual noise (text appears to shift then snap back).
-            self.resize_all_panes(false);
+            self.resize_all_panes();
         }
     }
 

@@ -229,7 +229,7 @@ impl FerrumWindow {
     /// Returns `true` if the event was a divider-drag release and was fully handled.
     fn handle_divider_drag_release(&mut self, state: ElementState) -> bool {
         if state == ElementState::Released && self.divider_drag.take().is_some() {
-            self.resize_all_panes(false);
+            self.resize_all_panes();
             self.send_sigwinch_to_all_panes();
             self.window.request_redraw();
             return true;
