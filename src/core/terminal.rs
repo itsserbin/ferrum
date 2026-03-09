@@ -1,9 +1,6 @@
 use std::collections::HashMap;
 use std::time::Instant;
 
-/// Maximum number of unique hyperlink URLs stored per terminal session.
-const HYPERLINK_URL_TABLE_MAX: usize = 4096;
-
 use base64::Engine as _;
 use crate::config::ThemeChoice;
 use super::{
@@ -12,6 +9,9 @@ use super::{
 };
 use unicode_width::UnicodeWidthChar;
 use vte::{Params, Parser, Perform};
+
+/// Maximum number of unique hyperlink URLs stored per terminal session.
+const HYPERLINK_URL_TABLE_MAX: usize = 4096;
 
 mod alt_screen;
 mod grid_ops;
