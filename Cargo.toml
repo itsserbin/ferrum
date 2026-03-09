@@ -26,6 +26,7 @@ anyhow = "1"
 vte = "0.15"
 unicode-width = "0.2"
 arboard = "3"
+base64 = "0.22"
 ron = "0.12"
 wgpu = { version = "28", optional = true }
 pollster = { version = "0.4", optional = true }

@@ -577,3 +577,27 @@ fn reflow_intensive_varying_sizes_preserves_content() {
     assert_eq!(get_char(&term, 8, 0), 'I', "row I lost after varying reflow");
     assert_eq!(get_char(&term, 9, 0), 'J', "row J lost after varying reflow");
 }
+
+// ── OSC 52 clipboard write ──
+
+#[test]
+fn osc52_writes_decoded_text_to_pending_clipboard() {
+    let mut term = Terminal::new(24, 80);
+    // "hello" in base64 is "aGVsbG8="
+    term.process(b"\x1b]52;c;aGVsbG8=\x07");
+    assert_eq!(term.pending_clipboard_write.as_deref(), Some("hello"));
+}
+
+#[test]
+fn osc52_query_is_ignored() {
+    let mut term = Terminal::new(24, 80);
+    term.process(b"\x1b]52;c;?\x07");
+    assert!(term.pending_clipboard_write.is_none());
+}
+
+#[test]
+fn osc52_invalid_base64_is_ignored() {
+    let mut term = Terminal::new(24, 80);
+    term.process(b"\x1b]52;c;!!!invalid!!!\x07");
+    assert!(term.pending_clipboard_write.is_none());
+}

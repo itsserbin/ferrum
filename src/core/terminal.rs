@@ -1,5 +1,6 @@
 use std::time::Instant;
 
+use base64::Engine as _;
 use crate::config::ThemeChoice;
 use super::{
     Color, GraphemeCell, PageCoord, PageList, SecurityConfig,
@@ -96,6 +97,8 @@ pub struct Terminal {
     pub cwd: Option<String>,
     /// Window/icon title set by OSC 0/1/2.
     pub title: Option<String>,
+    /// Decoded clipboard text queued by OSC 52 for the GUI to write to the system clipboard.
+    pub pending_clipboard_write: Option<String>,
 }
 
 impl Terminal {
@@ -152,6 +155,7 @@ impl Terminal {
             parser: Parser::new(),
             cwd: None,
             title: None,
+            pending_clipboard_write: None,
         }
     }
 
@@ -211,6 +215,11 @@ impl Terminal {
     /// Drains all pending PTY response bytes.
     pub fn drain_responses(&mut self) -> Vec<u8> {
         std::mem::take(&mut self.pending_responses)
+    }
+
+    /// Drains a pending clipboard write queued by OSC 52.
+    pub fn drain_clipboard_write(&mut self) -> Option<String> {
+        self.pending_clipboard_write.take()
     }
 
     /// Registers a tracked selection-start pin at the given absolute row/col.
@@ -464,6 +473,7 @@ impl Terminal {
         self.cursor_visible = true;
         self.cursor_style = CursorStyle::default();
         self.pending_responses.clear();
+        self.pending_clipboard_write = None;
         self.bracketed_paste = false;
         if self.security_config.clear_mouse_on_reset {
             self.clear_mouse_tracking(true);
@@ -609,6 +619,22 @@ impl Perform for Terminal {
                 }
                 let uri = String::from_utf8_lossy(params[1]);
                 self.cwd = parse_osc7_uri(&uri);
+            }
+            // OSC 52: clipboard write — params[1] is selection (ignored), params[2] is base64 data
+            b"52" => {
+                if params.len() < 3 {
+                    return;
+                }
+                let payload = params[2];
+                // A payload of "?" is a clipboard read query — ignore it.
+                if payload == b"?" {
+                    return;
+                }
+                if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(payload)
+                    && let Ok(text) = String::from_utf8(bytes)
+                {
+                    self.pending_clipboard_write = Some(text);
+                }
             }
             _ => {}
         }

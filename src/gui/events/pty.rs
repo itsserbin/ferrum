@@ -14,6 +14,12 @@ impl FerrumWindow {
                     && let Some(leaf) = tab.pane_tree.find_leaf_mut(*pane_id)
                 {
                     leaf.process_and_flush(bytes);
+                    if let Some(text) = leaf.terminal.drain_clipboard_write()
+                        && let Some(ref mut clipboard) = self.clipboard
+                        && let Err(e) = clipboard.set_text(&text)
+                    {
+                        eprintln!("OSC 52: failed to write to clipboard: {e}");
+                    }
                 }
             }
             PtyEvent::Exited { tab_id, pane_id } => {
