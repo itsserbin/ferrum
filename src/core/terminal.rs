@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 use std::time::Instant;
 
+/// Maximum number of unique hyperlink URLs stored per terminal session.
+const HYPERLINK_URL_TABLE_MAX: usize = 4096;
+
 use base64::Engine as _;
 use crate::config::ThemeChoice;
 use super::{
@@ -672,22 +675,22 @@ impl Perform for Terminal {
                 if uri.is_empty() {
                     self.current_hyperlink_id = 0;
                 } else {
+                    use std::collections::hash_map::Entry;
                     let url = String::from_utf8_lossy(uri).into_owned();
-                    let id = if let Some(&existing_id) = self.hyperlink_url_index.get(&url) {
-                        existing_id
-                    } else {
-                        if self.hyperlink_urls.len() >= 4096 {
-                            // Table full — treat as no hyperlink rather than growing unboundedly.
-                            eprintln!("[ferrum] OSC 8: hyperlink URL table full (4096 entries); ignoring new URL");
-                            self.current_hyperlink_id = 0;
-                            return;
+                    self.current_hyperlink_id = match self.hyperlink_url_index.entry(url) {
+                        Entry::Occupied(e) => *e.get(),
+                        Entry::Vacant(e) => {
+                            if self.hyperlink_urls.len() >= HYPERLINK_URL_TABLE_MAX {
+                                // Table full — treat as no hyperlink rather than growing unboundedly.
+                                eprintln!("[ferrum] OSC 8: hyperlink URL table full ({HYPERLINK_URL_TABLE_MAX} entries); ignoring new URL");
+                                return;
+                            }
+                            let id = (self.hyperlink_urls.len() + 1) as u16;
+                            self.hyperlink_urls.push(e.key().clone());
+                            e.insert(id);
+                            id
                         }
-                        self.hyperlink_urls.push(url.clone());
-                        let id = self.hyperlink_urls.len() as u16;
-                        self.hyperlink_url_index.insert(url, id);
-                        id
                     };
-                    self.current_hyperlink_id = id;
                 }
             }
             _ => {}

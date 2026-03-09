@@ -88,15 +88,11 @@ fn encode_arrow_key(final_byte: char, decckm: bool, modifier_param: Option<u8>) 
     }
 }
 
-fn encode_home_end_key(final_byte: char, decckm: bool, modifier_param: Option<u8>) -> Vec<u8> {
-    if let Some(param) = modifier_param {
-        return csi_with_modifier(final_byte, param);
-    }
-
-    if decckm {
-        format!("\x1bO{}", final_byte).into_bytes()
-    } else {
-        format!("\x1b[{}", final_byte).into_bytes()
+/// Encodes an SS3 function key (F1–F4): `ESC O {letter}` unmodified, or `ESC [ 1 ; {mod} {letter}` with a modifier.
+fn encode_ss3_key(final_byte: char, modifier_param: Option<u8>) -> Vec<u8> {
+    match modifier_param {
+        Some(param) => csi_with_modifier(final_byte, param),
+        None => vec![0x1b, b'O', final_byte as u8],
     }
 }
 
@@ -217,8 +213,8 @@ pub(super) fn key_to_bytes_ex(
                         Some(encode_arrow_key('D', decckm, modifier_param))
                     }
                 }
-                NamedKey::Home => Some(encode_home_end_key('H', decckm, modifier_param)),
-                NamedKey::End => Some(encode_home_end_key('F', decckm, modifier_param)),
+                NamedKey::Home => Some(encode_arrow_key('H', decckm, modifier_param)),
+                NamedKey::End => Some(encode_arrow_key('F', decckm, modifier_param)),
                 NamedKey::Insert => Some(csi_tilde(2, modifier_param)),
                 NamedKey::Delete => {
                     if is_word_delete_combo(modifiers) {
@@ -230,22 +226,10 @@ pub(super) fn key_to_bytes_ex(
                 NamedKey::PageUp => Some(csi_tilde(5, modifier_param)),
                 NamedKey::PageDown => Some(csi_tilde(6, modifier_param)),
                 // F1–F4: SS3 sequences without modifier, CSI 1;{mod}{letter} with modifier
-                NamedKey::F1 => Some(match modifier_param {
-                    Some(param) => csi_with_modifier('P', param),
-                    None => b"\x1bOP".to_vec(),
-                }),
-                NamedKey::F2 => Some(match modifier_param {
-                    Some(param) => csi_with_modifier('Q', param),
-                    None => b"\x1bOQ".to_vec(),
-                }),
-                NamedKey::F3 => Some(match modifier_param {
-                    Some(param) => csi_with_modifier('R', param),
-                    None => b"\x1bOR".to_vec(),
-                }),
-                NamedKey::F4 => Some(match modifier_param {
-                    Some(param) => csi_with_modifier('S', param),
-                    None => b"\x1bOS".to_vec(),
-                }),
+                NamedKey::F1 => Some(encode_ss3_key('P', modifier_param)),
+                NamedKey::F2 => Some(encode_ss3_key('Q', modifier_param)),
+                NamedKey::F3 => Some(encode_ss3_key('R', modifier_param)),
+                NamedKey::F4 => Some(encode_ss3_key('S', modifier_param)),
                 // F5–F12: CSI tilde sequences (16 and 22 are historically skipped)
                 NamedKey::F5 => Some(csi_tilde(15, modifier_param)),
                 NamedKey::F6 => Some(csi_tilde(17, modifier_param)),
