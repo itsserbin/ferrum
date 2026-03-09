@@ -70,14 +70,11 @@ impl FerrumWindow {
 
                 if self.modifiers.control_key() && !self.is_mouse_reporting()
                     && let Some(leaf) = self.tabs[idx].focused_leaf()
-                {
-                    let cell = &leaf.terminal.screen.viewport_row(row).cells[col];
-                    let hyperlink_id = cell.hyperlink_id;
-                    if let Some(url) = leaf.terminal.hyperlink_url(hyperlink_id) {
-                        open_url(url);
-                        self.is_selecting = false;
-                        return;
-                    }
+                    && let Some(cell) = leaf.terminal.screen.viewport_row(row).cells.get(col)
+                    && let Some(url) = leaf.terminal.hyperlink_url(cell.hyperlink_id) {
+                    open_url(url);
+                    self.is_selecting = false;
+                    return;
                 }
 
                 if self.modifiers.shift_key() {

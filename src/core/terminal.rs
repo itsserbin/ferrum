@@ -670,6 +670,11 @@ impl Perform for Terminal {
                     let id = if let Some(pos) = self.hyperlink_urls.iter().position(|u| u == &url) {
                         (pos + 1) as u16
                     } else {
+                        if self.hyperlink_urls.len() >= 4096 {
+                            // Table full — treat as no hyperlink rather than growing unboundedly.
+                            self.current_hyperlink_id = 0;
+                            return;
+                        }
                         self.hyperlink_urls.push(url);
                         self.hyperlink_urls.len() as u16
                     };
@@ -698,7 +703,8 @@ impl Perform for Terminal {
                         .iter()
                         .nth(1)
                         .and_then(|p| p.first().copied())
-                        .unwrap_or(0) as u8;
+                        .unwrap_or(0)
+                        .min(255) as u8;
                     self.modify_other_keys = level;
                 }
                 return;
