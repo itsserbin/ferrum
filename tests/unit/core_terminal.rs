@@ -601,3 +601,25 @@ fn osc52_invalid_base64_is_ignored() {
     term.process(b"\x1b]52;c;!!!invalid!!!\x07");
     assert!(term.pending_clipboard_write.is_none());
 }
+
+// ── modifyOtherKeys ──
+
+#[test]
+fn modify_other_keys_level_set_by_csi_sequence() {
+    let mut term = Terminal::new(24, 80);
+    assert_eq!(term.modify_other_keys, 0);
+    term.process(b"\x1b[>4;2m");
+    assert_eq!(term.modify_other_keys, 2);
+    term.process(b"\x1b[>4;1m");
+    assert_eq!(term.modify_other_keys, 1);
+    term.process(b"\x1b[>4;0m");
+    assert_eq!(term.modify_other_keys, 0);
+}
+
+#[test]
+fn modify_other_keys_reset_by_csi_without_param() {
+    let mut term = Terminal::new(24, 80);
+    term.process(b"\x1b[>4;2m");
+    term.process(b"\x1b[>4m");
+    assert_eq!(term.modify_other_keys, 0);
+}

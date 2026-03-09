@@ -125,8 +125,13 @@ pub(super) fn encode_mouse_event(
     }
 }
 
-/// Converts logical key input into PTY byte sequences.
-pub(super) fn key_to_bytes(key: &Key, modifiers: ModifiersState, decckm: bool) -> Option<Vec<u8>> {
+/// Converts logical key input into PTY byte sequences, respecting modifyOtherKeys level.
+pub(super) fn key_to_bytes_ex(
+    key: &Key,
+    modifiers: ModifiersState,
+    decckm: bool,
+    modify_other_keys: u8,
+) -> Option<Vec<u8>> {
     match key {
         Key::Character(c) => {
             let ch = c.chars().next()?;
@@ -152,7 +157,17 @@ pub(super) fn key_to_bytes(key: &Key, modifiers: ModifiersState, decckm: bool) -
             let modifier_param = csi_modifier_param(modifiers);
 
             match named {
-                NamedKey::Enter => Some(with_alt_prefix(vec![b'\r'], modifiers)),
+                NamedKey::Enter => {
+                    if modify_other_keys >= 2
+                        && modifiers.shift_key()
+                        && !modifiers.control_key()
+                        && !modifiers.alt_key()
+                    {
+                        Some(b"\x1b[27;2;13~".to_vec())
+                    } else {
+                        Some(with_alt_prefix(vec![b'\r'], modifiers))
+                    }
+                }
                 NamedKey::Backspace => {
                     if is_word_delete_combo(modifiers) {
                         Some(vec![0x17]) // Ctrl+W — backward-kill-word
@@ -245,6 +260,14 @@ pub(super) fn key_to_bytes(key: &Key, modifiers: ModifiersState, decckm: bool) -
         }
         _ => None,
     }
+}
+
+/// Converts logical key input into PTY byte sequences (modifyOtherKeys level 0).
+///
+/// Used only in tests; production callers use `key_to_bytes_ex` directly.
+#[cfg(test)]
+pub(super) fn key_to_bytes(key: &Key, modifiers: ModifiersState, decckm: bool) -> Option<Vec<u8>> {
+    key_to_bytes_ex(key, modifiers, decckm, 0)
 }
 
 #[cfg(test)]

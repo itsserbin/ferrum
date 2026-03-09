@@ -87,6 +87,8 @@ pub struct Terminal {
     pending_security_events: Vec<SecurityEventKind>,
     pub cursor_style: CursorStyle,
     pub resize_at: Option<Instant>,
+    /// modifyOtherKeys level set by `ESC [ > 4 ; <n> m` (0 = off, 1 = level 1, 2 = level 2).
+    pub modify_other_keys: u8,
 
     // ── Selection pins ───────────────────────────────────────────────────────
     pub selection_start_pin: Option<TrackedPin>,
@@ -150,6 +152,7 @@ impl Terminal {
             pending_security_events: Vec::new(),
             cursor_style: CursorStyle::default(),
             resize_at: None,
+            modify_other_keys: 0,
             selection_start_pin: None,
             selection_end_pin: None,
             parser: Parser::new(),
@@ -475,6 +478,7 @@ impl Terminal {
         self.pending_responses.clear();
         self.pending_clipboard_write = None;
         self.bracketed_paste = false;
+        self.modify_other_keys = 0;
         if self.security_config.clear_mouse_on_reset {
             self.clear_mouse_tracking(true);
         }
@@ -651,6 +655,18 @@ impl Perform for Terminal {
             return;
         }
         if action == 'm' {
+            if intermediates == b">" {
+                // modifyOtherKeys: ESC [ > 4 ; <level> m
+                if self.param(params, 0) == 4 {
+                    let level = params
+                        .iter()
+                        .nth(1)
+                        .and_then(|p| p.first().copied())
+                        .unwrap_or(0) as u8;
+                    self.modify_other_keys = level;
+                }
+                return;
+            }
             self.handle_sgr(params);
             return;
         }

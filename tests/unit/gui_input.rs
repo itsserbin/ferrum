@@ -215,3 +215,39 @@ fn f5_with_ctrl_uses_modifier_encoding() {
         .expect("Ctrl+F5 should be encoded");
     assert_eq!(bytes, b"\x1b[15;5~");
 }
+
+#[test]
+fn shift_enter_with_modify_other_keys_level2_produces_csi_27() {
+    let bytes = key_to_bytes_ex(
+        &Key::Named(NamedKey::Enter),
+        mods(false, true, false),
+        false,
+        2,
+    )
+    .expect("Shift+Enter with modifyOtherKeys=2 should be encoded");
+    assert_eq!(bytes, b"\x1b[27;2;13~");
+}
+
+#[test]
+fn plain_enter_with_modify_other_keys_level2_still_produces_cr() {
+    let bytes = key_to_bytes_ex(
+        &Key::Named(NamedKey::Enter),
+        ModifiersState::empty(),
+        false,
+        2,
+    )
+    .expect("Enter should be encoded");
+    assert_eq!(bytes, vec![b'\r']);
+}
+
+#[test]
+fn shift_enter_without_modify_other_keys_still_produces_cr() {
+    let bytes = key_to_bytes_ex(
+        &Key::Named(NamedKey::Enter),
+        mods(false, true, false),
+        false,
+        0,
+    )
+    .expect("Shift+Enter without mode should be encoded");
+    assert_eq!(bytes, vec![b'\r']);
+}
