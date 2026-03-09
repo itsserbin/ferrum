@@ -165,3 +165,53 @@ fn legacy_mouse_encoding_clamps_large_coordinates() {
     let bytes = encode_mouse_event(0, 300, 500, true, false);
     assert_eq!(bytes, vec![0x1b, b'[', b'M', 32, 255, 255]);
 }
+
+#[test]
+fn f1_through_f4_use_ss3_sequences() {
+    use winit::keyboard::NamedKey;
+    let cases = [
+        (NamedKey::F1, b"\x1bOP".as_ref()),
+        (NamedKey::F2, b"\x1bOQ".as_ref()),
+        (NamedKey::F3, b"\x1bOR".as_ref()),
+        (NamedKey::F4, b"\x1bOS".as_ref()),
+    ];
+    for (key, expected) in cases {
+        let bytes = key_to_bytes(&Key::Named(key), ModifiersState::empty(), false)
+            .expect("F key should be encoded");
+        assert_eq!(bytes, expected, "{key:?} should produce SS3 sequence");
+    }
+}
+
+#[test]
+fn f5_through_f12_use_csi_tilde_sequences() {
+    use winit::keyboard::NamedKey;
+    let cases = [
+        (NamedKey::F5,  b"\x1b[15~".as_ref()),
+        (NamedKey::F6,  b"\x1b[17~".as_ref()),
+        (NamedKey::F7,  b"\x1b[18~".as_ref()),
+        (NamedKey::F8,  b"\x1b[19~".as_ref()),
+        (NamedKey::F9,  b"\x1b[20~".as_ref()),
+        (NamedKey::F10, b"\x1b[21~".as_ref()),
+        (NamedKey::F11, b"\x1b[23~".as_ref()),
+        (NamedKey::F12, b"\x1b[24~".as_ref()),
+    ];
+    for (key, expected) in cases {
+        let bytes = key_to_bytes(&Key::Named(key), ModifiersState::empty(), false)
+            .expect("F key should be encoded");
+        assert_eq!(bytes, expected, "{key:?} should produce CSI tilde sequence");
+    }
+}
+
+#[test]
+fn f1_with_shift_uses_modifier_encoding() {
+    let bytes = key_to_bytes(&Key::Named(NamedKey::F1), mods(false, true, false), false)
+        .expect("Shift+F1 should be encoded");
+    assert_eq!(bytes, b"\x1b[1;2P");
+}
+
+#[test]
+fn f5_with_ctrl_uses_modifier_encoding() {
+    let bytes = key_to_bytes(&Key::Named(NamedKey::F5), mods(true, false, false), false)
+        .expect("Ctrl+F5 should be encoded");
+    assert_eq!(bytes, b"\x1b[15;5~");
+}

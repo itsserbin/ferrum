@@ -214,6 +214,32 @@ pub(super) fn key_to_bytes(key: &Key, modifiers: ModifiersState, decckm: bool) -
                 }
                 NamedKey::PageUp => Some(csi_tilde(5, modifier_param)),
                 NamedKey::PageDown => Some(csi_tilde(6, modifier_param)),
+                // F1–F4: SS3 sequences without modifier, CSI 1;{mod}{letter} with modifier
+                NamedKey::F1 => Some(match modifier_param {
+                    Some(param) => csi_with_modifier('P', param),
+                    None => b"\x1bOP".to_vec(),
+                }),
+                NamedKey::F2 => Some(match modifier_param {
+                    Some(param) => csi_with_modifier('Q', param),
+                    None => b"\x1bOQ".to_vec(),
+                }),
+                NamedKey::F3 => Some(match modifier_param {
+                    Some(param) => csi_with_modifier('R', param),
+                    None => b"\x1bOR".to_vec(),
+                }),
+                NamedKey::F4 => Some(match modifier_param {
+                    Some(param) => csi_with_modifier('S', param),
+                    None => b"\x1bOS".to_vec(),
+                }),
+                // F5–F12: CSI tilde sequences (16 and 22 are historically skipped)
+                NamedKey::F5 => Some(csi_tilde(15, modifier_param)),
+                NamedKey::F6 => Some(csi_tilde(17, modifier_param)),
+                NamedKey::F7 => Some(csi_tilde(18, modifier_param)),
+                NamedKey::F8 => Some(csi_tilde(19, modifier_param)),
+                NamedKey::F9 => Some(csi_tilde(20, modifier_param)),
+                NamedKey::F10 => Some(csi_tilde(21, modifier_param)),
+                NamedKey::F11 => Some(csi_tilde(23, modifier_param)),
+                NamedKey::F12 => Some(csi_tilde(24, modifier_param)),
                 _ => None,
             }
         }
