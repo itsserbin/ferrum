@@ -4,8 +4,6 @@ use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use std::io::{Read, Write};
 use std::sync::OnceLock;
 
-#[cfg(windows)]
-use std::path::{Path, PathBuf};
 use std::path::{Path, PathBuf};
 
 // Embed script files at compile time
