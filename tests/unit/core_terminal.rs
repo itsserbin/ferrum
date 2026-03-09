@@ -602,6 +602,41 @@ fn osc52_invalid_base64_is_ignored() {
     assert!(term.pending_clipboard_write.is_none());
 }
 
+// ── OSC 8 hyperlinks ──
+
+#[test]
+fn osc8_sets_hyperlink_on_subsequent_cells() {
+    let mut term = Terminal::new(24, 80);
+    // Start hyperlink, write "hi", end hyperlink
+    term.process(b"\x1b]8;;https://example.com\x07hi\x1b]8;;\x07");
+    let row = term.screen.viewport_row(0);
+    assert!(row.cells[0].hyperlink_id != 0, "first cell should have hyperlink");
+    assert!(row.cells[1].hyperlink_id != 0, "second cell should have hyperlink");
+    assert_eq!(row.cells[2].hyperlink_id, 0, "cell after end should have no hyperlink");
+    assert_eq!(
+        term.hyperlink_url(row.cells[0].hyperlink_id),
+        Some("https://example.com")
+    );
+}
+
+#[test]
+fn osc8_empty_uri_ends_hyperlink() {
+    let mut term = Terminal::new(24, 80);
+    term.process(b"\x1b]8;;https://x.com\x07a\x1b]8;;\x07b");
+    let row = term.screen.viewport_row(0);
+    assert!(row.cells[0].hyperlink_id != 0);
+    assert_eq!(row.cells[1].hyperlink_id, 0);
+}
+
+#[test]
+fn osc8_same_url_reuses_id() {
+    let mut term = Terminal::new(24, 80);
+    term.process(b"\x1b]8;;https://a.com\x07x\x1b]8;;\x07");
+    term.process(b"\x1b]8;;https://a.com\x07y\x1b]8;;\x07");
+    let row = term.screen.viewport_row(0);
+    assert_eq!(row.cells[0].hyperlink_id, row.cells[1].hyperlink_id, "same URL should reuse same ID");
+}
+
 // ── modifyOtherKeys ──
 
 #[test]

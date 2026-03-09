@@ -108,7 +108,7 @@ impl FerrumWindow {
 }
 
 /// Opens a URL in the system default browser.
-fn open_url(url: &str) {
+pub(super) fn open_url(url: &str) {
     #[cfg(target_os = "macos")]
     std::process::Command::new("open").arg(url).spawn().ok();
     #[cfg(target_os = "windows")]

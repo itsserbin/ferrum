@@ -101,6 +101,12 @@ pub struct Terminal {
     pub title: Option<String>,
     /// Decoded clipboard text queued by OSC 52 for the GUI to write to the system clipboard.
     pub pending_clipboard_write: Option<String>,
+
+    // ── OSC 8 hyperlinks ─────────────────────────────────────────────────────
+    /// URL table: index 0 corresponds to hyperlink_id 1.
+    hyperlink_urls: Vec<String>,
+    /// Currently active hyperlink id (0 = none).
+    current_hyperlink_id: u16,
 }
 
 impl Terminal {
@@ -159,6 +165,8 @@ impl Terminal {
             cwd: None,
             title: None,
             pending_clipboard_write: None,
+            hyperlink_urls: Vec::new(),
+            current_hyperlink_id: 0,
         }
     }
 
@@ -223,6 +231,14 @@ impl Terminal {
     /// Drains a pending clipboard write queued by OSC 52.
     pub fn drain_clipboard_write(&mut self) -> Option<String> {
         self.pending_clipboard_write.take()
+    }
+
+    /// Returns the URL associated with the given hyperlink id, or `None` if the id is 0 or out of range.
+    pub fn hyperlink_url(&self, id: u16) -> Option<&str> {
+        if id == 0 {
+            return None;
+        }
+        self.hyperlink_urls.get((id - 1) as usize).map(String::as_str)
     }
 
     /// Registers a tracked selection-start pin at the given absolute row/col.
@@ -483,6 +499,8 @@ impl Terminal {
             self.clear_mouse_tracking(true);
         }
         self.cwd = None;
+        self.hyperlink_urls.clear();
+        self.current_hyperlink_id = 0;
         self.reset_attributes();
         self.parser = Parser::new();
         self.reset_screen_buffer();
@@ -559,6 +577,7 @@ impl Perform for Terminal {
         gc.reverse = self.current_reverse;
         gc.underline_style = self.current_underline_style;
         gc.strikethrough = self.current_strikethrough;
+        gc.hyperlink_id = self.current_hyperlink_id;
         self.screen.viewport_set(cr, cc, gc);
 
         // Reserve the trailing cell for wide glyphs.
@@ -638,6 +657,23 @@ impl Perform for Terminal {
                     && let Ok(text) = String::from_utf8(bytes)
                 {
                     self.pending_clipboard_write = Some(text);
+                }
+            }
+            // OSC 8: hyperlinks — OSC 8 ; params ; uri ST
+            b"8" => {
+                let uri = params.get(2).copied().unwrap_or(b"");
+                if uri.is_empty() {
+                    self.current_hyperlink_id = 0;
+                } else {
+                    let url = String::from_utf8_lossy(uri).into_owned();
+                    // Reuse existing entry to avoid unbounded URL table growth.
+                    let id = if let Some(pos) = self.hyperlink_urls.iter().position(|u| u == &url) {
+                        (pos + 1) as u16
+                    } else {
+                        self.hyperlink_urls.push(url);
+                        self.hyperlink_urls.len() as u16
+                    };
+                    self.current_hyperlink_id = id;
                 }
             }
             _ => {}

@@ -66,6 +66,8 @@ pub struct GraphemeCell {
     pub reverse: bool,
     pub underline_style: UnderlineStyle,
     pub strikethrough: bool,
+    /// Index into the terminal's hyperlink URL table (0 = no link; n ≥ 1 = URL at index n-1).
+    pub hyperlink_id: u16,
 }
 
 impl GraphemeCell {
@@ -128,6 +130,7 @@ impl Default for GraphemeCell {
             reverse: false,
             underline_style: UnderlineStyle::None,
             strikethrough: false,
+            hyperlink_id: 0,
         }
     }
 }
