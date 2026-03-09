@@ -28,7 +28,7 @@ mod window_buttons;
 use wgpu;
 
 use crate::config::ThemePalette;
-use crate::gui::renderer::rasterizer::GlyphRasterizer;
+use super::rasterizer::GlyphRasterizer;
 use super::metrics::FontMetrics;
 
 use atlas::GlyphAtlas;
@@ -89,7 +89,7 @@ pub struct GpuRenderer {
     // Rasterizer & metrics
     pub(super) rasterizer: GlyphRasterizer,
     metrics: FontMetrics,
-    pub(in crate::gui::renderer) palette: ThemePalette,
+    pub(super) palette: ThemePalette,
 
     // UI command accumulator (filled during draw_* calls, flushed in present).
     commands: Vec<GpuDrawCommand>,

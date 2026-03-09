@@ -138,7 +138,7 @@ impl PaneLeaf {
             self.session
                 .as_ref()
                 .and_then(|s| s.process_id())
-                .and_then(crate::pty::cwd::get_process_cwd)
+                .and_then(pty::cwd::get_process_cwd)
         })
     }
 

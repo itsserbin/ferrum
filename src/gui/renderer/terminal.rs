@@ -62,7 +62,7 @@ impl CpuRenderer {
         for row in 0..rows {
             let abs_row = viewport_start + row;
             for col in 0..cols {
-                let cell = super::display_cell(screen, scroll_offset, row, col);
+                let cell = display_cell(screen, scroll_offset, row, col);
                 // Spacer cells (right half of wide char) — skip rendering the glyph,
                 // but still draw the background.
                 let is_spacer = cell.width == 0;
@@ -92,7 +92,7 @@ impl CpuRenderer {
                 }
 
                 if selected {
-                    bg = Color::from_pixel(super::blend_rgb(
+                    bg = Color::from_pixel(blend_rgb(
                         bg.to_pixel(),
                         self.palette.selection_overlay_color.to_pixel(),
                         self.palette.selection_overlay_alpha,
@@ -152,7 +152,7 @@ impl CpuRenderer {
         for row in 0..rows {
             let abs_row = viewport_start + row;
             for col in 0..cols {
-                let cell = super::display_cell(screen, scroll_offset, row, col);
+                let cell = display_cell(screen, scroll_offset, row, col);
                 let is_spacer = cell.width == 0;
                 let x = col as u32 * self.metrics.cell_width + rect.x;
                 let y = row as u32 * self.metrics.cell_height + rect.y;
@@ -190,7 +190,7 @@ impl CpuRenderer {
                 }
 
                 if selected {
-                    bg = Color::from_pixel(super::blend_rgb(
+                    bg = Color::from_pixel(blend_rgb(
                         bg.to_pixel(),
                         self.palette.selection_overlay_color.to_pixel(),
                         self.palette.selection_overlay_alpha,

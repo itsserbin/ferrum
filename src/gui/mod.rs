@@ -103,7 +103,7 @@ impl FerrumWindow {
             divider_drag: None,
             last_cwd_poll: std::time::Instant::now(),
             cursor_blink_interval_ms: config.terminal.cursor_blink_interval_ms,
-            settings_tx: std::sync::mpsc::channel().0,
+            settings_tx: mpsc::channel().0,
             event_proxy: proxy.clone(),
             pending_update_tag: None,
             update_banner_dismissed: false,
@@ -173,7 +173,7 @@ impl FerrumWindow {
             .find_map(|(id, rect)| (id == pane_id).then_some(rect.inset(pane_pad)))
     }
 
-    fn compose_window_title(&self, update: Option<&crate::update::AvailableRelease>) -> String {
+    fn compose_window_title(&self, update: Option<&update::AvailableRelease>) -> String {
         let base = self
             .active_tab_ref()
             .map(|tab| {
@@ -196,7 +196,7 @@ impl FerrumWindow {
         }
     }
 
-    pub(super) fn sync_window_title(&mut self, update: Option<&crate::update::AvailableRelease>) {
+    pub(super) fn sync_window_title(&mut self, update: Option<&update::AvailableRelease>) {
         let next_title = self.compose_window_title(update);
         if self.window_title != next_title {
             self.window.set_title(&next_title);
@@ -224,7 +224,7 @@ impl FerrumWindow {
                 Some(p) => p,
                 None => continue,
             };
-            if let Some(cwd) = crate::pty::cwd::get_process_cwd(pid) {
+            if let Some(cwd) = pty::cwd::get_process_cwd(pid) {
                 leaf.terminal.cwd = Some(cwd);
             }
         }
@@ -262,7 +262,7 @@ impl App {
             update::spawn_update_checker(update_tx);
         }
         crate::i18n::set_locale(config.language);
-        let (settings_tx, settings_rx) = std::sync::mpsc::channel();
+        let (settings_tx, settings_rx) = mpsc::channel();
         App {
             windows: std::collections::HashMap::new(),
             context: None,

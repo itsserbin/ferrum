@@ -1,6 +1,7 @@
 use std::time::Instant;
 
-use crate::core::{
+use crate::config::ThemeChoice;
+use super::{
     Color, GraphemeCell, PageCoord, PageList, SecurityConfig,
     SecurityEventKind, TrackedPin, UnderlineStyle,
 };
@@ -99,7 +100,7 @@ pub struct Terminal {
 
 impl Terminal {
     pub fn new(rows: usize, cols: usize) -> Self {
-        let palette = crate::config::ThemeChoice::FerrumDark.resolve();
+        let palette = ThemeChoice::FerrumDark.resolve();
         Self::with_config(rows, cols, 1000, Color::SENTINEL_FG, Color::SENTINEL_BG, palette.ansi)
     }
 

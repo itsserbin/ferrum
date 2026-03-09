@@ -1,7 +1,7 @@
 use std::time::Instant;
 
-use crate::gui::pane::{DIVIDER_HIT_ZONE, DIVIDER_WIDTH, SplitDirection};
-use crate::gui::renderer::TabBarHit;
+use pane::{DIVIDER_HIT_ZONE, DIVIDER_WIDTH, SplitDirection};
+use renderer::TabBarHit;
 use crate::gui::*;
 
 /// Resize edge thickness in logical pixels.

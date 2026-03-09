@@ -1,5 +1,11 @@
-use crate::gui::tabs::create::NewTabParams;
-use crate::gui::*;
+use tabs::create::NewTabParams;
+use super::*;
+
+#[cfg(target_os = "macos")]
+use crate::update::{spawn_manual_check, ManualCheckResult};
+#[cfg(target_os = "macos")]
+use crate::update_installer::spawn_installer;
+use crate::i18n::set_locale;
 
 mod pty_events;
 mod window_requests;
@@ -239,15 +245,15 @@ impl ApplicationHandler for App {
             }
             if platform::macos::settings_window::take_check_for_updates_requested() {
                 // User clicked "Check for Updates" — spawn manual check thread.
-                let (tx, rx) = std::sync::mpsc::channel();
-                crate::update::spawn_manual_check(tx);
+                let (tx, rx) = mpsc::channel();
+                spawn_manual_check(tx);
                 self.manual_check_rx = Some(rx);
                 platform::macos::settings_window::set_manual_check_status_checking();
             }
             if platform::macos::settings_window::take_install_update_requested() {
                 // User clicked "Install" — launch installer for the found tag.
                 if let Some(tag) = platform::macos::settings_window::manual_check_found_tag() {
-                    crate::update_installer::spawn_installer(&tag);
+                    spawn_installer(&tag);
                 }
             }
             if platform::macos::settings_window::check_window_closed() {
@@ -264,7 +270,7 @@ impl ApplicationHandler for App {
         {
             platform::macos::settings_window::set_manual_check_result(&result);
             // Also update the global available_release if a new version was found.
-            if let crate::update::ManualCheckResult::Found(release) = result {
+            if let ManualCheckResult::Found(release) = result {
                 self.available_release = Some(release);
                 self.broadcast_available_release();
             }
@@ -286,7 +292,7 @@ impl ApplicationHandler for App {
         // Apply config changes from native settings window.
         while let Ok(new_config) = self.settings_rx.try_recv() {
             let language_changed = new_config.language != self.config.language;
-            crate::i18n::set_locale(new_config.language);
+            set_locale(new_config.language);
             for win in self.windows.values_mut() {
                 win.apply_config_change(&new_config);
                 win.window.request_redraw();

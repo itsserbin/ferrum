@@ -19,7 +19,7 @@ impl FerrumWindow {
         if leaf
             .terminal
             .resize_at
-            .is_some_and(|t| t.elapsed().as_secs() < crate::core::terminal::Terminal::RESIZE_CURSOR_JUMP_GRACE_SECS)
+            .is_some_and(|t| t.elapsed().as_secs() < Terminal::RESIZE_CURSOR_JUMP_GRACE_SECS)
         {
             return;
         }

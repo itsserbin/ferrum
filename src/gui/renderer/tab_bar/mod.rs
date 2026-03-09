@@ -110,7 +110,7 @@ impl CpuRenderer {
                 let idx = py * target.width + px;
                 if idx < target.buffer.len() {
                     target.buffer[idx] =
-                        crate::gui::renderer::blend_rgb(target.buffer[idx], self.palette.tab_border.to_pixel(), 180);
+                        super::blend_rgb(target.buffer[idx], self.palette.tab_border.to_pixel(), 180);
                 }
             }
         }
@@ -158,7 +158,7 @@ fn fill_tab_rect(
             if px < buf_width {
                 let idx = py * buf_width + px;
                 if idx < target.buffer.len() {
-                    target.buffer[idx] = crate::gui::renderer::blend_rgb(target.buffer[idx], color, alpha);
+                    target.buffer[idx] = super::blend_rgb(target.buffer[idx], color, alpha);
                 }
             }
         }

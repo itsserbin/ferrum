@@ -5,15 +5,15 @@
 
 use std::time::Instant;
 
-use crate::core::terminal::CursorStyle;
-use crate::gui::pane::{DIVIDER_WIDTH, PaneLeaf, PaneNode, PaneRect, SplitDirection, split_rect};
-use crate::gui::renderer::traits::Renderer;
-use crate::gui::renderer::{RenderTarget, ScrollbarState};
-use crate::gui::renderer::shared::banner_layout::UpdateBannerLayout;
-use crate::gui::*;
+use crate::core::CursorStyle;
+use pane::{DIVIDER_WIDTH, PaneLeaf, PaneNode, PaneRect, SplitDirection, split_rect};
+use renderer::traits::Renderer;
+use renderer::{RenderTarget, ScrollbarState};
+use renderer::shared::banner_layout::UpdateBannerLayout;
+use super::super::*;
 
 #[cfg(not(target_os = "macos"))]
-use crate::gui::renderer::TabInfo;
+use renderer::TabInfo;
 
 /// Opacity of the inactive-pane dim overlay.
 const INACTIVE_PANE_DIM_ALPHA: f32 = 0.18;
@@ -23,7 +23,7 @@ const INACTIVE_PANE_DIM_ALPHA: f32 = 0.18;
 /// Built once per frame via `FerrumWindow::build_tab_bar_state`, then passed
 /// by value to the renderer-specific drawing code.
 #[cfg(not(target_os = "macos"))]
-pub(in crate::gui) struct TabBarFrameState {
+pub(in super::super) struct TabBarFrameState {
     pub tab_infos: Vec<TabBarFrameTabInfo>,
     pub tab_tooltip: Option<String>,
     pub drag_info: Option<(usize, f64, f32)>,
@@ -34,7 +34,7 @@ pub(in crate::gui) struct TabBarFrameState {
 
 /// Owned tab metadata captured for a single rendered frame.
 #[cfg(not(target_os = "macos"))]
-pub(in crate::gui) struct TabBarFrameTabInfo {
+pub(in super::super) struct TabBarFrameTabInfo {
     pub title: String,
     pub index: usize,
     pub is_active: bool,
@@ -73,7 +73,7 @@ impl TabBarFrameTabInfo {
 #[cfg(not(target_os = "macos"))]
 impl TabBarFrameState {
     /// Converts owned frame tab metadata into renderer-facing borrowed `TabInfo` views.
-    pub(in crate::gui::events) fn render_tab_infos(&self) -> Vec<TabInfo<'_>> {
+    pub(in super) fn render_tab_infos(&self) -> Vec<TabInfo<'_>> {
         self.tab_infos
             .iter()
             .map(TabBarFrameTabInfo::as_tab_info)
@@ -86,8 +86,8 @@ impl TabBarFrameState {
 /// Constructed inline in each render path *after* pattern-matching
 /// `self.backend`, enabling split borrows between the renderer and the
 /// remaining `FerrumWindow` fields.
-pub(in crate::gui::events) struct FrameParams<'a> {
-    pub tab: Option<&'a state::TabState>,
+pub(in super) struct FrameParams<'a> {
+    pub tab: Option<&'a TabState>,
     pub cursor_blink_start: Instant,
     pub cursor_blink_interval_ms: u64,
     /// When `true`, the terminal text cursor is not drawn.
@@ -110,8 +110,8 @@ pub(in crate::gui::events) struct FrameParams<'a> {
 /// Using a struct keeps [`build_frame_params`] within the clippy argument-count limit
 /// while still avoiding a whole-`self` borrow (which would conflict with the
 /// simultaneous mutable borrow of `self.backend`).
-pub(in crate::gui::events) struct FrameParamsInput<'a> {
-    pub tabs: &'a [state::TabState],
+pub(in super) struct FrameParamsInput<'a> {
+    pub tabs: &'a [TabState],
     pub active_tab: usize,
     pub cursor_blink_start: Instant,
     pub cursor_blink_interval_ms: u64,
@@ -123,7 +123,7 @@ pub(in crate::gui::events) struct FrameParamsInput<'a> {
     #[cfg(not(target_os = "macos"))]
     pub pinned: bool,
     pub update_banner_dismissed: bool,
-    pub update_install_state: &'a state::UpdateInstallState,
+    pub update_install_state: &'a UpdateInstallState,
     pub pending_update_tag: Option<&'a str>,
 }
 
@@ -151,7 +151,7 @@ macro_rules! make_frame_params_input {
         }
     };
 }
-pub(in crate::gui::events) use make_frame_params_input;
+pub(in super) use make_frame_params_input;
 
 /// Builds the read-only [`FrameParams`] snapshot used by both CPU and GPU render paths.
 ///
@@ -161,7 +161,7 @@ pub(in crate::gui::events) use make_frame_params_input;
 ///
 /// `tab_layout_metrics` and `tab_bar_h` must be read from `self.backend` before the caller
 /// pattern-matches the backend variant mutably.
-pub(in crate::gui::events) fn build_frame_params<'a>(
+pub(in super) fn build_frame_params<'a>(
     input: FrameParamsInput<'a>,
     tab_layout_metrics: &renderer::shared::tab_math::TabLayoutMetrics,
     tab_bar_h: u32,
@@ -197,7 +197,7 @@ impl FerrumWindow {
     /// On macOS this is a no-op (native tab bar), so the return type is
     /// behind `#[cfg(not(target_os = "macos"))]`.
     #[cfg(not(target_os = "macos"))]
-    pub(in crate::gui::events) fn build_tab_bar_state(&mut self, bw: usize) -> TabBarFrameState {
+    pub(in super) fn build_tab_bar_state(&mut self, bw: usize) -> TabBarFrameState {
         let renaming = self.renaming_tab.as_ref().map(|rename| {
             let selection = rename.selection_anchor.and_then(|anchor| {
                 if anchor == rename.cursor {
@@ -327,9 +327,9 @@ impl FerrumWindow {
 /// * `tab_layout_metrics` — pre-computed renderer metrics.
 /// * `tab_bar_h` — tab bar height in physical pixels.
 /// * `bw`, `bh` — frame buffer width/height in physical pixels.
-pub(in crate::gui::events) fn compute_banner(
+pub(in super) fn compute_banner(
     dismissed: bool,
-    install_state: &state::UpdateInstallState,
+    install_state: &UpdateInstallState,
     pending_tag: Option<&str>,
     tab_layout_metrics: &renderer::shared::tab_math::TabLayoutMetrics,
     tab_bar_h: u32,
@@ -358,7 +358,7 @@ pub(in crate::gui::events) fn compute_banner(
 /// For tabs with multiple panes, iterates the pane tree and renders each leaf
 /// into its assigned sub-rectangle, with dividers between panes and a dim
 /// overlay on inactive panes.
-pub(in crate::gui::events) fn draw_frame_content(
+pub(in super) fn draw_frame_content(
     renderer: &mut dyn Renderer,
     buffer: &mut [u32],
     bw: usize,
@@ -599,7 +599,7 @@ fn draw_dividers_with_renderer(
 ///
 /// Returns 0.0 when the scrollbar should be invisible, 1.0 when fully visible,
 /// and a smooth fade-out between 1.5s and 1.8s of inactivity.
-pub(in crate::gui::events) fn scrollbar_opacity(
+pub(in super) fn scrollbar_opacity(
     hover: bool,
     dragging: bool,
     last_activity: Instant,
@@ -620,7 +620,7 @@ pub(in crate::gui::events) fn scrollbar_opacity(
 
 /// Determines whether the cursor should be visible this frame, accounting
 /// for blinking.
-pub(in crate::gui::events) fn should_show_cursor(
+pub(in super) fn should_show_cursor(
     blink_start: Instant,
     style: CursorStyle,
     interval_ms: u64,

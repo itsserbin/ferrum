@@ -4,7 +4,9 @@ use std::time::Instant;
 #[cfg(not(target_os = "linux"))]
 use muda::MenuId;
 
-use crate::gui::*;
+use crate::config::AppConfig;
+use crate::core::PageCoord;
+use super::*;
 
 /// PTY event tagged with the source tab id and pane id.
 pub(super) enum PtyEvent {
@@ -195,7 +197,7 @@ pub(super) struct FerrumWindow {
     /// When set, SIGWINCH is sent to all panes once this instant is reached.
     /// Reset on every resize event so SIGWINCH fires only after the drag settles.
     pub(super) sigwinch_deadline: Option<Instant>,
-    pub(super) backend: renderer::RendererBackend,
+    pub(super) backend: RendererBackend,
     pub(super) tabs: Vec<TabState>,
     pub(super) active_tab: usize,
     pub(super) modifiers: ModifiersState,
@@ -205,8 +207,8 @@ pub(super) struct FerrumWindow {
     pub(super) last_click_time: Instant,
     pub(super) last_click_pos: Position,
     pub(super) click_streak: u8,
-    pub(super) selection_anchor: Option<crate::core::PageCoord>,
-    pub(super) keyboard_selection_anchor: Option<crate::core::PageCoord>,
+    pub(super) selection_anchor: Option<PageCoord>,
+    pub(super) keyboard_selection_anchor: Option<PageCoord>,
     pub(super) selection_drag_mode: SelectionDragMode,
     pub(super) hovered_tab: Option<usize>,
     #[cfg(not(target_os = "linux"))]
@@ -245,7 +247,7 @@ pub(super) struct FerrumWindow {
     /// Cursor blink interval from config.
     pub(super) cursor_blink_interval_ms: u64,
     /// Sender for native settings window config updates.
-    pub(super) settings_tx: mpsc::Sender<crate::config::AppConfig>,
+    pub(super) settings_tx: mpsc::Sender<AppConfig>,
     /// Proxy to wake the event loop from PTY reader threads.
     pub(super) event_proxy: winit::event_loop::EventLoopProxy<()>,
     /// Tag name of the latest available update, or `None` when up to date.
@@ -267,9 +269,9 @@ pub(super) struct App {
     pub(super) proxy: winit::event_loop::EventLoopProxy<()>,
     pub(super) update_rx: mpsc::Receiver<update::AvailableRelease>,
     pub(super) available_release: Option<update::AvailableRelease>,
-    pub(super) config: crate::config::AppConfig,
-    pub(super) settings_tx: mpsc::Sender<crate::config::AppConfig>,
-    pub(super) settings_rx: mpsc::Receiver<crate::config::AppConfig>,
+    pub(super) config: AppConfig,
+    pub(super) settings_tx: mpsc::Sender<AppConfig>,
+    pub(super) settings_rx: mpsc::Receiver<AppConfig>,
     /// Receives the result of a manual "Check for Updates" triggered from Settings.
     pub(super) manual_check_rx: Option<mpsc::Receiver<update::ManualCheckResult>>,
 }

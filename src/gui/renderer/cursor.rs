@@ -1,7 +1,7 @@
 use super::*;
 use super::RenderTarget;
 use crate::core::PageList;
-use crate::gui::pane::PaneRect;
+use super::super::pane::PaneRect;
 
 /// A pixel-space rectangle used as a fill target or clip boundary inside the cursor renderer.
 struct PixelRect {
@@ -12,7 +12,7 @@ struct PixelRect {
 }
 
 /// Returns the character at `(row, col)` in the viewport, or `None` when out of bounds.
-fn block_char_at(screen: &crate::core::PageList, row: usize, col: usize) -> Option<char> {
+fn block_char_at(screen: &PageList, row: usize, col: usize) -> Option<char> {
     if row < screen.viewport_rows() && col < screen.cols() {
         Some(screen.viewport_get(row, col).first_char())
     } else {
