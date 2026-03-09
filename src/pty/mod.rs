@@ -94,7 +94,7 @@ static SHELL_INTEGRATION_DIR: OnceLock<Option<PathBuf>> = OnceLock::new();
 /// Write shell integration scripts to a temp directory so they can be
 /// sourced by the spawned shell.  Returns the root temp dir on success.
 /// Files are written only once per process via [`OnceLock`].
-fn get_shell_integration_dir() -> Option<&'static PathBuf> {
+fn shell_integration_dir() -> Option<&'static PathBuf> {
     SHELL_INTEGRATION_DIR
         .get_or_init(setup_shell_integration)
         .as_ref()
@@ -191,7 +191,7 @@ impl Session {
         // Shell integration: set marker env and configure per-shell sourcing.
         cmd.env("FERRUM_SHELL_INTEGRATION", "1");
 
-        if let Some(integration_dir) = get_shell_integration_dir() {
+        if let Some(integration_dir) = shell_integration_dir() {
             let shell_name = Path::new(shell)
                 .file_name()
                 .and_then(|n| n.to_str())
