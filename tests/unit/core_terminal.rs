@@ -658,3 +658,37 @@ fn modify_other_keys_reset_by_csi_without_param() {
     term.process(b"\x1b[>4m");
     assert_eq!(term.modify_other_keys, 0);
 }
+
+#[test]
+fn modify_other_keys_clamps_level_above_2() {
+    let mut term = Terminal::new(24, 80);
+    term.process(b"\x1b[>4;9m");
+    assert_eq!(term.modify_other_keys, 2, "level above 2 should be clamped to 2");
+}
+
+// ── full_reset clears OSC 8 and modifyOtherKeys state ──
+
+#[test]
+fn full_reset_clears_hyperlink_state() {
+    let mut term = Terminal::new(24, 80);
+    term.process(b"\x1b]8;;https://example.com\x07hi\x1b]8;;\x07");
+    let id = term.screen.viewport_row(0).cells[0].hyperlink_id;
+    assert!(id != 0, "hyperlink should be set before reset");
+
+    term.full_reset();
+
+    assert_eq!(term.hyperlink_url(id), None, "URL table should be cleared after full_reset");
+    let row = term.screen.viewport_row(0);
+    assert_eq!(row.cells[0].hyperlink_id, 0, "cells should have no hyperlink after full_reset");
+}
+
+#[test]
+fn full_reset_clears_modify_other_keys() {
+    let mut term = Terminal::new(24, 80);
+    term.process(b"\x1b[>4;2m");
+    assert_eq!(term.modify_other_keys, 2);
+
+    term.full_reset();
+
+    assert_eq!(term.modify_other_keys, 0, "modifyOtherKeys should be 0 after full_reset");
+}

@@ -678,6 +678,7 @@ impl Perform for Terminal {
                     } else {
                         if self.hyperlink_urls.len() >= 4096 {
                             // Table full — treat as no hyperlink rather than growing unboundedly.
+                            eprintln!("[ferrum] OSC 8: hyperlink URL table full (4096 entries); ignoring new URL");
                             self.current_hyperlink_id = 0;
                             return;
                         }
@@ -712,7 +713,7 @@ impl Perform for Terminal {
                         .nth(1)
                         .and_then(|p| p.first().copied())
                         .unwrap_or(0)
-                        .min(255) as u8;
+                        .min(2) as u8;
                     self.modify_other_keys = level;
                 }
                 return;
