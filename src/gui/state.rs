@@ -4,7 +4,9 @@ use std::time::Instant;
 #[cfg(not(target_os = "linux"))]
 use muda::MenuId;
 
-use crate::gui::*;
+use crate::config::AppConfig;
+use crate::core::PageCoord;
+use super::*;
 
 /// PTY event tagged with the source tab id and pane id.
 pub(super) enum PtyEvent {
@@ -53,9 +55,9 @@ impl ScrollbarState {
 pub(super) struct TabState {
     pub(super) id: u64,
     pub(super) title: String,
-    pub(super) pane_tree: crate::gui::pane::PaneNode,
-    pub(super) focused_pane: crate::gui::pane::PaneId,
-    pub(super) next_pane_id: crate::gui::pane::PaneId,
+    pub(super) pane_tree: pane::PaneNode,
+    pub(super) focused_pane: pane::PaneId,
+    pub(super) next_pane_id: pane::PaneId,
     /// `true` when the user has explicitly renamed this tab.
     /// When `false`, the title auto-updates from the focused pane's CWD.
     pub(super) is_renamed: bool,
@@ -63,12 +65,12 @@ pub(super) struct TabState {
 
 impl TabState {
     /// Returns the focused pane leaf (immutable).
-    pub(super) fn focused_leaf(&self) -> Option<&crate::gui::pane::PaneLeaf> {
+    pub(super) fn focused_leaf(&self) -> Option<&pane::PaneLeaf> {
         self.pane_tree.find_leaf(self.focused_pane)
     }
 
     /// Returns the focused pane leaf (mutable).
-    pub(super) fn focused_leaf_mut(&mut self) -> Option<&mut crate::gui::pane::PaneLeaf> {
+    pub(super) fn focused_leaf_mut(&mut self) -> Option<&mut pane::PaneLeaf> {
         self.pane_tree.find_leaf_mut(self.focused_pane)
     }
 
@@ -84,10 +86,10 @@ impl TabState {
     /// 2) Otherwise, the most recently created remaining pane.
     pub(super) fn focus_after_closing_pane(
         &self,
-        closing_id: crate::gui::pane::PaneId,
-    ) -> Option<crate::gui::pane::PaneId> {
-        let mut previous_created: Option<crate::gui::pane::PaneId> = None;
-        let mut newest_remaining: Option<crate::gui::pane::PaneId> = None;
+        closing_id: pane::PaneId,
+    ) -> Option<pane::PaneId> {
+        let mut previous_created: Option<pane::PaneId> = None;
+        let mut newest_remaining: Option<pane::PaneId> = None;
 
         for pane_id in self.pane_tree.leaf_ids() {
             newest_remaining = Some(newest_remaining.map_or(pane_id, |v| v.max(pane_id)));
@@ -105,7 +107,7 @@ pub(super) struct DividerDragState {
     /// Last pointer position used to identify the dragged divider.
     pub(super) initial_mouse_pos: (u32, u32),
     /// Direction of the divider being dragged.
-    pub(super) direction: crate::gui::pane::SplitDirection,
+    pub(super) direction: pane::SplitDirection,
 }
 
 /// Drag-and-drop state for tab reordering.
@@ -179,11 +181,11 @@ pub(super) enum WindowRequest {
 pub(super) enum MenuContext {
     Tab {
         tab_index: usize,
-        action_map: Vec<(MenuId, crate::gui::menus::MenuAction)>,
+        action_map: Vec<(MenuId, menus::MenuAction)>,
     },
     Terminal {
-        pane_id: Option<crate::gui::pane::PaneId>,
-        action_map: Vec<(MenuId, crate::gui::menus::MenuAction)>,
+        pane_id: Option<pane::PaneId>,
+        action_map: Vec<(MenuId, menus::MenuAction)>,
     },
 }
 
@@ -194,19 +196,19 @@ pub(super) struct FerrumWindow {
     pub(super) pending_grid_resize: bool,
     /// When set, SIGWINCH is sent to all panes once this instant is reached.
     /// Reset on every resize event so SIGWINCH fires only after the drag settles.
-    pub(super) sigwinch_deadline: Option<std::time::Instant>,
-    pub(super) backend: renderer::RendererBackend,
+    pub(super) sigwinch_deadline: Option<Instant>,
+    pub(super) backend: RendererBackend,
     pub(super) tabs: Vec<TabState>,
     pub(super) active_tab: usize,
     pub(super) modifiers: ModifiersState,
     pub(super) is_selecting: bool,
     pub(super) mouse_pos: (f64, f64),
     pub(super) clipboard: Option<arboard::Clipboard>,
-    pub(super) last_click_time: std::time::Instant,
+    pub(super) last_click_time: Instant,
     pub(super) last_click_pos: Position,
     pub(super) click_streak: u8,
-    pub(super) selection_anchor: Option<crate::core::PageCoord>,
-    pub(super) keyboard_selection_anchor: Option<crate::core::PageCoord>,
+    pub(super) selection_anchor: Option<PageCoord>,
+    pub(super) keyboard_selection_anchor: Option<PageCoord>,
     pub(super) selection_drag_mode: SelectionDragMode,
     pub(super) hovered_tab: Option<usize>,
     #[cfg(not(target_os = "linux"))]
@@ -216,22 +218,22 @@ pub(super) struct FerrumWindow {
     #[cfg(not(target_os = "macos"))]
     pub(super) close_hover_progress: Vec<f32>,
     #[cfg(not(target_os = "macos"))]
-    pub(super) ui_animation_last_tick: std::time::Instant,
+    pub(super) ui_animation_last_tick: Instant,
     pub(super) closed_tabs: Vec<ClosedTabInfo>,
     pub(super) renaming_tab: Option<RenameState>,
     #[cfg(not(target_os = "macos"))]
     pub(super) dragging_tab: Option<DragState>,
     #[cfg(not(target_os = "macos"))]
     pub(super) tab_reorder_animation: Option<TabReorderAnimation>,
-    pub(super) last_tab_click: Option<(usize, std::time::Instant)>,
-    pub(super) last_topbar_empty_click: Option<std::time::Instant>,
+    pub(super) last_tab_click: Option<(usize, Instant)>,
+    pub(super) last_topbar_empty_click: Option<Instant>,
     pub(super) resize_direction: Option<ResizeDirection>,
-    pub(super) cursor_blink_start: std::time::Instant,
+    pub(super) cursor_blink_start: Instant,
     pub(super) suppress_click_to_cursor_once: bool,
     #[cfg(target_os = "macos")]
     pub(super) pending_native_tab_syncs: u8,
     #[cfg(target_os = "macos")]
-    pub(super) next_native_tab_sync_at: Option<std::time::Instant>,
+    pub(super) next_native_tab_sync_at: Option<Instant>,
     /// Accumulates fractional pixel scroll for trackpad (PixelDelta).
     pub(super) scroll_accumulator: f64,
     /// Pending requests from this window to the App (detach, close, etc.).
@@ -241,11 +243,11 @@ pub(super) struct FerrumWindow {
     /// Active divider drag state (pane resize).
     pub(super) divider_drag: Option<DividerDragState>,
     /// Last time CWD was polled via OS API for tabs without OSC 7.
-    pub(super) last_cwd_poll: std::time::Instant,
+    pub(super) last_cwd_poll: Instant,
     /// Cursor blink interval from config.
     pub(super) cursor_blink_interval_ms: u64,
     /// Sender for native settings window config updates.
-    pub(super) settings_tx: std::sync::mpsc::Sender<crate::config::AppConfig>,
+    pub(super) settings_tx: mpsc::Sender<AppConfig>,
     /// Proxy to wake the event loop from PTY reader threads.
     pub(super) event_proxy: winit::event_loop::EventLoopProxy<()>,
     /// Tag name of the latest available update, or `None` when up to date.
@@ -265,11 +267,11 @@ pub(super) struct App {
     pub(super) rx: mpsc::Receiver<PtyEvent>,
     /// Proxy used by PTY reader threads to wake the event loop.
     pub(super) proxy: winit::event_loop::EventLoopProxy<()>,
-    pub(super) update_rx: mpsc::Receiver<crate::update::AvailableRelease>,
-    pub(super) available_release: Option<crate::update::AvailableRelease>,
-    pub(super) config: crate::config::AppConfig,
-    pub(super) settings_tx: std::sync::mpsc::Sender<crate::config::AppConfig>,
-    pub(super) settings_rx: std::sync::mpsc::Receiver<crate::config::AppConfig>,
+    pub(super) update_rx: mpsc::Receiver<update::AvailableRelease>,
+    pub(super) available_release: Option<update::AvailableRelease>,
+    pub(super) config: AppConfig,
+    pub(super) settings_tx: mpsc::Sender<AppConfig>,
+    pub(super) settings_rx: mpsc::Receiver<AppConfig>,
     /// Receives the result of a manual "Check for Updates" triggered from Settings.
-    pub(super) manual_check_rx: Option<mpsc::Receiver<crate::update::ManualCheckResult>>,
+    pub(super) manual_check_rx: Option<mpsc::Receiver<update::ManualCheckResult>>,
 }

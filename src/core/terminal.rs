@@ -1,4 +1,7 @@
-use crate::core::{
+use std::time::Instant;
+
+use crate::config::ThemeChoice;
+use super::{
     Color, GraphemeCell, PageCoord, PageList, SecurityConfig,
     SecurityEventKind, TrackedPin, UnderlineStyle,
 };
@@ -82,7 +85,7 @@ pub struct Terminal {
     pub security_config: SecurityConfig,
     pending_security_events: Vec<SecurityEventKind>,
     pub cursor_style: CursorStyle,
-    pub resize_at: Option<std::time::Instant>,
+    pub resize_at: Option<Instant>,
 
     // ── Selection pins ───────────────────────────────────────────────────────
     pub selection_start_pin: Option<TrackedPin>,
@@ -97,7 +100,7 @@ pub struct Terminal {
 
 impl Terminal {
     pub fn new(rows: usize, cols: usize) -> Self {
-        let palette = crate::config::ThemeChoice::FerrumDark.resolve();
+        let palette = ThemeChoice::FerrumDark.resolve();
         Self::with_config(rows, cols, 1000, Color::SENTINEL_FG, Color::SENTINEL_BG, palette.ansi)
     }
 
@@ -188,16 +191,20 @@ impl Terminal {
         gc
     }
 
+    /// Replaces the screen buffer and cursor pin with a fresh blank grid of the same size.
+    fn reset_screen_buffer(&mut self) {
+        let rows = self.screen.viewport_rows();
+        let cols = self.screen.cols();
+        let max_sb = self.max_scrollback;
+        self.screen = PageList::new(rows, cols, max_sb);
+        self.cursor_pin = PageList::pin_at(PageCoord { abs_row: 0, col: 0 });
+    }
+
     /// Clears the screen and scrollback, resetting cursor to (0,0).
     ///
     /// Unlike `full_reset()`, this preserves terminal attributes and mode flags.
     pub fn clear_screen(&mut self) {
-        let rows = self.screen.viewport_rows();
-        let cols = self.screen.cols();
-        let max_sb = self.max_scrollback;
-        let new_screen = PageList::new(rows, cols, max_sb);
-        self.cursor_pin = PageList::pin_at(PageCoord { abs_row: 0, col: 0 });
-        self.screen = new_screen;
+        self.reset_screen_buffer();
         self.reset_scroll_region();
     }
 
@@ -228,6 +235,16 @@ impl Terminal {
     pub fn clear_selection_pins(&mut self) {
         self.selection_start_pin = None;
         self.selection_end_pin = None;
+    }
+
+    /// Moves the cursor to `next_row`, scrolling up the scroll region if needed.
+    fn advance_cursor_row(&mut self, next_row: usize) {
+        if next_row > self.scroll_bottom {
+            self.scroll_up_region(self.scroll_top, self.scroll_bottom);
+            self.set_cursor_row(self.scroll_bottom);
+        } else {
+            self.set_cursor_row(next_row);
+        }
     }
 
     /// Resets the scroll region to span the entire visible grid.
@@ -417,19 +434,14 @@ impl Terminal {
             color
         };
 
-        self.screen.viewport_recolor(|gc: &mut GraphemeCell| {
+        let recolor_cell = |gc: &mut GraphemeCell| {
             gc.fg = remap(gc.fg);
             gc.bg = remap(gc.bg);
-        });
-        self.screen.scrollback_recolor(|gc| {
-            gc.fg = remap(gc.fg);
-            gc.bg = remap(gc.bg);
-        });
+        };
+        self.screen.viewport_recolor(recolor_cell);
+        self.screen.scrollback_recolor(recolor_cell);
         if let Some(ref mut alt) = self.alt_screen {
-            alt.viewport_recolor(|gc| {
-                gc.fg = remap(gc.fg);
-                gc.bg = remap(gc.bg);
-            });
+            alt.viewport_recolor(recolor_cell);
         }
 
         self.current_fg = remap(self.current_fg);
@@ -441,8 +453,6 @@ impl Terminal {
 
     pub fn full_reset(&mut self) {
         let rows = self.screen.viewport_rows();
-        let cols = self.screen.cols();
-        let max_scrollback = self.max_scrollback;
 
         self.alt_screen = None;
         self.saved_cursor = PageCoord { abs_row: 0, col: 0 };
@@ -461,9 +471,7 @@ impl Terminal {
         self.cwd = None;
         self.reset_attributes();
         self.parser = Parser::new();
-        let screen = PageList::new(rows, cols, max_scrollback);
-        self.cursor_pin = PageList::pin_at(PageCoord { abs_row: 0, col: 0 });
-        self.screen = screen;
+        self.reset_screen_buffer();
     }
 
     fn handle_private_mode(&mut self, params: &Params, intermediates: &[u8], action: char) -> bool {
@@ -523,12 +531,7 @@ impl Perform for Terminal {
             self.screen.viewport_set_wrapped(cr, true);
             self.set_cursor_col(0);
             let next_row = self.cursor_row() + 1;
-            if next_row > self.scroll_bottom {
-                self.scroll_up_region(self.scroll_top, self.scroll_bottom);
-                self.set_cursor_row(self.scroll_bottom);
-            } else {
-                self.set_cursor_row(next_row);
-            }
+            self.advance_cursor_row(next_row);
         }
 
         let cr = self.cursor_row();
@@ -561,12 +564,7 @@ impl Perform for Terminal {
                 let cr = self.cursor_row();
                 self.screen.viewport_set_wrapped(cr, false);
                 let next_row = cr + 1;
-                if next_row > self.scroll_bottom {
-                    self.scroll_up_region(self.scroll_top, self.scroll_bottom);
-                    self.set_cursor_row(self.scroll_bottom);
-                } else {
-                    self.set_cursor_row(next_row);
-                }
+                self.advance_cursor_row(next_row);
             }
             13 => {
                 self.set_cursor_col(0);

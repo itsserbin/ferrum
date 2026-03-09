@@ -1,6 +1,6 @@
 //! Alternate screen buffer management (used by vim, htop, less, etc.).
 
-use crate::core::{PageCoord, PageList};
+use super::super::{PageCoord, PageList};
 
 use super::CursorStyle;
 

@@ -4,7 +4,6 @@ use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use std::io::{Read, Write};
 use std::sync::OnceLock;
 
-#[cfg(windows)]
 use std::path::{Path, PathBuf};
 
 // Embed script files at compile time
@@ -88,18 +87,18 @@ fn create_unix_aliases_script() -> Option<PathBuf> {
     Some(init_script)
 }
 
-static SHELL_INTEGRATION_DIR: OnceLock<Option<std::path::PathBuf>> = OnceLock::new();
+static SHELL_INTEGRATION_DIR: OnceLock<Option<PathBuf>> = OnceLock::new();
 
 /// Write shell integration scripts to a temp directory so they can be
 /// sourced by the spawned shell.  Returns the root temp dir on success.
 /// Files are written only once per process via [`OnceLock`].
-fn get_shell_integration_dir() -> Option<&'static std::path::PathBuf> {
+fn shell_integration_dir() -> Option<&'static PathBuf> {
     SHELL_INTEGRATION_DIR
         .get_or_init(setup_shell_integration)
         .as_ref()
 }
 
-fn setup_shell_integration() -> Option<std::path::PathBuf> {
+fn setup_shell_integration() -> Option<PathBuf> {
     let temp_dir = std::env::temp_dir().join("ferrum_shell_integration");
     let zsh_dir = temp_dir.join("zsh");
     let bash_dir = temp_dir.join("bash");
@@ -175,7 +174,7 @@ impl Session {
         }
 
         if let Some(dir) = cwd {
-            let path = std::path::Path::new(dir);
+            let path = Path::new(dir);
             if path.is_dir() {
                 cmd.cwd(dir);
                 cmd.env("PWD", dir);
@@ -190,8 +189,8 @@ impl Session {
         // Shell integration: set marker env and configure per-shell sourcing.
         cmd.env("FERRUM_SHELL_INTEGRATION", "1");
 
-        if let Some(integration_dir) = get_shell_integration_dir() {
-            let shell_name = std::path::Path::new(shell)
+        if let Some(integration_dir) = shell_integration_dir() {
+            let shell_name = Path::new(shell)
                 .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or(shell);
@@ -363,7 +362,7 @@ impl Session {
 pub fn has_active_child_processes(shell_pid: u32) -> bool {
     #[cfg(unix)]
     {
-        return has_active_child_processes_unix(shell_pid);
+        has_active_child_processes_unix(shell_pid)
     }
 
     #[cfg(windows)]
@@ -371,7 +370,7 @@ pub fn has_active_child_processes(shell_pid: u32) -> bool {
         return has_active_child_processes_windows(shell_pid);
     }
 
-    #[allow(unreachable_code)]
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = shell_pid;
         false

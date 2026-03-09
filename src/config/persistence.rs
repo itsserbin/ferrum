@@ -32,13 +32,10 @@ pub(crate) fn load_config() -> AppConfig {
     let Ok(contents) = fs::read_to_string(&path) else {
         return AppConfig::default();
     };
-    match ron::from_str(&contents) {
-        Ok(config) => config,
-        Err(e) => {
-            eprintln!("[ferrum] Failed to parse config: {e}");
-            AppConfig::default()
-        }
-    }
+    ron::from_str(&contents).unwrap_or_else(|e| {
+        eprintln!("[ferrum] Failed to parse config: {e}");
+        AppConfig::default()
+    })
 }
 
 /// Persists the config to disk. Errors are silently ignored.

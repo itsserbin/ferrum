@@ -93,10 +93,7 @@ impl FerrumWindow {
         }
     }
 
-    pub(in crate::gui) fn select_word_at(&mut self, row: usize, col: usize) {
-        let Some((start, end)) = self.word_bounds_at(row, col) else {
-            return;
-        };
+    fn set_selection_from_positions(&mut self, start: Position, end: Position) {
         let abs_start = self.pos_to_abs(start);
         let abs_end = self.pos_to_abs(end);
         if let Some(leaf) = self.active_leaf_mut() {
@@ -107,18 +104,18 @@ impl FerrumWindow {
         }
     }
 
+    pub(in crate::gui) fn select_word_at(&mut self, row: usize, col: usize) {
+        let Some((start, end)) = self.word_bounds_at(row, col) else {
+            return;
+        };
+        self.set_selection_from_positions(start, end);
+    }
+
     pub(in crate::gui) fn select_line_at(&mut self, row: usize) {
         let Some((start, end)) = self.line_bounds_at(row) else {
             return;
         };
-        let abs_start = self.pos_to_abs(start);
-        let abs_end = self.pos_to_abs(end);
-        if let Some(leaf) = self.active_leaf_mut() {
-            leaf.set_selection(Selection {
-                start: abs_start,
-                end: abs_end,
-            });
-        }
+        self.set_selection_from_positions(start, end);
     }
 
     pub(in crate::gui) fn update_drag_selection(&mut self, row: usize, col: usize) {
@@ -189,31 +186,10 @@ impl FerrumWindow {
                     }
                 }
             }
-            SelectionDragMode::Line => {
-                if current.abs_row < anchor.abs_row {
-                    Selection {
-                        start: PageCoord {
-                            abs_row: current.abs_row,
-                            col: 0,
-                        },
-                        end: PageCoord {
-                            abs_row: anchor.abs_row,
-                            col: max_col,
-                        },
-                    }
-                } else {
-                    Selection {
-                        start: PageCoord {
-                            abs_row: anchor.abs_row,
-                            col: 0,
-                        },
-                        end: PageCoord {
-                            abs_row: current.abs_row,
-                            col: max_col,
-                        },
-                    }
-                }
-            }
+            SelectionDragMode::Line => Selection {
+                start: PageCoord { abs_row: current.abs_row.min(anchor.abs_row), col: 0 },
+                end: PageCoord { abs_row: current.abs_row.max(anchor.abs_row), col: max_col },
+            },
         };
 
         if let Some(leaf) = self.active_leaf_mut() {

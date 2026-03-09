@@ -17,6 +17,21 @@ fn blend_ch(fg: f32, bg: f32, cov: u8, lut: &[u8; 256]) -> u8 {
 }
 
 impl CpuRenderer {
+    /// Renders a string starting at `(x, y)` in physical pixels, one character per cell.
+    pub(in crate::gui::renderer) fn draw_text_at(
+        &mut self,
+        target: &mut RenderTarget<'_>,
+        x: u32,
+        y: u32,
+        text: &str,
+        fg: Color,
+    ) {
+        for (ci, ch) in text.chars().enumerate() {
+            let cx = x + ci as u32 * self.metrics.cell_width;
+            self.draw_char(target, cx, y, ch, fg);
+        }
+    }
+
     pub(in crate::gui::renderer) fn draw_bg(
         &self,
         target: &mut RenderTarget<'_>,

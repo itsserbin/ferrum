@@ -42,15 +42,15 @@ impl FerrumWindow {
 
         if let Some(digit_index) = Self::physical_digit_index(physical) {
             if digit_index == 8 {
-                crate::gui::platform::macos::select_tab(&self.window, usize::MAX);
+                platform::macos::select_tab(&self.window, usize::MAX);
             } else {
-                crate::gui::platform::macos::select_tab(&self.window, digit_index);
+                platform::macos::select_tab(&self.window, digit_index);
             }
             return Some(true);
         }
 
         if matches!(key, Key::Named(NamedKey::Tab)) {
-            crate::gui::platform::macos::select_next_tab(&self.window);
+            platform::macos::select_next_tab(&self.window);
             return Some(true);
         }
 

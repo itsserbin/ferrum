@@ -1,34 +1,67 @@
 use super::*;
 use super::RenderTarget;
 use crate::core::PageList;
-use crate::gui::pane::PaneRect;
+use super::super::pane::PaneRect;
+
+/// A pixel-space rectangle used as a fill target or clip boundary inside the cursor renderer.
+struct PixelRect {
+    x: usize,
+    y: usize,
+    w: usize,
+    h: usize,
+}
+
+/// Returns the character at `(row, col)` in the viewport, or `None` when out of bounds.
+fn block_char_at(screen: &PageList, row: usize, col: usize) -> Option<char> {
+    if row < screen.viewport_rows() && col < screen.cols() {
+        Some(screen.viewport_get(row, col).first_char())
+    } else {
+        None
+    }
+}
 
 impl CpuRenderer {
-    pub fn draw_cursor(
-        &mut self,
+    /// Fills `region` with `pixel`, clipped to `clip` and the buffer bounds.
+    fn fill_rect_pixels(
         target: &mut RenderTarget<'_>,
-        row: usize,
-        col: usize,
-        screen: &PageList,
-        style: CursorStyle,
+        region: PixelRect,
+        pixel: u32,
+        clip: PixelRect,
     ) {
         let buf_width = target.width;
-        let buf_height = target.height;
-        let x = col as u32 * self.metrics.cell_width + self.window_padding_px();
-        let y = row as u32 * self.metrics.cell_height
-            + self.tab_bar_height_px()
-            + self.window_padding_px();
-        let cursor_pixel = self.palette.default_fg.to_pixel();
+        for dy in 0..region.h {
+            let py = region.y + dy;
+            if py >= target.height || py >= clip.y + clip.h {
+                break;
+            }
+            for dx in 0..region.w {
+                let px = region.x + dx;
+                if px < buf_width && px < clip.x + clip.w {
+                    target.buffer[py * buf_width + px] = pixel;
+                }
+            }
+        }
+    }
 
+    /// Draws the cursor shape at pixel position `pos`, clipped to `clip`.
+    ///
+    /// `block_char` is read from the screen grid before calling this and passed
+    /// directly, reducing the argument count to satisfy the clippy limit.
+    fn draw_cursor_shape(
+        &mut self,
+        target: &mut RenderTarget<'_>,
+        pos: (u32, u32),
+        cursor_pixel: u32,
+        clip: PixelRect,
+        block_char: Option<char>,
+        style: CursorStyle,
+    ) {
+        let (x, y) = pos;
         match style {
             CursorStyle::BlinkingBlock | CursorStyle::SteadyBlock => {
                 // Filled block with inverted foreground/background.
                 self.draw_bg(target, x, y, self.palette.default_fg);
-                let ch = if row < screen.viewport_rows() && col < screen.cols() {
-                    screen.viewport_get(row, col).first_char()
-                } else {
-                    ' '
-                };
+                let ch = block_char.unwrap_or(' ');
                 if ch != ' ' {
                     self.draw_char(target, x, y, ch, self.palette.default_bg);
                 }
@@ -37,36 +70,42 @@ impl CpuRenderer {
                 // 2px underline at the bottom of the cell.
                 let underline_h = 2usize;
                 let base_y = y as usize + self.metrics.cell_height as usize - underline_h;
-                for dy in 0..underline_h {
-                    let py = base_y + dy;
-                    if py >= buf_height {
-                        break;
-                    }
-                    for dx in 0..self.metrics.cell_width as usize {
-                        let px = x as usize + dx;
-                        if px < buf_width {
-                            target.buffer[py * buf_width + px] = cursor_pixel;
-                        }
-                    }
-                }
+                Self::fill_rect_pixels(
+                    target,
+                    PixelRect { x: x as usize, y: base_y, w: self.metrics.cell_width as usize, h: underline_h },
+                    cursor_pixel,
+                    clip,
+                );
             }
             CursorStyle::BlinkingBar | CursorStyle::SteadyBar => {
                 // 2px vertical bar at the left edge.
-                let bar_width = 2usize;
-                for dy in 0..self.metrics.cell_height as usize {
-                    let py = y as usize + dy;
-                    if py >= buf_height {
-                        break;
-                    }
-                    for dx in 0..bar_width {
-                        let px = x as usize + dx;
-                        if px < buf_width {
-                            target.buffer[py * buf_width + px] = cursor_pixel;
-                        }
-                    }
-                }
+                Self::fill_rect_pixels(
+                    target,
+                    PixelRect { x: x as usize, y: y as usize, w: 2, h: self.metrics.cell_height as usize },
+                    cursor_pixel,
+                    clip,
+                );
             }
         }
+    }
+
+    pub fn draw_cursor(
+        &mut self,
+        target: &mut RenderTarget<'_>,
+        row: usize,
+        col: usize,
+        screen: &PageList,
+        style: CursorStyle,
+    ) {
+        let x = col as u32 * self.metrics.cell_width + self.window_padding_px();
+        let y = row as u32 * self.metrics.cell_height
+            + self.tab_bar_height_px()
+            + self.window_padding_px();
+        let cursor_pixel = self.palette.default_fg.to_pixel();
+        let block_char = block_char_at(screen, row, col);
+        // No clip rectangle: use the full buffer.
+        let clip = PixelRect { x: 0, y: 0, w: target.width, h: target.height };
+        self.draw_cursor_shape(target, (x, y), cursor_pixel, clip, block_char, style);
     }
 
     /// Draws the cursor at a position offset by a pane rectangle.
@@ -79,58 +118,16 @@ impl CpuRenderer {
         style: CursorStyle,
         rect: PaneRect,
     ) {
-        let buf_width = target.width;
-        let buf_height = target.height;
         let x = col as u32 * self.metrics.cell_width + rect.x;
         let y = row as u32 * self.metrics.cell_height + rect.y;
         let cursor_pixel = self.palette.default_fg.to_pixel();
-
-        let rect_right = (rect.x + rect.width) as usize;
-        let rect_bottom = (rect.y + rect.height) as usize;
-
-        match style {
-            CursorStyle::BlinkingBlock | CursorStyle::SteadyBlock => {
-                self.draw_bg(target, x, y, self.palette.default_fg);
-                let ch = if row < screen.viewport_rows() && col < screen.cols() {
-                    screen.viewport_get(row, col).first_char()
-                } else {
-                    ' '
-                };
-                if ch != ' ' {
-                    self.draw_char(target, x, y, ch, self.palette.default_bg);
-                }
-            }
-            CursorStyle::BlinkingUnderline | CursorStyle::SteadyUnderline => {
-                let underline_h = 2usize;
-                let base_y = y as usize + self.metrics.cell_height as usize - underline_h;
-                for dy in 0..underline_h {
-                    let py = base_y + dy;
-                    if py >= buf_height || py >= rect_bottom {
-                        break;
-                    }
-                    for dx in 0..self.metrics.cell_width as usize {
-                        let px = x as usize + dx;
-                        if px < buf_width && px < rect_right {
-                            target.buffer[py * buf_width + px] = cursor_pixel;
-                        }
-                    }
-                }
-            }
-            CursorStyle::BlinkingBar | CursorStyle::SteadyBar => {
-                let bar_width = 2usize;
-                for dy in 0..self.metrics.cell_height as usize {
-                    let py = y as usize + dy;
-                    if py >= buf_height || py >= rect_bottom {
-                        break;
-                    }
-                    for dx in 0..bar_width {
-                        let px = x as usize + dx;
-                        if px < buf_width && px < rect_right {
-                            target.buffer[py * buf_width + px] = cursor_pixel;
-                        }
-                    }
-                }
-            }
-        }
+        let block_char = block_char_at(screen, row, col);
+        let clip = PixelRect {
+            x: rect.x as usize,
+            y: rect.y as usize,
+            w: rect.width as usize,
+            h: rect.height as usize,
+        };
+        self.draw_cursor_shape(target, (x, y), cursor_pixel, clip, block_char, style);
     }
 }

@@ -151,32 +151,32 @@ mod tests {
     fn mouse_normal_mode() {
         let mut term = Terminal::new(4, 10);
         term.process(b"\x1b[?1000h");
-        assert!(term.mouse_mode == MouseMode::Normal);
+        assert_eq!(term.mouse_mode, MouseMode::Normal);
     }
 
     #[test]
     fn mouse_button_event() {
         let mut term = Terminal::new(4, 10);
         term.process(b"\x1b[?1002h");
-        assert!(term.mouse_mode == MouseMode::ButtonEvent);
+        assert_eq!(term.mouse_mode, MouseMode::ButtonEvent);
     }
 
     #[test]
     fn mouse_any_event() {
         let mut term = Terminal::new(4, 10);
         term.process(b"\x1b[?1003h");
-        assert!(term.mouse_mode == MouseMode::AnyEvent);
+        assert_eq!(term.mouse_mode, MouseMode::AnyEvent);
     }
 
     #[test]
     fn private_mode_multi_param_enables_all_modes() {
         let mut term = Terminal::new(4, 10);
         term.process(b"\x1b[?1002;1006h");
-        assert!(term.mouse_mode == MouseMode::ButtonEvent);
+        assert_eq!(term.mouse_mode, MouseMode::ButtonEvent);
         assert!(term.sgr_mouse);
 
         term.process(b"\x1b[?1002;1006l");
-        assert!(term.mouse_mode == MouseMode::Off);
+        assert_eq!(term.mouse_mode, MouseMode::Off);
         assert!(!term.sgr_mouse);
     }
 
@@ -193,9 +193,9 @@ mod tests {
     fn mouse_off() {
         let mut term = Terminal::new(4, 10);
         term.process(b"\x1b[?1000h");
-        assert!(term.mouse_mode == MouseMode::Normal);
+        assert_eq!(term.mouse_mode, MouseMode::Normal);
         term.process(b"\x1b[?1000l");
-        assert!(term.mouse_mode == MouseMode::Off);
+        assert_eq!(term.mouse_mode, MouseMode::Off);
     }
 
     #[test]
@@ -231,13 +231,13 @@ mod tests {
     fn cursor_style_steady_block() {
         let mut term = Terminal::new(4, 10);
         term.process(b"\x1b[2 q");
-        assert!(term.cursor_style == CursorStyle::SteadyBlock);
+        assert_eq!(term.cursor_style, CursorStyle::SteadyBlock);
     }
 
     #[test]
     fn cursor_style_blinking_bar() {
         let mut term = Terminal::new(4, 10);
         term.process(b"\x1b[5 q");
-        assert!(term.cursor_style == CursorStyle::BlinkingBar);
+        assert_eq!(term.cursor_style, CursorStyle::BlinkingBar);
     }
 }

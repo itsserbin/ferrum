@@ -38,13 +38,17 @@ impl FerrumWindow {
         }
     }
 
-    #[cfg(target_os = "macos")]
-    pub(in crate::gui::events::mouse) fn handle_tab_bar_left_click(
+    /// Shared pre-match logic for tab bar left-click handling.
+    ///
+    /// Handles mouse-up cleanup and rename field interactions.
+    /// Returns `Some((hit, had_rename))` when the caller should proceed to match on `hit`,
+    /// or `None` when the event has been fully handled and the caller should return.
+    fn handle_tab_bar_left_click_impl(
         &mut self,
         state: ElementState,
         mx: f64,
         my: f64,
-    ) {
+    ) -> Option<(TabBarHit, bool)> {
         if state != ElementState::Pressed {
             // Mouse release in tab bar area.
             // End any active pointer selection state so terminal drag-selection doesn't stick.
@@ -55,7 +59,7 @@ impl FerrumWindow {
             }
             self.is_selecting = false;
             self.selection_anchor = None;
-            return;
+            return None;
         }
 
         let hit = self.tab_bar_hit(mx, my);
@@ -70,11 +74,26 @@ impl FerrumWindow {
                 .is_some_and(|r| r.tab_index == idx)
         {
             self.handle_rename_field_click(mx);
-            return;
+            return None;
         }
 
         // Commit any active rename before processing the click (blur behavior).
+        let had_rename = self.renaming_tab.is_some();
         self.commit_rename();
+
+        Some((hit, had_rename))
+    }
+
+    #[cfg(target_os = "macos")]
+    pub(in crate::gui::events::mouse) fn handle_tab_bar_left_click(
+        &mut self,
+        state: ElementState,
+        mx: f64,
+        my: f64,
+    ) {
+        let Some((hit, _)) = self.handle_tab_bar_left_click_impl(state, mx, my) else {
+            return;
+        };
 
         match hit {
             TabBarHit::Tab(idx) => {
@@ -97,37 +116,11 @@ impl FerrumWindow {
         config: &AppConfig,
     ) {
         if state != ElementState::Pressed {
-            // Mouse release in tab bar area.
-            // End any active pointer selection state so terminal drag-selection doesn't stick.
-            if self.is_selecting && self.renaming_tab.is_none() && self.is_mouse_reporting() {
-                // If PTY owns mouse reporting, still emit release even when cursor is over tab bar.
-                let (row, col) = self.pixel_to_grid(mx, my);
-                self.send_mouse_event(0, col, row, false);
-            }
-            self.is_selecting = false;
-            self.selection_anchor = None;
             self.finish_drag();
-            return;
         }
-
-        let hit = self.tab_bar_hit(mx, my);
-
-        // Check if the click landed inside the rename text field area.
-        // If so, handle cursor positioning instead of normal tab bar interaction.
-        if self.renaming_tab.is_some()
-            && let TabBarHit::Tab(idx) = hit
-            && self
-                .renaming_tab
-                .as_ref()
-                .is_some_and(|r| r.tab_index == idx)
-        {
-            self.handle_rename_field_click(mx);
+        let Some((hit, had_rename)) = self.handle_tab_bar_left_click_impl(state, mx, my) else {
             return;
-        }
-
-        // Commit any active rename before processing the click (blur behavior).
-        let had_rename = self.renaming_tab.is_some();
-        self.commit_rename();
+        };
 
         match hit {
             TabBarHit::Tab(idx) => {
@@ -158,13 +151,11 @@ impl FerrumWindow {
                 self.handle_empty_bar_click();
             }
             TabBarHit::PinButton => {
-                self.last_topbar_empty_click = None;
-                self.last_tab_click = None;
+                self.clear_click_state();
                 self.toggle_pin();
             }
             TabBarHit::SettingsButton => {
-                self.last_topbar_empty_click = None;
-                self.last_tab_click = None;
+                self.clear_click_state();
                 self.toggle_settings_overlay(config);
             }
         }

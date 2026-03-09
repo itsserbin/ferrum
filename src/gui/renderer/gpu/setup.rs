@@ -6,7 +6,8 @@ use anyhow::Context;
 use wgpu;
 use winit::window::Window;
 
-use crate::config::AppConfig;
+use crate::config::{AppConfig, load_fonts};
+use super::super::rasterizer::{GlyphRasterizer, RasterMode};
 use super::super::metrics::FontMetrics;
 use super::atlas::GlyphAtlas;
 use super::buffers::*;
@@ -70,9 +71,9 @@ impl super::GpuRenderer {
         surface.configure(&device, &surface_config);
 
         // Font setup.
-        let (font_data, fallback_data) = crate::config::load_fonts(config.font.family);
-        let mode = crate::gui::renderer::rasterizer::RasterMode::from_scale_factor(scale_factor);
-        let mut rasterizer = crate::gui::renderer::rasterizer::GlyphRasterizer::new(
+        let (font_data, fallback_data) = load_fonts(config.font.family);
+        let mode = RasterMode::from_scale_factor(scale_factor);
+        let mut rasterizer = GlyphRasterizer::new(
             font_data, fallback_data, config.font.size, mode,
         );
         let mut metrics = FontMetrics::from_config(config);
@@ -100,12 +101,12 @@ impl super::GpuRenderer {
         // Create buffers.
         let grid_uniform_buffer = Self::create_uniform_buffer(
             &device,
-            std::mem::size_of::<GridUniforms>(),
+            size_of::<GridUniforms>(),
             "grid_uniforms",
         );
         let grid_cell_buffer = Self::create_storage_buffer(
             &device,
-            std::mem::size_of::<PackedCell>() * 256 * 64,
+            size_of::<PackedCell>() * 256 * 64,
             "grid_cells",
         );
         let glyph_data = atlas.glyph_info_buffer_data();
@@ -116,15 +117,15 @@ impl super::GpuRenderer {
         );
 
         let ui_uniform_buffer =
-            Self::create_uniform_buffer(&device, std::mem::size_of::<UiUniforms>(), "ui_uniforms");
+            Self::create_uniform_buffer(&device, size_of::<UiUniforms>(), "ui_uniforms");
         let ui_command_buffer = Self::create_storage_buffer(
             &device,
-            std::mem::size_of::<GpuDrawCommand>() * MAX_UI_COMMANDS,
+            size_of::<GpuDrawCommand>() * MAX_UI_COMMANDS,
             "ui_commands",
         );
         let composite_uniform_buffer = Self::create_uniform_buffer(
             &device,
-            std::mem::size_of::<CompositeUniforms>(),
+            size_of::<CompositeUniforms>(),
             "composite_uniforms",
         );
 
@@ -254,9 +255,9 @@ impl super::GpuRenderer {
     }
 
     /// Applies config changes (font, metrics, atlas, palette).
-    pub(in crate::gui::renderer) fn apply_config(&mut self, config: &crate::config::AppConfig) {
-        let (font_data, fallback_data) = crate::config::load_fonts(config.font.family);
-        self.rasterizer = crate::gui::renderer::rasterizer::GlyphRasterizer::new(
+    pub(in super::super) fn apply_config(&mut self, config: &AppConfig) {
+        let (font_data, fallback_data) = load_fonts(config.font.family);
+        self.rasterizer = GlyphRasterizer::new(
             font_data, fallback_data, config.font.size, self.rasterizer.mode,
         );
         self.metrics.update_bases(config);

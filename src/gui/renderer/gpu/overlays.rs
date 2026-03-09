@@ -159,74 +159,34 @@ impl super::GpuRenderer {
         }
 
         let t = crate::i18n::t();
+        let (_, _, _, btn_h) = layout.details_rect();
 
-        // [Details] button background.
-        let (details_x, details_y, details_w, btn_h) = layout.details_rect();
-        self.push_rounded_rect_cmd(&RoundedRectCmd {
-            x: details_x as f32,
-            y: details_y as f32,
-            w: details_w as f32,
-            h: btn_h as f32,
-            radius: r,
-            color: self.palette.tab_border.to_pixel(),
-            opacity: 0.47,
-        });
-        let details_text = t.update_details;
-        let details_text_w = details_text.chars().count() as u32 * self.metrics.cell_width;
-        let details_text_x = details_x + (details_w.saturating_sub(details_text_w)) / 2;
-        let details_text_y = details_y + (btn_h.saturating_sub(self.metrics.cell_height)) / 2;
-        self.push_text(
-            details_text_x as f32,
-            details_text_y as f32,
-            details_text,
-            self.palette.tab_text_active.to_pixel(),
-            1.0,
-        );
+        let buttons = [
+            (layout.details_rect(), t.update_details),
+            (layout.install_rect(), t.update_install),
+            (layout.dismiss_rect(), "✕"),
+        ];
 
-        // [Install] button background.
-        let (install_x, install_y, install_w, _) = layout.install_rect();
-        self.push_rounded_rect_cmd(&RoundedRectCmd {
-            x: install_x as f32,
-            y: install_y as f32,
-            w: install_w as f32,
-            h: btn_h as f32,
-            radius: r,
-            color: self.palette.tab_border.to_pixel(),
-            opacity: 0.47,
-        });
-        let install_text = t.update_install;
-        let install_text_w = install_text.chars().count() as u32 * self.metrics.cell_width;
-        let install_text_x = install_x + (install_w.saturating_sub(install_text_w)) / 2;
-        let install_text_y = install_y + (btn_h.saturating_sub(self.metrics.cell_height)) / 2;
-        self.push_text(
-            install_text_x as f32,
-            install_text_y as f32,
-            install_text,
-            self.palette.tab_text_active.to_pixel(),
-            1.0,
-        );
-
-        // [✕] dismiss button background.
-        let (dismiss_x, dismiss_y, dismiss_w, _) = layout.dismiss_rect();
-        self.push_rounded_rect_cmd(&RoundedRectCmd {
-            x: dismiss_x as f32,
-            y: dismiss_y as f32,
-            w: dismiss_w as f32,
-            h: btn_h as f32,
-            radius: r,
-            color: self.palette.tab_border.to_pixel(),
-            opacity: 0.47,
-        });
-        let dismiss_text = "✕";
-        let dismiss_text_w = dismiss_text.chars().count() as u32 * self.metrics.cell_width;
-        let dismiss_text_x = dismiss_x + (dismiss_w.saturating_sub(dismiss_text_w)) / 2;
-        let dismiss_text_y = dismiss_y + (btn_h.saturating_sub(self.metrics.cell_height)) / 2;
-        self.push_text(
-            dismiss_text_x as f32,
-            dismiss_text_y as f32,
-            dismiss_text,
-            self.palette.tab_text_active.to_pixel(),
-            1.0,
-        );
+        for ((bx, by, bw, _), text) in buttons {
+            self.push_rounded_rect_cmd(&RoundedRectCmd {
+                x: bx as f32,
+                y: by as f32,
+                w: bw as f32,
+                h: btn_h as f32,
+                radius: r,
+                color: self.palette.tab_border.to_pixel(),
+                opacity: 0.47,
+            });
+            let (tx, ty) = super::super::shared::centered_button_text_origin(
+                bx, by, bw, btn_h, text, self.metrics.cell_width, self.metrics.cell_height,
+            );
+            self.push_text(
+                tx as f32,
+                ty as f32,
+                text,
+                self.palette.tab_text_active.to_pixel(),
+                1.0,
+            );
+        }
     }
 }

@@ -9,7 +9,7 @@ use super::buffers::*;
 #[cfg(not(target_os = "macos"))]
 use super::super::shared::ui_layout;
 #[cfg(not(target_os = "macos"))]
-use crate::gui::renderer::traits::Renderer;
+use super::super::Renderer;
 
 impl super::GpuRenderer {
     #[cfg(not(target_os = "macos"))]
@@ -79,7 +79,7 @@ impl super::GpuRenderer {
                 continue;
             }
 
-            let needed = batch.cells.len() * std::mem::size_of::<PackedCell>();
+            let needed = batch.cells.len() * size_of::<PackedCell>();
             if needed as u64 > self.grid_cell_buffer.size() {
                 self.grid_cell_buffer =
                     Self::create_storage_buffer(&self.device, needed, "grid_cells");

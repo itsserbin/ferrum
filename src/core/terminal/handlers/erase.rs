@@ -228,7 +228,7 @@ mod tests {
 
         term.process(b"\x1b[3J");
 
-        assert!(term.screen.scrollback_len() == 0, "CSI 3J should clear scrollback");
+        assert_eq!(term.screen.scrollback_len(), 0, "CSI 3J should clear scrollback");
         assert_eq!(
             get_char(&term, 0, 0),
             visible_before,

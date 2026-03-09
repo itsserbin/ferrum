@@ -13,16 +13,7 @@ impl FerrumWindow {
                 if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == *tab_id)
                     && let Some(leaf) = tab.pane_tree.find_leaf_mut(*pane_id)
                 {
-                    leaf.terminal.process(bytes);
-
-                    for event in leaf.terminal.drain_security_events() {
-                        leaf.security.record(event);
-                    }
-
-                    let responses = leaf.terminal.drain_responses();
-                    if !responses.is_empty() {
-                        leaf.write_pty(&responses);
-                    }
+                    leaf.process_and_flush(bytes);
                 }
             }
             PtyEvent::Exited { tab_id, pane_id } => {
@@ -35,15 +26,13 @@ impl FerrumWindow {
                         return;
                     }
 
+                    // Cleanup is always required whether the pane or whole tab is being closed.
+                    if let Some(leaf) = tab.pane_tree.find_leaf_mut(*pane_id) {
+                        leaf.cleanup_and_drain_security();
+                    }
+
                     // If the tab has multiple panes, close just the exited pane.
                     if tab.has_multiple_panes() {
-                        // Run cleanup on the exiting pane's terminal.
-                        if let Some(leaf) = tab.pane_tree.find_leaf_mut(*pane_id) {
-                            leaf.terminal.cleanup_after_process_exit();
-                            for event in leaf.terminal.drain_security_events() {
-                                leaf.security.record(event);
-                            }
-                        }
                         // Close the pane in the tree.
                         tab.pane_tree.close(*pane_id);
                         // If the focused pane was the one that exited, pick a new one.
@@ -55,12 +44,6 @@ impl FerrumWindow {
                     }
 
                     // Single pane: close the whole tab (existing behavior).
-                    if let Some(leaf) = tab.pane_tree.find_leaf_mut(*pane_id) {
-                        leaf.terminal.cleanup_after_process_exit();
-                        for event in leaf.terminal.drain_security_events() {
-                            leaf.security.record(event);
-                        }
-                    }
 
                     let len_before = self.tabs.len();
                     self.adjust_rename_after_tab_remove(idx);

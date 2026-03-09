@@ -11,17 +11,17 @@
 pub fn get_process_cwd(pid: u32) -> Option<String> {
     #[cfg(target_os = "linux")]
     {
-        return get_cwd_linux(pid);
+        get_cwd_linux(pid)
     }
     #[cfg(target_os = "macos")]
     {
-        return get_cwd_macos(pid);
+        get_cwd_macos(pid)
     }
     #[cfg(target_os = "windows")]
     {
-        return get_cwd_windows(pid);
+        get_cwd_windows(pid)
     }
-    #[allow(unreachable_code)]
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
     {
         let _ = pid;
         None
@@ -66,7 +66,7 @@ fn get_cwd_macos(pid: u32) -> Option<String> {
     }
 
     let mut info: VInfoPathInfo = unsafe { mem::zeroed() };
-    let size = mem::size_of::<VInfoPathInfo>() as i32;
+    let size = size_of::<VInfoPathInfo>() as i32;
 
     let ret = unsafe {
         proc_pidinfo(
@@ -87,7 +87,7 @@ fn get_cwd_macos(pid: u32) -> Option<String> {
         .iter()
         .position(|&b| b == 0)
         .unwrap_or(MAXPATHLEN);
-    std::str::from_utf8(&path_bytes[..nul])
+    str::from_utf8(&path_bytes[..nul])
         .ok()
         .filter(|s| !s.is_empty())
         .map(String::from)

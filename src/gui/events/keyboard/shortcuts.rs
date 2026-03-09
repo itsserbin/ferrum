@@ -147,7 +147,7 @@ impl FerrumWindow {
         match key {
             Key::Named(NamedKey::Tab) => {
                 #[cfg(target_os = "macos")]
-                crate::gui::platform::macos::select_previous_tab(&self.window);
+                platform::macos::select_previous_tab(&self.window);
                 #[cfg(not(target_os = "macos"))]
                 {
                     if !self.tabs.is_empty() {

@@ -1,27 +1,26 @@
 mod animation;
 
 #[cfg(feature = "gpu")]
-use crate::gui::renderer::backend::RendererBackend;
-use crate::gui::*;
+use renderer::backend::RendererBackend;
+use super::super::*;
 
 /// Debounce delay before sending SIGWINCH after the last resize event.
 /// Allows the user to finish dragging before the shell redraws its prompt.
 const SIGWINCH_DEBOUNCE_MS: u64 = 80;
-#[cfg(target_os = "macos")]
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 #[cfg(target_os = "macos")]
 use animation::{NATIVE_TAB_SYNC_ATTEMPTS, NATIVE_TAB_SYNC_INTERVAL};
 
 impl FerrumWindow {
     #[cfg(target_os = "macos")]
-    pub(in crate::gui) fn schedule_native_tab_bar_resync(&mut self) {
+    pub(in super::super) fn schedule_native_tab_bar_resync(&mut self) {
         self.pending_native_tab_syncs = NATIVE_TAB_SYNC_ATTEMPTS;
         self.next_native_tab_sync_at = Some(Instant::now());
         self.window.request_redraw();
     }
 
-    pub(in crate::gui) fn apply_pending_resize(&mut self) {
+    pub(in super::super) fn apply_pending_resize(&mut self) {
         if self.pending_grid_resize {
             self.pending_grid_resize = false;
             // Resize terminal grids so rendering is correct.
@@ -42,7 +41,7 @@ impl FerrumWindow {
         // A DPI change alters cell pixel dimensions, so the grid row/col count
         // can change. Defer SIGWINCH the same way a window resize does.
         self.sigwinch_deadline =
-            Some(std::time::Instant::now() + std::time::Duration::from_millis(SIGWINCH_DEBOUNCE_MS));
+            Some(Instant::now() + Duration::from_millis(SIGWINCH_DEBOUNCE_MS));
     }
 
     pub(crate) fn on_resized(&mut self, size: winit::dpi::PhysicalSize<u32>) {
@@ -54,14 +53,14 @@ impl FerrumWindow {
         // Defer SIGWINCH: reset deadline on every resize event so SIGWINCH fires
         // only once, ~80 ms after the user stops dragging.
         self.sigwinch_deadline =
-            Some(std::time::Instant::now() + std::time::Duration::from_millis(SIGWINCH_DEBOUNCE_MS));
+            Some(Instant::now() + Duration::from_millis(SIGWINCH_DEBOUNCE_MS));
         self.window.request_redraw();
     }
 
     pub(crate) fn on_redraw_requested(&mut self) {
         #[cfg(target_os = "macos")]
         {
-            crate::gui::platform::macos::sync_native_tab_bar_visibility(&self.window);
+            platform::macos::sync_native_tab_bar_visibility(&self.window);
             if self.pending_native_tab_syncs > 0 {
                 self.pending_native_tab_syncs -= 1;
                 self.next_native_tab_sync_at = if self.pending_native_tab_syncs > 0 {

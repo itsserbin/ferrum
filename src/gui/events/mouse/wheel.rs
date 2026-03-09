@@ -21,28 +21,17 @@ impl FerrumWindow {
     }
 
     fn wheel_grid_pos_for_pane(&self, pane_id: PaneId) -> Option<(usize, usize)> {
-        let tab = self.active_tab_ref()?;
-        let leaf = tab.pane_tree.find_leaf(pane_id)?;
-        let terminal_rect = self.terminal_content_rect();
-        let pane_pad = if tab.has_multiple_panes() {
-            self.backend.pane_inner_padding_px()
-        } else {
-            0
-        };
-        let content = tab
-            .pane_tree
-            .layout(terminal_rect, DIVIDER_WIDTH)
-            .into_iter()
-            .find_map(|(id, rect)| (id == pane_id).then_some(rect.inset(pane_pad)))?;
+        let leaf = self.active_tab_ref()?.pane_tree.find_leaf(pane_id)?;
+        let content = self.pane_content_rect(pane_id)?;
 
         let local_x = (self.mouse_pos.0 as u32).saturating_sub(content.x);
         let local_y = (self.mouse_pos.1 as u32).saturating_sub(content.y);
-        let col = ((local_x + self.backend.cell_width() / 2) as usize
-            / self.backend.cell_width() as usize)
-            .min(leaf.terminal.screen.cols().saturating_sub(1));
-        let row = (local_y as usize / self.backend.cell_height() as usize)
-            .min(leaf.terminal.screen.viewport_rows().saturating_sub(1));
-        Some((row, col))
+        Some(self.local_pixel_to_grid(
+            local_x,
+            local_y,
+            leaf.terminal.screen.cols(),
+            leaf.terminal.screen.viewport_rows(),
+        ))
     }
 
     pub(crate) fn on_mouse_wheel(&mut self, delta: MouseScrollDelta) {
@@ -72,18 +61,19 @@ impl FerrumWindow {
             return;
         };
 
-        let mouse_reporting = !self.modifiers.shift_key()
-            && self
-                .active_tab_ref()
-                .and_then(|tab| tab.pane_tree.find_leaf(target_pane))
-                .is_some_and(|leaf| leaf.terminal.mouse_mode != MouseMode::Off);
+        let (mouse_reporting, sgr) = match self
+            .active_tab_ref()
+            .and_then(|tab| tab.pane_tree.find_leaf(target_pane))
+        {
+            Some(leaf) => (
+                !self.modifiers.shift_key() && leaf.terminal.mouse_mode != MouseMode::Off,
+                leaf.terminal.sgr_mouse,
+            ),
+            None => return,
+        };
 
         // Mouse reporting -- send scroll events to app for pane under cursor.
         if mouse_reporting {
-            let sgr = self
-                .active_tab_ref()
-                .and_then(|tab| tab.pane_tree.find_leaf(target_pane))
-                .is_some_and(|leaf| leaf.terminal.sgr_mouse);
             let Some((row, col)) = self.wheel_grid_pos_for_pane(target_pane) else {
                 return;
             };
