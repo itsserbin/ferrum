@@ -1,5 +1,7 @@
+use std::collections::HashMap;
 use std::time::Instant;
 
+use base64::Engine as _;
 use crate::config::ThemeChoice;
 use super::{
     Color, GraphemeCell, PageCoord, PageList, SecurityConfig,
@@ -7,6 +9,9 @@ use super::{
 };
 use unicode_width::UnicodeWidthChar;
 use vte::{Params, Parser, Perform};
+
+/// Maximum number of unique hyperlink URLs stored per terminal session.
+const HYPERLINK_URL_TABLE_MAX: usize = 4096;
 
 mod alt_screen;
 mod grid_ops;
@@ -86,6 +91,8 @@ pub struct Terminal {
     pending_security_events: Vec<SecurityEventKind>,
     pub cursor_style: CursorStyle,
     pub resize_at: Option<Instant>,
+    /// modifyOtherKeys level set by `ESC [ > 4 ; <n> m` (0 = off, 1 = level 1, 2 = level 2).
+    pub modify_other_keys: u8,
 
     // ── Selection pins ───────────────────────────────────────────────────────
     pub selection_start_pin: Option<TrackedPin>,
@@ -96,6 +103,16 @@ pub struct Terminal {
     pub cwd: Option<String>,
     /// Window/icon title set by OSC 0/1/2.
     pub title: Option<String>,
+    /// Decoded clipboard text queued by OSC 52 for the GUI to write to the system clipboard.
+    pub pending_clipboard_write: Option<String>,
+
+    // ── OSC 8 hyperlinks ─────────────────────────────────────────────────────
+    /// URL table: index 0 corresponds to hyperlink_id 1.
+    hyperlink_urls: Vec<String>,
+    /// Companion index for O(1) URL deduplication (url → hyperlink_id).
+    hyperlink_url_index: HashMap<String, u16>,
+    /// Currently active hyperlink id (0 = none).
+    current_hyperlink_id: u16,
 }
 
 impl Terminal {
@@ -147,11 +164,16 @@ impl Terminal {
             pending_security_events: Vec::new(),
             cursor_style: CursorStyle::default(),
             resize_at: None,
+            modify_other_keys: 0,
             selection_start_pin: None,
             selection_end_pin: None,
             parser: Parser::new(),
             cwd: None,
             title: None,
+            pending_clipboard_write: None,
+            hyperlink_urls: Vec::new(),
+            hyperlink_url_index: HashMap::new(),
+            current_hyperlink_id: 0,
         }
     }
 
@@ -211,6 +233,19 @@ impl Terminal {
     /// Drains all pending PTY response bytes.
     pub fn drain_responses(&mut self) -> Vec<u8> {
         std::mem::take(&mut self.pending_responses)
+    }
+
+    /// Drains a pending clipboard write queued by OSC 52.
+    pub fn drain_clipboard_write(&mut self) -> Option<String> {
+        self.pending_clipboard_write.take()
+    }
+
+    /// Returns the URL associated with the given hyperlink id, or `None` if the id is 0 or out of range.
+    pub fn hyperlink_url(&self, id: u16) -> Option<&str> {
+        if id == 0 {
+            return None;
+        }
+        self.hyperlink_urls.get((id - 1) as usize).map(String::as_str)
     }
 
     /// Registers a tracked selection-start pin at the given absolute row/col.
@@ -464,11 +499,16 @@ impl Terminal {
         self.cursor_visible = true;
         self.cursor_style = CursorStyle::default();
         self.pending_responses.clear();
+        self.pending_clipboard_write = None;
         self.bracketed_paste = false;
+        self.modify_other_keys = 0;
         if self.security_config.clear_mouse_on_reset {
             self.clear_mouse_tracking(true);
         }
         self.cwd = None;
+        self.hyperlink_urls.clear();
+        self.hyperlink_url_index.clear();
+        self.current_hyperlink_id = 0;
         self.reset_attributes();
         self.parser = Parser::new();
         self.reset_screen_buffer();
@@ -545,6 +585,7 @@ impl Perform for Terminal {
         gc.reverse = self.current_reverse;
         gc.underline_style = self.current_underline_style;
         gc.strikethrough = self.current_strikethrough;
+        gc.hyperlink_id = self.current_hyperlink_id;
         self.screen.viewport_set(cr, cc, gc);
 
         // Reserve the trailing cell for wide glyphs.
@@ -610,6 +651,48 @@ impl Perform for Terminal {
                 let uri = String::from_utf8_lossy(params[1]);
                 self.cwd = parse_osc7_uri(&uri);
             }
+            // OSC 52: clipboard write — params[1] is selection (ignored), params[2] is base64 data
+            b"52" => {
+                if params.len() < 3 {
+                    return;
+                }
+                let payload = params[2];
+                // A payload of "?" is a clipboard read query — ignore it.
+                if payload == b"?" {
+                    return;
+                }
+                if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(payload)
+                    && let Ok(text) = String::from_utf8(bytes)
+                {
+                    self.pending_clipboard_write = Some(text);
+                }
+            }
+            // OSC 8: hyperlinks — OSC 8 ; params ; uri ST
+            // params[1] may contain link attributes (e.g. `id=foo`) per spec; we ignore them
+            // since most tools do not use them and URL-based deduplication is sufficient.
+            b"8" => {
+                let uri = params.get(2).copied().unwrap_or(b"");
+                if uri.is_empty() {
+                    self.current_hyperlink_id = 0;
+                } else {
+                    use std::collections::hash_map::Entry;
+                    let url = String::from_utf8_lossy(uri).into_owned();
+                    self.current_hyperlink_id = match self.hyperlink_url_index.entry(url) {
+                        Entry::Occupied(e) => *e.get(),
+                        Entry::Vacant(e) => {
+                            if self.hyperlink_urls.len() >= HYPERLINK_URL_TABLE_MAX {
+                                // Table full — treat as no hyperlink rather than growing unboundedly.
+                                eprintln!("[ferrum] OSC 8: hyperlink URL table full ({HYPERLINK_URL_TABLE_MAX} entries); ignoring new URL");
+                                return;
+                            }
+                            let id = (self.hyperlink_urls.len() + 1) as u16;
+                            self.hyperlink_urls.push(e.key().clone());
+                            e.insert(id);
+                            id
+                        }
+                    };
+                }
+            }
             _ => {}
         }
     }
@@ -625,6 +708,19 @@ impl Perform for Terminal {
             return;
         }
         if action == 'm' {
+            if intermediates == b">" {
+                // modifyOtherKeys: ESC [ > 4 ; <level> m
+                if self.param(params, 0) == 4 {
+                    let level = params
+                        .iter()
+                        .nth(1)
+                        .and_then(|p| p.first().copied())
+                        .unwrap_or(0)
+                        .min(2) as u8;
+                    self.modify_other_keys = level;
+                }
+                return;
+            }
             self.handle_sgr(params);
             return;
         }

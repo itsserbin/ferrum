@@ -1,5 +1,6 @@
 use crate::core::PageCoord;
 use crate::gui::*;
+use super::update_banner::open_url;
 
 impl FerrumWindow {
     fn update_terminal_click_streak(&mut self, pos: Position) -> u8 {
@@ -66,6 +67,15 @@ impl FerrumWindow {
             ElementState::Pressed => {
                 self.is_selecting = true;
                 self.keyboard_selection_anchor = None;
+
+                if self.modifiers.control_key() && !self.is_mouse_reporting()
+                    && let Some(leaf) = self.tabs[idx].focused_leaf()
+                    && let Some(cell) = leaf.terminal.screen.viewport_row(row).cells.get(col)
+                    && let Some(url) = leaf.terminal.hyperlink_url(cell.hyperlink_id) {
+                    open_url(url);
+                    self.is_selecting = false;
+                    return;
+                }
 
                 if self.modifiers.shift_key() {
                     self.click_streak = 0;

@@ -1,4 +1,4 @@
-use crate::gui::input::key_to_bytes;
+use crate::gui::input::key_to_bytes_ex;
 use crate::gui::*;
 
 impl FerrumWindow {
@@ -17,8 +17,11 @@ impl FerrumWindow {
         }
         self.keyboard_selection_anchor = None;
 
-        let decckm = self.active_leaf_ref().is_some_and(|l| l.terminal.decckm);
-        let Some(bytes) = key_to_bytes(key, self.modifiers, decckm) else {
+        let (decckm, modify_other_keys) = self
+            .active_leaf_ref()
+            .map(|l| (l.terminal.decckm, l.terminal.modify_other_keys))
+            .unwrap_or((false, 0));
+        let Some(bytes) = key_to_bytes_ex(key, self.modifiers, decckm, modify_other_keys) else {
             return;
         };
         if let Some(leaf) = self.active_leaf_mut() {

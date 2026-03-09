@@ -577,3 +577,118 @@ fn reflow_intensive_varying_sizes_preserves_content() {
     assert_eq!(get_char(&term, 8, 0), 'I', "row I lost after varying reflow");
     assert_eq!(get_char(&term, 9, 0), 'J', "row J lost after varying reflow");
 }
+
+// ── OSC 52 clipboard write ──
+
+#[test]
+fn osc52_writes_decoded_text_to_pending_clipboard() {
+    let mut term = Terminal::new(24, 80);
+    // "hello" in base64 is "aGVsbG8="
+    term.process(b"\x1b]52;c;aGVsbG8=\x07");
+    assert_eq!(term.pending_clipboard_write.as_deref(), Some("hello"));
+}
+
+#[test]
+fn osc52_query_is_ignored() {
+    let mut term = Terminal::new(24, 80);
+    term.process(b"\x1b]52;c;?\x07");
+    assert!(term.pending_clipboard_write.is_none());
+}
+
+#[test]
+fn osc52_invalid_base64_is_ignored() {
+    let mut term = Terminal::new(24, 80);
+    term.process(b"\x1b]52;c;!!!invalid!!!\x07");
+    assert!(term.pending_clipboard_write.is_none());
+}
+
+// ── OSC 8 hyperlinks ──
+
+#[test]
+fn osc8_sets_hyperlink_on_subsequent_cells() {
+    let mut term = Terminal::new(24, 80);
+    // Start hyperlink, write "hi", end hyperlink
+    term.process(b"\x1b]8;;https://example.com\x07hi\x1b]8;;\x07");
+    let row = term.screen.viewport_row(0);
+    assert!(row.cells[0].hyperlink_id != 0, "first cell should have hyperlink");
+    assert!(row.cells[1].hyperlink_id != 0, "second cell should have hyperlink");
+    assert_eq!(row.cells[2].hyperlink_id, 0, "cell after end should have no hyperlink");
+    assert_eq!(
+        term.hyperlink_url(row.cells[0].hyperlink_id),
+        Some("https://example.com")
+    );
+}
+
+#[test]
+fn osc8_empty_uri_ends_hyperlink() {
+    let mut term = Terminal::new(24, 80);
+    term.process(b"\x1b]8;;https://x.com\x07a\x1b]8;;\x07b");
+    let row = term.screen.viewport_row(0);
+    assert!(row.cells[0].hyperlink_id != 0);
+    assert_eq!(row.cells[1].hyperlink_id, 0);
+}
+
+#[test]
+fn osc8_same_url_reuses_id() {
+    let mut term = Terminal::new(24, 80);
+    term.process(b"\x1b]8;;https://a.com\x07x\x1b]8;;\x07");
+    term.process(b"\x1b]8;;https://a.com\x07y\x1b]8;;\x07");
+    let row = term.screen.viewport_row(0);
+    assert_eq!(row.cells[0].hyperlink_id, row.cells[1].hyperlink_id, "same URL should reuse same ID");
+}
+
+// ── modifyOtherKeys ──
+
+#[test]
+fn modify_other_keys_level_set_by_csi_sequence() {
+    let mut term = Terminal::new(24, 80);
+    assert_eq!(term.modify_other_keys, 0);
+    term.process(b"\x1b[>4;2m");
+    assert_eq!(term.modify_other_keys, 2);
+    term.process(b"\x1b[>4;1m");
+    assert_eq!(term.modify_other_keys, 1);
+    term.process(b"\x1b[>4;0m");
+    assert_eq!(term.modify_other_keys, 0);
+}
+
+#[test]
+fn modify_other_keys_reset_by_csi_without_param() {
+    let mut term = Terminal::new(24, 80);
+    term.process(b"\x1b[>4;2m");
+    term.process(b"\x1b[>4m");
+    assert_eq!(term.modify_other_keys, 0);
+}
+
+#[test]
+fn modify_other_keys_clamps_level_above_2() {
+    let mut term = Terminal::new(24, 80);
+    term.process(b"\x1b[>4;9m");
+    assert_eq!(term.modify_other_keys, 2, "level above 2 should be clamped to 2");
+}
+
+// ── full_reset clears OSC 8 and modifyOtherKeys state ──
+
+#[test]
+fn full_reset_clears_hyperlink_state() {
+    let mut term = Terminal::new(24, 80);
+    term.process(b"\x1b]8;;https://example.com\x07hi\x1b]8;;\x07");
+    let id = term.screen.viewport_row(0).cells[0].hyperlink_id;
+    assert!(id != 0, "hyperlink should be set before reset");
+
+    term.full_reset();
+
+    assert_eq!(term.hyperlink_url(id), None, "URL table should be cleared after full_reset");
+    let row = term.screen.viewport_row(0);
+    assert_eq!(row.cells[0].hyperlink_id, 0, "cells should have no hyperlink after full_reset");
+}
+
+#[test]
+fn full_reset_clears_modify_other_keys() {
+    let mut term = Terminal::new(24, 80);
+    term.process(b"\x1b[>4;2m");
+    assert_eq!(term.modify_other_keys, 2);
+
+    term.full_reset();
+
+    assert_eq!(term.modify_other_keys, 0, "modifyOtherKeys should be 0 after full_reset");
+}

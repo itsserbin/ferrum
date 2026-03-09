@@ -8,6 +8,7 @@ version = "0.5.0"
 dependencies = [
  "anyhow",
  "arboard",
+ "base64",
  "bytemuck",
  "gethostname",
  "gtk4",

@@ -88,15 +88,11 @@ fn encode_arrow_key(final_byte: char, decckm: bool, modifier_param: Option<u8>) 
     }
 }
 
-fn encode_home_end_key(final_byte: char, decckm: bool, modifier_param: Option<u8>) -> Vec<u8> {
-    if let Some(param) = modifier_param {
-        return csi_with_modifier(final_byte, param);
-    }
-
-    if decckm {
-        format!("\x1bO{}", final_byte).into_bytes()
-    } else {
-        format!("\x1b[{}", final_byte).into_bytes()
+/// Encodes an SS3 function key (F1–F4): `ESC O {letter}` unmodified, or `ESC [ 1 ; {mod} {letter}` with a modifier.
+fn encode_ss3_key(final_byte: char, modifier_param: Option<u8>) -> Vec<u8> {
+    match modifier_param {
+        Some(param) => csi_with_modifier(final_byte, param),
+        None => vec![0x1b, b'O', final_byte as u8],
     }
 }
 
@@ -125,8 +121,13 @@ pub(super) fn encode_mouse_event(
     }
 }
 
-/// Converts logical key input into PTY byte sequences.
-pub(super) fn key_to_bytes(key: &Key, modifiers: ModifiersState, decckm: bool) -> Option<Vec<u8>> {
+/// Converts logical key input into PTY byte sequences, respecting modifyOtherKeys level.
+pub(super) fn key_to_bytes_ex(
+    key: &Key,
+    modifiers: ModifiersState,
+    decckm: bool,
+    modify_other_keys: u8,
+) -> Option<Vec<u8>> {
     match key {
         Key::Character(c) => {
             let ch = c.chars().next()?;
@@ -152,7 +153,17 @@ pub(super) fn key_to_bytes(key: &Key, modifiers: ModifiersState, decckm: bool) -
             let modifier_param = csi_modifier_param(modifiers);
 
             match named {
-                NamedKey::Enter => Some(with_alt_prefix(vec![b'\r'], modifiers)),
+                NamedKey::Enter => {
+                    if modify_other_keys >= 2
+                        && modifiers.shift_key()
+                        && !modifiers.control_key()
+                        && !modifiers.alt_key()
+                    {
+                        Some(b"\x1b[27;2;13~".to_vec())
+                    } else {
+                        Some(with_alt_prefix(vec![b'\r'], modifiers))
+                    }
+                }
                 NamedKey::Backspace => {
                     if is_word_delete_combo(modifiers) {
                         Some(vec![0x17]) // Ctrl+W — backward-kill-word
@@ -202,8 +213,8 @@ pub(super) fn key_to_bytes(key: &Key, modifiers: ModifiersState, decckm: bool) -
                         Some(encode_arrow_key('D', decckm, modifier_param))
                     }
                 }
-                NamedKey::Home => Some(encode_home_end_key('H', decckm, modifier_param)),
-                NamedKey::End => Some(encode_home_end_key('F', decckm, modifier_param)),
+                NamedKey::Home => Some(encode_arrow_key('H', decckm, modifier_param)),
+                NamedKey::End => Some(encode_arrow_key('F', decckm, modifier_param)),
                 NamedKey::Insert => Some(csi_tilde(2, modifier_param)),
                 NamedKey::Delete => {
                     if is_word_delete_combo(modifiers) {
@@ -214,11 +225,33 @@ pub(super) fn key_to_bytes(key: &Key, modifiers: ModifiersState, decckm: bool) -
                 }
                 NamedKey::PageUp => Some(csi_tilde(5, modifier_param)),
                 NamedKey::PageDown => Some(csi_tilde(6, modifier_param)),
+                // F1–F4: SS3 sequences without modifier, CSI 1;{mod}{letter} with modifier
+                NamedKey::F1 => Some(encode_ss3_key('P', modifier_param)),
+                NamedKey::F2 => Some(encode_ss3_key('Q', modifier_param)),
+                NamedKey::F3 => Some(encode_ss3_key('R', modifier_param)),
+                NamedKey::F4 => Some(encode_ss3_key('S', modifier_param)),
+                // F5–F12: CSI tilde sequences (16 and 22 are historically skipped)
+                NamedKey::F5 => Some(csi_tilde(15, modifier_param)),
+                NamedKey::F6 => Some(csi_tilde(17, modifier_param)),
+                NamedKey::F7 => Some(csi_tilde(18, modifier_param)),
+                NamedKey::F8 => Some(csi_tilde(19, modifier_param)),
+                NamedKey::F9 => Some(csi_tilde(20, modifier_param)),
+                NamedKey::F10 => Some(csi_tilde(21, modifier_param)),
+                NamedKey::F11 => Some(csi_tilde(23, modifier_param)),
+                NamedKey::F12 => Some(csi_tilde(24, modifier_param)),
                 _ => None,
             }
         }
         _ => None,
     }
+}
+
+/// Converts logical key input into PTY byte sequences (modifyOtherKeys level 0).
+///
+/// Used only in tests; production callers use `key_to_bytes_ex` directly.
+#[cfg(test)]
+pub(super) fn key_to_bytes(key: &Key, modifiers: ModifiersState, decckm: bool) -> Option<Vec<u8>> {
+    key_to_bytes_ex(key, modifiers, decckm, 0)
 }
 
 #[cfg(test)]
