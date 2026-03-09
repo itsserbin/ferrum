@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::time::Instant;
 
 use base64::Engine as _;
@@ -105,6 +106,8 @@ pub struct Terminal {
     // ── OSC 8 hyperlinks ─────────────────────────────────────────────────────
     /// URL table: index 0 corresponds to hyperlink_id 1.
     hyperlink_urls: Vec<String>,
+    /// Companion index for O(1) URL deduplication (url → hyperlink_id).
+    hyperlink_url_index: HashMap<String, u16>,
     /// Currently active hyperlink id (0 = none).
     current_hyperlink_id: u16,
 }
@@ -166,6 +169,7 @@ impl Terminal {
             title: None,
             pending_clipboard_write: None,
             hyperlink_urls: Vec::new(),
+            hyperlink_url_index: HashMap::new(),
             current_hyperlink_id: 0,
         }
     }
@@ -500,6 +504,7 @@ impl Terminal {
         }
         self.cwd = None;
         self.hyperlink_urls.clear();
+        self.hyperlink_url_index.clear();
         self.current_hyperlink_id = 0;
         self.reset_attributes();
         self.parser = Parser::new();
@@ -660,23 +665,26 @@ impl Perform for Terminal {
                 }
             }
             // OSC 8: hyperlinks — OSC 8 ; params ; uri ST
+            // params[1] may contain link attributes (e.g. `id=foo`) per spec; we ignore them
+            // since most tools do not use them and URL-based deduplication is sufficient.
             b"8" => {
                 let uri = params.get(2).copied().unwrap_or(b"");
                 if uri.is_empty() {
                     self.current_hyperlink_id = 0;
                 } else {
                     let url = String::from_utf8_lossy(uri).into_owned();
-                    // Reuse existing entry to avoid unbounded URL table growth.
-                    let id = if let Some(pos) = self.hyperlink_urls.iter().position(|u| u == &url) {
-                        (pos + 1) as u16
+                    let id = if let Some(&existing_id) = self.hyperlink_url_index.get(&url) {
+                        existing_id
                     } else {
                         if self.hyperlink_urls.len() >= 4096 {
                             // Table full — treat as no hyperlink rather than growing unboundedly.
                             self.current_hyperlink_id = 0;
                             return;
                         }
-                        self.hyperlink_urls.push(url);
-                        self.hyperlink_urls.len() as u16
+                        self.hyperlink_urls.push(url.clone());
+                        let id = self.hyperlink_urls.len() as u16;
+                        self.hyperlink_url_index.insert(url, id);
+                        id
                     };
                     self.current_hyperlink_id = id;
                 }
