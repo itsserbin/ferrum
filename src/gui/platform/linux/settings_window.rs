@@ -590,7 +590,11 @@ fn build_updates_tab(
 // ── Widget helpers ───────────────────────────────────────────────────
 
 fn tab_vbox() -> gtk4::Box {
-    let vbox = tab_vbox();
+    let vbox = gtk4::Box::new(Orientation::Vertical, 12);
+    vbox.set_margin_top(16);
+    vbox.set_margin_bottom(16);
+    vbox.set_margin_start(16);
+    vbox.set_margin_end(16);
     vbox
 }
 
