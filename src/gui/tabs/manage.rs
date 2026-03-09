@@ -39,7 +39,7 @@ impl FerrumWindow {
             let next_height = self.backend.tab_bar_height_px();
 
             if prev_height != next_height && !self.tabs.is_empty() {
-                self.resize_all_panes();
+                self.resize_all_panes(true);
             }
         }
     }
@@ -103,7 +103,7 @@ impl FerrumWindow {
             // Recalculate pane layout for the newly active tab so each pane
             // gets correct dimensions (they may have been stale since the last
             // window resize happened while a different tab was active).
-            self.resize_all_panes();
+            self.resize_all_panes(true);
         }
     }
 
@@ -269,7 +269,7 @@ impl FerrumWindow {
             .split_with_node(focused_pane, direction, new_leaf, reverse);
         tab.focused_pane = pane_id;
 
-        self.resize_all_panes();
+        self.resize_all_panes(false);
         // A pane split is a discrete event, not a drag: dimensions are already
         // final, so SIGWINCH can be sent immediately without debouncing.
         self.send_sigwinch_to_all_panes();
@@ -290,7 +290,7 @@ impl FerrumWindow {
         if let Some(next_focus) = tab.focus_after_closing_pane(closing_id) {
             tab.focused_pane = next_focus;
         }
-        self.resize_all_panes();
+        self.resize_all_panes(false);
         // Closing a pane is a discrete event: the surviving pane expands to fill
         // the freed space immediately, so SIGWINCH can be sent without debouncing.
         self.send_sigwinch_to_all_panes();
@@ -313,7 +313,13 @@ impl FerrumWindow {
     /// Recalculates pane dimensions for all tabs and resizes the terminal grids.
     /// Does NOT send SIGWINCH — call `send_sigwinch_to_all_panes` separately
     /// after the resize has settled (debounced).
-    pub(in crate::gui) fn resize_all_panes(&mut self) {
+    ///
+    /// When `reflow` is `false`, soft-wrapped lines are not reflowed.  Use
+    /// `false` during interactive window drag or when SIGWINCH follows
+    /// immediately — the shell will redraw anyway, so intermediate reflow
+    /// produces only visual noise.  Use `true` when no SIGWINCH is sent and
+    /// the buffer should look correct until the next shell redraw.
+    pub(in crate::gui) fn resize_all_panes(&mut self, reflow: bool) {
         let cw = self.backend.cell_width();
         let ch = self.backend.cell_height();
         let terminal_rect = self.terminal_content_rect();
@@ -333,7 +339,11 @@ impl FerrumWindow {
                     let content = rect.inset(pane_pad);
                     let cols = (content.width / cw).max(1) as usize;
                     let rows = (content.height / ch).max(1) as usize;
-                    leaf.terminal.resize(rows, cols);
+                    if reflow {
+                        leaf.terminal.resize(rows, cols);
+                    } else {
+                        leaf.terminal.resize_no_reflow(rows, cols);
+                    }
                     leaf.scroll_offset = leaf.scroll_offset.min(leaf.terminal.screen.scrollback_len());
                 }
             }

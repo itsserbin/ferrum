@@ -30,6 +30,23 @@ impl super::Terminal {
         self.resize_at = Some(std::time::Instant::now());
     }
 
+    /// Resizes the terminal without reflowing soft-wrapped lines.
+    ///
+    /// Use this during interactive window drag where the shell will redraw via
+    /// SIGWINCH anyway, to avoid visual jumpiness from intermediate reflow.
+    pub fn resize_no_reflow(&mut self, rows: usize, cols: usize) {
+        if self.screen.viewport_rows() == rows && self.screen.cols() == cols {
+            return;
+        }
+        if let Some(ref mut alt) = self.alt_screen {
+            alt.simple_resize(rows, cols);
+        }
+        self.simple_resize(rows, cols);
+        self.scroll_top = 0;
+        self.scroll_bottom = rows - 1;
+        self.resize_at = Some(std::time::Instant::now());
+    }
+
     /// Resize when only the height changes (no col change, no reflow).
     ///
     /// When the terminal shrinks, rows are pushed from the top of the viewport
