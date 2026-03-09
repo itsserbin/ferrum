@@ -364,7 +364,7 @@ impl Session {
 pub fn has_active_child_processes(shell_pid: u32) -> bool {
     #[cfg(unix)]
     {
-        return has_active_child_processes_unix(shell_pid);
+        has_active_child_processes_unix(shell_pid)
     }
 
     #[cfg(windows)]
