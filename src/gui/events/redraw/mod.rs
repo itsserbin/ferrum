@@ -59,8 +59,11 @@ impl FerrumWindow {
         // only call request_redraw() the OS compositor has time to stretch the
         // previous frame to fit the new window, producing the "text shifts then
         // snaps back" visual artefact.  Rendering here, while still inside the
-        // resize callback, eliminates the compositor-stretch window entirely —
-        // the same technique used by Ghostty and iTerm2.
+        // resize callback, eliminates the compositor-stretch window entirely.
+        //
+        // All tabs are resized here (not just the active one).  Terminal::resize()
+        // returns immediately when rows and cols are unchanged, so inactive tabs
+        // that already have the right dimensions cost only two integer comparisons.
         self.resize_all_panes();
         self.render_frame();
 
