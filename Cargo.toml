@@ -35,7 +35,7 @@ libc = "0.2.182"
 semver = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-ureq = { version = "3.2", features = ["json"] }
+ureq = { version = "3.3", features = ["json"] }
 gethostname = "1.1.0"
 zip = "8"
 
