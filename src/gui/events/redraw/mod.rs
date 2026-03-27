@@ -45,15 +45,29 @@ impl FerrumWindow {
     }
 
     pub(crate) fn on_resized(&mut self, size: winit::dpi::PhysicalSize<u32>) {
-        // Reconfigure the GPU surface immediately so the OS compositor does not
-        // stretch the previous frame to fit the new window dimensions.
+        // Reconfigure the GPU surface to the new dimensions.
         self.backend.notify_resize(size.width, size.height);
-        self.pending_grid_resize = true;
         self.window.set_cursor_visible(false);
         // Defer SIGWINCH: reset deadline on every resize event so SIGWINCH fires
         // only once, ~80 ms after the user stops dragging.
         self.sigwinch_deadline =
             Some(Instant::now() + Duration::from_millis(SIGWINCH_DEBOUNCE_MS));
+
+        // Resize the terminal grid and render a new frame synchronously, before
+        // returning to the OS event loop.  On macOS, winit batches RedrawRequested
+        // events during live resize (documented delay of 200-500 ms), so if we
+        // only call request_redraw() the OS compositor has time to stretch the
+        // previous frame to fit the new window, producing the "text shifts then
+        // snaps back" visual artefact.  Rendering here, while still inside the
+        // resize callback, eliminates the compositor-stretch window entirely.
+        //
+        // All tabs are resized here (not just the active one).  Terminal::resize()
+        // returns immediately when rows and cols are unchanged, so inactive tabs
+        // that already have the right dimensions cost only two integer comparisons.
+        self.resize_all_panes();
+        self.render_frame();
+
+        // Request a deferred redraw so cursor blink and other animations continue.
         self.window.request_redraw();
     }
 
