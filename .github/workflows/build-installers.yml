@@ -29,7 +29,7 @@ jobs:
       is-release: ${{ steps.version.outputs.is-release }}
       is-prerelease: ${{ steps.version.outputs.is-prerelease }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.TAG || github.ref }}
           persist-credentials: false
@@ -65,7 +65,7 @@ jobs:
     env:
       VERSION: ${{ needs.resolve-version.outputs.version }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.TAG || github.ref }}
           persist-credentials: false
@@ -151,7 +151,7 @@ jobs:
     env:
       VERSION: ${{ needs.resolve-version.outputs.version }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.TAG || github.ref }}
           persist-credentials: false
@@ -188,7 +188,7 @@ jobs:
     env:
       VERSION: ${{ needs.resolve-version.outputs.version }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.TAG || github.ref }}
           persist-credentials: false
@@ -258,7 +258,7 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.TAG }}
           persist-credentials: false
